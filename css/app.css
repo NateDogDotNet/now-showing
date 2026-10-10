@@ -211,6 +211,37 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
   z-index: 10;
 }
 .status-pill.warn { color: var(--accent); }
+/* The pill belongs to the controls: it goes when they do (body.idle, set by wake()). */
+body.idle .status-pill { visibility: hidden; }
+
+/* The quiet indicator: a tiny dim dot in a safe-area corner that moves to the next one every few
+   minutes (main.js sets data-corner), so even it never sits still for hours (burn-in). Shown only
+   while the controls are hidden. */
+.status-dot {
+  --m: max(12px, env(safe-area-inset-left, 0px));
+  --size: 6px;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 10;
+  transform-origin: 0 0;
+  --x: calc(var(--vw) / -2 + var(--m));
+  --y: calc(var(--vh) / -2 + max(12px, env(safe-area-inset-top, 0px)));
+  transform: rotate(var(--ui-rotation)) translate(var(--x), var(--y));
+}
+.status-dot[data-corner="1"] { --x: calc(var(--vw) / 2 - max(12px, env(safe-area-inset-right, 0px)) - var(--size)); }
+.status-dot[data-corner="2"] {
+  --x: calc(var(--vw) / 2 - max(12px, env(safe-area-inset-right, 0px)) - var(--size));
+  --y: calc(var(--vh) / 2 - max(12px, env(safe-area-inset-bottom, 0px)) - var(--size));
+}
+.status-dot[data-corner="3"] { --y: calc(var(--vh) / 2 - max(12px, env(safe-area-inset-bottom, 0px)) - var(--size)); }
+body:not(.idle) .status-dot, body.asleep .status-dot { visibility: hidden; }
 
 .toast {
   position: fixed;

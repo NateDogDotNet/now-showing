@@ -424,8 +424,7 @@ function showEmpty(show, message) {
   if (message) $('empty-message').textContent = message;
 }
 
-function updateStatus() {
-  const pill = $('status');
+function statusText() {
   let text = '';
   if (state.paused) text = 'Paused';
   if (state.offlineSince) {
@@ -433,11 +432,34 @@ function updateStatus() {
     text = `${navigator.onLine === false ? 'Offline' : "Can't reach Plex"}${display.currentPoster ? ' · showing cached posters' : ''}${retry}`;
     if (state.paused) text = `Paused · ${text}`;
   }
+  return text;
+}
+
+/**
+ * The pill lives and updates only while the controls show (body.idle hides it); the once-a-second
+ * re-render stops while they are hidden. The dot stands in for it then, when there is anything to say.
+ */
+function updateStatus() {
+  const text = statusText();
+  const dot = $('status-dot');
+  dot.hidden = !(text && state.settings.statusIndicator === 'dot');
+  if (document.body.classList.contains('idle')) return;
+  const pill = $('status');
   pill.hidden = !text;
-  pill.textContent = text;
+  if (pill.textContent !== text) pill.textContent = text;
   pill.classList.toggle('warn', Boolean(state.offlineSince));
 }
 setInterval(updateStatus, 1000);
+
+// The dot visits the four corners of the safe area in turn, on its own timer (not pixel shift). The start
+// corner follows the clock, so a daily reload does not park it in the same place every time.
+const DOT_CYCLE_MS = 5 * 60 * 1000;
+let dotCorner = Math.floor(Date.now() / DOT_CYCLE_MS) % 4;
+$('status-dot').dataset.corner = dotCorner;
+setInterval(() => {
+  dotCorner = (dotCorner + 1) % 4;
+  $('status-dot').dataset.corner = dotCorner;
+}, DOT_CYCLE_MS);
 
 function updatePinButton() {
   const btn = document.querySelector('[data-action="pin"]');
@@ -643,12 +665,15 @@ document.addEventListener('keydown', (e) => {
 let idleTimer;
 function wake() {
   $('controls').classList.add('visible');
+  const wasIdle = document.body.classList.contains('idle');
   document.body.classList.remove('idle');
+  if (wasIdle) updateStatus(); // catch the pill up before it shows
   clearTimeout(idleTimer);
   idleTimer = setTimeout(() => {
     if ($('controls').matches(':hover, :focus-within')) return wake();
     $('controls').classList.remove('visible');
     document.body.classList.add('idle');
+    updateStatus(); // the dot takes over from the pill
   }, 3500);
 }
 ['pointermove', 'pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, wake, { passive: true }));
