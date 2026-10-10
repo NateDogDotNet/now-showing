@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { posterBox, requestSize, stageSize } from '../js/layout.js';
+import { posterBox, requestSize, shiftOffset, stageSize } from '../js/layout.js';
 import { detectWindow } from '../js/frames.js';
 import { createBackoff } from '../js/backoff.js';
 
@@ -40,4 +40,25 @@ test('backoff grows exponentially to a cap and resets', () => {
   assert.deepEqual([b.next(), b.next(), b.next(), b.next()], [1000, 2000, 4000, 5000]);
   b.reset();
   assert.equal(b.next(), 1000);
+});
+
+test('stageSize with a margin is 97% of the margin-less size on the limiting axis', () => {
+  const a = stageSize({ viewportW: 1920, viewportH: 1080, aspect: 0.64 });
+  const b = stageSize({ viewportW: 1920, viewportH: 1080, aspect: 0.64, margin: 0.015 });
+  assert.ok(Math.abs(b.height - a.height * 0.97) <= 1);
+  assert.ok(Math.abs(b.width - a.width * 0.97) <= 1);
+  const c = stageSize({ viewportW: 1920, viewportH: 1080, aspect: 0.64, rotation: 90, margin: 0.015 });
+  assert.ok(Math.abs(c.width - Math.floor(1080 * 0.97)) <= 1);
+  assert.deepEqual(stageSize({ viewportW: 1920, viewportH: 1080, aspect: 0.64, margin: 0 }), a);
+});
+
+test('shiftOffset is bounded, never repeats back to back, covers 9 points in 9 steps and is deterministic', () => {
+  const m = 16;
+  const pts = Array.from({ length: 60 }, (_, i) => shiftOffset(i, m));
+  for (const p of pts) assert.ok(Math.abs(p.x) <= m && Math.abs(p.y) <= m, JSON.stringify(p));
+  for (let i = 1; i < pts.length; i++) assert.notDeepEqual(pts[i], pts[i - 1], `step ${i}`);
+  const key = (p) => `${p.x},${p.y}`;
+  assert.equal(new Set(pts.slice(0, 9).map(key)).size, 9);
+  assert.deepEqual(pts.map(key), Array.from({ length: 60 }, (_, i) => key(shiftOffset(i, m))));
+  assert.notEqual(key(pts[8]), key(pts[9])); // the wrap-around step also moves
 });

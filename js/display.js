@@ -2,9 +2,11 @@
 
 import { detectWindow, findFrame, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { formatRuntime } from './plex.js';
-import { posterBox, stageSize } from './layout.js';
+import { posterBox, shiftOffset, stageSize } from './layout.js';
 
 const POSTER_ASPECT = 2 / 3;
+// Empty border per side while pixel shift is on; the stage moves inside it.
+const SHIFT_MARGIN = 0.015;
 // A decode that has not settled by now never will (the same bound main.js puts on a poster download).
 const DECODE_TIMEOUT_MS = 20000;
 
@@ -36,6 +38,24 @@ export function createDisplay(root = document) {
   // removing src before a load finishes leaves decode() pending forever, which stalled rotation.
   const owners = new WeakMap();
   let drawSeq = 0;
+  let shiftStep = 0;
+  let shiftTimer = null;
+  let shiftEveryMs = 0;
+
+  /** Runs the pixel-shift step timer while `pixelShift` is on, restarting it only when the interval changes. */
+  function syncShiftTimer() {
+    const every = settings?.pixelShift ? Math.max(1, settings.pixelShiftMinutes) * 60000 : 0;
+    if (every === shiftEveryMs) return;
+    clearInterval(shiftTimer);
+    shiftTimer = null;
+    shiftEveryMs = every;
+    if (every) {
+      shiftTimer = setInterval(() => {
+        shiftStep++;
+        layout();
+      }, every);
+    }
+  }
 
   async function loadFrame(s) {
     const builtIn = findFrame(s.frameId);
@@ -84,9 +104,22 @@ export function createDisplay(root = document) {
       viewportH: window.innerHeight,
       aspect: frame.aspect,
       rotation: settings.rotation,
+      margin: settings.pixelShift ? SHIFT_MARGIN : 0,
     });
     el.stage.style.width = `${width}px`;
     el.stage.style.height = `${height}px`;
+    if (settings.pixelShift) {
+      // Room left on the tighter axis, in screen pixels (the stage is rotated into place by CSS).
+      const sideways = settings.rotation === 90 || settings.rotation === 270;
+      const room = Math.min(
+        (window.innerWidth - (sideways ? height : width)) / 2,
+        (window.innerHeight - (sideways ? width : height)) / 2,
+      );
+      const { x, y } = shiftOffset(shiftStep, Math.max(0, Math.floor(room)));
+      el.stage.style.translate = `${x}px ${y}px`;
+    } else {
+      el.stage.style.removeProperty('translate');
+    }
     el.stage.style.setProperty('--rotation', `${settings.rotation}deg`);
 
     // The UI shell follows the stage unless rotateUi is off (OS-level rotation). --vw/--vh are the
@@ -143,6 +176,7 @@ export function createDisplay(root = document) {
     async apply(s) {
       const barOrLabelChanged = settings && (settings.showProgress !== s.showProgress || settings.showPlayer !== s.showPlayer);
       settings = s;
+      syncShiftTimer();
       // The bar and the label follow their settings at once, a live preview included; the poster on screen is unchanged.
       if (barOrLabelChanged) this.redrawNowPlaying();
       await loadFrame(s).catch((err) => {

@@ -216,6 +216,15 @@
         </fieldset>
 
         <fieldset>
+          <legend>Display protection</legend>
+          <label class="check"><input name="pixelShift" type="checkbox" /> Shift the picture a few pixels now and then</label>
+          <label>Shift every
+            <span class="input-row"><input name="pixelShiftMinutes" type="number" min="1" max="60" step="1" /> <span class="muted">minutes</span></span>
+          </label>
+          <p class="muted small">The picture glides to a new spot inside a thin margin, so no pixel stays lit for hours. Turning it off fills the screen edge to edge.</p>
+        </fieldset>
+
+        <fieldset>
           <legend>Sleep</legend>
           <label class="check"><input name="sleepEnabled" type="checkbox" /> Go black on a schedule</label>
           <label>From

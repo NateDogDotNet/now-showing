@@ -5,10 +5,12 @@
  * When rotated 90/270 the stage is laid out against swapped viewport dimensions,
  * then rotated into place by CSS.
  */
-export function stageSize({ viewportW, viewportH, aspect, rotation = 0 }) {
+export function stageSize({ viewportW, viewportH, aspect, rotation = 0, margin = 0 }) {
   const sideways = rotation === 90 || rotation === 270;
-  const availW = sideways ? viewportH : viewportW;
-  const availH = sideways ? viewportW : viewportH;
+  // `margin` is a fraction of each axis left empty on both sides (pixel shift needs room to move in).
+  const keep = 1 - 2 * margin;
+  const availW = (sideways ? viewportH : viewportW) * keep;
+  const availH = (sideways ? viewportW : viewportH) * keep;
   let w = availW;
   let h = w / aspect;
   if (h > availH) {
@@ -16,6 +18,19 @@ export function stageSize({ viewportW, viewportH, aspect, rotation = 0 }) {
     w = h * aspect;
   }
   return { width: Math.floor(w), height: Math.floor(h) };
+}
+
+// The 9 points of a 3x3 grid in an order that never lands on the same point twice in a row,
+// including the wrap from the last step back to the first (fractions of the margin).
+const SHIFT_PATH = [
+  [0, 0], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1],
+];
+
+/** Pixel-shift offset { x, y } in screen pixels for a step number; each coordinate is within +-marginPx. */
+export function shiftOffset(step, marginPx) {
+  const n = SHIFT_PATH.length;
+  const [fx, fy] = SHIFT_PATH[((Math.trunc(step) % n) + n) % n];
+  return { x: fx * marginPx, y: fy * marginPx };
 }
 
 /**
