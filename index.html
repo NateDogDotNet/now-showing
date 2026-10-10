@@ -222,6 +222,28 @@
             <span class="input-row"><input name="pixelShiftMinutes" type="number" min="1" max="60" step="1" /> <span class="muted">minutes</span></span>
           </label>
           <p class="muted small">The picture glides to a new spot inside a thin margin, so no pixel stays lit for hours. Turning it off fills the screen edge to edge.</p>
+          <div data-live>
+            <label>Frame brightness
+              <span class="input-row"><input name="frameBrightness" type="range" min="10" max="100" step="1" /> <span class="muted">10-100 %</span></span>
+            </label>
+            <label class="check"><input name="nightDim" type="checkbox" /> Dim automatically at night</label>
+            <label>From
+              <input name="nightDimStart" type="time" />
+            </label>
+            <label>Until
+              <input name="nightDimEnd" type="time" />
+            </label>
+            <label>Night brightness
+              <span class="input-row"><input name="nightDimLevel" type="number" min="10" max="100" step="5" /> <span class="muted">%</span></span>
+            </label>
+            <label>Dim
+              <select name="nightDimTarget">
+                <option value="frame">The frame only</option>
+                <option value="stage">The whole picture</option>
+              </select>
+            </label>
+            <p class="muted small">At night the dimming eases in over ten minutes and out again before the end, one step a minute. The lower of the two brightness values applies. It waits until the clock is set.</p>
+          </div>
         </fieldset>
 
         <fieldset>

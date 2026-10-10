@@ -12,6 +12,7 @@ const SHELL = [
   'css/app.css',
   'js/main.js',
   'js/backoff.js',
+  'js/brightness.js',
   'js/display.js',
   'js/engine.js',
   'js/frames.js',

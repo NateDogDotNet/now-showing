@@ -1,6 +1,7 @@
 // App bootstrap: wires settings, Plex, the poster engine, display and controls together.
 
 import { createBackoff } from './backoff.js';
+import { effectiveBrightness } from './brightness.js';
 import { createDisplay } from './display.js';
 import { createEngine } from './engine.js';
 import { createPlexClient } from './plex.js';
@@ -347,6 +348,7 @@ function syncSleepClock() {
     state.lastPlaybackAt += jump;
     if (state.manualWakeUntil) state.manualWakeUntil += jump;
   }
+  if (Math.abs(jump) > BRIGHTNESS_JUMP_MS) evaluateBrightness(); // the clock moved: the night dim may be wrong now
 }
 
 /** Applies decideSleep() to the page: the veil and body.asleep. The wake lock is never touched. */
@@ -372,6 +374,20 @@ function evaluateSleep() {
   if (!state.busy && !state.paused) tick(); // asleep: look for playback now; awake: show a poster now
 }
 setInterval(evaluateSleep, 1000);
+
+// ---------- Frame brightness and night dim ----------
+
+const BRIGHTNESS_JUMP_MS = 2 * 60_000;
+let brightnessTimer = 0;
+
+/** Sets the frame (or stage) brightness for the current minute and re-arms the timer for the next minute boundary. */
+function evaluateBrightness() {
+  const now = new Date();
+  display.setBrightness(effectiveBrightness(now, state.settings), state.settings.nightDimTarget);
+  clearTimeout(brightnessTimer);
+  // Aligned to the minute boundary; a timer that fires a hair early just re-arms for the remaining sliver.
+  brightnessTimer = setTimeout(evaluateBrightness, 60_000 - (now.getTime() % 60_000));
+}
 
 const SWALLOW_MS = 800;
 
@@ -498,6 +514,7 @@ async function applySettings(next, { persist = true, preview = false } = {}) {
     next = { ...next, maxContentRating, limitNowPlaying, staticRatingKey, staticTitle };
   }
   state.settings = persist ? save(storage, next) : next;
+  evaluateBrightness(); // live preview and Save both show at once
   // Whatever is on screen is re-checked against the settings now in force on EVERY apply, previews and Cancel
   // included, even offline (K20, D29). This comes BEFORE the frame is applied, because a custom frame's load has no
   // timeout and must not keep an above-limit poster on screen.
@@ -703,6 +720,7 @@ async function updateWakeLock() {
 
 document.addEventListener('visibilitychange', () => {
   updateWakeLock();
+  if (document.visibilityState === 'visible') evaluateBrightness();
   if (document.visibilityState === 'visible' && !state.paused && state.nextAt && Date.now() >= state.nextAt - 1000) tick();
 });
 window.addEventListener('online', () => {

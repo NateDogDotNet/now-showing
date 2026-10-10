@@ -173,6 +173,17 @@ export function createDisplay(root = document) {
   }
 
   return {
+    /**
+     * Sets the brightness filter on the frame or the whole stage and clears it on the other. Never the poster
+     * layers or #poster-box. No transition or animation: callers change it once a minute.
+     */
+    setBrightness(level, target) {
+      const value = level < 1 ? `brightness(${level})` : '';
+      const dim = target === 'stage' ? el.stage : el.frame;
+      const clear = dim === el.stage ? el.frame : el.stage;
+      dim.style.filter = value;
+      clear.style.filter = '';
+    },
     async apply(s) {
       const barOrLabelChanged = settings && (settings.showProgress !== s.showProgress || settings.showPlayer !== s.showPlayer);
       settings = s;
