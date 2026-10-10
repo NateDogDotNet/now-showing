@@ -92,3 +92,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 
 - **D37 Content filter lands; upward re-rating routed.** `content-rating-filter` lands as approved. Re-checking cached titles' ratings while a limit is set (one batched metadata request per online refresh; fail closed for any title not confirmed) is a must-fix for `metadata-and-now-playing`, and `real-server-validation-extended` confirms the request format.
 - **D38 Help text.** `settings-sheet` corrects the household-limit help text: posters above the limit are never shown except an owner-saved pin, and the playing title when "Apply the limit to what's playing right now" is off.
+
+## Owner request — 2026-10-10 (between stops)
+
+- **D39 Off-network validation rows.** Owner asked (verbatim: "yes add both rows") for two rows in `docs/validation/real-server-extended.md`: V1-E24 (the app off the server's network reaches it through the remote `*.plex.direct` address, and posters are downloaded and cached) and V1-E25 (with the direct remote address unreachable, it falls back to the Plex relay and keeps rotating; `Image mode: direct` over relay is recorded, not failed). A wrong or missing connection reopens `settings-sheet`; a remote address that loads but will not cache reopens `cache-first-fetch`.
