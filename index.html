@@ -261,6 +261,21 @@
           <label class="check"><input name="wakeOnPlayback" type="checkbox" /> Wake the screen when something starts playing</label>
           <p class="muted small">Asleep is a black screen that keeps the display awake, so playback can wake it. With idle sleep the screen stays black between movies. Touch or press a key to wake it for a minute. Turn off your system's own screen blanking.</p>
         </fieldset>
+
+        <fieldset>
+          <legend>Kiosk</legend>
+          <label class="check"><input name="kioskMode" type="checkbox" /> Hide the controls (kiosk mode)</label>
+          <label class="check"><input name="disableShortcuts" type="checkbox" /> Ignore the keyboard shortcuts</label>
+          <p class="muted small">In kiosk mode the controls never appear on a touch, click or key press. Hold a finger or the mouse in the bottom-right corner for 3 seconds, or hold Enter for 3 seconds, to show them for 15 seconds.</p>
+          <div class="pinned">
+            <span>Settings PIN: <strong id="pin-status">not set</strong></span>
+            <span class="input-row">
+              <button type="button" class="btn small" id="pin-set-btn">Set PIN…</button>
+              <button type="button" class="btn small" id="pin-clear-btn" hidden>Remove PIN</button>
+            </span>
+          </div>
+          <p class="muted small">The PIN is a deterrent, not security: it keeps casual hands out of Settings, Diagnostics, import, reset and the token. It is stored on this device, so anyone who controls the device can get around it. It is never exported.</p>
+        </fieldset>
       </div>
 
       <footer class="sheet-foot">
@@ -282,6 +297,30 @@
       <button type="button" class="btn" id="diag-copy">Copy</button>
       <button type="button" class="btn primary" id="diag-close">Close</button>
     </footer>
+  </dialog>
+
+  <dialog id="pin-dialog" class="sheet pin-sheet" aria-labelledby="pin-title">
+    <div class="pin-box">
+      <h2 id="pin-title">Enter PIN</h2>
+      <output id="pin-dots" class="pin-dots" tabindex="-1" aria-live="polite"></output>
+      <p id="pin-error" class="error" role="alert"></p>
+      <div class="keypad" role="group" aria-label="PIN keypad">
+        <button type="button" data-key="1">1</button>
+        <button type="button" data-key="2">2</button>
+        <button type="button" data-key="3">3</button>
+        <button type="button" data-key="4">4</button>
+        <button type="button" data-key="5">5</button>
+        <button type="button" data-key="6">6</button>
+        <button type="button" data-key="7">7</button>
+        <button type="button" data-key="8">8</button>
+        <button type="button" data-key="9">9</button>
+        <button type="button" data-key="back" aria-label="Delete the last digit">⌫</button>
+        <button type="button" data-key="0">0</button>
+        <button type="button" data-key="ok" class="ok" aria-label="Enter">OK</button>
+      </div>
+      <button type="button" class="btn" id="pin-cancel">Cancel</button>
+      <p id="pin-note" class="muted small"></p>
+    </div>
   </dialog>
 
   <div id="sleep-veil" class="sleep-veil" aria-hidden="true" hidden></div>

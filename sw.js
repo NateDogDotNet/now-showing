@@ -16,6 +16,7 @@ const SHELL = [
   'js/display.js',
   'js/engine.js',
   'js/frames.js',
+  'js/kiosk.js',
   'js/layout.js',
   'js/plex.js',
   'js/poster-cache.js',

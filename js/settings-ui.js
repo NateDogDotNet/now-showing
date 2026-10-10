@@ -7,7 +7,11 @@ import { downloadJson, toast } from './util.js';
 
 const LAYOUT_KEYS = ['posterScale', 'posterOffsetX', 'posterOffsetY'];
 
-export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave, onClearCache, onReset }) {
+/**
+ * `requestPin()` is the app's one PIN check (true at once when no PIN is set); the token reveal, the token export,
+ * an import and Reset everything all go through it. `choosePin()` asks for a new PIN twice and gives { hash, salt }.
+ */
+export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave, onClearCache, onReset, requestPin, choosePin }) {
   const $ = (id) => document.getElementById(id);
   const dialog = $('settings');
   const form = $('settings-form');
@@ -18,6 +22,9 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // The pin the dialog would save: set by write() (open and import), cleared by Unpin, used by read(). It is separate
   // from the saved pin, which the live preview keeps applying until Save (an unsaved pin is never drawn, D29).
   let pendingPin = { key: '', title: '' };
+  // The PIN material the dialog would save, like pendingPin: set from the saved settings by write(), changed by the
+  // Set / Remove buttons, saved by Save. An import never changes it (fromImport ignores PIN material).
+  let pendingAuth = { hash: '', salt: '' };
 
   // Frame options are built from the registry so new frames only need adding there.
   $('frame-select').replaceChildren(
@@ -38,6 +45,8 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     pendingPin = { key: s.staticRatingKey || '', title: s.staticTitle || '' };
     $('pinned-title').textContent = s.staticRatingKey ? s.staticTitle || `item ${s.staticRatingKey}` : 'none';
     $('unpin-btn').hidden = !s.staticRatingKey;
+    pendingAuth = { hash: s.settingsPinHash || '', salt: s.settingsPinSalt || '' };
+    syncPin();
     syncDependent();
   }
 
@@ -52,7 +61,22 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     s.libraryName = lib.selectedOptions[0]?.dataset.title || s.libraryName;
     s.staticRatingKey = pendingPin.key;
     s.staticTitle = pendingPin.title;
+    s.settingsPinHash = pendingAuth.hash;
+    s.settingsPinSalt = pendingAuth.salt;
     return sanitize(s);
+  }
+
+  function syncPin() {
+    const set = Boolean(pendingAuth.hash);
+    const changed = pendingAuth.hash !== (getSettings().settingsPinHash || '');
+    $('pin-status').textContent = set ? (changed ? 'set (saved with Settings)' : 'set') : changed ? 'removed (saved with Settings)' : 'not set';
+    $('pin-set-btn').textContent = set ? 'Change PIN…' : 'Set PIN…';
+    $('pin-clear-btn').hidden = !set;
+  }
+
+  function setTokenShown(shown) {
+    field('plexToken').type = shown ? 'text' : 'password';
+    $('token-toggle').textContent = shown ? 'Hide' : 'Show';
   }
 
   function syncDependent() {
@@ -187,6 +211,15 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     $('signin-btn').disabled = false;
   }
 
+  /**
+   * Closes the sheet and hides the token in the same step. The dialog's own 'close' event (which also hides it) is queued
+   * for a later task, so `dialog.open` is already false while it has not run yet: nothing may rely on that event alone.
+   */
+  function closeSheet() {
+    setTokenShown(false);
+    dialog.close();
+  }
+
   // ---- events ----
 
   form.addEventListener('input', (e) => {
@@ -210,12 +243,13 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     err.textContent = '';
     original = null;
     cancelSignIn();
-    dialog.close();
+    closeSheet();
     onSave(s);
   });
 
-  $('settings-cancel').addEventListener('click', () => dialog.close());
+  $('settings-cancel').addEventListener('click', closeSheet);
   dialog.addEventListener('close', () => {
+    setTokenShown(false); // the token is hidden again whenever the sheet closes
     cancelSignIn();
     if (original) onPreview(original); // undo live preview
     original = null;
@@ -225,10 +259,24 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   $('signin-cancel').addEventListener('click', cancelSignIn);
   $('server-select').addEventListener('change', (e) => useServer(Number(e.target.value)));
   $('test-btn').addEventListener('click', testConnection);
-  $('token-toggle').addEventListener('click', (e) => {
-    const t = field('plexToken');
-    t.type = t.type === 'password' ? 'text' : 'password';
-    e.target.textContent = t.type === 'password' ? 'Show' : 'Hide';
+  $('token-toggle').addEventListener('click', async () => {
+    if (field('plexToken').type === 'password') {
+      if (!(await requestPin()) || !dialog.open) return; // showing the token needs the PIN; hiding it does not
+      setTokenShown(true);
+    } else {
+      setTokenShown(false);
+    }
+  });
+
+  $('pin-set-btn').addEventListener('click', async () => {
+    const auth = await choosePin();
+    if (!auth || !dialog.open) return;
+    pendingAuth = auth;
+    syncPin();
+  });
+  $('pin-clear-btn').addEventListener('click', () => {
+    pendingAuth = { hash: '', salt: '' };
+    syncPin();
   });
 
   $('reset-layout').addEventListener('click', () => {
@@ -244,8 +292,9 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     $('pinned-title').textContent = 'none (unpinned on save)';
   });
 
-  $('export-btn').addEventListener('click', () => {
+  $('export-btn').addEventListener('click', async () => {
     const includeSecrets = $('export-secrets').checked;
+    if (includeSecrets && !(await requestPin())) return; // the file would carry the token
     downloadJson('plex-poster-settings.json', toExport(read(), { includeSecrets }));
     if (includeSecrets) toast('Exported with your Plex token — keep that file private.');
   });
@@ -255,6 +304,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+    if (!(await requestPin())) return; // the gate sits on the file arriving, not on the button, so a scripted change event is gated too
     try {
       const s = fromImport(await file.text(), read());
       write(s);
@@ -271,10 +321,11 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     toast('Poster cache cleared.');
   });
 
-  $('reset-btn').addEventListener('click', () => {
+  $('reset-btn').addEventListener('click', async () => {
+    if (!(await requestPin())) return;
     if (!confirm('Reset all settings, including your Plex token, and clear cached posters?')) return;
     original = null;
-    dialog.close();
+    closeSheet();
     onReset();
   });
 
@@ -287,6 +338,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       $('first-run-hint').hidden = !firstRun;
       form.dataset.serverName = original.serverName;
       write(original);
+      setTokenShown(false);
       $('manual-connection').open = Boolean(original.plexToken && !original.serverName);
       dialog.showModal();
       if (original.plexToken && original.serverUrl) testConnection();

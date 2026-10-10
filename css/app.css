@@ -404,5 +404,42 @@ summary { cursor: pointer; color: var(--muted); }
   .poster-layer, .stage, .controls, .empty-card, .status-pill { transition: none; }
 }
 
+/* ---------- Kiosk and the PIN dialog ---------- */
+
+/* Kiosk: a press must reach the corner hold, not scroll, select or open a long-press menu. */
+body.kiosk #app { touch-action: none; user-select: none; -webkit-user-select: none; }
+
+/* A small keypad dialog, centred in the viewer's frame; like every dialog it carries its own rotation (D2). */
+.pin-sheet {
+  width: min(340px, var(--vw));
+  height: auto;
+  max-height: var(--vh);
+  overflow-y: auto;
+  border: 1px solid var(--panel-line);
+  border-radius: var(--radius);
+  transform: rotate(var(--ui-rotation)) translate(-50%, -50%);
+}
+.pin-box { padding: 18px 20px 16px; text-align: center; }
+.pin-box h2 { margin: 0; font-size: 1.25rem; }
+.pin-dots { display: block; min-height: 1.8em; margin-top: 8px; font-size: 1.5rem; line-height: 1.8; letter-spacing: 0.3em; }
+.pin-dots:focus { outline: none; }
+.pin-box .error { min-height: 1.4em; margin: 2px 0 6px; }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.keypad button {
+  min-height: 48px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-line);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+.keypad button:hover { background: rgba(255, 255, 255, 0.14); }
+.keypad button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.keypad button.ok { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.pin-box .btn { min-height: 48px; justify-content: center; }
+.pin-box .muted.small { margin: 12px 0 0; }
+
 /* Scrollable regions are focusable in Chromium; the ring around the whole panel is noise. */
 .sheet:focus, .sheet-body:focus, .sheet-body:focus-visible { outline: none; }

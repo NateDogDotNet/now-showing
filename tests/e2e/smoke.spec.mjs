@@ -9,7 +9,10 @@ const check = (name) => console.log(`  ok  ${name}`);
 // Poster renders and the console stays clean.
 await withApp({ settings: seedFor }, async ({ page, app }) => {
   const errors = [];
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  // The app asks for config.json on every load (the PIN reset flag, D10); with none beside it the server answers 404
+  // (403 off loopback) and Chromium logs that as a console error. That one error is expected; every other one fails.
+  const expected = (m) => m.location().url.endsWith('/config.json') && /status of (404|403)\b/.test(m.text());
+  page.on('console', (m) => m.type() === 'error' && !expected(m) && errors.push(m.text()));
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(app.url);
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });

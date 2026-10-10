@@ -4,6 +4,7 @@ import { createBackoff } from './backoff.js';
 import { effectiveBrightness } from './brightness.js';
 import { createDisplay } from './display.js';
 import { createEngine } from './engine.js';
+import { cornerZone, createHold, createPinPrompt, HOLD_MS, inZone, REVEAL_MS, shouldResetPin } from './kiosk.js';
 import { createPlexClient } from './plex.js';
 import { createPosterCache } from './poster-cache.js';
 import { allows } from './ratings.js';
@@ -50,6 +51,7 @@ const state = {
 
 let client = null;
 let engine = null;
+let pinResetFlag = false; // config.json served {"resetPin": true} on this load
 const backoff = createBackoff({ baseMs: 5000, maxMs: 5 * 60 * 1000 });
 
 function rebuildClient() {
@@ -508,10 +510,11 @@ async function applySettings(next, { persist = true, preview = false } = {}) {
   const prev = state.settings;
   // A live preview shows layout only. The household limit and the pin are never previewed (CCI1, C6I1): while the
   // dialog is open the previous, saved values keep applying, so only Save changes them and Cancel has nothing to undo
-  // (an imported file that pins an above-limit title must not exempt it before it is saved).
+  // (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the
+  // kiosk switches and the settings PIN: an unsaved PIN or kiosk change is never in force.
   if (preview) {
-    const { maxContentRating, limitNowPlaying, staticRatingKey, staticTitle } = prev;
-    next = { ...next, maxContentRating, limitNowPlaying, staticRatingKey, staticTitle };
+    const { maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt } = prev;
+    next = { ...next, maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt };
   }
   state.settings = persist ? save(storage, next) : next;
   evaluateBrightness(); // live preview and Save both show at once
@@ -529,6 +532,10 @@ async function applySettings(next, { persist = true, preview = false } = {}) {
   if (preview) return;
 
   document.body.classList.toggle('hide-cursor', state.settings.hideCursor);
+  if (prev.kioskMode !== state.settings.kioskMode) {
+    applyKiosk();
+    if (!state.settings.kioskMode) wake();
+  }
   updateWakeLock();
   updatePinButton();
   syncSleepClock();
@@ -552,7 +559,34 @@ async function applySettings(next, { persist = true, preview = false } = {}) {
   tick({ force });
 }
 
+// ---------- The PIN gate ----------
+
+const pinPrompt = createPinPrompt({
+  dialog: $('pin-dialog'),
+  storage,
+  getAuth: () => ({ hash: state.settings.settingsPinHash, salt: state.settings.settingsPinSalt }),
+});
+
+/**
+ * The ONE PIN check (D16: a deterrent, not security). True at once when no PIN is set; otherwise the PIN dialog
+ * decides. Settings, Diagnostics, import, Reset everything, the token reveal and the token export all ask here.
+ */
+const requestPin = () => (state.settings.settingsPinHash ? pinPrompt.verify() : Promise.resolve(true));
+
+/** Opens Settings, after the PIN when one is set. Every route to Settings (button, `s`, empty card, first run) ends here. */
+async function requestSettings(options) {
+  if (settingsUI.isOpen) return;
+  if (await requestPin()) settingsUI.open(options);
+}
+
+/** Opens Diagnostics, after the PIN when one is set. */
+async function requestDiagnostics() {
+  if (await requestPin()) openDiagnostics();
+}
+
 const settingsUI = createSettingsUI({
+  requestPin,
+  choosePin: () => pinPrompt.choose(),
   getSettings: () => state.settings,
   clientId: clientIdValue,
   log,
@@ -612,6 +646,7 @@ function renderDiagnostics() {
     'Wake lock': state.wakeLock ? 'held' : s.keepAwake ? 'not held' : 'off',
     Storage: storage.persistent ? 'localStorage' : 'memory only (settings will not persist!)',
     Screen: `${innerWidth}×${innerHeight} @${devicePixelRatio}x, rotation ${s.rotation}°`,
+    ...(pinResetFlag ? { 'PIN reset': 'PIN reset flag present — remove "resetPin" from config.json' } : {}),
   };
   $('diag-list').replaceChildren(
     ...Object.entries(rows).flatMap(([k, v]) => {
@@ -655,9 +690,9 @@ $('diag-copy').addEventListener('click', async () => {
 // ---------- Controls, keyboard, idle ----------
 
 const actions = {
-  settings: () => settingsUI.open(),
-  diagnostics: openDiagnostics,
-  refresh: () => (engine ? tick({ force: true }) : settingsUI.open()),
+  settings: () => requestSettings(),
+  diagnostics: requestDiagnostics,
+  refresh: () => (engine ? tick({ force: true }) : requestSettings()),
   pause: () => setPaused(!state.paused),
   pin: togglePin,
   rotate,
@@ -671,7 +706,9 @@ document.addEventListener('click', (e) => {
 
 const KEYS = { s: 'settings', d: 'diagnostics', r: 'refresh', ' ': 'pause', p: 'pause', o: 'rotate', f: 'fullscreen' };
 document.addEventListener('keydown', (e) => {
-  if (e.target.closest('input, select, textarea, dialog') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (state.settings.disableShortcuts) return;
+  // (`dialog[open]`: for a frame after a sheet closes, focus can still sit on a button inside it.)
+  if (e.target.closest('input, select, textarea, dialog[open]') || e.ctrlKey || e.metaKey || e.altKey) return;
   const action = KEYS[e.key.toLowerCase()];
   if (action) {
     e.preventDefault();
@@ -680,20 +717,89 @@ document.addEventListener('keydown', (e) => {
 });
 
 let idleTimer;
-function wake() {
-  $('controls').classList.add('visible');
+
+function showControls() {
+  const controls = $('controls');
+  controls.inert = false;
+  controls.classList.add('visible');
   const wasIdle = document.body.classList.contains('idle');
   document.body.classList.remove('idle');
   if (wasIdle) updateStatus(); // catch the pill up before it shows
   clearTimeout(idleTimer);
+}
+
+function hideControls() {
+  $('controls').classList.remove('visible');
+  $('controls').inert = state.settings.kioskMode; // kiosk: not even Tab reaches them
+  document.body.classList.add('idle');
+  updateStatus(); // the dot takes over from the pill
+}
+
+/** Pointer or key activity shows the controls for a moment. Kiosk mode ignores it: see revealControls(). */
+function wake() {
+  if (state.settings.kioskMode) return;
+  showControls();
   idleTimer = setTimeout(() => {
     if ($('controls').matches(':hover, :focus-within')) return wake();
-    $('controls').classList.remove('visible');
-    document.body.classList.add('idle');
-    updateStatus(); // the dot takes over from the pill
+    hideControls();
   }, 3500);
 }
 ['pointermove', 'pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, wake, { passive: true }));
+
+// ---------- Kiosk mode ----------
+
+/** Kiosk mode: the controls are hidden and inert; only a 3 s hold in the corner or on Enter shows them, for 15 s. */
+function applyKiosk() {
+  document.body.classList.toggle('kiosk', state.settings.kioskMode);
+  clearTimeout(idleTimer);
+  if (state.settings.kioskMode) hideControls();
+  else $('controls').inert = false;
+}
+
+function revealControls() {
+  if (!state.settings.kioskMode) return;
+  showControls();
+  idleTimer = setTimeout(hideControls, REVEAL_MS);
+}
+
+const uiRotation = () => Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-rotation')) || 0;
+const cornerHold = createHold({ ms: HOLD_MS, onHold: revealControls });
+const enterHold = createHold({ ms: HOLD_MS, onHold: revealControls });
+let holdPointer = null; // the pointerId whose press started the corner hold
+
+// Pointer events cover mouse, touch and pen. The zone follows the shell's --ui-rotation, so it is the viewer's corner.
+const press = { capture: true, passive: true };
+document.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (!state.settings.kioskMode || !e.isPrimary || cornerHold.active) return;
+    if (!inZone(cornerZone(uiRotation(), { width: innerWidth, height: innerHeight }), e.clientX, e.clientY)) return;
+    holdPointer = e.pointerId;
+    cornerHold.start(e.clientX, e.clientY);
+  },
+  press,
+);
+document.addEventListener('pointermove', (e) => e.pointerId === holdPointer && cornerHold.move(e.clientX, e.clientY), press);
+for (const type of ['pointerup', 'pointercancel']) {
+  document.addEventListener(type, (e) => e.pointerId === holdPointer && cornerHold.end(), press);
+}
+
+// Remotes: holding OK/Enter. Only the first keydown arms the hold (auto-repeat never does, so a key held through a wake
+// from sleep, whose first press is swallowed, cannot start it); keyup ends it. Works with disableShortcuts.
+document.addEventListener(
+  'keydown',
+  (e) => {
+    if (e.key === 'Enter' && !e.repeat && state.settings.kioskMode && !e.target.closest?.('dialog')) enterHold.start();
+  },
+  press,
+);
+document.addEventListener('keyup', (e) => e.key === 'Enter' && enterHold.end(), press);
+window.addEventListener('blur', () => {
+  cornerHold.end();
+  enterHold.end();
+});
+// A long press on the viewer must not open a menu; inside an open dialog it must (paste into a Settings field).
+document.addEventListener('contextmenu', (e) => state.settings.kioskMode && !e.target.closest?.('dialog[open]') && e.preventDefault());
 
 function toggleFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen?.();
@@ -759,14 +865,31 @@ function registerServiceWorker() {
 
 // ---------- Boot ----------
 
-/** Optional provisioning: a config.json beside index.html seeds settings on first run. */
-async function loadProvisionedConfig() {
+/** config.json beside index.html, fetched on every load (the server only serves it to loopback): its text, or null. */
+async function readConfigJson() {
   try {
-    const res = await fetch('config.json', { cache: 'no-store' });
-    if (!res.ok) return null;
-    const s = fromImport(await res.text(), state.settings);
+    const res = await fetch('config.json', { cache: 'no-store', signal: AbortSignal.timeout?.(2500) });
+    return res.ok ? await res.text() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Optional provisioning: the config.json settings seed a first run. */
+function provisionedSettings(text) {
+  try {
+    const s = fromImport(text, state.settings);
     log.info('Loaded settings from config.json');
     return s;
+  } catch {
+    return null;
+  }
+}
+
+/** The text parsed as JSON, or null. */
+function parseJson(text) {
+  try {
+    return JSON.parse(text);
   } catch {
     return null;
   }
@@ -775,16 +898,30 @@ async function loadProvisionedConfig() {
 async function boot() {
   const { source } = load(storage);
   if (source === 'legacy') log.info('Migrated settings from the previous version (layout reset to defaults).');
-  if (source === 'defaults') {
-    const provisioned = await loadProvisionedConfig();
+  applyKiosk(); // hidden and inert before anything is awaited
+  evaluateSleep(); // black before config.json is awaited, as before
+  const config = await readConfigJson();
+  if (source === 'defaults' && config !== null) {
+    const provisioned = provisionedSettings(config);
     if (provisioned) state.settings = save(storage, provisioned);
   }
+  // The PIN reset (D10, Q21): while config.json serves {"resetPin": true} the PIN is cleared on every load.
+  pinResetFlag = config !== null && shouldResetPin(parseJson(config));
+  if (pinResetFlag) {
+    pinPrompt.resetLock(); // the lockout too
+    if (state.settings.settingsPinHash || state.settings.settingsPinSalt) {
+      state.settings = save(storage, { ...state.settings, settingsPinHash: '', settingsPinSalt: '' });
+    }
+    pinPrompt.cancelVerify(); // a prompt opened during the config.json wait asks for a PIN that no longer exists
+    log.warn('PIN reset flag present in config.json: the settings PIN was cleared. Remove the flag once you are done.');
+  }
+  applyKiosk(); // a provisioned file may have switched kiosk mode on
   evaluateSleep(); // black before the first poster, not after
   if (!storage.persistent) log.warn('localStorage unavailable — settings will not survive a reload.');
 
   registerServiceWorker();
   await applySettings(state.settings, { persist: false });
-  if (!isConfigured(state.settings)) settingsUI.open({ firstRun: true });
+  if (!isConfigured(state.settings)) requestSettings({ firstRun: true });
   wake();
 }
 
