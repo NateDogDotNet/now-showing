@@ -341,7 +341,7 @@ Protect the screen, the Pi and the SD card, and keep children out of the setting
 - **Goal:** Hide the controls entirely, reveal them by a 3 s corner hold or a 3 s Enter hold, gate settings and token reveal behind an optional PIN, and allow a loopback-only PIN reset.
 - **Findings:** E12, E16 · **Requirements:** R-KIOSK-1, R-KIOSK-2 · **Rulings:** D10, D16
 - **Mode:** afk · **Tags:** ui, risk:high · **Blocked by:** `rotation-layout-and-shell`, `settings-and-schedule-core`
-- **Output:** `js/kiosk.js`, `tests/kiosk.test.js`, `js/main.js`, `js/settings-ui.js`, `index.html`, `css/app.css`, `sw.js`, `tests/e2e/kiosk.spec.mjs`
+- **Output:** `js/kiosk.js`, `tests/kiosk.test.js`, `js/main.js`, `js/settings-ui.js`, `index.html`, `css/app.css`, `sw.js`, `tests/e2e/kiosk.spec.mjs`, `tests/e2e/smoke.spec.mjs` (K32: the every-load config.json fetch logs an expected 404/403)
 - **Acceptance criteria:**
   1. `test -f tests/kiosk.test.js && node --test tests/kiosk.test.js`  (hash/verify round trip with salt; wrong PIN fails; lockout: 5 failures lock 60 s, doubling to 15 min, clears on success; fallback hasher used when `crypto.subtle` is missing; `cornerZone(rotation, viewport)` returns the viewer's bottom-right 96x96 region for 0/90/180/270; hold timer cancels on movement > 12 px or early release; `shouldResetPin(config)` is true only for `{resetPin: true}`)
   2. `npm test`
