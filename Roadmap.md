@@ -14,6 +14,16 @@
 - Sign in with Plex (plex.tv/link PIN) and automatic server/connection discovery
 - Screen wake lock, auto-hiding cursor, keyboard shortcuts, diagnostics log
 
+## ⏭ Planned for 2.2
+
+Moved out of 2.1 so the screen-protection features ship sooner (D41). Both are fully specified in `docs/integration-plan.md` (phases 22 and 23).
+
+### Drag and nudge poster positioning
+Place the poster by dragging it, or with the arrow keys, while Settings is open, instead of with tiny sliders. Works at every rotation (R-SET-5).
+
+### Landscape fill: blurred backdrop or info panel
+Use the empty sides of a landscape screen for a dimmed, blurred copy of the poster or a synopsis panel (R-FILL-1).
+
 ## 🔜 Ideas
 
 ### Auto-discover Plex servers on the local network
@@ -83,3 +93,17 @@ Separate "OLED", "LCD" and "e-ink" choices that set pixel shift, dimming and sle
 
 ### Burn-in report
 Track how many hours a day the frame art stays lit and suggest stronger protection when the number is high.
+
+## 🛠 Engineering backlog
+
+### Split `js/main.js`
+It is about 930 lines and every feature phase adds wiring to it. After 2.1, move sleep and display power, the PIN gate and display protection into their own modules. Do it before the source-adapter work, and not during the 2.1 run, when every remaining phase edits the file.
+
+### Validate on the real server early
+Run the core real-server checklist (`docs/validation/real-server-core.md`) as soon as the leaked token is rotated, before more features land. Much of the code rests on unverified guesses, such as the poster download needed for caching, the rating filter syntax and the batched rating re-check (D42).
+
+### Pull request and merge for 2.1
+The 2.1 work lives on its own branch. When it is ready, open a pull request so CI (`.github/workflows/ci.yml`) runs on it, and merge once validation passes. Merging is the owner's call (D13).
+
+### Tidy the build workspace
+Delete leftover per-phase git worktrees once their phases have landed.

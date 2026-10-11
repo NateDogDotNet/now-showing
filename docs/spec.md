@@ -296,6 +296,8 @@ An **owner-pinned** poster is exempt. Client-side ladder: `G=TV-Y=TV-G < PG=TV-Y
 | Animated frame bulbs | E3 (was R-FRM-3) | The overlay does not rest the underlying bulb pixels and an infinite animation keeps the Pi compositing around the clock | deferred (D1) → Roadmap |
 | Frame rotation (daily/weekly frame) | E5 (was R-FRM-2) | The three built-in frames place their bulb rings within about 1.5 points of each other, so rotating gives little relief beyond pixel shift | deferred (D1) → Roadmap |
 | Hardware brightness through the helper | E6 part | DDC/CI is absent on consumer TVs, HDMI has no backlight sysfs (D8) | dropped |
+| Drag and nudge poster positioning | U5 (R-SET-5) | Release scope cut to ship the protection features sooner (D41) | 2.2 → Roadmap |
+| Landscape fill: blurred backdrop and info panel | U7 (R-FILL-1) | Release scope cut; large display.js change (D41) | 2.2 → Roadmap |
 | Local-network Plex server discovery | — | Roadmap only (D3); GDM needs a UDP listener in `serve.mjs` | Roadmap (exists) |
 | Multiple libraries mixed in the random pool, collections, genre/decade filters, "recently added" mode | Roadmap ideas | Not in the findings; the library picker and pool code would change shape | stay on the Roadmap |
 | Server-side PIN enforcement or real authentication | — | The app has no backend by design; the PIN deters casual use (D16) | — |

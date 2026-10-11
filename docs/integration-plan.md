@@ -53,8 +53,8 @@ Tag decisions: `rotate-plex-token` is hitl with no code to review cold, so it is
 |---|---|---|---|
 | M1 | P0 fix-first | `e2e-harness`, `settings-and-schedule-core`, `rotate-plex-token`, `serve-config-guard`, `rotation-layout-and-shell`, `cache-first-fetch`, `status-indicator`, `validation-checklists`, `real-server-validation` | `real-server-validation` |
 | M2 | P1 protection | `pixel-shift`, `frame-brightness`, `sleep-mode`, `content-rating-filter`, `kiosk-and-pin`, `device-helper-server`, `device-helper-integration`, `pi-stability`, `recommended-protection-preset` | `recommended-protection-preset` |
-| M3 | P2 polish | `settings-sheet`, `touch-and-labels`, `metadata-and-now-playing`, `position-drag-nudge` | `position-drag-nudge` |
-| M4 | P3 bigger features and release | `fill-blur-and-info`, `real-server-validation-extended`, `docs`, `release-bump` | `release-bump` |
+| M3 | P2 polish | `settings-sheet`, `touch-and-labels`, `metadata-and-now-playing` (`position-drag-nudge` deferred, D41) | `touch-and-labels` |
+| M4 | P3 release | `real-server-validation-extended`, `docs`, `release-bump` (`fill-blur-and-info` deferred, D41) | `release-bump` |
 
 Optional, outside the release path and outside every milestone: `purge-git-history`. Milestone order is the default scheduling order; a later milestone's phase may start earlier only when its `Blocked by` is satisfied and its Output is disjoint from every running phase.
 
@@ -439,7 +439,7 @@ Protect the screen, the Pi and the SD card, and keep children out of the setting
 
 ## Milestone 3 — P2 polish
 
-Settings and input ergonomics for a keyboardless, remote-or-touch-only device. Exit: `position-drag-nudge`.
+Settings and input ergonomics for a keyboardless, remote-or-touch-only device. Exit: `touch-and-labels` (`position-drag-nudge` deferred, D41).
 
 ### 19. `settings-sheet` — Connection card, libraries, minute presets, Advanced fold, actionable errors and the keyboardless first run
 
@@ -504,7 +504,8 @@ Settings and input ergonomics for a keyboardless, remote-or-touch-only device. E
 
 ### 22. `position-drag-nudge` — Drag and nudge poster positioning
 
-- **Goal:** Place the poster by dragging it or with arrow keys while Settings is open, instead of tiny sliders. Closes M3.
+- **Status:** deferred to 2.2 (D41); not part of the 2.1 release.
+- **Goal:** Place the poster by dragging it or with arrow keys while Settings is open, instead of tiny sliders.
 - **Findings:** U5 · **Requirements:** R-SET-5
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `rotation-layout-and-shell`, `settings-and-schedule-core`, `settings-sheet`, `touch-and-labels`, `metadata-and-now-playing`
 - **Output:** `js/position.js`, `tests/position.test.js`, `index.html`, `css/app.css`, `js/settings-ui.js`, `js/main.js`, `sw.js`, `tests/e2e/position.spec.mjs`
@@ -528,6 +529,7 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 ### 23. `fill-blur-and-info` — Landscape fill: blurred backdrop and info panel
 
+- **Status:** deferred to 2.2 (D41); not part of the 2.1 release.
 - **Goal:** Use the empty sides of a landscape screen for a dimmed poster backdrop or a synopsis panel.
 - **Findings:** U7 · **Requirements:** R-FILL-1 · **Rulings:** D1
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `metadata-and-now-playing`, `rotation-layout-and-shell`, `pi-stability`
@@ -565,7 +567,7 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 - **Goal:** Document everything a page cannot do (smart plug, SD wear, overlay FS, battery, Chromium flags and policy, OS blanking, VLAN, managed user, helper, config.json, supported setups), bring the feature docs to 2.1 reality, and record each D1 deferral on the Roadmap.
 - **Findings:** E7, E8, E11, E13, E15, E17, F4 · **Requirements:** R-DOC-1, R-DOC-2, R-DOC-3, R-DOC-4, R-DOC-5, R-DOC-6, R-DOC-7, R-DOC-8, R-DOC-9, R-TOPO-1 · **Rulings:** D1, D7, D9, D16
-- **Mode:** afk · **Tags:** docs · **Blocked by:** `recommended-protection-preset`, `position-drag-nudge`, `fill-blur-and-info`, `real-server-validation-extended`
+- **Mode:** afk · **Tags:** docs · **Blocked by:** `recommended-protection-preset`, `touch-and-labels`, `real-server-validation-extended` (position-drag-nudge and fill-blur-and-info deferred, D41)
 - **Output:** `README.md`, `Roadmap.md`
 - **Acceptance criteria:**
   1. `for k in 'smart plug' 'Overlay File System' 'disk-cache-dir' 'lost on reboot' 'swelling' 'overscroll-history-navigation' 'disable-pinch' 'overscroll-behavior' 'managed user' 'Plex Home' '32400' 'VLAN' '--helper' 'cec-ctl' 'wlr-randr' 'config.json' 'resetPin' 'reverse proxy' 'Recommended protection' 'Household with children' 'DeveloperToolsAvailability' 'chromium-browser' 'labwc' 'screen blanking' 'Supported setups' 'deterrent' 'Fullscreen' 'rotateUi' 'hdmi_force_hotplug' 'video group' 'fake-hwclock'; do grep -qiF -- "$k" README.md || { echo "missing: $k"; exit 1; }; done`
@@ -662,10 +664,10 @@ One remaining fill feature, the extended real-server validation, the single docs
 | 19 | `settings-sheet` | afk | `rotation-layout-and-shell`, `settings-and-schedule-core` |
 | 20 | `touch-and-labels` | afk | `kiosk-and-pin`, `sleep-mode` |
 | 21 | `metadata-and-now-playing` | afk | `content-rating-filter`, `settings-and-schedule-core` |
-| 22 | `position-drag-nudge` | afk | `rotation-layout-and-shell`, `settings-and-schedule-core`, `settings-sheet`, `touch-and-labels`, `metadata-and-now-playing` |
-| 23 | `fill-blur-and-info` | afk | `metadata-and-now-playing`, `rotation-layout-and-shell`, `pi-stability` |
+| 22 | `position-drag-nudge` (deferred, D41) | afk | `rotation-layout-and-shell`, `settings-and-schedule-core`, `settings-sheet`, `touch-and-labels`, `metadata-and-now-playing` |
+| 23 | `fill-blur-and-info` (deferred, D41) | afk | `metadata-and-now-playing`, `rotation-layout-and-shell`, `pi-stability` |
 | 24 | `real-server-validation-extended` | hitl | `validation-checklists`, `real-server-validation`, `content-rating-filter`, `settings-sheet`, `metadata-and-now-playing`, `device-helper-integration`, `pi-stability` |
-| 25 | `docs` | afk | `recommended-protection-preset`, `position-drag-nudge`, `fill-blur-and-info`, `real-server-validation-extended` |
+| 25 | `docs` | afk | `recommended-protection-preset`, `touch-and-labels`, `real-server-validation-extended` |
 | 26 | `release-bump` | afk | `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended` |
 | 27 | `purge-git-history` | hitl | `rotate-plex-token`, `release-bump` |
 | 28 | `display-decode-hang` | afk | `rotation-layout-and-shell` |
@@ -718,7 +720,7 @@ Waves are a planning aid: the conductor computes the real frontier live from `Bl
 
 ### Critical path
 
-`e2e-harness` -> `settings-and-schedule-core` -> `rotation-layout-and-shell` -> `kiosk-and-pin` -> `touch-and-labels` -> `position-drag-nudge` -> `docs` -> `release-bump`  (8 phases)
+`e2e-harness` -> `settings-and-schedule-core` -> `rotation-layout-and-shell` -> `kiosk-and-pin` -> `touch-and-labels` -> `docs` -> `release-bump` (`position-drag-nudge` deferred, D41)  (8 phases)
 
 No optional or deferred phase is on it: the deferred items (D1) have no phases, and `purge-git-history` is a leaf outside the release path.
 
