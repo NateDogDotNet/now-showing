@@ -4,6 +4,7 @@ import { createBackoff } from './backoff.js';
 import { effectiveBrightness } from './brightness.js';
 import { createDisplay } from './display.js';
 import { createEngine } from './engine.js';
+import { createHelper } from './helper.js';
 import { cornerZone, createHold, createPinPrompt, HOLD_MS, inZone, REVEAL_MS, shouldResetPin } from './kiosk.js';
 import { createPlexClient } from './plex.js';
 import { createPosterCache } from './poster-cache.js';
@@ -21,6 +22,7 @@ const storage = safeStorage();
 const log = createLog();
 const cache = createPosterCache({ storage, limit: () => state.settings.posterCacheLimit });
 const display = createDisplay();
+const helper = createHelper({ log });
 const clientIdValue = getClientId(storage);
 const $ = (id) => document.getElementById(id);
 
@@ -44,6 +46,7 @@ const state = {
   manualWakeUntil: 0,
   swallowUntil: 0, // performance.now() until which clicks are swallowed (after a press that only woke the display)
   pollFailing: false,
+  tvWaking: false, // between the power-on request at wake and the end of TV_WAKE_MS: no poster is fetched yet
   pollError: null, // the error of this tick's failed playback poll, handed to decide() so it does not ask again
   pollFailures: 0, // consecutive failed playback polls
   sleepClock: { wall: Date.now(), mono: performance.now() },
@@ -198,13 +201,14 @@ function imageLoads(url) {
 }
 
 async function tick({ force = false } = {}) {
-  if (!engine || state.busy) return;
+  if (!engine || state.busy || state.tvWaking) return;
   state.busy = true;
   try {
     const sessions = await pollPlayback(); // fetched once; decide() reuses it
     const sessionsError = state.pollError; // a failed poll is not repeated by decide() (C8M1)
-    // Asleep: Plex is polled above, but no poster is chosen, fetched or shown.
-    const decision = state.asleep ? null : await engine.decide({ force: force || document.body.classList.contains('poster-blocked'), sessions, sessionsError });
+    // Asleep (or the TV still waking, the wake having begun during the poll above): Plex is polled, but no poster
+    // is chosen, fetched or shown; the end of the TV wake ticks again.
+    const decision = state.asleep || state.tvWaking ? null : await engine.decide({ force: force || document.body.classList.contains('poster-blocked'), sessions, sessionsError });
     let refused = false; // a poster was fetched but the limit no longer allows it
     if (decision) {
       cache.refreshRating(decision.poster); // seen online: its stored rating follows Plex (C7M2)
@@ -353,6 +357,67 @@ function syncSleepClock() {
   if (Math.abs(jump) > BRIGHTNESS_JUMP_MS) evaluateBrightness(); // the clock moved: the night dim may be wrong now
 }
 
+// ---------- Device helper (R-HELP-2, D8) ----------
+
+// How long the TV gets to wake after the power-on request before the first poster is fetched. (verify) on hardware:
+// the V1-E22 checklist row measures it.
+const TV_WAKE_MS = 4000;
+const DIAG_TEMP_MS = 5000; // CPU temperature refresh, only while Diagnostics is open
+
+let tvOff = false; // we asked the TV to switch off and have not switched it on again
+let powerChain = Promise.resolve(); // power requests go out one at a time, in order
+let helperInfo = { available: false, tempC: null, temperature: null };
+let diagTimer = 0;
+
+/** The setting is on and the last probe found a helper. Everything else about the helper is gated on this. */
+const helperActive = () => state.settings.deviceHelper && helper.available;
+
+/** Probes once (boot, Settings opening, the setting being switched on); a display already asleep is switched off now. */
+async function probeHelper() {
+  if (!state.settings.deviceHelper) return;
+  helperInfo = await helper.probe();
+  if (state.asleep) powerOffAfterVeil();
+}
+
+const queuePower = (on) => (powerChain = powerChain.then(() => helper.power(on)));
+
+/** Power off only once the veil is up and painted (two frames), and only if the display is still asleep. */
+function powerOffAfterVeil() {
+  if (!helperActive() || tvOff) return;
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      if (!state.asleep || tvOff || !helperActive()) return;
+      tvOff = true;
+      queuePower(false);
+    }),
+  );
+}
+
+/** Wake: power on first, give the TV time, and only then let the poster fetch begin. A failed call does not block. */
+async function wakeTv() {
+  tvOff = false;
+  state.tvWaking = true;
+  try {
+    await queuePower(true);
+    await new Promise((resolve) => setTimeout(resolve, TV_WAKE_MS));
+  } finally {
+    state.tvWaking = false;
+  }
+}
+
+/** The setting was switched off while we had the TV powered off: one power on so the screen is not stranded, then silence. */
+function releaseTv() {
+  if (!tvOff) return;
+  tvOff = false;
+  if (helper.available) queuePower(true); // a failure is logged once by the helper; either way nothing more is sent
+}
+
+async function refreshTemperature() {
+  if (!helperActive()) return;
+  helperInfo = await helper.status();
+  if ($('diagnostics').open) renderDiagnostics();
+}
+
 /** Applies decideSleep() to the page: the veil and body.asleep. The wake lock is never touched. */
 function evaluateSleep() {
   syncSleepClock();
@@ -373,7 +438,16 @@ function evaluateSleep() {
   document.body.classList.toggle('asleep', asleep);
   if (asleep) $('controls').classList.remove('visible');
   log.info(asleep ? `Asleep (${why})` : 'Awake');
-  if (!state.busy && !state.paused) tick(); // asleep: look for playback now; awake: show a poster now
+  const next = () => !state.busy && !state.paused && tick(); // asleep: look for playback now; awake: show a poster now
+  if (asleep) {
+    powerOffAfterVeil();
+    next();
+  } else if (tvOff && helperActive()) {
+    wakeTv().then(() => !state.asleep && next());
+  } else {
+    tvOff = false; // the setting was switched off since the power off: no helper call at all
+    next();
+  }
 }
 setInterval(evaluateSleep, 1000);
 
@@ -511,10 +585,10 @@ async function applySettings(next, { persist = true, preview = false } = {}) {
   // A live preview shows layout only. The household limit and the pin are never previewed (CCI1, C6I1): while the
   // dialog is open the previous, saved values keep applying, so only Save changes them and Cancel has nothing to undo
   // (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the
-  // kiosk switches and the settings PIN: an unsaved PIN or kiosk change is never in force.
+  // kiosk switches, the settings PIN and the device helper: an unsaved change to any of them is never in force.
   if (preview) {
-    const { maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt } = prev;
-    next = { ...next, maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt };
+    const { maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
+    next = { ...next, maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper };
   }
   state.settings = persist ? save(storage, next) : next;
   evaluateBrightness(); // live preview and Save both show at once
@@ -538,6 +612,8 @@ async function applySettings(next, { persist = true, preview = false } = {}) {
   }
   updateWakeLock();
   updatePinButton();
+  if (state.settings.deviceHelper && !prev.deviceHelper) probeHelper();
+  if (!state.settings.deviceHelper && prev.deviceHelper) releaseTv();
   syncSleepClock();
   state.lastPlaybackAt = Date.now(); // a save counts as a fresh start for the idle clock
   evaluateSleep();
@@ -576,7 +652,10 @@ const requestPin = () => (state.settings.settingsPinHash ? pinPrompt.verify() : 
 /** Opens Settings, after the PIN when one is set. Every route to Settings (button, `s`, empty card, first run) ends here. */
 async function requestSettings(options) {
   if (settingsUI.isOpen) return;
-  if (await requestPin()) settingsUI.open(options);
+  if (await requestPin()) {
+    settingsUI.open(options);
+    probeHelper();
+  }
 }
 
 /** Opens Diagnostics, after the PIN when one is set. */
@@ -646,6 +725,9 @@ function renderDiagnostics() {
     'Wake lock': state.wakeLock ? 'held' : s.keepAwake ? 'not held' : 'off',
     Storage: storage.persistent ? 'localStorage' : 'memory only (settings will not persist!)',
     Screen: `${innerWidth}×${innerHeight} @${devicePixelRatio}x, rotation ${s.rotation}°`,
+    ...(helperActive() && helperInfo.tempC !== null
+      ? { 'CPU temperature': `${helperInfo.tempC} °C${helperInfo.temperature ? ` (${helperInfo.temperature})` : ''}` }
+      : {}),
     ...(pinResetFlag ? { 'PIN reset': 'PIN reset flag present — remove "resetPin" from config.json' } : {}),
   };
   $('diag-list').replaceChildren(
@@ -670,7 +752,15 @@ function renderDiagnostics() {
 function openDiagnostics() {
   renderDiagnostics();
   $('diagnostics').showModal();
+  if (helperActive()) {
+    refreshTemperature();
+    diagTimer = setInterval(refreshTemperature, DIAG_TEMP_MS);
+  }
 }
+$('diagnostics').addEventListener('close', () => {
+  clearInterval(diagTimer); // the temperature is read only while Diagnostics is open
+  diagTimer = 0;
+});
 log.onChange(() => $('diagnostics').open && renderDiagnostics());
 $('diag-close').addEventListener('click', () => $('diagnostics').close());
 $('diag-copy').addEventListener('click', async () => {
@@ -921,6 +1011,7 @@ async function boot() {
 
   registerServiceWorker();
   await applySettings(state.settings, { persist: false });
+  probeHelper(); // once at boot; nothing at all when the setting is off
   if (!isConfigured(state.settings)) requestSettings({ firstRun: true });
   wake();
 }

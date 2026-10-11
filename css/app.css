@@ -336,7 +336,7 @@ input[type="text"], input[type="url"], input[type="password"], input[type="numbe
   font: inherit;
 }
 input[type="range"] { width: 100%; accent-color: var(--accent); }
-input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+input[type="checkbox"] { flex: none; width: 18px; height: 18px; accent-color: var(--accent); }
 input:focus-visible, select:focus-visible, .btn:focus-visible, summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -443,3 +443,4 @@ body.kiosk #app { touch-action: none; user-select: none; -webkit-user-select: no
 
 /* Scrollable regions are focusable in Chromium; the ring around the whole panel is noise. */
 .sheet:focus, .sheet-body:focus, .sheet-body:focus-visible { outline: none; }
+.sheet .muted code { font: 12px ui-monospace, Menlo, Consolas, monospace; }

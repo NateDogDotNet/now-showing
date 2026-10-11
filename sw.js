@@ -16,6 +16,7 @@ const SHELL = [
   'js/display.js',
   'js/engine.js',
   'js/frames.js',
+  'js/helper.js',
   'js/kiosk.js',
   'js/layout.js',
   'js/plex.js',
@@ -60,6 +61,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // Plex server, plex.tv: straight to network
   if (url.pathname.endsWith('/config.json')) return; // provisioning file: always fresh
+  if (url.pathname.includes('/__helper/')) return; // device helper: live status, never cached
 
   // Navigations: network first so a redeploy shows up, falling back to the cached shell.
   if (request.mode === 'navigate') {
