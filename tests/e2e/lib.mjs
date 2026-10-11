@@ -36,6 +36,75 @@ const chromium = pw.chromium || pw.default?.chromium;
 const DEFAULT_SETTINGS = { pixelShift: false, dailyReload: false };
 const WHATS_NEW_MARKER = 'e2e';
 
+// K48: no spec reaches the real plex.tv. A page with no Plex token asks plex.tv for a sign-in code on load, so such a
+// context answers plex.tv itself: a code that is never approved and an empty resource list. A spec that tests the
+// sign-in installs its own context.route after this one (Playwright tries the most recent route first), so it wins.
+// A context that has a token never reaches plex.tv on load and gets no route at all: any route turns on Playwright's
+// request interception, which changes cache and service-worker behaviour (pi-stability depends on neither changing).
+const STUB_HOST = 'plex.tv';
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+async function stubPlexTv(context) {
+  await context.route(`https://${STUB_HOST}/**`, (route) => {
+    const req = route.request();
+    const { pathname } = new URL(req.url());
+    const headers = { 'access-control-allow-origin': '*' };
+    const json = (body) => route.fulfill({ status: 200, headers, contentType: 'application/json', body: JSON.stringify(body) });
+    if (req.method() === 'POST' && pathname === '/api/v2/pins') {
+      return json({ id: 1, code: 'STUB', expiresIn: 900, expiresAt: new Date(Date.now() + 900_000).toISOString(), authToken: null });
+    }
+    if (pathname.startsWith('/api/v2/pins/')) return json({ id: 1, code: 'STUB', authToken: null });
+    if (pathname === '/api/v2/resources') return json([]);
+    return route.fulfill({ status: 404, headers, body: '' });
+  });
+}
+
+/**
+ * Records every request that leaves the machine: any host that is not local, and any plex.tv request that no route
+ * handler fulfilled or aborted (the default stub, or the spec's own). A route that merely matches a plex.tv pattern proves
+ * nothing: a spec that answers `/api/v2/pins` and nothing else must have its `/api/v2/resources` flagged, and a handler
+ * that passes a request on with `route.fallback()` to nobody leaves it unanswered too. `route.continue()` is no answer
+ * either: it sends the request on to the real plex.tv, which is exactly what K48 forbids. `assertClean()`
+ * throws if there was one, so the spec fails and the suite cannot silently reach out again.
+ */
+export function guardNetwork(context) {
+  const outside = new Set();
+  const plexTv = new Map(); // request -> "METHOD url"
+  const answered = new WeakSet(); // requests a route handler fulfilled or aborted; continue() reaches the real service and does not count
+  const track = (route) => {
+    if (route.__guarded) return; // one Route object travels through every handler that falls back to the next
+    route.__guarded = true;
+    for (const method of ['fulfill', 'abort']) {
+      const original = route[method].bind(route);
+      route[method] = (...args) => {
+        answered.add(route.request());
+        return original(...args);
+      };
+    }
+  };
+  const watch = (owner) => {
+    const original = owner.route.bind(owner);
+    owner.route = (url, handler, ...rest) => original(url, typeof handler === 'function' ? (route, ...args) => (track(route), handler(route, ...args)) : handler, ...rest);
+  };
+  watch(context);
+  context.on?.('page', watch);
+  context.on('request', (req) => {
+    const { protocol, hostname } = new URL(req.url());
+    if (!/^https?:$/.test(protocol)) return; // data:, blob:, about:
+    if (LOCAL_HOSTS.has(hostname)) return;
+    if (hostname === STUB_HOST) plexTv.set(req, `${req.method()} ${req.url()}`);
+    else outside.add(`${req.method()} ${req.url()}`);
+  });
+  return {
+    async assertClean() {
+      await new Promise((resolve) => setTimeout(resolve, 150)); // a request made just now may not have reached its handler yet
+      const unanswered = [...plexTv].filter(([req]) => !answered.has(req)).map(([, label]) => `${label} (plex.tv, no route answered it: fulfill or abort it, continue() reaches the real service)`);
+      const found = [...outside, ...unanswered];
+      if (found.length) throw new Error(`the spec reached beyond the local servers (K48):\n  ${found.join('\n  ')}`);
+    },
+  };
+}
+
 export function freePort() {
   return new Promise((resolve, reject) => {
     const s = createServer();
@@ -122,10 +191,12 @@ export async function withApp(opts, fn) {
       isMobile,
       serviceWorkers: serviceWorkers === 'allow' ? 'allow' : 'block',
     });
-    const page = await context.newPage();
-
     // `settings` may be a function of app so a dedicated server's mock port can be used in the seed.
     const seed = { ...DEFAULT_SETTINGS, ...(typeof settings === 'function' ? settings(app) : settings) };
+    const guard = guardNetwork(context);
+    if (!seed.plexToken) await stubPlexTv(context);
+    const page = await context.newPage();
+
     await context.addInitScript(
       ({ seed, extra, marker }) => {
         // Seed only when absent so a reload keeps whatever the app saved since.
@@ -168,7 +239,9 @@ export async function withApp(opts, fn) {
     );
     if (clock) await page.clock.install(clock);
 
-    return await fn({ page, context, app, mock: makeMock(app.mockPort) });
+    const result = await fn({ page, context, app, mock: makeMock(app.mockPort) });
+    await guard.assertClean();
+    return result;
   } finally {
     await browser.close().catch(() => {});
     if (dedicated) dedicated.child.kill();

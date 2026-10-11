@@ -101,6 +101,22 @@ async function advanceUntil(page, cond, maxMs, step = 1000) {
   assert.fail(`condition not met within ${maxMs} simulated ms`);
 }
 
+/**
+ * Stops the fake clock a little ahead of now and checks it, so the power-on time and the poster time that follow are read
+ * from a stopped clock (a flowing one can step backwards between reads). Retries a bounded number of times, then fails.
+ */
+async function freezeClock(page, tries = 8) {
+  let last = null;
+  for (let i = 0; i < tries; i++) {
+    const target = (await page.evaluate(() => Date.now())) + 500;
+    await page.clock.pauseAt(target).catch(() => {}); // "Cannot fast-forward to the past" if it overshot
+    await page.waitForTimeout(100); // let any in-flight real-time tick finish
+    last = await page.evaluate(() => Date.now());
+    if (last === target) return;
+  }
+  throw new Error(`the fake clock would not stop after ${tries} tries (last read ${last})`);
+}
+
 const diagRow = (page, key) =>
   page.evaluate((k) => [...document.querySelectorAll('#diag-list dt')].find((dt) => dt.textContent === k)?.nextElementSibling?.textContent, key);
 const openDiag = (page) => page.evaluate(() => document.querySelector('[data-action="diagnostics"]').click());
@@ -242,6 +258,7 @@ await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sle
   await page.goto(app.url);
   await waitAsleep(page);
   await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 1, 10000, 500);
+  await freezeClock(page);
   await mock.play('3');
   let onAt = null;
   let posterAt = null;
@@ -464,6 +481,7 @@ await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sle
   await waitAsleep(page);
   await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 1, 10000, 500);
   assert.ok(!seen.order.includes('poster'), 'no poster while asleep');
+  await freezeClock(page);
   await page.keyboard.press('a'); // a manual wake: the display stays awake for 60 s
   await advanceUntil(page, async () => !(await isAsleep(page)), 3000, 250);
   const { onAt, posterAt } = await wakeSequence(page, seen, 20000);
@@ -480,6 +498,7 @@ await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sle
   await waitAsleep(page);
   await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 1, 10000, 500);
   assert.ok(!seen.order.includes('poster'), 'no poster while asleep');
+  await freezeClock(page);
   const { onAt, posterAt } = await wakeSequence(page, seen, 60000);
   assert.equal(await isAsleep(page), false, 'awake after the schedule ended');
   assert.deepEqual((await helperCalls(context, app)).map((c) => [c.action, c.on]), [['display', false], ['display', true]]);

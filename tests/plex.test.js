@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildUrl, createPlexClient, discoverServers, formatRuntime, pickNowPlaying, rankConnections, toPoster, xmlToContainer } from '../js/plex.js';
+import { buildUrl, createPin, createPlexClient, discoverServers, formatRuntime, pickNowPlaying, rankConnections, toPoster, xmlToContainer } from '../js/plex.js';
 import { allowedValues } from '../js/ratings.js';
+import { pinSignIn } from '../js/settings-ui.js';
 
 const jsonResponse = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -273,4 +274,173 @@ test('items(keys) is ONE request with the keys joined by literal commas, and ret
   assert.deepEqual(items.map((p) => [p.ratingKey, p.contentRating]), [['1', 'G'], ['4', 'R']]);
   assert.deepEqual(await client.items([]), [], 'no keys: no request');
   assert.equal(calls.length, 1);
+});
+
+// ---- library counts (R-SET-4) ----
+
+function countClient(respond) {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(new URL(url));
+    return respond(url);
+  };
+  return { calls, client: createPlexClient({ serverUrl: 'http://h:32400', token: 'tok', clientId: 'cid', fetchImpl }) };
+}
+
+test('libraryCount reads totalSize from a JSON container, asking for no items', async () => {
+  const { calls, client } = countClient(() => jsonResponse({ MediaContainer: { size: 0, totalSize: 1240 } }));
+  assert.equal(await client.libraryCount('1'), 1240);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].pathname, '/library/sections/1/all');
+  assert.equal(calls[0].searchParams.get('X-Plex-Container-Start'), '0');
+  assert.equal(calls[0].searchParams.get('X-Plex-Container-Size'), '0');
+  assert.equal(calls[0].searchParams.get('X-Plex-Token'), 'tok');
+});
+
+test('libraryCount accepts a numeric string and zero, and encodes the section key', async () => {
+  const { calls, client } = countClient(() => jsonResponse({ MediaContainer: { size: 0, totalSize: '8' } }));
+  assert.equal(await client.libraryCount('1'), 8);
+  assert.equal(await createPlexClient({ serverUrl: 'http://h', token: 't', clientId: 'c', fetchImpl: async () => jsonResponse({ MediaContainer: { totalSize: 0 } }) }).libraryCount('2'), 0);
+  await client.libraryCount('a/b');
+  assert.equal(calls.at(-1).pathname, '/library/sections/a%2Fb/all');
+});
+
+test('libraryCount reads totalSize from an XML container', async () => {
+  const saved = globalThis.DOMParser;
+  globalThis.DOMParser = class {
+    parseFromString() {
+      return fakeXml(['MediaContainer', { size: '0', totalSize: '1240' }]);
+    }
+  };
+  try {
+    const { client } = countClient(() => new Response('<MediaContainer size="0" totalSize="1240"/>', { status: 200, headers: { 'Content-Type': 'text/xml' } }));
+    assert.equal(await client.libraryCount('1'), 1240);
+  } finally {
+    if (saved === undefined) delete globalThis.DOMParser;
+    else globalThis.DOMParser = saved;
+  }
+});
+
+test('libraryCount is null when the attribute is missing or not a count', async () => {
+  for (const container of [{ size: 0 }, { size: 0, totalSize: 'many' }, { size: 0, totalSize: '' }, { size: 0, totalSize: -3 }, { size: 0, totalSize: null }, {}]) {
+    const { client } = countClient(() => jsonResponse({ MediaContainer: container }));
+    assert.equal(await client.libraryCount('1'), null, JSON.stringify(container));
+  }
+  const { client } = countClient(() => new Response('', { status: 200 }));
+  assert.equal(await client.libraryCount('1'), null, 'an empty body has no count');
+});
+
+test('libraryCount is null, never a throw, on an error', async () => {
+  for (const respond of [
+    () => new Response('', { status: 500 }),
+    () => new Response('', { status: 401 }),
+    () => new Response('not json', { status: 200 }),
+    () => {
+      throw new TypeError('Failed to fetch');
+    },
+  ]) {
+    const { client } = countClient(respond);
+    assert.equal(await client.libraryCount('1'), null);
+  }
+});
+
+// ---- the plex.tv code (R-FIRST-1) ----
+
+test('createPin returns the id, code and how long the code lives, from plex.tv\'s own figure', async () => {
+  const calls = [];
+  const fetchImpl = async (url, opts) => {
+    calls.push({ url: new URL(url), opts });
+    return jsonResponse({ id: 77, code: 'AB12', expiresIn: 900, expiresAt: '2026-10-11T12:15:00Z', authToken: null });
+  };
+  const pin = await createPin('cid', { fetchImpl });
+  assert.deepEqual(pin, { id: 77, code: 'AB12', expiresAt: '2026-10-11T12:15:00Z', expiresIn: 900 });
+  assert.equal(calls[0].opts.method, 'POST');
+  assert.equal(calls[0].url.pathname, '/api/v2/pins');
+  assert.equal(calls[0].url.searchParams.get('strong'), 'false');
+  assert.equal(calls[0].url.searchParams.get('X-Plex-Client-Identifier'), 'cid');
+});
+
+test('createPin: a missing or unusable lifetime is null, not a number made up here', async () => {
+  for (const expiresIn of [undefined, null, 0, -5, 'soon']) {
+    const pin = await createPin('c', { fetchImpl: async () => jsonResponse({ id: 1, code: 'AB12', expiresIn }) });
+    assert.equal(pin.expiresIn, null, String(expiresIn));
+  }
+});
+
+test('createPin: a reply with no id or no code is an error, never a blank pin', async () => {
+  for (const body of [{}, { id: 1 }, { code: 'AB12' }, { id: 1, code: '' }, { id: 1, code: 42 }]) {
+    await assert.rejects(createPin('c', { fetchImpl: async () => jsonResponse(body) }), { kind: 'parse' }, JSON.stringify(body));
+  }
+  await assert.rejects(createPin('c', { fetchImpl: async () => { throw new TypeError('Failed to fetch'); } }), { kind: 'network' });
+  await assert.rejects(createPin('c', { fetchImpl: async () => new Response('', { status: 500 }) }), { kind: 'http' });
+});
+
+// ---- pinSignIn: the code flow the Settings sheet and the empty card share ----
+
+/** A stand-in for plex.tv: pins are created as `pin`, polls answer from `polls` in turn (an Error is thrown, a value is the authToken). */
+function fakePlexTv({ pin = { id: 5, code: 'AB12', expiresIn: 1 }, polls = [null] } = {}) {
+  const seen = { pins: 0, polls: 0 };
+  const fetchImpl = async (url, opts) => {
+    const u = new URL(url);
+    if (opts?.method === 'POST') {
+      seen.pins++;
+      return jsonResponse(pin);
+    }
+    const next = polls[Math.min(seen.polls++, polls.length - 1)];
+    if (next instanceof Error) throw next;
+    return jsonResponse({ id: Number(u.pathname.split('/').pop()), authToken: next });
+  };
+  return { seen, fetchImpl };
+}
+
+test('pinSignIn shows the code once and resolves the token when the code is approved', async () => {
+  const { seen, fetchImpl } = fakePlexTv({ pin: { id: 5, code: 'AB12', expiresIn: 60 }, polls: [null, null, 'user-token'] });
+  const codes = [];
+  const token = await pinSignIn('cid', { fetchImpl, pollMs: 5, onCode: (c) => codes.push(c) });
+  assert.equal(token, 'user-token');
+  assert.deepEqual(codes, ['AB12']);
+  assert.equal(seen.pins, 1);
+  assert.equal(seen.polls, 3);
+});
+
+test('pinSignIn resolves null when the code expires unused', async () => {
+  const { seen, fetchImpl } = fakePlexTv({ pin: { id: 5, code: 'AB12', expiresIn: 0.05 }, polls: [null] });
+  const t0 = Date.now();
+  assert.equal(await pinSignIn('cid', { fetchImpl, pollMs: 5, minLifeMs: 60 }), null);
+  assert.ok(Date.now() - t0 >= 50, 'it lived at least the floor');
+  assert.equal(seen.pins, 1, 'one call makes one pin; the caller asks again');
+});
+
+test('pinSignIn never trusts a lifetime shorter than its floor', async () => {
+  const { fetchImpl } = fakePlexTv({ pin: { id: 5, code: 'AB12', expiresIn: 0.001 }, polls: [null] });
+  const t0 = Date.now();
+  assert.equal(await pinSignIn('cid', { fetchImpl, pollMs: 5, minLifeMs: 80 }), null);
+  assert.ok(Date.now() - t0 >= 75, `lived ${Date.now() - t0} ms`);
+});
+
+test('pinSignIn: a failing poll is not an error, the code stays good', async () => {
+  const { seen, fetchImpl } = fakePlexTv({ pin: { id: 5, code: 'AB12', expiresIn: 60 }, polls: [new TypeError('offline'), new TypeError('offline'), 'tok'] });
+  assert.equal(await pinSignIn('cid', { fetchImpl, pollMs: 2 }), 'tok');
+  assert.equal(seen.polls, 3);
+});
+
+test('pinSignIn throws when no code can be had, and shows no code', async () => {
+  const codes = [];
+  await assert.rejects(pinSignIn('cid', { fetchImpl: async () => { throw new TypeError('offline'); }, onCode: (c) => codes.push(c) }), { kind: 'network' });
+  await assert.rejects(pinSignIn('cid', { fetchImpl: async () => jsonResponse({}), onCode: (c) => codes.push(c) }), { kind: 'parse' });
+  assert.deepEqual(codes, []);
+});
+
+test('pinSignIn stops at once when aborted, before or during the wait', async () => {
+  const { seen, fetchImpl } = fakePlexTv({ pin: { id: 5, code: 'AB12', expiresIn: 60 }, polls: [null] });
+  const ctrl = new AbortController();
+  const run = pinSignIn('cid', { fetchImpl, pollMs: 10_000, signal: ctrl.signal });
+  setTimeout(() => ctrl.abort(), 20);
+  const t0 = Date.now();
+  assert.equal(await run, null);
+  assert.ok(Date.now() - t0 < 2000, 'did not sit out the 10 s poll wait');
+  assert.equal(seen.polls, 0);
+  const done = new AbortController();
+  done.abort();
+  assert.equal(await pinSignIn('cid', { fetchImpl, signal: done.signal, onCode: () => assert.fail('no code after abort') }), null);
 });

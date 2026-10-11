@@ -46,6 +46,12 @@
         <img src="assets/icons/icon.svg" alt="" width="72" height="72" />
         <h1>Plex Poster Display</h1>
         <p id="empty-message">Connect to your Plex server to get started.</p>
+        <div id="firstrun" class="firstrun" hidden>
+          <p class="firstrun-lead">On any device, go to <strong>plex.tv/link</strong> and enter this code:</p>
+          <div id="signin-code-large" class="pin-code-large" aria-live="polite">····</div>
+          <p id="firstrun-status" class="muted small"></p>
+        </div>
+        <div id="empty-actions" class="empty-actions"></div>
         <button type="button" class="btn primary" data-action="settings">Open settings</button>
       </div>
     </div>
@@ -75,7 +81,12 @@
         <fieldset>
           <legend>Plex connection</legend>
 
-          <div class="signin">
+          <div id="connected-card" class="connected-card" hidden>
+            <p id="connected-text" class="connected-text">Connected</p>
+            <button type="button" class="btn small" id="connected-change">Change</button>
+          </div>
+
+          <div id="signin-controls" class="signin">
             <button type="button" class="btn primary" id="signin-btn">Sign in with Plex</button>
             <div id="signin-panel" class="signin-panel" hidden>
               <p>On any device, go to <a href="https://plex.tv/link" target="_blank" rel="noopener">plex.tv/link</a> and enter:</p>
@@ -103,8 +114,8 @@
 
           <div class="input-row">
             <button type="button" class="btn" id="test-btn">Test connection</button>
-            <span id="test-result" class="muted" aria-live="polite"></span>
           </div>
+          <p id="test-result" class="test-result muted small" aria-live="polite"></p>
 
           <label>Library
             <select name="libraryKey" id="library-select">
@@ -121,9 +132,6 @@
           </label>
           <label class="check"><input name="includeEpisodes" type="checkbox" /> Include TV episodes (shows the series poster)</label>
           <label class="check"><input name="unwatchedOnly" type="checkbox" /> Random posters: unwatched only</label>
-          <label>Random pool: top-rated
-            <span class="input-row"><input name="randomPoolSize" type="number" min="1" max="1000" step="1" /> <span class="muted">titles</span></span>
-          </label>
           <div class="pinned">
             <span>Pinned poster: <strong id="pinned-title">none</strong></span>
             <button type="button" class="btn small" id="unpin-btn" hidden>Unpin</button>
@@ -146,20 +154,39 @@
             </label>
             <label class="check"><input name="limitNowPlaying" type="checkbox" /> Apply the limit to what's playing right now</label>
           </div>
-          <p class="muted small">Posters rated above the limit are never shown, online or from the offline cache. Unrated titles are hidden too. A pinned poster is always shown.</p>
+          <p id="household-help" class="muted small">Posters above the limit are never shown, online or from the offline cache, and unrated titles are hidden too. The exceptions are a poster you pinned and saved, and the title playing right now when "Apply the limit to what's playing right now" is off.</p>
         </fieldset>
 
         <fieldset>
           <legend>Timing</legend>
-          <label>Change poster every
-            <span class="input-row"><input name="rotateSeconds" type="number" min="10" step="10" /> <span class="muted">seconds</span></span>
-          </label>
-          <label>Check for now playing every
-            <span class="input-row"><input name="nowPlayingPollSeconds" type="number" min="5" step="5" /> <span class="muted">seconds</span></span>
-          </label>
-          <label>Cross-fade
-            <span class="input-row"><input name="crossfadeMs" type="number" min="0" max="10000" step="100" /> <span class="muted">ms</span></span>
-          </label>
+          <div id="rotate-field" role="group" aria-labelledby="rotate-label">
+            <span id="rotate-label" class="field-label">Change poster every</span>
+            <div class="seg">
+              <label class="seg-opt"><input type="radio" name="rotatePreset" value="60" /><span>1 min</span></label>
+              <label class="seg-opt"><input type="radio" name="rotatePreset" value="300" /><span>5 min</span></label>
+              <label class="seg-opt"><input type="radio" name="rotatePreset" value="900" /><span>15 min</span></label>
+              <label class="seg-opt"><input type="radio" name="rotatePreset" value="3600" /><span>60 min</span></label>
+              <label class="seg-opt"><input type="radio" name="rotatePreset" value="custom" /><span>Custom…</span></label>
+            </div>
+            <span id="rotate-custom" class="input-row" hidden>
+              <input name="rotateMinutes" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Minutes between posters" />
+              <span class="muted">minutes</span>
+            </span>
+            <!-- What is stored: whole seconds. The buttons and the Custom field above map to and from it (settings-ui.js). -->
+            <input name="rotateSeconds" type="hidden" />
+          </div>
+          <details id="advanced">
+            <summary>Advanced</summary>
+            <label>Check for now playing every
+              <span class="input-row"><input name="nowPlayingPollSeconds" type="number" min="5" step="5" /> <span class="muted">seconds</span></span>
+            </label>
+            <label>Random pool: top-rated
+              <span class="input-row"><input name="randomPoolSize" type="number" min="1" max="1000" step="1" /> <span class="muted">titles</span></span>
+            </label>
+            <label>Cross-fade
+              <span class="input-row"><input name="crossfadeMs" type="number" min="0" max="10000" step="100" /> <span class="muted">ms</span></span>
+            </label>
+          </details>
         </fieldset>
 
         <fieldset data-live>
@@ -223,8 +250,8 @@
           </label>
           <p class="muted small">The picture glides to a new spot inside a thin margin, so no pixel stays lit for hours. Turning it off fills the screen edge to edge.</p>
           <div data-live>
-            <label>Frame brightness
-              <span class="input-row"><input name="frameBrightness" type="range" min="10" max="100" step="1" /> <span class="muted">10-100 %</span></span>
+            <label>Frame brightness <output data-for="frameBrightness"></output>
+              <span class="input-row"><input name="frameBrightness" type="range" min="10" max="100" step="1" /> <span id="brightness-hint" class="muted nowrap">10–100 %</span></span>
             </label>
             <label class="check"><input name="nightDim" type="checkbox" /> Dim automatically at night</label>
             <label>From

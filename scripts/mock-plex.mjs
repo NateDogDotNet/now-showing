@@ -12,11 +12,16 @@
 //   GET  /__mock/log                          {requests}: every Plex request since the last reset, "path?query" without the token
 //   POST /__mock/reset-stats                  zero the counters and clear that log
 //   POST /__mock/down  /  POST /__mock/up      simulate the server going offline
+//   POST /__mock/counts-fail[?status=500]      answer the library count request (X-Plex-Container-Size=0) with that HTTP
+//                                             status; status=0 is normal again
+//   POST /__mock/empty  /  POST /__mock/nonempty   a pool request for unwatched titles (unwatched=1) finds none / finds them
+//                                             again (a library whose titles were all watched); watched titles are still listed
 //
 // The 8 titles carry contentRating G, PG, PG-13, R, TV-MA, gb/12, gb/15 and none (title 8, as an unrated
 // Plex item has no attribute), and a runtime (`duration`, ms): item 3 is PG-13, 8,040,000 ms, 1972; the unrated item 8 has no
 // runtime either. /library/sections/1/all honours `contentRating=a,b,c` strictly: a title whose
 // rating is not in the list, or that has none, is dropped before paging. Other unknown parameters are ignored.
+// With X-Plex-Container-Size=0 it answers { MediaContainer: { size: 0, totalSize: 8 } }, as Plex does for a count.
 
 import { createServer } from 'node:http';
 
@@ -50,6 +55,8 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
   const log = []; // "path?query" of every Plex request, token left out
   const ratings = new Map(); // ratingKey -> contentRating set by /__mock/rate ('' = unrated)
   let sessionsStatus = 200;
+  let countsStatus = 200; // the library count request (/library/sections/1/all with X-Plex-Container-Size=0)
+  let emptyUnwatched = false; // every title counts as watched: pool requests that ask for unwatched ones find none
   // A title as Plex would send it now: a re-rating applies to every endpoint.
   const current = (m) => {
     if (!m || !ratings.has(m.ratingKey)) return m;
@@ -85,6 +92,9 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
         ratings.set(url.searchParams.get('ratingKey'), rating === 'none' ? '' : rating);
       }
       if (action === 'sessions-status') sessionsStatus = Number(url.searchParams.get('status') || 200);
+      if (action === 'counts-fail') countsStatus = url.searchParams.has('status') ? Number(url.searchParams.get('status')) || 200 : 500;
+      if (action === 'empty') emptyUnwatched = true;
+      if (action === 'nonempty') emptyUnwatched = false;
       if (action === 'stop') state.session = null;
       if (action === 'down') state.down = true;
       if (action === 'up') state.down = false;
@@ -124,11 +134,16 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
       return json(200, { MediaContainer: { size: state.session ? 1 : 0, Metadata: state.session ? [strip(state.session)] : [] } });
     }
     if (path === '/library/sections/1/all') {
+      if (url.searchParams.get('X-Plex-Container-Size') === '0') {
+        if (countsStatus !== 200) return json(countsStatus, { error: `Mock: counts answer ${countsStatus}` });
+        return json(200, { MediaContainer: { size: 0, totalSize: MOVIES.length } });
+      }
       const size = Number(url.searchParams.get('X-Plex-Container-Size') || MOVIES.length);
       const wanted = url.searchParams.get('contentRating');
       const allowed = wanted === null ? null : wanted.split(',');
       const items = allowed ? MOVIES.map(current).filter((m) => m.contentRating && allowed.includes(m.contentRating)) : MOVIES.map(current);
-      return json(200, { MediaContainer: { Metadata: items.slice(0, size).map(strip) } });
+      const listed = emptyUnwatched && url.searchParams.get('unwatched') === '1' ? [] : items;
+      return json(200, { MediaContainer: { Metadata: listed.slice(0, size).map(strip) } });
     }
     // One key, or several joined by commas (a batched lookup): the ones that exist, in the order asked. A single
     // unknown key is a 404; unknown keys in a list are just absent.

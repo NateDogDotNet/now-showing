@@ -160,6 +160,22 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
       return (c.Directory || []).map((d) => ({ key: String(d.key), title: d.title, type: d.type }));
     },
 
+    /**
+     * How many items a library section holds, from the `totalSize` of a request that asks for none (`X-Plex-Container-Size=0`)
+     * (verify against a real server). Null on any error or when the attribute is missing or not a count: a label is
+     * decoration, so this never throws.
+     */
+    async libraryCount(key) {
+      try {
+        const c = await get(`/library/sections/${encodeURIComponent(key)}/all`, { 'X-Plex-Container-Start': 0, 'X-Plex-Container-Size': 0 }, { timeoutMs: 8000 });
+        const raw = c.totalSize;
+        const n = typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== '') ? Number(raw) : NaN;
+        return Number.isFinite(n) && n >= 0 ? n : null;
+      } catch {
+        return null;
+      }
+    },
+
     async sessions() {
       const c = await get('/status/sessions');
       return c.Metadata || [];
@@ -223,13 +239,21 @@ function tvParams(clientId, token) {
   };
 }
 
-/** Creates a short 4-character PIN the user enters at plex.tv/link. */
+/**
+ * Creates a short 4-character PIN the user enters at plex.tv/link. `expiresIn` is how long it lives, in seconds, as plex.tv
+ * said it (null when it did not say): measured on this device's own clock, so a device with the wrong date does not misread it.
+ * A reply with no id or no code is an error, not a pin.
+ */
 export async function createPin(clientId, { fetchImpl = (...a) => fetch(...a) } = {}) {
   const pin = await request(buildUrl(PLEX_TV, '/api/v2/pins', { strong: 'false', ...tvParams(clientId) }), {
     method: 'POST',
     fetchImpl,
   });
-  return { id: pin.id, code: pin.code, expiresAt: pin.expiresAt };
+  if (pin.id === undefined || pin.id === null || typeof pin.code !== 'string' || !pin.code) {
+    throw new PlexError('plex.tv did not return a sign-in code.', { kind: 'parse' });
+  }
+  const life = Number(pin.expiresIn);
+  return { id: pin.id, code: pin.code, expiresAt: pin.expiresAt, expiresIn: Number.isFinite(life) && life > 0 ? life : null };
 }
 
 /** Resolves to the auth token once the PIN is claimed, or null while still pending. */

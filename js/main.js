@@ -11,10 +11,10 @@ import { createPosterCache } from './poster-cache.js';
 import { allows } from './ratings.js';
 import { requestSize } from './layout.js';
 import { isPlausibleClock } from './schedule.js';
-import { createSettingsUI } from './settings-ui.js';
+import { createSettingsUI, pinSignIn } from './settings-ui.js';
 import { fromImport, isConfigured, load, save, STORAGE_KEY } from './settings.js';
 import { decideSleep, MANUAL_WAKE_MS } from './sleep.js';
-import { clientId as getClientId, createLog, formatDuration, safeStorage, toast } from './util.js';
+import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
 export const VERSION = '2.0.0';
 
@@ -223,7 +223,7 @@ function imageLoads(url) {
   });
 }
 
-async function tick({ force = false } = {}) {
+async function tick({ force = false, notify = false } = {}) {
   if (!engine || state.busy || state.tvWaking) return;
   state.busy = true;
   try {
@@ -270,7 +270,7 @@ async function tick({ force = false } = {}) {
     showEmpty(false);
     schedule(refused ? REFUSED_RETRY_MS : intervalMs());
   } catch (err) {
-    await handleFailure(err);
+    await handleFailure(err, { notify });
   } finally {
     state.busy = false;
     updateStatus();
@@ -282,7 +282,7 @@ async function tick({ force = false } = {}) {
   }
 }
 
-async function handleFailure(err) {
+async function handleFailure(err, { notify = false } = {}) {
   display.setNowPlaying(null); // what Plex last said about playback is no longer known
   state.lastError = err.message;
   if (!state.offlineSince) state.offlineSince = Date.now();
@@ -312,7 +312,11 @@ async function handleFailure(err) {
   }
   if (!display.currentPoster) {
     const limited = state.settings.maxContentRating && !fatal;
-    showEmpty(true, limited ? 'No posters within the household limit are available while Plex is unreachable.' : err.message);
+    showEmpty(true, limited ? 'No posters within the household limit are available while Plex is unreachable.' : err.message, err.kind);
+  }
+  // A refresh somebody asked for that fails with a poster still on screen has nothing else to say so: the toast carries the fixes.
+  if (notify && fixesFor(err.kind).length) {
+    toast(err.message, { actions: fixesFor(err.kind).map((fix) => ({ label: fix.label, onClick: () => runFix(fix.id) })), ms: 15_000 });
   }
   // Asleep, the only thing to retry is the playback poll: keep it at its normal rate, not the 5 minute backoff.
   const retryMs = fatal ? 5 * 60 * 1000 : backoff.next();
@@ -574,6 +578,7 @@ function evaluateSleep() {
   state.sleepWhy = why;
   if (asleep === state.asleep) return;
   state.asleep = asleep;
+  syncFirstRun(); // an asleep display asks plex.tv for nothing (K50)
   $('sleep-veil').hidden = !asleep;
   $('app').inert = asleep; // top-layer dialogs are outside #app and stay usable
   document.body.classList.toggle('asleep', asleep);
@@ -651,11 +656,45 @@ window.addEventListener(
   true,
 );
 
+// ---------- Errors carry their fix (R-SET-6) ----------
+
+/**
+ * The ONE table from what went wrong to what can be done about it. The empty card, the toast and the connection test
+ * result in Settings all read it (`fixesFor`), and `runFix` does the work, so they cannot drift apart.
+ */
+const FIXES = {
+  signin: 'Sign in again',
+  diagnostics: 'Diagnostics',
+  test: 'Test connection',
+  unwatched: 'Turn off "unwatched only"',
+};
+const FIXES_BY_KIND = { auth: ['signin'], network: ['diagnostics', 'test'], timeout: ['diagnostics', 'test'], empty: ['unwatched'] };
+
+// A fix that cannot help is not offered: turning "unwatched only" off does nothing when it is already off.
+const FIX_APPLIES = { unwatched: (s) => s.unwatchedOnly };
+
+/** The fixes for an error kind, as [{ id, label }]; none for a kind the table does not know. */
+const fixesFor = (kind) =>
+  (FIXES_BY_KIND[kind] || []).filter((id) => FIX_APPLIES[id]?.(state.settings) ?? true).map((id) => ({ id, label: FIXES[id] }));
+
+async function runFix(id) {
+  if (id === 'signin') return requestSettings({ signIn: true });
+  if (id === 'test') return requestSettings({ test: true });
+  if (id === 'diagnostics') return requestDiagnostics();
+  // A saved setting changes only behind the PIN, like every other route to one. It saves, rebuilds the pool request and ticks.
+  if (id === 'unwatched' && (await requestPin())) return applySettings({ ...state.settings, unwatchedOnly: false });
+}
+
 // ---------- UI state ----------
 
-function showEmpty(show, message) {
+/** The empty card: `message` says what is wrong and `kind` (a PlexError kind, or 'empty') picks the fix buttons under it. */
+function showEmpty(show, message, kind) {
   $('empty').hidden = !show;
   if (message) $('empty-message').textContent = message;
+  if (!show) return;
+  const fixes = fixesFor(kind);
+  $('empty-actions').replaceChildren(...fixes.map((fix) => actionButton(fix.label, () => runFix(fix.id))));
+  document.querySelector('#empty [data-action="settings"]').classList.toggle('primary', !fixes.length);
 }
 
 function statusText() {
@@ -727,10 +766,17 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   // A live preview shows layout only. The household limit and the pin are never previewed (CCI1, C6I1): while the
   // dialog is open the previous, saved values keep applying, so only Save changes them and Cancel has nothing to undo
   // (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the
-  // kiosk switches, the settings PIN and the device helper: an unsaved change to any of them is never in force.
+  // kiosk switches, the settings PIN and the device helper: an unsaved change to any of them is never in force. The Display
+  // protection fieldset is not live either (K30): a pixel-shift or daily-reload change waits for Save, even when a live
+  // layout field moves while it is unsaved. The brightness controls are their own live block and are not listed here.
   if (preview) {
     const { maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
-    next = { ...next, maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper };
+    const { pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime } = prev;
+    next = {
+      ...next,
+      ...{ maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper },
+      ...{ pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime },
+    };
   }
   state.settings = persist ? save(storage, next) : next;
   evaluateBrightness(); // live preview and Save both show at once
@@ -747,6 +793,13 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   }
   if (preview) return;
 
+  // The Plex client is rebuilt BEFORE evaluateSleep() below (C8M2, D28): when this Save is what wakes the display, the
+  // wake tick must already use the new connection, not read a session or a pool from the old one.
+  const connectionChanged = ['plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some(
+    (k) => prev[k] !== state.settings[k],
+  );
+  if (connectionChanged || !engine) rebuildClient();
+
   document.body.classList.toggle('hide-cursor', state.settings.hideCursor);
   if (prev.kioskMode !== state.settings.kioskMode) {
     applyKiosk();
@@ -761,12 +814,9 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   if (restartIdle) state.lastPlaybackAt = Date.now(); // a save counts as a fresh start for the idle clock (boot after an automatic reload keeps it)
   evaluateSleep();
 
-  const connectionChanged = ['plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some(
-    (k) => prev[k] !== state.settings[k],
-  );
-  if (connectionChanged || !engine) rebuildClient();
+  syncFirstRun(); // configured now: the code flow stops; still not: it carries on (or starts)
   if (!isConfigured(state.settings)) {
-    showEmpty(true, 'Connect to your Plex server to get started.');
+    showEmpty(true, unconfiguredMessage());
     return;
   }
   // Online, the forced tick below picks the replacement for a blocked poster; offline, handleFailure shows an
@@ -792,13 +842,26 @@ const pinPrompt = createPinPrompt({
  */
 const requestPin = () => (state.settings.settingsPinHash ? pinPrompt.verify() : Promise.resolve(true));
 
-/** Opens Settings, after the PIN when one is set. Every route to Settings (button, `s`, empty card, first run) ends here. */
-async function requestSettings(options) {
-  if (settingsUI.isOpen) return;
-  if (await requestPin()) {
-    settingsUI.open(options);
-    probeHelper();
+/**
+ * Opens Settings, after the PIN when one is set. Every route to Settings (button, `s`, empty card, the fixes, first run) ends
+ * here. `options` are for the sheet: { signIn } starts a plex.tv code in it, { test } runs the connection test. Already open,
+ * the fixes act on the open sheet (no second PIN). A token the empty card's code earned (`pendingToken`) goes into the sheet
+ * at the first open that gets past the PIN, so it is never lost to a prompt that was open when the code was approved, and
+ * never reaches the sheet, let alone storage, without the PIN.
+ */
+async function requestSettings(options = {}) {
+  if (!settingsUI.isOpen && !(await requestPin())) return; // cancelled: a token the card earned stays pending (below)
+  if (settingsUI.isOpen) {
+    // Open already, or opened a moment ago by another request that shared this PIN prompt: act on the open sheet.
+    if (options.signIn) settingsUI.startSignIn();
+    else if (options.test) settingsUI.test();
+    return;
   }
+  const token = pendingToken; // the first open after the PIN takes it, whichever route opened Settings
+  pendingToken = null;
+  settingsUI.open({ ...options, token });
+  syncFirstRun(); // the sheet is its own place to sign in: the card's code steps aside
+  probeHelper();
 }
 
 /** Opens Diagnostics, after the PIN when one is set. */
@@ -817,6 +880,8 @@ const settingsUI = createSettingsUI({
     applySettings(s);
     toast('Settings saved.');
   },
+  fixesFor,
+  runFix,
   onClearCache: () => cache.clear(),
   onReset: async () => {
     storage.removeItem(STORAGE_KEY);
@@ -927,7 +992,7 @@ $('diag-copy').addEventListener('click', async () => {
 const actions = {
   settings: () => requestSettings(),
   diagnostics: requestDiagnostics,
-  refresh: () => (engine ? tick({ force: true }) : requestSettings()),
+  refresh: () => (engine ? tick({ force: true, notify: true }) : requestSettings()),
   pause: () => setPaused(!state.paused),
   pin: togglePin,
   rotate,
@@ -1105,6 +1170,103 @@ function registerServiceWorker() {
     .catch((err) => log.warn(`Service worker failed: ${err.message}`));
 }
 
+// ---------- First run: the plex.tv code on the empty card (R-FIRST-1, D3) ----------
+
+// An unconfigured display asks plex.tv for a sign-in code by itself and shows it large on the empty card: whoever stands
+// in front of it enters the code at plex.tv/link on a phone. Nothing is forced open. It runs only while nothing is
+// configured, config.json has had its say, and Settings (its own place to sign in) is closed. A code that expires is
+// replaced at once (a code lives minutes, never less than 5 s here); a plex.tv failure waits 30 s, then 60 s, up to 5 minutes.
+// A display nobody is attending must not hammer plex.tv (K50): the code is polled every 5 s while it is fresh, after
+// 3 codes in a row expire unused it rests 5 minutes before asking for the next, and an asleep display asks for nothing.
+const FIRST_RUN_RETRY_MS = 30_000;
+const FIRST_RUN_RETRY_MAX_MS = 5 * 60_000;
+const FIRST_RUN_FRESH_CODES = 3;
+const FIRST_RUN_REST_MS = 5 * 60_000;
+let firstRunCtl = null; // the AbortController of the running flow, or null
+let bootSettled = false; // boot has read config.json and applied the settings: "not configured" can be believed
+let pendingToken = null; // a token the card's code earned, waiting for the first open of Settings that gets past the PIN
+
+// A pending token ends the flow too: the display is signed in, it only needs somebody to finish in Settings.
+const firstRunWanted = () => bootSettled && !isConfigured(state.settings) && !settingsUI.isOpen && !state.asleep && !pendingToken;
+
+/** Starts or stops the code flow to match whether it is wanted. Cheap to call; called wherever that can change. */
+function syncFirstRun() {
+  if (firstRunWanted()) {
+    if (!firstRunCtl) startFirstRun();
+  } else if (firstRunCtl) {
+    firstRunCtl.abort();
+    firstRunCtl = null;
+    $('firstrun').hidden = true;
+  }
+}
+
+/** What the empty card says on an unconfigured display: the invitation, or, once a code was approved, what is left to do. */
+const unconfiguredMessage = () => (pendingToken ? 'Signed in. Open settings to finish.' : 'Connect to your Plex server to get started.');
+
+/** `rest` shows only the status: while the display waits to ask again, "enter this code" over empty squares would mislead. */
+function showFirstRun(code, status, { rest = false } = {}) {
+  $('firstrun').classList.toggle('resting', rest);
+  $('signin-code-large').textContent = code || '····';
+  $('firstrun-status').textContent = status;
+}
+
+function startFirstRun() {
+  const ctl = new AbortController();
+  firstRunCtl = ctl;
+  $('firstrun').hidden = false;
+  showFirstRun('', 'Asking plex.tv for a code…');
+  showEmpty(true, 'Connect to your Plex server to get started.');
+  runFirstRun(ctl).catch((err) => log.warn(`First-run sign-in stopped: ${err.message}`));
+}
+
+async function runFirstRun(ctl) {
+  let failures = 0;
+  let unused = 0; // codes in a row that ran out unapproved
+  while (!ctl.signal.aborted) {
+    try {
+      const token = await pinSignIn(clientIdValue, {
+        signal: ctl.signal,
+        onCode: (code) => {
+          failures = 0; // plex.tv answered
+          showFirstRun(code, 'Waiting for you to approve…');
+        },
+      });
+      if (ctl.signal.aborted) return;
+      if (token) return finishFirstRun(ctl, token);
+      // The code expired unused: the loop asks for a fresh one, after a rest once three in a row have gone to waste.
+      if (++unused >= FIRST_RUN_FRESH_CODES) {
+        showFirstRun('', 'That code ran out. Asking plex.tv for a new one in 5 minutes…', { rest: true });
+        await sleep(FIRST_RUN_REST_MS, ctl.signal);
+        if (ctl.signal.aborted) return;
+        showFirstRun('', 'Asking plex.tv for a code…');
+      }
+    } catch (err) {
+      if (ctl.signal.aborted) return;
+      if (failures === 0) log.warn(`Could not get a sign-in code from plex.tv: ${err.message}`); // once per outage, not per retry
+      showFirstRun('', "Can't reach plex.tv. Trying again soon…");
+      await sleep(Math.min(FIRST_RUN_RETRY_MAX_MS, FIRST_RUN_RETRY_MS * 2 ** failures), ctl.signal);
+      failures++;
+    }
+  }
+}
+
+/**
+ * The code was approved: Settings opens with the token (after the PIN when one is set), and the usual post-sign-in steps
+ * (servers, library) run in it. The token waits in `pendingToken` until an open gets past the PIN. A prompt that was
+ * already up shares its answer with this request, and one that is cancelled leaves the token waiting for the next open,
+ * so the code is never asked for again and never saved without the PIN.
+ */
+async function finishFirstRun(ctl, token) {
+  if (firstRunCtl === ctl) firstRunCtl = null;
+  $('firstrun').hidden = true;
+  log.info('Sign-in code approved');
+  pendingToken = token;
+  await requestSettings();
+  syncFirstRun(); // opened: the sheet owns sign-in; cancelled: the token waits and the flow stays stopped
+  if (pendingToken) showEmpty(true, unconfiguredMessage()); // cancelled: say the sign-in worked and what is left
+}
+$('settings').addEventListener('close', syncFirstRun);
+
 // ---------- Boot ----------
 
 /** config.json beside index.html, fetched on every load (the server only serves it to loopback): its text, or null. */
@@ -1164,7 +1326,8 @@ async function boot() {
   registerServiceWorker();
   await applySettings(state.settings, { persist: false, restartIdle: carriedPlayback === null });
   probeHelper(); // once at boot; nothing at all when the setting is off
-  if (!isConfigured(state.settings)) requestSettings({ firstRun: true });
+  bootSettled = true;
+  syncFirstRun(); // unconfigured after config.json: the code appears on the card by itself; Settings is not forced open
   wake();
 }
 

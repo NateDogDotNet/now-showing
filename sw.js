@@ -14,6 +14,7 @@ const SHELL = [
   'js/backoff.js',
   'js/brightness.js',
   'js/display.js',
+  'js/duration.js',
   'js/engine.js',
   'js/frames.js',
   'js/helper.js',

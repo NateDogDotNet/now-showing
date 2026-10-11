@@ -18,6 +18,22 @@ const seedFor = (extra = {}) => (app) => ({
 
 const local = (h, m = 0, s = 0) => new Date(2026, 5, 1, h, m, s);
 
+/**
+ * Pauses the fake clock at `time` and checks it. A flowing Playwright clock has a real-time tick that can land after
+ * pauseAt and move Date.now() backwards, so re-pause until the page reads exactly `time`; give up after a few tries.
+ */
+async function pauseAtChecked(page, time, tries = 8) {
+  const want = time.getTime();
+  let last = null;
+  for (let i = 0; i < tries; i++) {
+    await page.clock.pauseAt(time).catch(() => {}); // "Cannot fast-forward to the past" if it overshot
+    await page.waitForTimeout(100); // let any in-flight real-time tick finish
+    last = await page.evaluate(() => Date.now());
+    if (last === want) return;
+  }
+  throw new Error(`the fake clock would not pause at ${time.toISOString()} after ${tries} tries (last read ${last === null ? 'none' : new Date(last).toISOString()})`);
+}
+
 async function ready(page) {
   await page.waitForFunction(
     () => document.getElementById('frame').naturalWidth > 0 && [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0),
@@ -116,7 +132,7 @@ await Promise.all([
   withApp({ settings: seedFor({ nightDimStart: '22:00', nightDimEnd: '07:00' }), clock: { time: local(21, 58, 30) } }, async ({ page, app }) => {
     await page.goto(app.url);
     await ready(page);
-    await page.clock.pauseAt(local(21, 59, 0));
+    await pauseAtChecked(page, local(21, 59, 0));
     const read = async () => level((await filters(page)).frame);
     approx(await read(), 1, 0.001, '21:59');
     const values = [];
@@ -140,7 +156,7 @@ await Promise.all([
   withApp({ settings: seedFor(), clock: { time: local(6, 48, 30) } }, async ({ page, app }) => {
     await page.goto(app.url);
     await ready(page);
-    await page.clock.pauseAt(local(6, 49, 0));
+    await pauseAtChecked(page, local(6, 49, 0));
     const read = async () => level((await filters(page)).frame);
     approx(await read(), 0.6, 0.001, '06:49');
     const values = [];
