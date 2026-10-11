@@ -567,7 +567,7 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 - **Goal:** Document everything a page cannot do (smart plug, SD wear, overlay FS, battery, Chromium flags and policy, OS blanking, VLAN, managed user, helper, config.json, supported setups), bring the feature docs to 2.1 reality, and record each D1 deferral on the Roadmap.
 - **Findings:** E7, E8, E11, E13, E15, E17, F4 · **Requirements:** R-DOC-1, R-DOC-2, R-DOC-3, R-DOC-4, R-DOC-5, R-DOC-6, R-DOC-7, R-DOC-8, R-DOC-9, R-TOPO-1 · **Rulings:** D1, D7, D9, D16
-- **Mode:** afk · **Tags:** docs · **Blocked by:** `recommended-protection-preset`, `touch-and-labels`, `real-server-validation-extended` (position-drag-nudge and fill-blur-and-info deferred, D41)
+- **Mode:** afk · **Tags:** docs · **Blocked by:** `recommended-protection-preset`, `touch-and-labels` (K61: no longer waits on `real-server-validation-extended`; every unproven command or flag is tagged (verify) and `release-bump` updates the tags from the validation results; position-drag-nudge and fill-blur-and-info deferred, D41)
 - **Output:** `README.md`, `Roadmap.md`
 - **Acceptance criteria:**
   1. `for k in 'smart plug' 'Overlay File System' 'disk-cache-dir' 'lost on reboot' 'swelling' 'overscroll-history-navigation' 'disable-pinch' 'overscroll-behavior' 'managed user' 'Plex Home' '32400' 'VLAN' '--helper' 'cec-ctl' 'wlr-randr' 'config.json' 'resetPin' 'reverse proxy' 'Recommended protection' 'Household with children' 'DeveloperToolsAvailability' 'chromium-browser' 'labwc' 'screen blanking' 'Supported setups' 'deterrent' 'Fullscreen' 'rotateUi' 'hdmi_force_hotplug' 'video group' 'fake-hwclock'; do grep -qiF -- "$k" README.md || { echo "missing: $k"; exit 1; }; done`

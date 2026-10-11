@@ -280,7 +280,7 @@ An **owner-pinned** poster is exempt. Client-side ladder: `G=TV-Y=TV-G < PG=TV-Y
 
 ### Upgrade and release
 
-**R-UPG-1 (P2, sceptic M8) One-time "What's new in 2.1" toast.** After the upgrade, a configured install shows once a toast "What's new in 2.1: display protection options" with an **Open settings** action. The seen marker is `plexPoster.whatsNew` (a plain key, not a setting). A fresh (unconfigured) install never sees it.
+**R-UPG-1 (P2, sceptic M8) One-time "What's new in 2.1" toast.** After the upgrade, a configured install shows once a toast "What's new in 2.1: one-tap display protection for always-on screens." (amended at recommended-protection-preset r1 to the shipped wording) with an **Open settings** action. The seen marker is `plexPoster.whatsNew` (a plain key, not a setting). A fresh (unconfigured) install never sees it.
 - With `plexPoster.whatsNew` unset and the app configured, the toast appears once and not after a reload; unconfigured never; the e2e harness seeds the marker so other specs are unaffected.
 
 **R-REL-1 (P3; D11, D13, D16) Single version bump and release gate.** `VERSION` in `sw.js`, `js/main.js` and `package.json` is bumped to `2.1.0` once, in the final `release-bump` phase. The rationale is clean releases, not that per-phase bumps reload clients (any `sw.js` edit already triggers a service-worker update). Every phase that adds a file to `js/` also adds it to `SHELL` in `sw.js`, checked recursively by `scripts/check-precache.mjs`. The release requires `Rotated: yes` in the token receipt and `Overall: PASS` in both validation files; optional and deferred phases never block it. The run pushes to its working branch only (D13); a PR or merge happens only when the owner asks.
