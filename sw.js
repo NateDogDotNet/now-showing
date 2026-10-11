@@ -71,6 +71,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // A request that asks for no cache at all (the daily-reload probe, `fetch('index.html', { cache: 'no-store' })`) goes
+  // straight to the network: answered from the shell cache it could never fail, which is the whole point of the probe.
+  if (request.cache === 'no-store') return;
+
   // Everything else from our origin: cache first, then network (and cache custom frames etc.).
   event.respondWith(
     caches.match(request, { ignoreSearch: true }).then(

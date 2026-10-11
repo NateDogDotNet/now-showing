@@ -18,6 +18,27 @@ import { clientId as getClientId, createLog, formatDuration, safeStorage, toast 
 
 export const VERSION = '2.0.0';
 
+// An automatic reload (the daily one, or one for a new service worker) hands the idle-sleep clock to the next page
+// through sessionStorage, so it does not read as fresh playback (C8M3, D28). A normal load never finds it.
+const CARRY_KEY = 'plexPoster.carry';
+const CARRY_MAX_AGE_MS = 2 * 60_000;
+
+/** `lastPlaybackAt` left by an automatic reload that just happened, read once; null on any other load. */
+function takeCarriedPlayback() {
+  try {
+    const carried = JSON.parse(sessionStorage.getItem(CARRY_KEY));
+    sessionStorage.removeItem(CARRY_KEY);
+    const now = Date.now();
+    if (Number.isFinite(carried?.lastPlaybackAt) && Number.isFinite(carried?.at) && now - carried.at >= 0 && now - carried.at < CARRY_MAX_AGE_MS) {
+      return Math.min(carried.lastPlaybackAt, now);
+    }
+  } catch {
+    // no sessionStorage, or junk in it: a fresh clock
+  }
+  return null;
+}
+const carriedPlayback = takeCarriedPlayback();
+
 const storage = safeStorage();
 const log = createLog();
 const cache = createPosterCache({ storage, limit: () => state.settings.posterCacheLimit });
@@ -42,7 +63,7 @@ const state = {
   asleep: false,
   sleepWhy: '', // 'schedule' | 'idle' | 'manual wake' | ''
   playing: false, // the last poll saw a matching session (only polled while sleep needs it)
-  lastPlaybackAt: Date.now(),
+  lastPlaybackAt: carriedPlayback ?? Date.now(),
   manualWakeUntil: 0,
   swallowUntil: 0, // performance.now() until which clicks are swallowed (after a press that only woke the display)
   pollFailing: false,
@@ -54,6 +75,7 @@ const state = {
 
 let client = null;
 let engine = null;
+let lastDrawAt = -Infinity; // performance.now() of the last poster draw: its crossfade may still be running
 let pinResetFlag = false; // config.json served {"resetPin": true} on this load
 const backoff = createBackoff({ baseMs: 5000, maxMs: 5 * 60 * 1000 });
 
@@ -154,6 +176,7 @@ async function showPoster(poster, image) {
   document.querySelectorAll('.poster-layer.cut').forEach((img) => img.classList.remove('cut'));
   const outgoing = display.currentPoster;
   await display.show(poster, image);
+  lastDrawAt = performance.now();
   if (!allowedOnScreen(poster)) {
     blockPoster(); // the limit was tightened during the decode
     return false;
@@ -352,10 +375,128 @@ function syncSleepClock() {
   state.sleepClock = { wall, mono };
   if (Math.abs(jump) > 5000) {
     state.lastPlaybackAt += jump;
+    bootAt += jump;
     if (state.manualWakeUntil) state.manualWakeUntil += jump;
   }
   if (Math.abs(jump) > BRIGHTNESS_JUMP_MS) evaluateBrightness(); // the clock moved: the night dim may be wrong now
 }
+
+// ---------- Daily reload (R-PROT-3, D6) ----------
+
+// A display that runs for weeks sheds Chromium's memory growth with a reload each day, but only where a reload cannot
+// strand it: a service worker controls the page (so the reload is answered from the shell cache even if the host is
+// down) AND an uncached probe of index.html just succeeded (so the host is up now). Anything else is skipped and logged.
+const LAST_RELOAD_KEY = 'plexPoster.lastReload'; // a plain key, not a setting: it is the loop guard
+const RELOAD_STALE_MS = 12 * 60 * 60_000; // the first wake from sleep reloads if the last reload is older than this
+const RELOAD_GAP_MS = 10 * 60_000; // never two reloads closer than this
+const RELOAD_PROBE_MS = 5000;
+let bootAt = Date.now(); // moved with the clock when it is set after boot (syncSleepClock)
+
+let reloadPending = ''; // 'scheduled' | 'wake' | '': a reload is wanted and waits for a quiet moment
+let reloadChecking = false; // the probe is in flight
+let reloading = false; // location.reload() was called
+let reloadSkip = ''; // why the last attempt was skipped (Diagnostics)
+let reloadDay = ''; // the local day whose reload time has been handled
+let reloadArmed = false; // reloadDay has been taken from a plausible clock
+
+/** Why a reload cannot happen now, or ''. */
+function dailyReloadBlocker() {
+  if (!state.settings.dailyReload) return 'turned off in Settings';
+  if (!isPlausibleClock(new Date())) return 'the clock is not set';
+  if (!storage.persistent) return 'storage is unavailable, so a reload loop could not be prevented';
+  if (!navigator.serviceWorker?.controller) return 'no service worker controls this page (it needs https or localhost)';
+  return '';
+}
+
+const dailyReloadRow = () => {
+  const why = dailyReloadBlocker() || reloadSkip;
+  return why ? `skipped (${why})` : 'active';
+};
+
+/** Not now, but soon: a dialog is open, a poster is loading, or the last poster is still fading in. */
+function reloadMustWait() {
+  if (document.querySelector('dialog[open]')) return 'a dialog is open';
+  if (state.busy || state.tvWaking) return 'a poster is loading';
+  if (Date.now() < state.manualWakeUntil) return 'a manual wake is running'; // it would lose its 60 s to the reload
+  if (performance.now() - lastDrawAt < (state.settings.crossfadeMs ?? 0) + 250) return 'a poster is fading in';
+  return '';
+}
+
+function skipReload(why) {
+  reloadPending = '';
+  reloadSkip = why;
+  log.info(`Daily reload skipped: ${why}`);
+}
+
+/** Reloads the page on the page's own account (not the user's): the idle-sleep clock carries over. */
+function reloadAutomatically() {
+  reloading = true;
+  try {
+    sessionStorage.setItem(CARRY_KEY, JSON.stringify({ lastPlaybackAt: state.lastPlaybackAt, at: Date.now() }));
+  } catch {
+    // no sessionStorage: the idle clock starts afresh
+  }
+  location.reload();
+}
+
+/** A wake that ends sleep (K39: not a manual wake) reloads when the last reload (or, with none recorded, this page load) is over 12 h old. */
+function requestReloadAfterWake() {
+  if (!state.settings.dailyReload || !isPlausibleClock(new Date())) return;
+  const last = Number(storage.getItem(LAST_RELOAD_KEY)) || bootAt;
+  if (Date.now() - last > RELOAD_STALE_MS) reloadPending ||= 'wake';
+}
+
+/** Runs a wanted reload once nothing is in the way. Anything unsafe skips it; a busy moment only delays it. */
+async function runDailyReload() {
+  if (reloading || reloadChecking) return;
+  const blocker = dailyReloadBlocker();
+  if (blocker) return skipReload(blocker);
+  if (reloadMustWait()) return; // stays pending: looked at again in a second
+  const last = Number(storage.getItem(LAST_RELOAD_KEY)) || 0;
+  const age = Date.now() - last;
+  if (last && age >= 0 && age < RELOAD_GAP_MS) return skipReload('the last reload was less than 10 minutes ago');
+
+  reloadSkip = '';
+  reloadChecking = true;
+  let why = '';
+  try {
+    const res = await fetch('index.html', { cache: 'no-store', signal: AbortSignal.timeout?.(RELOAD_PROBE_MS) });
+    if (!res.ok) why = `the server answered HTTP ${res.status}`;
+  } catch {
+    why = 'the server did not answer';
+  } finally {
+    reloadChecking = false;
+  }
+  if (why) return skipReload(why);
+  if (dailyReloadBlocker() || reloadMustWait()) return; // the probe took a moment and things changed: decide again next second
+  const stamp = String(Date.now());
+  storage.setItem(LAST_RELOAD_KEY, stamp); // BEFORE reloading, so a failing reload cannot loop
+  if (storage.getItem(LAST_RELOAD_KEY) !== stamp) return skipReload('the reload could not be recorded');
+  log.info('Daily reload');
+  reloadAutomatically();
+}
+
+/** Once a second: notices dailyReloadTime passing (never one that had passed before this page loaded) and runs a wanted reload. */
+function dailyReloadTick() {
+  if (reloading) return;
+  const now = new Date();
+  if (!isPlausibleClock(now)) {
+    reloadArmed = false; // when the clock is set, start from there: the time it jumps past is not "04:00 passing"
+  } else {
+    const [h, m] = state.settings.dailyReloadTime.split(':').map(Number);
+    const due = now.getHours() * 60 + now.getMinutes() >= h * 60 + m;
+    const day = now.toDateString();
+    if (!reloadArmed) {
+      reloadArmed = true;
+      reloadDay = due ? day : '';
+    } else if (due && day !== reloadDay) {
+      reloadDay = day;
+      if (state.settings.dailyReload) reloadPending ||= 'scheduled';
+    }
+  }
+  if (reloadPending) runDailyReload().catch((err) => skipReload(err.message));
+}
+setInterval(dailyReloadTick, 1000);
 
 // ---------- Device helper (R-HELP-2, D8) ----------
 
@@ -438,6 +579,7 @@ function evaluateSleep() {
   document.body.classList.toggle('asleep', asleep);
   if (asleep) $('controls').classList.remove('visible');
   log.info(asleep ? `Asleep (${why})` : 'Awake');
+  if (!asleep && why !== 'manual wake') requestReloadAfterWake(); // a manual wake would lose its 60 s to the reload (K39)
   const next = () => !state.busy && !state.paused && tick(); // asleep: look for playback now; awake: show a poster now
   if (asleep) {
     powerOffAfterVeil();
@@ -580,7 +722,7 @@ function setPaused(paused) {
 
 // ---------- Settings ----------
 
-async function applySettings(next, { persist = true, preview = false } = {}) {
+async function applySettings(next, { persist = true, preview = false, restartIdle = true } = {}) {
   const prev = state.settings;
   // A live preview shows layout only. The household limit and the pin are never previewed (CCI1, C6I1): while the
   // dialog is open the previous, saved values keep applying, so only Save changes them and Cancel has nothing to undo
@@ -614,8 +756,9 @@ async function applySettings(next, { persist = true, preview = false } = {}) {
   updatePinButton();
   if (state.settings.deviceHelper && !prev.deviceHelper) probeHelper();
   if (!state.settings.deviceHelper && prev.deviceHelper) releaseTv();
+  if (prev.dailyReloadTime !== state.settings.dailyReloadTime) reloadArmed = false; // a new time is not "passing" until it does
   syncSleepClock();
-  state.lastPlaybackAt = Date.now(); // a save counts as a fresh start for the idle clock
+  if (restartIdle) state.lastPlaybackAt = Date.now(); // a save counts as a fresh start for the idle clock (boot after an automatic reload keeps it)
   evaluateSleep();
 
   const connectionChanged = ['plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some(
@@ -707,7 +850,9 @@ function renderDiagnostics() {
   const p = display.currentPoster;
   const rows = {
     Version: VERSION,
-    'Service worker': navigator.serviceWorker?.controller ? 'active (works offline)' : 'not active',
+    'Service worker': navigator.serviceWorker?.controller ? 'controlling' : 'none',
+    'Secure context': window.isSecureContext ? 'yes' : 'no',
+    'Daily reload': dailyReloadRow(),
     Installed: matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches ? 'yes' : 'no (running in a tab)',
     Server: s.serverUrl ? `${s.serverName || ''} ${s.serverUrl}`.trim() : '—',
     Token: s.plexToken ? `${s.plexToken.slice(0, 4)}…` : '—',
@@ -942,13 +1087,20 @@ function registerServiceWorker() {
   const hadController = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     // A new version took over. Kiosks are unattended, so reload into it automatically.
-    if (hadController && !settingsUI.isOpen) location.reload();
+    if (hadController && !settingsUI.isOpen) reloadAutomatically();
   });
   navigator.serviceWorker
     .register('sw.js')
     .then((reg) => {
-      // Check for updates periodically; always-on displays rarely reload on their own.
-      setInterval(() => reg.update().catch(() => {}), 6 * 60 * 60 * 1000);
+      if (!reg) return; // (a browser that blocks service workers can resolve register() with nothing)
+      // Check for updates periodically; always-on displays rarely reload on their own. Never throws (K16).
+      setInterval(() => {
+        try {
+          reg.update().catch(() => {});
+        } catch {
+          // the registration is gone: nothing to update
+        }
+      }, 6 * 60 * 60 * 1000);
     })
     .catch((err) => log.warn(`Service worker failed: ${err.message}`));
 }
@@ -1010,7 +1162,7 @@ async function boot() {
   if (!storage.persistent) log.warn('localStorage unavailable — settings will not survive a reload.');
 
   registerServiceWorker();
-  await applySettings(state.settings, { persist: false });
+  await applySettings(state.settings, { persist: false, restartIdle: carriedPlayback === null });
   probeHelper(); // once at boot; nothing at all when the setting is off
   if (!isConfigured(state.settings)) requestSettings({ firstRun: true });
   wake();

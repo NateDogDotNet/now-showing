@@ -1,7 +1,7 @@
 :root {
   --accent: #e5a00d;
   --accent-ink: #1a1200;
-  --panel: rgba(18, 18, 20, 0.94);
+  --panel: rgba(18, 18, 20, 0.98); /* near-opaque instead of a backdrop blur (R-PROT-4) */
   --panel-line: rgba(255, 255, 255, 0.12);
   --text: #f2f2f2;
   --muted: #a3a3a8;
@@ -25,6 +25,7 @@ html, body {
   color: var(--text);
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   overflow: hidden;
+  overscroll-behavior: none; /* in-page backstop for swipe-back (R-PROT-4, R-DOC-4) */
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -293,7 +294,6 @@ body.asleep .controls, body.asleep .status-pill, body.asleep .toast { visibility
   border-left: 1px solid var(--panel-line);
   background: var(--panel);
   color: var(--text);
-  backdrop-filter: blur(8px);
 }
 .sheet::backdrop { background: rgba(0, 0, 0, 0.25); }
 .sheet[open] { display: flex; flex-direction: column; }

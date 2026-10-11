@@ -434,3 +434,55 @@ await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true }) }
   assert.equal(widths.helper, widths.night, `deviceHelper checkbox ${widths.helper}px, nightDim ${widths.night}px`);
   check('DHM1: the deviceHelper checkbox keeps the width of the others');
 });
+
+// 12-13. DHM2 (K38): every kind of wake with the helper on shows power on, then TV_WAKE_MS, then the poster fetch.
+// Cases 2 and 7 cover the playback wake; these cover a key press while asleep and the end of the schedule.
+
+/** Steps the fake clock until the first poster fetch after a wake; returns { onAt, posterAt } on the page's fake clock. */
+async function wakeSequence(page, seen, maxMs) {
+  let onAt = null;
+  let posterAt = null;
+  for (let t = 0; t < maxMs && posterAt === null; t += 250) {
+    await advance(page, 250, 250);
+    onAt ??= await page.evaluate(() => window.__helperFetch.find((f) => f.body.includes('"on":true'))?.at ?? null);
+    if (seen.order.includes('poster')) posterAt = await page.evaluate(() => Date.now()); // the end of the step the fetch fell in
+  }
+  assert.notEqual(onAt, null, 'power on was requested');
+  assert.notEqual(posterAt, null, 'a poster was fetched');
+  assert.ok(posterAt - onAt >= TV_WAKE_MS, `poster ${posterAt - onAt} ms after power on, before TV_WAKE_MS`);
+  assert.ok(posterAt - onAt <= TV_WAKE_MS + 2000 + 250, `poster ${posterAt - onAt} ms after power on, more than ~2 s late`);
+  const order = seen.order.filter((o) => o.startsWith('helper:display:') || o === 'poster');
+  assert.deepEqual(order, ['helper:display:{"on":false}', 'helper:display:{"on":true}', 'poster'], `order of calls: ${order.join(' | ')}`);
+  return { onAt, posterAt };
+}
+
+// 12. A key press while asleep (manual wake).
+await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true, nowPlayingPollSeconds: 20 }), clock: { time: INSIDE } }, async ({ page, context, app, mock }) => {
+  await mock.stop();
+  const seen = await watch(page);
+  await page.goto(app.url);
+  await waitAsleep(page);
+  await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 1, 10000, 500);
+  assert.ok(!seen.order.includes('poster'), 'no poster while asleep');
+  await page.keyboard.press('a'); // a manual wake: the display stays awake for 60 s
+  await advanceUntil(page, async () => !(await isAsleep(page)), 3000, 250);
+  const { onAt, posterAt } = await wakeSequence(page, seen, 20000);
+  assert.deepEqual((await helperCalls(context, app)).map((c) => [c.action, c.on]), [['display', false], ['display', true]]);
+  assert.deepEqual(seen.errors, []);
+  check(`manual wake (key press): power on, then the poster fetch ${posterAt - onAt} ms later`);
+});
+
+// 13. The end of the schedule (07:00).
+await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true, nowPlayingPollSeconds: 20 }), clock: { time: '2026-01-05T06:59:40' } }, async ({ page, context, app, mock }) => {
+  await mock.stop();
+  const seen = await watch(page);
+  await page.goto(app.url);
+  await waitAsleep(page);
+  await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 1, 10000, 500);
+  assert.ok(!seen.order.includes('poster'), 'no poster while asleep');
+  const { onAt, posterAt } = await wakeSequence(page, seen, 60000);
+  assert.equal(await isAsleep(page), false, 'awake after the schedule ended');
+  assert.deepEqual((await helperCalls(context, app)).map((c) => [c.action, c.on]), [['display', false], ['display', true]]);
+  assert.deepEqual(seen.errors, []);
+  check(`schedule-end wake (07:00): power on, then the poster fetch ${posterAt - onAt} ms later`);
+});
