@@ -1416,6 +1416,27 @@ async function boot() {
   bootSettled = true;
   syncFirstRun(); // unconfigured after config.json: the code appears on the card by itself; Settings is not forced open
   wake();
+  announceWhatsNew();
+}
+
+// ---------- The upgrade notice (R-UPG-1) ----------
+
+const WHATS_NEW_KEY = 'plexPoster.whatsNew';
+
+/**
+ * Once per install: a configured display without the marker is an upgrade, so it is told what is new and pointed at the
+ * Display protection fieldset (through the normal PIN gate). An unconfigured one is a fresh install, not an upgrade, so it
+ * shows nothing. Either way the marker is written, so it never shows again.
+ */
+function announceWhatsNew() {
+  if (storage.getItem(WHATS_NEW_KEY) !== null) return;
+  storage.setItem(WHATS_NEW_KEY, '2.1');
+  if (!isConfigured(state.settings)) return;
+  toast("What's new in 2.1: one-tap display protection for always-on screens.", {
+    action: 'Open settings',
+    onAction: () => requestSettings({ section: 'protection' }),
+    ms: 20_000,
+  });
 }
 
 boot();

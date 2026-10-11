@@ -58,7 +58,12 @@ await withApp({ serviceWorkers: 'allow' }, async ({ page, app }) => {
 await withApp({ clock: { time: '2026-01-05T03:59:30' } }, async ({ page, app }) => {
   await page.goto(app.url);
   assert.equal(await page.evaluate(() => new Date().getFullYear()), 2026);
-  const t0 = await page.evaluate(() => Date.now());
+  // K59: a running fake clock keeps ticking in real time between reads (Playwright 1.56), so pause it first and check it
+  // holds still; then the case measures simulated time only.
+  await page.clock.pauseAt('2026-01-05T03:59:40');
+  const [p0, p1] = [await page.evaluate(() => Date.now()), await page.evaluate(() => Date.now())];
+  assert.equal(p1, p0, 'the clock is paused');
+  const t0 = p1;
   await page.clock.runFor(60000);
   const t1 = await page.evaluate(() => Date.now());
   assert.ok(t1 - t0 >= 60000 && t1 - t0 < 62000, `advanced ${t1 - t0}ms`);

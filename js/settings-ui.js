@@ -8,6 +8,23 @@ import { actionButton, downloadJson, sleep, toast } from './util.js';
 
 const LAYOUT_KEYS = ['posterScale', 'posterOffsetX', 'posterOffsetY'];
 
+/**
+ * "Recommended protection" (R-PROT-5, D4/D5/D6, Q20): the values the one-tap button would set, kept here (not in the
+ * schema) so the preset can evolve without a settings change. It never touches idle sleep, the content limit, the
+ * connection or any key not listed. `locked` rows are shown but cannot be unticked (the night-dim target, Q20).
+ */
+export const PROTECTION_PRESET = [
+  { key: 'sleepEnabled', value: true, label: 'Go black on a schedule' },
+  { key: 'sleepStart', value: '01:00', label: 'Sleep from' },
+  { key: 'sleepEnd', value: '07:00', label: 'Sleep until' },
+  { key: 'nightDim', value: true, label: 'Dim automatically at night' },
+  { key: 'nightDimLevel', value: 60, label: 'Night brightness (%)' },
+  { key: 'nightDimTarget', value: 'stage', label: 'Dim the whole picture', locked: true },
+  { key: 'pixelShift', value: true, label: 'Shift the picture now and then' },
+  { key: 'dailyReload', value: true, label: 'Reload the page once a day' },
+];
+const showValue = (v) => (v === true ? 'on' : v === false ? 'off' : String(v));
+
 // ---- the plex.tv code (shared by the Settings sheet and the empty card's first run) ----
 
 const PIN_POLL_MS = 5000; // K50: one poll per 5 s while the code is fresh
@@ -146,6 +163,55 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     }
     field('rotateSeconds').value = value;
     $('rotate-custom').hidden = true;
+  }
+
+  // ---- Recommended protection ----
+
+  function currentFormValue(key) {
+    const el = field(key);
+    return el.type === 'checkbox' ? el.checked : el.value;
+  }
+
+  function closePreset() {
+    $('preset-panel').hidden = true;
+    $('preset-list').replaceChildren();
+  }
+
+  /** Lists every key the preset sets, each with a tick box (the locked row stays ticked), and what it is now. */
+  function openPreset() {
+    const items = PROTECTION_PRESET.map((row) => {
+      const li = document.createElement('li');
+      li.dataset.presetKey = row.key;
+      if (row.locked) li.dataset.locked = '';
+      const label = document.createElement('label');
+      label.className = 'check';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = true;
+      box.disabled = Boolean(row.locked);
+      const now = currentFormValue(row.key);
+      const hint = document.createElement('span');
+      hint.className = 'muted small';
+      hint.textContent = String(now) === String(row.value) ? 'already set' : `now ${showValue(now)}`;
+      label.append(box, document.createTextNode(`${row.label}: ${showValue(row.value)}`), hint);
+      li.append(label);
+      return li;
+    });
+    $('preset-list').replaceChildren(...items);
+    $('preset-panel').hidden = false;
+  }
+
+  /** Fills the form with the ticked rows; nothing is stored until Save. Goes through 'change' so the live preview follows. */
+  function applyPreset() {
+    for (const li of $('preset-list').children) {
+      const row = PROTECTION_PRESET.find((r) => r.key === li.dataset.presetKey);
+      if (!row || !li.querySelector('input').checked) continue;
+      const el = field(row.key);
+      if (el.type === 'checkbox') el.checked = row.value;
+      else el.value = String(row.value);
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    closePreset();
   }
 
   // ---- the "Connected to" card ----
@@ -373,12 +439,16 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   $('settings-cancel').addEventListener('click', closeSheet);
   dialog.addEventListener('close', () => {
+    closePreset();
     setTokenShown(false); // the token is hidden again whenever the sheet closes
     cancelSignIn();
     if (original) onPreview(original); // undo live preview
     original = null;
   });
 
+  $('preset-btn').addEventListener('click', openPreset);
+  $('preset-cancel').addEventListener('click', closePreset);
+  $('preset-apply').addEventListener('click', applyPreset);
   $('signin-btn').addEventListener('click', () => signIn());
   $('connected-change').addEventListener('click', openConnection);
   field('libraryKey').addEventListener('change', renderConnected);
@@ -468,9 +538,9 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     /**
      * Opens the sheet. `signIn` starts a plex.tv code in it at once (the fix for a rejected token); `token` is one the empty
      * card's code already earned, so the sheet picks up at "Signed in"; `test` runs the connection test even when it would not
-     * run by itself.
+     * run by itself; `section` ('protection') scrolls the sheet to that fieldset.
      */
-    open({ signIn: wantSignIn = false, token = null, test = false } = {}) {
+    open({ signIn: wantSignIn = false, token = null, test = false, section = '' } = {}) {
       if (dialog.open) return;
       original = getSettings();
       $('form-error').textContent = '';
@@ -481,7 +551,9 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       setTokenShown(false);
       $('advanced').open = false;
       $('manual-connection').open = Boolean(original.plexToken && !original.serverName);
+      closePreset();
       dialog.showModal();
+      if (section === 'protection') $('protection-fieldset').scrollIntoView({ block: 'start' });
       if (token) signIn({ token });
       else if (wantSignIn) signIn();
       else if (test || (original.plexToken && original.serverUrl)) testConnection();

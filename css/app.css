@@ -485,6 +485,13 @@ summary { cursor: pointer; color: var(--muted); }
 .test-result:empty { display: none; }
 .test-result .btn { margin: 6px 8px 0 0; }
 
+.preset .btn { margin-top: 6px; }
+.preset-panel { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--panel-line); border-radius: 8px; }
+.preset-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.preset-list li { margin: 0; }
+.preset-list label.check { margin-top: 6px; }
+.preset-list .muted { margin-left: auto; padding-left: 12px; text-align: right; }
+.preset-list li[data-locked] { opacity: 0.8; }
 .pinned { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-top: 12px; }
 .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; align-items: center; }
 .button-grid label.check { margin: 0; }

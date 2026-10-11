@@ -224,9 +224,9 @@
           </label>
           <label>Control labels
             <select name="controlLabels">
-              <option value="auto">Auto (text on touch screens, tooltip with a mouse)</option>
-              <option value="always">Always show text under the buttons</option>
-              <option value="never">Never</option>
+              <option value="auto">Auto</option>
+              <option value="always">Always</option>
+              <option value="never">Never (icons only)</option>
             </select>
           </label>
           <label class="check"><input name="showTitle" type="checkbox" /> Show title below poster</label>
@@ -249,8 +249,21 @@
           </div>
         </fieldset>
 
-        <fieldset>
+        <fieldset id="protection-fieldset">
           <legend>Display protection</legend>
+          <div class="preset">
+            <button type="button" class="btn" id="preset-btn" aria-controls="preset-panel">Recommended protection</button>
+            <p class="muted small">Sleep at night, dim the picture, shift it a little and reload once a day. You see the list first and can untick anything.</p>
+            <div id="preset-panel" class="preset-panel" role="group" aria-labelledby="preset-title" hidden>
+              <strong id="preset-title">This will change</strong>
+              <ul id="preset-list" class="preset-list"></ul>
+              <p class="muted small">Nothing is saved until you press Save. Idle sleep, the content limit and the connection are never touched.</p>
+              <div class="input-row">
+                <button type="button" class="btn small primary" id="preset-apply">Apply</button>
+                <button type="button" class="btn small" id="preset-cancel">Cancel</button>
+              </div>
+            </div>
+          </div>
           <label class="check"><input name="pixelShift" type="checkbox" /> Shift the picture a few pixels now and then</label>
           <label>Shift every
             <span class="input-row"><input name="pixelShiftMinutes" type="number" min="1" max="60" step="1" /> <span class="muted">minutes</span></span>
