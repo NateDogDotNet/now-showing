@@ -43,3 +43,43 @@ Thin progress bar along the frame while something is playing.
 
 ### Remote control
 Change poster or settings from a phone on the same network.
+
+### Sources other than Plex
+Show posters from Jellyfin first (Emby is close behind), and optionally mix in "coming soon" titles from TMDB or a Radarr/Sonarr calendar.
+
+- **Why:** many self-hosters run Jellyfin instead of Plex, and a "Coming Soon" frame is better with films that aren't in the library yet.
+- **How:** turn `js/plex.js` into the first *source adapter*. Each adapter provides a random pool, what's playing now, poster images and a content rating, in the shape `toPoster` already produces. Two Plex leaks need cleaning up first: the engine imports `pickNowPlaying` from `plex.js`, and some settings and UI text say "Plex". Then add Jellyfin with its own mock server and real-server checklist rows. TMDB and Radarr/Sonarr mix in as extras (for example, one "Coming Soon" poster in every ten) rather than replacing the main source. Radarr/Sonarr are self-hosted, so they probably go through the device helper.
+- **Constraints:** every adapter maps its own ratings for the household limit and fails closed (unknown is hidden while a limit is set), with its own adversarial review like `content-rating-filter` had. Jellyfin may need cross-origin requests allowed on the server. TMDB needs a free API key and attribution. Streaming services are out: no public APIs, and scraping breaks their terms.
+
+### "Now showing" theatre mode
+When playback starts, show the playing title with a marquee caption such as "Now Showing in the Living Room", using the frame artwork, instead of only switching posters.
+
+### Seasonal schedules
+Pick a collection or frame by date range: horror in October, holiday films in December, a kids' collection on weekend mornings. Reuses the schedule helpers that sleep and night dim already use.
+
+### Trailer on demand
+Hold OK to play the current title's trailer when Plex has one. It must respect kiosk mode, the PIN and the household content limit.
+
+### Health beacon
+An optional status line, served by the device helper, with the time the last poster was shown, the wake lock state and the CPU temperature. Home Assistant or Uptime Kuma can then warn you before you notice a wall display has quietly stopped.
+
+### Home Assistant / MQTT hooks
+Sleep and wake the frame from home automations ("lights off → frame sleeps") and publish what's playing. This belongs in the device helper, not the page.
+
+### Presence-based sleep
+Wake on motion and sleep when nobody is around, using a PIR sensor on a Pi GPIO pin read by the device helper. It protects the panel better than a fixed schedule.
+
+### Update channel
+Diagnostics shows "update available", applies it in one tap, and rolls back if the new version fails its startup check.
+
+### Shared settings for several displays
+One `config.json` read by several frames, each with its own rotation and position, for a home theatre with more than one poster frame.
+
+### Synchronised displays
+Two frames flanking a screen change together, or show a matching pair (poster and backdrop). Needs coordination between displays, so it is bigger than it looks.
+
+### Panel-aware protection presets
+Separate "OLED", "LCD" and "e-ink" choices that set pixel shift, dimming and sleep to suit the panel, extending the recommended-protection preset.
+
+### Burn-in report
+Track how many hours a day the frame art stays lit and suggest stronger protection when the number is high.
