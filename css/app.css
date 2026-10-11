@@ -150,9 +150,11 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
 .firstrun { margin: 0 0 18px; }
 .empty-card .firstrun p { margin: 0 0 6px; }
 .empty-card .firstrun-lead { color: var(--text); }
-/* Resting between codes: only the status line shows, with no instruction and no placeholder squares. */
+/* Resting between codes: only the status line shows, with no instruction, no placeholder squares and not the general
+   invitation either (K53, D43): the rest message is the one line that speaks. */
 .firstrun.resting .firstrun-lead,
 .firstrun.resting .pin-code-large { display: none; }
+.empty-card:has(.firstrun.resting:not([hidden])) #empty-message { display: none; }
 .pin-code-large {
   margin: 8px 0 10px;
   font: 700 clamp(64px, 12vmin, 112px)/1.1 ui-monospace, Menlo, Consolas, monospace;
@@ -173,14 +175,21 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
   left: 50%;
   top: 50%;
   width: max-content;
+  /* Labelled buttons are wider: the bar wraps to a second row rather than leave a phone's screen (R-CTRL-1). */
+  max-width: calc(var(--vw) - 24px);
   transform-origin: 0 0;
   --nudge: 8px;
+  /* Label mode, set below: the label's display and the shape of a button (a circle without one, a rounded tile with one). */
+  --label-display: none;
+  --button-radius: 50%;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
   padding: 8px;
   background: var(--panel);
   border: 1px solid var(--panel-line);
-  border-radius: 999px;
+  border-radius: 28px;
   opacity: 0;
   transform: rotate(var(--ui-rotation)) translate(0, var(--nudge))
     translate(calc(var(--vw) / 2 - max(12px, env(safe-area-inset-right)) - 100%), calc(var(--vh) / 2 - max(12px, env(safe-area-inset-bottom)) - 100%));
@@ -191,15 +200,51 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
 .controls.visible { --nudge: 0px; opacity: 1; pointer-events: auto; }
 
 .controls button {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
+  position: relative; /* the tooltip is placed against its button */
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column; /* icon over text */
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--button-radius);
   background: transparent;
   color: var(--text);
+  font: inherit;
   cursor: pointer;
+}
+.controls svg { flex: none; }
+
+/* Control labels (R-CTRL-1). 'always': a label under every icon. 'auto' (the default): under every icon where there is no
+   hover, a tooltip on hover and keyboard focus where there is. 'never': neither. */
+.controls .label { display: var(--label-display); font-size: 11px; line-height: 1.2; white-space: nowrap; }
+.controls[data-labels="always"] { --label-display: block; --button-radius: 14px; }
+@media (hover: none) {
+  .controls[data-labels="auto"] { --label-display: block; --button-radius: 14px; }
+}
+@media (hover: hover) {
+  .controls[data-labels="auto"] button:hover .label,
+  .controls[data-labels="auto"] button:focus-visible .label {
+    display: block;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    font-size: 12px;
+    pointer-events: none;
+  }
+  .controls[data-labels="auto"] button:hover .label[data-key]::after,
+  .controls[data-labels="auto"] button:focus-visible .label[data-key]::after {
+    content: " (" attr(data-key) ")";
+    color: var(--muted);
+  }
 }
 .controls button:hover, .controls button:focus-visible { background: rgba(255, 255, 255, 0.12); outline: none; }
 .controls button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
@@ -502,3 +547,23 @@ body.kiosk #app { touch-action: none; user-select: none; -webkit-user-select: no
 /* Scrollable regions are focusable in Chromium; the ring around the whole panel is noise. */
 .sheet:focus, .sheet-body:focus, .sheet-body:focus-visible { outline: none; }
 .sheet .muted code { font: 12px ui-monospace, Menlo, Consolas, monospace; }
+
+/* ---------- Shortcuts dialog ---------- */
+
+/* Centred in the viewer's frame like the PIN dialog (it shares .pin-sheet, so it carries the UI rotation too, D2). */
+.shortcuts-sheet { width: min(380px, var(--vw)); }
+.shortcuts-list { margin: 12px 0 16px; text-align: left; }
+.shortcuts-list > div { display: flex; gap: 14px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--panel-line); }
+.shortcuts-list dt { flex: none; min-width: 4.5em; margin: 0; }
+.shortcuts-list dd { margin: 0; color: var(--muted); }
+.shortcuts-list kbd {
+  display: inline-block;
+  min-width: 1.8em;
+  padding: 1px 7px;
+  border: 1px solid var(--panel-line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font: 600 13px ui-monospace, Menlo, Consolas, monospace;
+  text-align: center;
+}

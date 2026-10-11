@@ -60,14 +60,14 @@
   <div id="status" class="status-pill" role="status" hidden></div>
   <div id="status-dot" class="status-dot" aria-hidden="true" hidden></div>
 
-  <nav id="controls" class="controls" aria-label="Display controls">
-    <button type="button" data-action="settings" title="Settings (S)" aria-label="Settings"><svg><use href="#i-settings"/></svg></button>
-    <button type="button" data-action="diagnostics" title="Diagnostics (D)" aria-label="Diagnostics"><svg><use href="#i-info"/></svg></button>
-    <button type="button" data-action="refresh" title="Next poster (R)" aria-label="Next poster"><svg><use href="#i-refresh"/></svg></button>
-    <button type="button" data-action="pause" title="Pause auto-refresh (P)" aria-label="Pause auto-refresh" aria-pressed="false"><svg><use href="#i-pause"/></svg></button>
-    <button type="button" data-action="pin" title="Pin this poster" aria-label="Pin this poster" aria-pressed="false"><svg><use href="#i-pin"/></svg></button>
-    <button type="button" data-action="rotate" title="Rotate 90° (O)" aria-label="Rotate display"><svg><use href="#i-rotate"/></svg></button>
-    <button type="button" data-action="fullscreen" title="Full screen (F)" aria-label="Full screen"><svg><use href="#i-fullscreen"/></svg></button>
+  <nav id="controls" class="controls" data-labels="auto" aria-label="Display controls">
+    <button type="button" data-action="settings" aria-label="Settings"><svg><use href="#i-settings"/></svg><span class="label" aria-hidden="true">Settings</span></button>
+    <button type="button" data-action="diagnostics" aria-label="Diagnostics"><svg><use href="#i-info"/></svg><span class="label" aria-hidden="true">Diagnostics</span></button>
+    <button type="button" data-action="refresh" aria-label="Next poster"><svg><use href="#i-refresh"/></svg><span class="label" aria-hidden="true">Next poster</span></button>
+    <button type="button" data-action="pause" aria-label="Pause auto-refresh" aria-pressed="false"><svg><use href="#i-pause"/></svg><span class="label" aria-hidden="true">Pause</span></button>
+    <button type="button" data-action="pin" aria-label="Pin this poster" aria-pressed="false"><svg><use href="#i-pin"/></svg><span class="label" aria-hidden="true">Pin</span></button>
+    <button type="button" data-action="rotate" aria-label="Rotate display"><svg><use href="#i-rotate"/></svg><span class="label" aria-hidden="true">Rotate</span></button>
+    <button type="button" data-action="fullscreen" aria-label="Full screen"><svg><use href="#i-fullscreen"/></svg><span class="label" aria-hidden="true">Full screen</span></button>
   </nav>
 
   <dialog id="settings" class="sheet" aria-labelledby="settings-title">
@@ -222,6 +222,13 @@
               <option value="270">270°</option>
             </select>
           </label>
+          <label>Control labels
+            <select name="controlLabels">
+              <option value="auto">Auto (text on touch screens, tooltip with a mouse)</option>
+              <option value="always">Always show text under the buttons</option>
+              <option value="never">Never</option>
+            </select>
+          </label>
           <label class="check"><input name="showTitle" type="checkbox" /> Show title below poster</label>
           <label class="check"><input name="showMeta" type="checkbox" /> Show rating, runtime and year below poster</label>
           <label class="check"><input name="showProgress" type="checkbox" /> Show a progress bar while something plays</label>
@@ -328,7 +335,8 @@
       <ol id="diag-log" class="diag-log" reversed></ol>
     </div>
     <footer class="sheet-foot">
-      <button type="button" class="btn" id="diag-copy">Copy</button>
+      <button type="button" class="btn" id="diag-shortcuts">Keyboard shortcuts</button>
+      <button type="button" class="btn" id="diag-copy" autofocus>Copy</button>
       <button type="button" class="btn primary" id="diag-close">Close</button>
     </footer>
   </dialog>
@@ -354,6 +362,14 @@
       </div>
       <button type="button" class="btn" id="pin-cancel">Cancel</button>
       <p id="pin-note" class="muted small"></p>
+    </div>
+  </dialog>
+
+  <dialog id="shortcuts" class="sheet pin-sheet shortcuts-sheet" aria-labelledby="shortcuts-title">
+    <div class="pin-box">
+      <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+      <dl id="shortcuts-list" class="shortcuts-list"></dl>
+      <button type="button" class="btn" id="shortcuts-close">Close</button>
     </div>
   </dialog>
 

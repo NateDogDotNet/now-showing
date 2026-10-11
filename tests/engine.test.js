@@ -247,6 +247,38 @@ test('no limit: an empty library keeps the plain empty error', async () => {
   await assert.rejects(engine.decide(), (err) => err.kind === 'empty' && !/raise the limit/.test(err.message));
 });
 
+// K54: the empty-library message only suggests turning off "unwatched only" when that setting is on.
+const emptyMessage = async (overrides) => {
+  const { engine } = setup(overrides, { pool: overrides.maxContentRating ? [rated('r', 'R')] : [] }); // nothing allowed through
+  const err = await engine.decide().then(
+    () => assert.fail('expected the empty error'),
+    (e) => e,
+  );
+  assert.equal(err.kind, 'empty');
+  return err.message;
+};
+
+test('empty hint without a limit: "unwatched only" is suggested only while it is on', async () => {
+  const on = await emptyMessage({ unwatchedOnly: true, maxContentRating: '' });
+  assert.match(on, /try turning off "unwatched only"/);
+  assert.doesNotMatch(on, /raise the limit/);
+  const off = await emptyMessage({ unwatchedOnly: false, maxContentRating: '' });
+  assert.doesNotMatch(off, /unwatched only/);
+  assert.doesNotMatch(off, /raise the limit/);
+  assert.match(off, /^No posters found in that library\.$/);
+});
+
+test('empty hint with a limit: "unwatched only" is suggested only while it is on, the limit always', async () => {
+  const on = await emptyMessage({ unwatchedOnly: true, maxContentRating: 'G' });
+  assert.match(on, /at or below G/);
+  assert.match(on, /try turning off "unwatched only"/);
+  assert.match(on, /raise the limit/);
+  const off = await emptyMessage({ unwatchedOnly: false, maxContentRating: 'G' });
+  assert.match(off, /at or below G/);
+  assert.doesNotMatch(off, /unwatched only/);
+  assert.match(off, /raise the limit/);
+});
+
 test('now playing above the limit is treated as nothing playing: a random allowed poster is shown', async () => {
   const { engine } = setup({ maxContentRating: 'PG-13' }, { sessions: playingRated('R'), pool: MIXED });
   const d = await engine.decide();

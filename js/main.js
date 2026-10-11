@@ -13,6 +13,7 @@ import { requestSize } from './layout.js';
 import { isPlausibleClock } from './schedule.js';
 import { createSettingsUI, pinSignIn } from './settings-ui.js';
 import { fromImport, isConfigured, load, save, STORAGE_KEY } from './settings.js';
+import { keyMap, listShortcuts, normalizeKey } from './shortcuts.js';
 import { decideSleep, MANUAL_WAKE_MS } from './sleep.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
@@ -738,7 +739,8 @@ function updatePinButton() {
   const btn = document.querySelector('[data-action="pin"]');
   const pinned = Boolean(state.settings.staticRatingKey);
   btn.setAttribute('aria-pressed', String(pinned));
-  btn.title = pinned ? `Unpin "${state.settings.staticTitle}"` : 'Pin this poster';
+  btn.setAttribute('aria-label', pinned ? `Unpin "${state.settings.staticTitle}"` : 'Pin this poster');
+  btn.querySelector('.label').textContent = pinned ? 'Unpin' : 'Pin';
 }
 
 function setPaused(paused) {
@@ -746,7 +748,7 @@ function setPaused(paused) {
   const btn = document.querySelector('[data-action="pause"]');
   btn.setAttribute('aria-pressed', String(paused));
   btn.setAttribute('aria-label', paused ? 'Resume auto-refresh' : 'Pause auto-refresh');
-  btn.title = paused ? 'Resume auto-refresh (P)' : 'Pause auto-refresh (P)';
+  btn.querySelector('.label').textContent = paused ? 'Resume' : 'Pause';
   btn.querySelector('use').setAttribute('href', paused ? '#i-play' : '#i-pause');
   if (paused) {
     clearTimeout(state.timer);
@@ -779,6 +781,7 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
     };
   }
   state.settings = persist ? save(storage, next) : next;
+  applyControlLabels();
   evaluateBrightness(); // live preview and Save both show at once
   // Whatever is on screen is re-checked against the settings now in force on EVERY apply, previews and Cancel
   // included, even offline (K20, D29). This comes BEFORE the frame is applied, because a custom frame's load has no
@@ -961,6 +964,7 @@ function renderDiagnostics() {
 
 function openDiagnostics() {
   renderDiagnostics();
+  $('diag-shortcuts').hidden = !listShortcuts(state.settings).length; // R-CTRL-3: no list while the shortcuts are off
   $('diagnostics').showModal();
   if (helperActive()) {
     refreshTemperature();
@@ -997,6 +1001,7 @@ const actions = {
   pin: togglePin,
   rotate,
   fullscreen: toggleFullscreen,
+  shortcuts: openShortcuts,
 };
 
 document.addEventListener('click', (e) => {
@@ -1004,17 +1009,59 @@ document.addEventListener('click', (e) => {
   if (btn && actions[btn.dataset.action]) actions[btn.dataset.action]();
 });
 
-const KEYS = { s: 'settings', d: 'diagnostics', r: 'refresh', ' ': 'pause', p: 'pause', o: 'rotate', f: 'fullscreen' };
+const KEYS = keyMap(); // js/shortcuts.js: the same table the `?` dialog lists, so the two cannot drift
 document.addEventListener('keydown', (e) => {
   if (state.settings.disableShortcuts) return;
   // (`dialog[open]`: for a frame after a sheet closes, focus can still sit on a button inside it.)
   if (e.target.closest('input, select, textarea, dialog[open]') || e.ctrlKey || e.metaKey || e.altKey) return;
-  const action = KEYS[e.key.toLowerCase()];
+  const action = KEYS[normalizeKey(e.key)];
   if (action) {
     e.preventDefault();
     actions[action]();
   }
 });
+
+// ---------- Shortcuts dialog and control labels (R-CTRL-1, R-CTRL-3) ----------
+
+/** The text on a key cap: "R", "?", "Space". */
+const keyCap = (key) => (key.length > 1 ? key[0].toUpperCase() + key.slice(1) : key.toUpperCase());
+
+/** `?` lists every shortcut in the table; it lists none (and does not open) while the shortcuts are switched off. */
+function openShortcuts() {
+  const entries = listShortcuts(state.settings);
+  if (!entries.length || $('shortcuts').open) return;
+  $('shortcuts-list').replaceChildren(
+    ...entries.map((entry) => {
+      const row = document.createElement('div');
+      row.dataset.shortcut = entry.key;
+      const key = document.createElement('dt');
+      const cap = document.createElement('kbd');
+      // A capital O reads like a zero in a monospace cap: letters show lower-case, and O is announced as the letter.
+      cap.textContent = entry.key.length === 1 ? entry.key.toLowerCase() : keyCap(entry.key);
+      if (entry.key === 'o') cap.setAttribute('aria-label', 'letter O');
+      key.append(cap);
+      const label = document.createElement('dd');
+      label.textContent = entry.label;
+      row.append(key, label);
+      return row;
+    }),
+  );
+  $('shortcuts').showModal();
+}
+$('diag-shortcuts').addEventListener('click', openShortcuts);
+$('shortcuts-close').addEventListener('click', () => $('shortcuts').close());
+
+/** `controlLabels` picks how the buttons are labelled (css/app.css); each label also learns its key, for the tooltip. */
+function applyControlLabels() {
+  $('controls').dataset.labels = state.settings.controlLabels;
+  const entries = listShortcuts(state.settings);
+  for (const btn of $('controls').querySelectorAll('[data-action]')) {
+    const entry = entries.find((e) => e.action === btn.dataset.action);
+    const label = btn.querySelector('.label');
+    if (entry) label.dataset.key = keyCap(entry.key);
+    else delete label.dataset.key;
+  }
+}
 
 let idleTimer;
 
@@ -1045,6 +1092,42 @@ function wake() {
   }, 3500);
 }
 ['pointermove', 'pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, wake, { passive: true }));
+
+// The first touch on hidden controls only reveals them (R-CTRL-2, U12). `.controls` ignores the pointer until `.visible`;
+// the pointerdown below adds it, and the browser then sends the tap's click to the button that just became hit-testable.
+// So the state before the press is recorded here (capture phase, ahead of wake()), and the click that follows is swallowed
+// only when ALL hold: the controls were hidden, the press was on them or on the bare stage, no dialog is open (wake() runs
+// on every pointerdown and hides the controls after 3.5 s even behind Settings, so this must not eat a tap on Save), and it
+// was not a mouse. The #empty backdrop itself counts as the bare stage (the bar sits under it on an unconfigured display, K58);
+// the empty card, its text and its buttons are none of these, so they are never swallowed. Kiosk mode
+// never reveals them by touch, so there is nothing to swallow. A press while asleep never gets here (manualWake owns it).
+let swallowTapClick = false;
+document.addEventListener(
+  'pointerdown',
+  (e) => {
+    const target = e.target instanceof Element ? e.target : null;
+    swallowTapClick =
+      Boolean(target) &&
+      !$('controls').classList.contains('visible') &&
+      !state.settings.kioskMode &&
+      e.pointerType !== 'mouse' &&
+      !document.querySelector('dialog[open]') &&
+      Boolean(target.closest('#controls, #stage') || target === $('app') || target === $('empty'));
+  },
+  { capture: true, passive: true },
+);
+document.addEventListener('pointercancel', () => (swallowTapClick = false), { capture: true, passive: true });
+window.addEventListener(
+  'click',
+  (e) => {
+    const swallow = swallowTapClick && e.detail > 0; // a keyboard click (detail 0) is not a tap
+    swallowTapClick = false;
+    if (!swallow) return;
+    e.stopPropagation();
+    e.preventDefault();
+  },
+  true,
+);
 
 // ---------- Kiosk mode ----------
 
@@ -1098,8 +1181,11 @@ window.addEventListener('blur', () => {
   cornerHold.end();
   enterHold.end();
 });
-// A long press on the viewer must not open a menu; inside an open dialog it must (paste into a Settings field).
-document.addEventListener('contextmenu', (e) => state.settings.kioskMode && !e.target.closest?.('dialog[open]') && e.preventDefault());
+// A long press on the viewer must not open a menu, nor on the PIN keypad or any dialog but Settings (K36, D40). It may
+// where text is typed (a long press pastes into a Settings field) and on the Settings sheet's own box.
+const TEXT_FIELD = 'textarea, input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="file"], [type="color"], [type="image"], [type="hidden"])';
+const allowsContextMenu = (el) => el instanceof Element && (el.matches(TEXT_FIELD) || el === $('settings'));
+document.addEventListener('contextmenu', (e) => state.settings.kioskMode && !allowsContextMenu(e.target) && e.preventDefault());
 
 function toggleFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen?.();
@@ -1303,6 +1389,7 @@ async function boot() {
   const { source } = load(storage);
   if (source === 'legacy') log.info('Migrated settings from the previous version (layout reset to defaults).');
   applyKiosk(); // hidden and inert before anything is awaited
+  applyControlLabels();
   evaluateSleep(); // black before config.json is awaited, as before
   const config = await readConfigJson();
   if (source === 'defaults' && config !== null) {

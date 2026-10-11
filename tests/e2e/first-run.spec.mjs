@@ -408,6 +408,7 @@ firstRunCase(
     const codeCard = async (when) => {
       assert.equal(await page.isVisible('#empty .firstrun-lead'), true, `${when}: the instruction is shown`);
       assert.equal(await page.isVisible('#signin-code-large'), true, `${when}: the code is shown`);
+      assert.match(await page.innerText('#empty-message'), /Connect to your Plex server to get started/i, `${when}: the general line is shown with a live code`);
     };
     const restCard = async (when) => {
       assert.equal(await page.isVisible('#empty .firstrun-lead'), false, `${when}: no instruction to enter a code`);
@@ -416,6 +417,17 @@ firstRunCase(
       assert.doesNotMatch(text, /enter this code/i, `${when}: it must not ask for a code that is not there`);
       assert.doesNotMatch(text, /····/, `${when}: no placeholder squares`);
       assert.match(await page.innerText('#firstrun-status'), /ran out.*5 minutes/i, `${when}: the rest message is what is shown`);
+      // K53 (D43): the general invitation steps aside, so the rest message is the only line that speaks.
+      assert.equal(await page.isVisible('#empty-message'), false, `${when}: the general line is hidden`);
+      assert.doesNotMatch(text, /Connect to your Plex server to get started/i, `${when}: only the rest message is shown`);
+      assert.equal(await page.isVisible('#firstrun-status'), true, `${when}: the rest message is visible`);
+    };
+    // S6C1: once the rest is over the card is a code card again (no resting class, a new status, the general line back).
+    const restOver = async (when) => {
+      await page.waitForFunction(() => !document.getElementById('firstrun').classList.contains('resting'), null, { timeout: 10000 });
+      assert.doesNotMatch(await page.innerText('#firstrun-status'), /ran out/i, `${when}: the status has changed`);
+      assert.match(await page.innerText('#firstrun-status'), /Asking plex\.tv for a code|Waiting for you to approve/i, `${when}: it says it is asking or waiting`);
+      assert.equal(await page.isVisible('#empty-message'), true, `${when}: the general line is back`);
     };
     await codeCard('first code');
     // A fresh code: one step of 5 s is one poll (two on the step where the code runs out and its replacement is asked for).
@@ -424,7 +436,7 @@ firstRunCase(
         const before = requests();
         await page.clock.runFor(5000);
         at += 5;
-        await until(() => requests() > before, `a request at ${at} s`, 3000);
+        await until(() => requests() > before, `a request at ${at} s`, 30_000); // real time: generous, so six copies of this spec in parallel cannot starve it (S6C2)
         await settle();
         assert.ok(requests() - before <= 2, `${requests() - before} requests in one 5 s step at ${at} s`);
       }
@@ -458,6 +470,7 @@ firstRunCase(
     at += 60;
     await until(() => tv.pins === 4, 'the next code after the rest');
     await settle();
+    await restOver('after the first rest');
     assert.ok(at >= 50 * 60 && at <= 52 * 60, `the rest ended at ${at} s`);
     await codeCard('fourth code');
     await freshUntil(() => at >= 60 * 60);
@@ -486,6 +499,8 @@ firstRunCase(
     await page.clock.runFor(60_000);
     at += 60;
     await until(() => tv.pins === 5, 'the 5th code after the second rest');
+    await settle();
+    await restOver('after the second rest');
     check(`K50 ${tv.pins} codes and ${tv.polls} polls in ${Math.round(at / 60)} min`);
   },
 );

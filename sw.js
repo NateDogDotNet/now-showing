@@ -26,6 +26,7 @@ const SHELL = [
   'js/schedule.js',
   'js/settings.js',
   'js/settings-ui.js',
+  'js/shortcuts.js',
   'js/sleep.js',
   'js/util.js',
   'assets/frames/marquee.png',

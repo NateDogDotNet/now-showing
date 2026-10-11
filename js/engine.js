@@ -149,8 +149,10 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
 
       const next = pickRandom((await loadPool(s)).filter((p) => permitted(s, p)));
       if (!next) {
-        const hint = s.maxContentRating ? ` at or below ${s.maxContentRating} (try turning off "unwatched only" or raise the limit)` : ' (try turning off "unwatched only")';
-        throw Object.assign(new Error(`No posters found in that library${hint}.`), { kind: 'empty' });
+        // Each piece of advice is given only when it could help: "unwatched only" must be on, a limit must be set (K54).
+        const advice = [s.unwatchedOnly && 'try turning off "unwatched only"', s.maxContentRating && 'raise the limit'].filter(Boolean).join(' or ');
+        const where = `${s.maxContentRating ? ` at or below ${s.maxContentRating}` : ''}${advice ? ` (${advice})` : ''}`;
+        throw Object.assign(new Error(`No posters found in that library${where}.`), { kind: 'empty' });
       }
       return { poster: next, reason: playbackEnded ? 'playback ended' : force ? 'manual refresh' : 'rotation' };
     },
