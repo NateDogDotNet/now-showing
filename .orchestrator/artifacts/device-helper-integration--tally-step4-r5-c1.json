@@ -1,0 +1,94 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "device-helper-integration--ac1-r5.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "device-helper-integration--scope-r5.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "device-helper-integration--precommit-format-r5.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "device-helper-integration--mutation-stranded-tv-r5.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_correction": {
+  "reason": "same correction as r3 (tally-step4-r3-c1): derive scores 'tests where implied' from the r1 survivor off-after-wake, a two-frame race inside powerOffAfterVeil that the conductor accepted untested at r1. Every hazard mutant of r5 is killed (preview-applies/updates, stranded-tv, no-probe-on-enable at r5; no-tv-wait, fetch-before-power, helper-ignores-setting at r3).",
+  "supersedes": "device-helper-integration--tally-step4-r5.json"
+ },
+ "_result": {
+  "total": 75,
+  "max": 75,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "device-helper-integration--ac1-r5.json": "499bf6c4ed9c6fc0dfe711bf418efd7391e95eacf5850bb69cff9ec7b6fca1dc",
+  "device-helper-integration--scope-r5.json": "5a3d1235159e148fc8b72e01d843a22d89b28b682060ea157d2ed2746ffe9721",
+  "device-helper-integration--precommit-format-r5.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "device-helper-integration--mutation-stranded-tv-r5.txt": "a14ba4494e491710237972a75be1185640b0d3f2e0b153efe47515b9ee778ceb"
+ },
+ "_written": "2026-10-11T04:42:44.266474Z"
+}

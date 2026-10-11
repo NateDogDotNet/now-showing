@@ -1,0 +1,17 @@
+Hazard: a hung spec hangs the whole run (no FAIL line, orphaned processes)
+Mutant: no-deadline-kill (tests/e2e/run.mjs) — ok
+## diff
+--- /tmp/tmp.sOWrSUr8i3/orig	2026-10-08 22:24:17.680477936 +0000
++++ /tmp/tmp.sOWrSUr8i3/wt/tests/e2e/run.mjs	2026-10-08 22:24:17.696395706 +0000
+@@ -52,7 +52,6 @@
+       current = p;
+       const timer = setTimeout(() => {
+         timedOut = true;
+-        killGroup(p);
+       }, TIMEOUT_MS);
+       p.on('exit', (c) => {
+         clearTimeout(timer);
+## test: bash .orchestrator/artifacts/e2e-harness--hangcheck-r2.sh
+bash: .orchestrator/artifacts/e2e-harness--hangcheck-r2.sh: No such file or directory
+## summary (exit 127)
+1 failed

@@ -1,0 +1,42 @@
+Hazard: veil lifts on playback with wakeOnPlayback off
+Mutant: ignore-wake-flag (js/sleep.js) — ok
+## diff
+--- /tmp/tmp.Ex1d4twuGz/orig	2026-10-09 00:16:17.466837731 +0000
++++ /tmp/tmp.Ex1d4twuGz/wt/js/sleep.js	2026-10-09 00:16:17.483077805 +0000
+@@ -27,7 +27,7 @@
+       : idleMs > 0 && t - lastPlaybackAt >= idleMs
+         ? 'idle'
+         : '';
+-  if (!why || (playingNow && settings.wakeOnPlayback)) return { asleep: false, why: '' };
++  if (!why || (playingNow)) return { asleep: false, why: '' };
+   if (t < manualWakeUntil) return { asleep: false, why: 'manual wake' };
+   return { asleep: true, why };
+ }
+## test: node --test tests/sleep.test.js tests/engine.test.js
+  ---
+  duration_ms: 0.251956
+  type: 'test'
+  ...
+# Subtest: an empty window (start === end) never sleeps
+ok 26 - an empty window (start === end) never sleeps
+  ---
+  duration_ms: 5.028898
+  type: 'test'
+  ...
+# Subtest: the schedule wins the label when both triggers hold
+ok 27 - the schedule wins the label when both triggers hold
+  ---
+  duration_ms: 0.202003
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 26
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 275.886421
+## summary (exit 1)
+1 failed

@@ -1,0 +1,14 @@
+{
+  "cmd": "for f in tests/e2e/*.mjs scripts/check-precache.mjs; do node --check \"$f\" || exit 1; done",
+  "exit": 0,
+  "seconds": 0.15,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

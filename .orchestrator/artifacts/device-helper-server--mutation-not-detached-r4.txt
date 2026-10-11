@@ -1,0 +1,42 @@
+Hazard: child group not created
+Mutant: not-detached (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.puAuLQd1O7/orig	2026-10-08 23:46:12.407749047 +0000
++++ /tmp/tmp.puAuLQd1O7/wt/scripts/device-helper.mjs	2026-10-08 23:46:12.424824269 +0000
+@@ -55,7 +55,7 @@
+ // `detached`, and a detached child (its own process group) is what lets a timeout kill the
+ // command together with anything it forked. No shell, ever; stderr is discarded.
+ function realExecFile(file, args, opts, cb) {
+-  const child = spawn(file, args, { env: opts.env, shell: false, detached: true, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
++  const child = spawn(file, args, { env: opts.env, shell: false, detached: false, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+   let out = '';
+   let called = false;
+   const finish = (err) => { if (!called) { called = true; cb(err, out, ''); } };
+## test: node --test tests/device-helper.test.js
+  ...
+# Subtest: integration: fake-mode status is power fake, or the explicit flag
+ok 40 - integration: fake-mode status is power fake, or the explicit flag
+  ---
+  duration_ms: 260.685884
+  type: 'test'
+  ...
+# Subtest: integration: --helper alone has no calls route
+ok 41 - integration: --helper alone has no calls route
+  ---
+  duration_ms: 143.473826
+  type: 'test'
+  ...
+# Subtest: integration: without --helper the routes do not exist
+ok 42 - integration: without --helper the routes do not exist
+  ---
+  duration_ms: 141.598558
+  type: 'test'
+  ...
+# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+ok 43 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+  ---
+  duration_ms: 265.197564
+  type: 'test'
+  ...
+## summary (exit 124)
+1 failed

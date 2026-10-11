@@ -1,0 +1,42 @@
+Hazard: cached ratings never re-checked under a limit
+Mutant: no-recheck (js/engine.js) — ok
+## diff
+--- /tmp/tmp.kxwy1oz7Ph/orig	2026-10-10 16:33:01.880266911 +0000
++++ /tmp/tmp.kxwy1oz7Ph/wt/js/engine.js	2026-10-10 16:33:01.893129393 +0000
+@@ -39,7 +39,7 @@
+    * (fails closed). A title merely absent from the random pool says nothing about its rating.
+    */
+   async function recheckCachedRatings() {
+-    const keys = cachedKeys().slice(0, RECHECK_MAX);
++    const keys = [];
+     if (!keys.length) return;
+     let returned = [];
+     try {
+## test: node --test tests/plex.test.js tests/engine.test.js && npm run test:e2e -- metadata && npm run test:e2e -- now-playing
+  ---
+  duration_ms: 0.08143
+  type: 'test'
+  ...
+# Subtest: pickNowPlaying carries the same fields from an XML session (attributes are strings)
+ok 69 - pickNowPlaying carries the same fields from an XML session (attributes are strings)
+  ---
+  duration_ms: 0.354827
+  type: 'test'
+  ...
+# Subtest: items(keys) is ONE request with the keys joined by literal commas, and returns each item with its rating
+ok 70 - items(keys) is ONE request with the keys joined by literal commas, and returns each item with its rating
+  ---
+  duration_ms: 0.546537
+  type: 'test'
+  ...
+1..70
+# tests 70
+# suites 0
+# pass 64
+# fail 6
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 317.244031
+## summary (exit 1)
+6 failed

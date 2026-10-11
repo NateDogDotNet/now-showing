@@ -1,0 +1,170 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 136e5fb..7fa54e0 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -7,6 +7,7 @@ on:
+ jobs:
+   test:
+     runs-on: ubuntu-latest
++    timeout-minutes: 20
+     steps:
+       - uses: actions/checkout@v4
+       - uses: actions/setup-node@v4
+@@ -14,8 +15,8 @@ jobs:
+           node-version: 22
+       - run: npm ci
+       - run: npm test
++      - name: Every file the service worker precaches exists, and every js/ file is precached
++        run: node scripts/check-precache.mjs
+       - name: Install Chromium for the browser tests
+         run: npx playwright install --with-deps chromium
+       - run: npm run test:e2e
+-      - name: Every file the service worker precaches exists, and every js/ file is precached
+-        run: node scripts/check-precache.mjs
+diff --git a/tests/e2e/lib.mjs b/tests/e2e/lib.mjs
+index e7520ca..b0ab764 100644
+--- a/tests/e2e/lib.mjs
++++ b/tests/e2e/lib.mjs
+@@ -141,19 +141,25 @@ export async function withApp(opts, fn) {
+             request: async () => {
+               wl.requests++;
+               wl.held++;
+-              let released = false;
+-              return {
++              const listeners = [];
++              const sentinel = {
+                 released: false,
+                 type: 'screen',
+-                addEventListener() {},
+-                removeEventListener() {},
++                addEventListener: (type, fn) => type === 'release' && listeners.push(fn),
++                removeEventListener: (type, fn) => {
++                  const i = listeners.indexOf(fn);
++                  if (type === 'release' && i >= 0) listeners.splice(i, 1);
++                },
+                 release: async () => {
+-                  if (released) return;
+-                  released = true;
++                  if (sentinel.released) return;
++                  sentinel.released = true;
+                   wl.held--;
+                   wl.releases++;
++                  for (const fn of [...listeners]) fn.call(sentinel, { type: 'release', target: sentinel });
++                  sentinel.onrelease?.({ type: 'release', target: sentinel });
+                 },
+               };
++              return sentinel;
+             },
+           },
+         });
+diff --git a/tests/e2e/run.mjs b/tests/e2e/run.mjs
+index e9c2e3c..dbbdbeb 100644
+--- a/tests/e2e/run.mjs
++++ b/tests/e2e/run.mjs
+@@ -19,9 +19,21 @@ const specs = names.length
+   ? names
+   : readdirSync(DIR).filter((f) => f.endsWith('.spec.mjs')).map((f) => f.slice(0, -'.spec.mjs'.length)).sort();
+ 
++const TIMEOUT_MS = Number(process.env.E2E_SPEC_TIMEOUT || 180) * 1000;
++
+ const { child: server, ready } = spawnServe(['--mock', '--port', String(E2E_PORT), '--mock-port', String(E2E_MOCK_PORT)]);
+-const stopServer = () => server.kill();
+-process.on('exit', stopServer);
++let current = null; // the running spec child (its own process group)
++const killGroup = (p) => {
++  if (!p || !p.pid) return;
++  try {
++    process.kill(-p.pid, 'SIGKILL');
++  } catch {}
++};
++const cleanup = () => {
++  killGroup(current);
++  server.kill();
++};
++process.on('exit', cleanup);
+ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130));
+ 
+ let failed = 0;
+@@ -34,16 +46,27 @@ try {
+       failed++;
+       continue;
+     }
++    let timedOut = false;
+     const code = await new Promise((resolve) => {
+-      const p = spawn(process.execPath, [file], { stdio: 'inherit', env: process.env });
+-      p.on('exit', (c) => resolve(c ?? 1));
++      const p = spawn(process.execPath, [file], { stdio: 'inherit', env: process.env, detached: true });
++      current = p;
++      const timer = setTimeout(() => {
++        timedOut = true;
++        killGroup(p);
++      }, TIMEOUT_MS);
++      p.on('exit', (c) => {
++        clearTimeout(timer);
++        killGroup(p); // sweep stragglers (Chromium, dedicated server) left in the group
++        current = null;
++        resolve(timedOut ? 1 : (c ?? 1));
++      });
+     });
+-    console.log(`${code === 0 ? 'PASS' : 'FAIL'} ${name}`);
++    console.log(`${code === 0 ? 'PASS' : 'FAIL'} ${name}${timedOut ? ' (timeout)' : ''}`);
+     if (code !== 0) failed++;
+   }
+ } catch (e) {
+   console.error(e.message);
+   failed++;
+ }
+-stopServer();
++cleanup();
+ process.exit(failed ? 1 : 0);
+diff --git a/tests/e2e/smoke.spec.mjs b/tests/e2e/smoke.spec.mjs
+index 3d38987..acffc62 100644
+--- a/tests/e2e/smoke.spec.mjs
++++ b/tests/e2e/smoke.spec.mjs
+@@ -82,3 +82,46 @@ await withApp({ localStorage: { 'plexPoster.lastReload': '123' } }, async ({ pag
+   assert.equal(await page.evaluate(() => typeof window.__wakeLock.requests), 'number');
+   check('localStorage seed + pixelShift false + wake lock stub');
+ });
++
++// Contract defaults: whatsNew seeded, dailyReload false.
++await withApp({}, async ({ page, app }) => {
++  await page.goto(app.url);
++  assert.notEqual(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), null);
++  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('plexPoster.settings')).dailyReload), false);
++  check('whatsNew seeded, dailyReload false');
++});
++
++// Wake-lock stub: counting and faithful sentinel.
++await withApp({}, async ({ page, app }) => {
++  await page.goto(app.url);
++  const r = await page.evaluate(async () => {
++    const wl = window.__wakeLock;
++    const s = await navigator.wakeLock.request('screen');
++    const afterRequest = { ...wl, released: s.released };
++    let fired = 0;
++    s.addEventListener('release', () => fired++);
++    await s.release();
++    return { afterRequest, afterRelease: { ...wl, released: s.released }, fired };
++  });
++  assert.deepEqual(r.afterRequest, { held: 1, requests: 1, releases: 0, released: false });
++  assert.deepEqual(r.afterRelease, { held: 0, requests: 1, releases: 1, released: true });
++  assert.equal(r.fired, 1);
++  check('wake-lock stub counts and sentinel released/release event are faithful');
++});
++
++// viewport and isMobile.
++await withApp({ viewport: { width: 500, height: 800 } }, async ({ page, app }) => {
++  await page.goto(app.url);
++  assert.equal(await page.evaluate(() => innerWidth), 500);
++  check('viewport sets innerWidth');
++});
++// isMobile: a page without a viewport meta lays out at 980px on a mobile context, at the real width otherwise.
++const layoutWidth = async (opts) =>
++  withApp({ viewport: { width: 500, height: 800 }, ...opts }, async ({ page, app }) => {
++    await page.route('**/e2e-nometa', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><body>x' }));
++    await page.goto(`${app.url}e2e-nometa`);
++    return page.evaluate(() => document.documentElement.clientWidth);
++  });
++assert.equal(await layoutWidth({ isMobile: true }), 980);
++assert.equal(await layoutWidth({}), 500);
++check('isMobile gives a mobile signal (980px layout without viewport meta)');

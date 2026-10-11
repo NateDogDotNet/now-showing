@@ -1,0 +1,42 @@
+Hazard: an import file plants a PIN hash
+Mutant: import-plants-pin (js/settings.js) — ok
+## diff
+--- /tmp/tmp.YxeIq7gSYf/orig	2026-10-08 22:49:20.857229947 +0000
++++ /tmp/tmp.YxeIq7gSYf/wt/js/settings.js	2026-10-08 22:49:20.873177131 +0000
+@@ -213,7 +213,7 @@
+     incoming = parsed.settings || {};
+   }
+   incoming = translateLegacyShape(incoming);
+-  const known = Object.keys(incoming).filter((k) => k in SCHEMA && !NEVER_EXPORT_KEYS.includes(k));
++  const known = Object.keys(incoming).filter((k) => k in SCHEMA);
+   if (known.length === 0) throw new Error('No recognised settings in file.');
+   const merged = { ...current };
+   for (const k of known) merged[k] = incoming[k];
+## test: TZ=America/New_York npm test && TZ=Europe/London npm test
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: a 2.0.0 export imports with the new keys at their defaults
+ok 66 - a 2.0.0 export imports with the new keys at their defaults
+  ---
+  duration_ms: 0.397821
+  type: 'test'
+  ...
+# Subtest: stored 2.0.0 settings load with new keys filled
+ok 67 - stored 2.0.0 settings load with new keys filled
+  ---
+  duration_ms: 0.18162
+  type: 'test'
+  ...
+1..67
+# tests 67
+# suites 0
+# pass 66
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 782.665373
+## summary (exit 1)
+1 failed

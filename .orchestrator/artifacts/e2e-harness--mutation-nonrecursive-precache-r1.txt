@@ -1,0 +1,18 @@
+Hazard: nested js/vendor files escape the precache check (offline breaks)
+Mutant: nonrecursive-precache (scripts/check-precache.mjs) — ok
+## diff
+--- /tmp/tmp.E9hefZ0fWi/orig	2026-10-08 22:11:12.215104363 +0000
++++ /tmp/tmp.E9hefZ0fWi/wt/scripts/check-precache.mjs	2026-10-08 22:11:12.237001289 +0000
+@@ -24,7 +24,7 @@
+ const walk = (dir) =>
+   readdirSync(dir).flatMap((name) => {
+     const p = join(dir, name);
+-    return statSync(p).isDirectory() ? walk(p) : [relative(ROOT, p).split(sep).join('/')];
++    return statSync(p).isDirectory() ? [] : [relative(ROOT, p).split(sep).join('/')];
+   });
+ 
+ const missing = list.filter((p) => p !== './' && !existsSync(join(ROOT, p)));
+## test: d=$(mktemp -d) && mkdir -p "$d/js/vendor" && touch "$d/index.html" "$d/js/vendor/x.js" && printf "const SHELL = [\n  'index.html',\n];\n" > "$d/sw.js" && ! node scripts/check-precache.mjs --root "$d" && printf "const SHELL = [\n  'index.html',\n  'js/vendor/x.js',\n];\n" > "$d/sw.js" && node scripts/check-precache.mjs --root "$d"
+1 precached files OK
+## summary (exit 1)
+1 failed

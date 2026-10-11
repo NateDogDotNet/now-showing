@@ -1,0 +1,42 @@
+Hazard: a symlinked config.json resolving outside the root is served to loopback
+Mutant: no-containment (scripts/serve.mjs) — ok
+## diff
+--- /tmp/tmp.cxXQNOL30B/orig	2026-10-08 22:22:30.949115952 +0000
++++ /tmp/tmp.cxXQNOL30B/wt/scripts/serve.mjs	2026-10-08 22:22:30.970725786 +0000
+@@ -70,7 +70,7 @@
+     // A symlink whose real path leaves the root, or lands on a non-app file, is not an app path.
+     const real = await realpath(file);
+     const rel = '/' + relative(REAL_ROOT, real).split(sep).join('/');
+-    if (rel.startsWith('/..') || (path !== '/config.json' && !isAppPath(rel))) return send(res, 404, 'Not found');
++    if ((path !== '/config.json' && !isAppPath(rel))) return send(res, 404, 'Not found');
+     if (!(await stat(file)).isFile()) return send(res, 404, 'Not found');
+     const body = await readFile(file);
+     res.writeHead(200, {
+## test: node --test tests/serve.test.js
+  ---
+  duration_ms: 2.377661
+  type: 'test'
+  ...
+# Subtest: symlinks leaving the root or reaching config.json are 404
+ok 9 - symlinks leaving the root or reaching config.json are 404
+  ---
+  duration_ms: 2.950574
+  type: 'test'
+  ...
+# Subtest: dotfiles under app directories are 404
+ok 10 - dotfiles under app directories are 404
+  ---
+  duration_ms: 1.741548
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 419.685925
+## summary (exit 0)
+0 failed

@@ -1,0 +1,42 @@
+Hazard: above-limit poster stays up while a frame loads
+Mutant: block-after-frame-load (js/main.js) — ok
+## diff
+--- /tmp/tmp.Rylt738ELQ/orig	2026-10-09 06:41:36.392038477 +0000
++++ /tmp/tmp.Rylt738ELQ/wt/js/main.js	2026-10-09 06:41:36.410238985 +0000
+@@ -427,7 +427,7 @@
+   // A new limit applies at once, even offline: a poster already up may now be above it (K20). This comes BEFORE the
+   // frame is applied, because a custom frame's load has no timeout and must not keep an above-limit poster on screen.
+   // (A preview never changes the limit, so there is nothing to re-check for it.)
+-  if (!preview && display.currentPoster && !allowedOnScreen(display.currentPoster)) blockPoster();
++  ;
+   try {
+     await display.apply(state.settings);
+   } catch (err) {
+## test: npm run test:e2e -- content-rating
+    at async file:///tmp/tmp.Rylt738ELQ/wt/tests/e2e/content-rating.spec.mjs:744:1
+case 15 A3-rec limit saved during a tick keeps its forced tick failed:
+AssertionError [ERR_ASSERTION]: title 4 was taken off the screen by the save
+
+1 !== 0
+
+    at file:///tmp/tmp.Rylt738ELQ/wt/tests/e2e/content-rating.spec.mjs:579:10
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at process.processImmediate (node:internal/timers:453:9)
+    at process.callbackTrampoline (node:internal/async_hooks:130:17)
+    at async withApp (file:///tmp/tmp.Rylt738ELQ/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.Rylt738ELQ/wt/tests/e2e/content-rating.spec.mjs:749:9
+    at async Promise.all (index 2)
+    at async file:///tmp/tmp.Rylt738ELQ/wt/tests/e2e/content-rating.spec.mjs:744:1
+case 17 C4M1 limit + slow custom frame in one Save failed:
+AssertionError [ERR_ASSERTION]: title 4 (R) is off the screen while the frame is still loading (on screen: 4)
+
+false !== true
+
+    at file:///tmp/tmp.Rylt738ELQ/wt/tests/e2e/content-rating.spec.mjs:665:10
+    at async withApp (file:///tmp/tmp.Rylt738ELQ/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.Rylt738ELQ/wt/tests/e2e/content-rating.spec.mjs:749:9
+    at async Promise.all (index 1)
+    at async file:///tmp/tmp.Rylt738ELQ/wt/tests/e2e/content-rating.spec.mjs:744:1
+FAIL content-rating
+## summary (exit 1)
+1 failed

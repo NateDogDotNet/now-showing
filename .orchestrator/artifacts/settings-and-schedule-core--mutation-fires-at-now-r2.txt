@@ -1,0 +1,42 @@
+Hazard: reload fires twice / zero delay at the exact time
+Mutant: fires-at-now (js/schedule.js) — ok
+## diff
+--- /tmp/tmp.Bqzosn5J4C/orig	2026-10-08 23:03:41.510013636 +0000
++++ /tmp/tmp.Bqzosn5J4C/wt/js/schedule.js	2026-10-08 23:03:41.524948901 +0000
+@@ -48,7 +48,7 @@
+   const mi = mins % 60;
+   const now = date.getTime();
+   let t = occurrence(date.getFullYear(), date.getMonth(), date.getDate(), h, mi);
+-  if (t <= now) t = occurrence(date.getFullYear(), date.getMonth(), date.getDate() + 1, h, mi);
++  if (t < now) t = occurrence(date.getFullYear(), date.getMonth(), date.getDate() + 1, h, mi);
+   const ms = t - now;
+   return Number.isFinite(ms) && ms > 0 ? ms : DAY_MS;
+ }
+## test: TZ=America/New_York npm test && TZ=Europe/London npm test
+  ---
+  duration_ms: 1.120737
+  type: 'test'
+  ...
+# Subtest: a 2.0.0 export imports with the new keys at their defaults
+ok 66 - a 2.0.0 export imports with the new keys at their defaults
+  ---
+  duration_ms: 0.681084
+  type: 'test'
+  ...
+# Subtest: stored 2.0.0 settings load with new keys filled
+ok 67 - stored 2.0.0 settings load with new keys filled
+  ---
+  duration_ms: 0.228515
+  type: 'test'
+  ...
+1..67
+# tests 67
+# suites 0
+# pass 62
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 759.629498
+## summary (exit 1)
+5 failed

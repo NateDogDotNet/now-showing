@@ -1,0 +1,129 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "serve-config-guard--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "serve-config-guard--derive-step8-r3-0.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "serve-config-guard--precommit-format-r3.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "serve-config-guard--mutation-allow-all-both-r3.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "serve-config-guard--dlog-check-r3.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "serve-config-guard--review-check-r3.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "serve-config-guard--readback-0914090.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 99,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_result": {
+  "total": 90,
+  "max": 100,
+  "percentage": 90,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "serve-config-guard--ac1-r3.json": "535085de05a1576effb966070eec8ed92200685b70fa1551efaca61f485a5d9d",
+  "serve-config-guard--derive-step8-r3-0.json": "4948e14b310f879a606f7a9fbe419c421663e9d52efa66104acf568c2c2bdb9c",
+  "serve-config-guard--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "serve-config-guard--mutation-allow-all-v2-r2.txt": "d0422974442d94572d0278075ee27f631ef08d7b4f6dac629e27f1e810985361",
+  "serve-config-guard--dlog-check-r3.json": "a71bd630e544e7bf4a103ccc913dc3e69e3eaa2a895ed3f477743ab7ec29d3f2",
+  "serve-config-guard--review-check-r3.json": "1adc5d524f733b0e8a8e50b00284dd123fc9ad8a57dc786e420ef7eee3f8b39a",
+  "serve-config-guard--readback-0914090.json": "dd446758b61c150ecac1850a6f403f4a28a17d279805882e6b8aced459e6a5a1"
+ },
+ "_written": "2026-10-08T22:26:17.403093Z"
+}

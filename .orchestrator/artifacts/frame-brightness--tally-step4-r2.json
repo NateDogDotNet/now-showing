@@ -1,0 +1,101 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "frame-brightness--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "frame-brightness--scope-r2.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "frame-brightness--precommit-format-r2.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "frame-brightness--mutation-ramp-jump-r1.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 5,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 75,
+  "max": 75,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "frame-brightness--ac1-r2.json": "ea872a90bf21a8acefc0b822e126ed328e3c4658fd1d4f78adbb93bd1e82f814",
+  "frame-brightness--scope-r2.json": "6b0fbfb0a3fd24c0f8a3c35fb734ef1db7579f640531da30e3a100e8aa43b517",
+  "frame-brightness--precommit-format-r2.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "frame-brightness--mutation-ramp-jump-r1.txt": "f3546ff9dfa8e1fe0a2817154ac89c5ca7f87f353f460efc4a035cc837591649"
+ },
+ "_written": "2026-10-10T19:57:26.362789Z"
+}

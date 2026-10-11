@@ -1,0 +1,39 @@
+Hazard: rotated stage not centred (F1)
+Mutant: no-centre-translate (css/app.css) — ok
+## diff
+--- /tmp/tmp.bO95NxFOnm/orig	2026-10-08 23:29:04.892389378 +0000
++++ /tmp/tmp.bO95NxFOnm/wt/css/app.css	2026-10-08 23:29:04.909146650 +0000
+@@ -47,7 +47,7 @@
+   top: 50%;
+   /* width/height/rotation are set from JS (see layout.js). Pixel shift uses the separate
+      `translate` property, which composes before this transform. */
+-  transform: translate(-50%, -50%) rotate(var(--rotation, 0deg));
++  transform: rotate(var(--rotation, 0deg));
+   transition: transform 0.5s ease;
+ }
+ 
+## test: npm run test:e2e -- rotation
+
+> plex-poster-display@2.0.0 test:e2e
+> node tests/e2e/run.mjs rotation
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: inside viewport: 1920x1080 rotation 0 #stage {"left":960,"top":540,"right":1650,"bottom":1620,"width":690,"height":1080}
+    at file:///tmp/tmp.bO95NxFOnm/wt/tests/e2e/rotation.spec.mjs:56:16
+    at async withApp (file:///tmp/tmp.bO95NxFOnm/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.bO95NxFOnm/wt/tests/e2e/rotation.spec.mjs:25:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL rotation
+## summary (exit 1)
+1 failed

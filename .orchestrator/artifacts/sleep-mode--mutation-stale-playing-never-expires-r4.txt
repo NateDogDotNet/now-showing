@@ -1,0 +1,42 @@
+Hazard: outage after a movie holds the screen awake all night
+Mutant: stale-playing-never-expires (js/main.js) — ok
+## diff
+--- /tmp/tmp.BtYK7gBuZA/orig	2026-10-09 02:12:58.863227546 +0000
++++ /tmp/tmp.BtYK7gBuZA/wt/js/main.js	2026-10-09 02:12:58.879849360 +0000
+@@ -194,7 +194,7 @@
+   try {
+     sessions = await client.sessions();
+   } catch (err) {
+-    if (++state.pollFailures >= MAX_POLL_FAILURES) state.playing = false; // the 1 s evaluateSleep() timer acts on it
++    ++state.pollFailures; // the 1 s evaluateSleep() timer acts on it
+     if (state.asleep) throw err;
+     if (!state.pollFailing) log.warn(`Playback check failed: ${err.message}`);
+     state.pollFailing = true;
+## test: npm run test:e2e -- sleep
+  ok  double and triple tap on the Pause button while asleep: Pause stays off, mock.play() still wakes the display
+  ok  sessions 403 (idle sleep on, now playing off): 5 posters shown in 48 s, no error shown
+  ok  one failed poll, then two in a row, mid-playback: veil stays down; it comes up after the playback really ends
+  ok  every poll failing (HTTP 500) for 61 min: idle sleep still starts (a failed poll is not playback)
+  ok  idle sleep: awake at 59 min, asleep at 61 min without playback; Sleep: asleep (idle)
+  ok  idle sleep: playback wakes the display and it stays awake
+  ok  idleSleepHours 0 -> 1 saved after 2 h: awake at save and at 58 min, asleep (idle) an hour after the save
+  ok  1970 clock: idle sleep still works, and a clock jump does not trigger it early
+  ok  70 s of pointer activity, then 70 s of key presses, in Settings: the display stays awake; a checkbox click toggles
+  ok  veil back behind the open dialog: the next click and key press in the dialog act
+  ok  3 min outage while asleep, then mock.play(): awake 2105 ms after Plex returned
+  ok  awake, sleep configured, now playing on: 10 sessions requests in 10 ticks (one each)
+  ok  veil aria-hidden="true"; #app inert while asleep and not after; a dialog above the veil takes clicks
+  ok  paused: sleeping and waking make no sessions or image request
+  ok  Plex down inside the window with 2+ cached posters: nothing drawn while asleep (Neon Matinee (1993) — cache)
+  ok  idle sleep: playback past the original deadline; awake after it stops, asleep one idle hour after the last playback
+case 11d Plex outage mid-movie: the veil comes up within ~1.5 min failed:
+AssertionError [ERR_ASSERTION]: condition not met within 120000 simulated ms
+    at advanceUntil (file:///tmp/tmp.BtYK7gBuZA/wt/tests/e2e/sleep.spec.mjs:50:10)
+    at async file:///tmp/tmp.BtYK7gBuZA/wt/tests/e2e/sleep.spec.mjs:463:18
+    at async withApp (file:///tmp/tmp.BtYK7gBuZA/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.BtYK7gBuZA/wt/tests/e2e/sleep.spec.mjs:677:9
+    at async Promise.all (index 0)
+    at async file:///tmp/tmp.BtYK7gBuZA/wt/tests/e2e/sleep.spec.mjs:672:1
+FAIL sleep
+## summary (exit 1)
+1 failed

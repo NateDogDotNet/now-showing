@@ -1,0 +1,14 @@
+{
+  "cmd": "grep -q 'no-store' sw.js && node scripts/check-precache.mjs",
+  "exit": 1,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

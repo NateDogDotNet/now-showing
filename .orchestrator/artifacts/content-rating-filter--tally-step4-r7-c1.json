@@ -1,0 +1,94 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "content-rating-filter--ac1-r7.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "content-rating-filter--scope-r7.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "content-rating-filter--precommit-format-r7.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "content-rating-filter--mutation-preview-applies-pin-r7.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_written": "2026-10-10T13:00:30.579910Z",
+ "_correction": {
+  "reason": "random-unfiltered-e2e-r1 is equivalent at e2e (mock filters server-side; killed at unit level and by the reviewers' filter-ignoring mock); every r7 mutant killed",
+  "supersedes": "content-rating-filter--tally-step4-r7.json"
+ },
+ "_result": {
+  "total": 75,
+  "max": 75,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "content-rating-filter--ac1-r7.json": "b4d74aeaf69664795185c8d1f9d66238b7fea4791e690f01328a93bf320033fe",
+  "content-rating-filter--scope-r7.json": "830423ed0a30c901af45776c6f922d675f8d8ed9913cdca31c57836c47758103",
+  "content-rating-filter--precommit-format-r7.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "content-rating-filter--mutation-preview-applies-pin-r7.txt": "0abe2f1a02a8fdc0b0c53b0e40dfba993d57721949b3b733d7a92edeca7ba4c7"
+ }
+}

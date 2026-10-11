@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f scripts/serve.mjs && test -f scripts/net.mjs && ! grep -qiE 'x-forwarded|forwarded' scripts/serve.mjs scripts/net.mjs",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

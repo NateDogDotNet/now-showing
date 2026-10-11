@@ -1,0 +1,131 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 30,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "kiosk-and-pin--ac1-r6.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "kiosk-and-pin--scope-r6.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "kiosk-and-pin--precommit-format-r6.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "kiosk-and-pin--mutation-no-clamp-r6.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "kiosk-and-pin--dlog-check-r6.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "kiosk-and-pin--review-check-r6.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 95,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 7,
+  "missing_rows": [
+   "ac7"
+  ],
+  "review_rows": [
+   7
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 90,
+  "max": 95,
+  "percentage": 95,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 30,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "kiosk-and-pin--ac1-r6.json": "11fb1652a5007fe46f31fc81d4fae9190fe112dfe9d3b57690ba5a920e08bd4b",
+  "kiosk-and-pin--scope-r6.json": "fb1f2376990e70dc92e93ba3564b3237deeddfa3ff582ccbee509fda54ac39fa",
+  "kiosk-and-pin--precommit-format-r6.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "kiosk-and-pin--mutation-no-clamp-r6.txt": "50bd34a1c6411dfce77b279fe475c09b36f2c319421310901ff7cfca4ec149f5",
+  "kiosk-and-pin--dlog-check-r6.json": "bab18521f8490c2f9051515612818f417041b20f64e94157482b0b91bbc56ef3",
+  "kiosk-and-pin--review-check-r6.json": "1da7dc0d3e092279b20ba1a59678c7813dc2189d3e288c57f1479334118526c4"
+ },
+ "_written": "2026-10-10T23:59:26.848709Z"
+}

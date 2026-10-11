@@ -1,0 +1,42 @@
+Hazard: timeout kill cannot reach the command's group
+Mutant: not-detached (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.lucD7Ve1X3/orig	2026-10-08 23:14:15.852801325 +0000
++++ /tmp/tmp.lucD7Ve1X3/wt/scripts/device-helper.mjs	2026-10-08 23:14:15.879975079 +0000
+@@ -55,7 +55,7 @@
+ // `detached`, and a detached child (its own process group) is what lets a timeout kill the
+ // command together with anything it forked. No shell, ever; stderr is discarded.
+ function realExecFile(file, args, opts, cb) {
+-  const child = spawn(file, args, { env: opts.env, shell: false, detached: true, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
++  const child = spawn(file, args, { env: opts.env, shell: false, detached: false, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+   let out = '';
+   let called = false;
+   const finish = (err) => { if (!called) { called = true; cb(err, out, ''); } };
+## test: node --test tests/device-helper.test.js
+  ---
+  duration_ms: 163.6839
+  type: 'test'
+  ...
+# Subtest: integration: without --helper the routes do not exist
+ok 41 - integration: without --helper the routes do not exist
+  ---
+  duration_ms: 135.68568
+  type: 'test'
+  ...
+# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+ok 42 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+  ---
+  duration_ms: 266.82804
+  type: 'test'
+  ...
+1..42
+# tests 42
+# suites 0
+# pass 41
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 300775.472369
+## summary (exit 1)
+1 failed

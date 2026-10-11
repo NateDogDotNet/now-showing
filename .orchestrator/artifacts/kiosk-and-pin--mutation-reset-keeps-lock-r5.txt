@@ -1,0 +1,42 @@
+Hazard: reset leaves the lockout
+Mutant: reset-keeps-lock (js/main.js) — ok
+## diff
+--- /tmp/tmp.QNGlIXndA2/orig	2026-10-10 23:08:31.791476123 +0000
++++ /tmp/tmp.QNGlIXndA2/wt/js/main.js	2026-10-10 23:08:31.804869157 +0000
+@@ -908,7 +908,7 @@
+   // The PIN reset (D10, Q21): while config.json serves {"resetPin": true} the PIN is cleared on every load.
+   pinResetFlag = config !== null && shouldResetPin(parseJson(config));
+   if (pinResetFlag) {
+-    storage.removeItem(LOCK_KEY);
++    void LOCK_KEY;
+     if (state.settings.settingsPinHash || state.settings.settingsPinSalt) {
+       state.settings = save(storage, { ...state.settings, settingsPinHash: '', settingsPinSalt: '' });
+     }
+## test: npm run test:e2e -- kiosk
++ actual - expected
+
++ '{"failures":9,"lockedUntil":1791674552872}'
+- null
+
+    at file:///tmp/tmp.QNGlIXndA2/wt/tests/e2e/kiosk.spec.mjs:817:10
+    at async withApp (file:///tmp/tmp.QNGlIXndA2/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.QNGlIXndA2/wt/tests/e2e/kiosk.spec.mjs:971:11
+    at async Promise.all (index 1)
+    at async runPool (file:///tmp/tmp.QNGlIXndA2/wt/tests/e2e/kiosk.spec.mjs:966:3)
+    at async file:///tmp/tmp.QNGlIXndA2/wt/tests/e2e/kiosk.spec.mjs:986:18
+  ok  first-run provisioning is unchanged
+PASS a first run still takes its settings from config.json
+  ok  sleep swallowing still holds with the PIN gate
+PASS a press that wakes the display is swallowed, PIN or not; the next one reaches the gate
+  ok  reset flag: every load, while served
+PASS the reset flag is read on every load and honoured while it is served; Diagnostics stops warning when it is gone
+  ok  Enter held through a wake does not reveal; a fresh hold does
+PASS an Enter held through a wake from sleep does not reveal the controls; a fresh hold still does
+  ok  PIN set / mismatch / too short / cancel / remove
+PASS a PIN is set, changed and removed in Settings, and Settings says it is a deterrent
+  ok  no PIN reset without {"resetPin": true} from a 2xx config.json
+PASS the PIN stays without a true flag: {resetPin:false}, "true", 1, a 403 or 500 carrying the flag, a query string
+1 of 37 kiosk cases failed
+FAIL kiosk
+## summary (exit 1)
+1 failed

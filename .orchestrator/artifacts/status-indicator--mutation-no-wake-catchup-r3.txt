@@ -1,0 +1,34 @@
+Hazard: stale pill on wake
+Mutant: no-wake-catchup (js/main.js) — ok
+## diff
+--- /tmp/tmp.eYglS3M8Gx/orig	2026-10-10 18:20:37.660280951 +0000
++++ /tmp/tmp.eYglS3M8Gx/wt/js/main.js	2026-10-10 18:20:37.669879622 +0000
+@@ -667,7 +667,7 @@
+   $('controls').classList.add('visible');
+   const wasIdle = document.body.classList.contains('idle');
+   document.body.classList.remove('idle');
+-  if (wasIdle) updateStatus(); // catch the pill up before it shows
++  if (false) updateStatus(); // catch the pill up before it shows
+   clearTimeout(idleTimer);
+   idleTimer = setTimeout(() => {
+     if ($('controls').matches(':hover, :focus-within')) return wake();
+## test: npm run test:e2e -- status
+
+> plex-poster-display@2.0.0 test:e2e
+> node tests/e2e/run.mjs status
+
+  ok  offline: idle dot, awake pill with countdown
+  ok  healthy idle: neither visible
+  ok  0 mutations over 3 s while hidden
+  ok  statusIndicator off: no dot
+  ok  dot cycles through the corners
+  ok  dot rotated 90
+  ok  asleep: no dot
+  FAIL waking brings the pill text current at once (no wait for the 1 s tick)
+AssertionError [ERR_ASSERTION]: pill text refreshed by the wake itself
+    at file:///tmp/tmp.eYglS3M8Gx/wt/tests/e2e/status.spec.mjs:173:10
+    at async withApp (file:///tmp/tmp.eYglS3M8Gx/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.eYglS3M8Gx/wt/tests/e2e/status.spec.mjs:181:5
+FAIL status
+## summary (exit 1)
+1 failed

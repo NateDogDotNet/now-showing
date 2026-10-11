@@ -1,0 +1,140 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "settings-sheet--ac1-r6.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "settings-sheet--derive-step8-r6-0.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "settings-sheet--precommit-format-r6.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "settings-sheet--mutation-k51-count-resets-r6.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "settings-sheet--dlog-check-r6.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "settings-sheet--review-check-r6.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "settings-sheet--readback-51f8aa9.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 99,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 8,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": true,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 100,
+  "max": 100,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "settings-sheet--ac1-r6.json": "5ee596ac1004114959b64ac21e9d1a53af1877f12d1999d0b64ffab0622bcf23",
+  "settings-sheet--derive-step8-r6-0.json": "90b0598c6b804efdd31b8a2b18bf151c29a7b86d384948961b9cae153c4a2b56",
+  "settings-sheet--precommit-format-r6.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "settings-sheet--mutation-k51-count-resets-r6.txt": "168e366fc8e791ffa0c94673241c17509c1f4e421f17810cde7def658916f419",
+  "settings-sheet--dlog-check-r6.json": "bf527914d5ec3e690e61b545cc613d5eefedc1c4fcded7f460ada6c10fb93b18",
+  "settings-sheet--review-check-r6.json": "8771a1bcc7832c8c39e8d8cef3c2830c43ad78725eab188507ebc47cde2d25a9",
+  "settings-sheet--readback-51f8aa9.json": "5a5b01dff9f95c210785b4a585966eb7b6a9fda89bce63ebaa165bef9985262e"
+ },
+ "_written": "2026-10-11T15:06:19.550435Z"
+}

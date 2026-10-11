@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- now-playing",
+  "exit": 0,
+  "seconds": 26.87,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs now-playing\n\n  ok  600 s of 6000 s: #progress is 10 % of the poster window, 3 px high, inside #stage, on the bottom edge\n  ok  the bar moved 10.1 % -> 12.0 % with one linear transition of 90s\nPASS case 2 one linear transition between polls\n  ok  after the next poll with offset 1200000 the bar is 20 %\nPASS case 1 progress bar follows viewOffset\n  ok  state=paused: the bar sits at 60 % and does not move\nPASS case 3 paused freezes the bar\n  ok  mock.stop(): #progress is removed after the next poll\nPASS case 4 stop removes the bar\n  ok  showPlayer:true: \"Playing in Living Room\"\nPASS case 6 player label\n  ok  default: the player label is hidden\nPASS case 7 player label is off by default\n  ok  showProgress:false: no bar although a session is playing\nPASS case 5 showProgress false hides the bar\n  ok  R title playing under PG-13: no poster, no bar, no label\nPASS case 8 an above-limit title playing shows no bar\n  ok  401 on /status/sessions (engine fetch only): 3 different posters, no error card; playback shows once allowed\nPASS case 9 K18 401 on sessions, engine fetch only\n  ok  403 on /status/sessions (engine fetch only): 3 different posters, no error card; playback shows once allowed\nPASS case 9 K18 403 on sessions, engine fetch only\n  ok  401 on /status/sessions (sleep poll also asks): 3 different posters, no error card; playback shows once allowed\nPASS case 9 K18 401 on sessions, sleep poll also asks\n  ok  403 on /status/sessions (sleep poll also asks): 3 different posters, no error card; playback shows once allowed\nPASS case 9 K18 403 on sessions, sleep poll also asks\n  ok  500 on /status/sessions: a tick with a failed playback poll makes exactly one request (3 forced ticks)\nPASS case 10 C8M1 500 poll, one request per tick\n  ok  403 on /status/sessions: a tick with a failed playback poll makes exactly one request (3 forced ticks)\nPASS case 10 C8M1 403 poll, one request per tick\nPASS now-playing",
+  "stderr_tail": ""
+}

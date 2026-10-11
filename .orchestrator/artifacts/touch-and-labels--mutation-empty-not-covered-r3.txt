@@ -1,0 +1,42 @@
+Hazard: first tap acts on the empty screen
+Mutant: empty-not-covered (js/main.js) — ok
+## diff
+--- /tmp/tmp.3VmnNi9o6I/orig	2026-10-11 18:12:15.597107178 +0000
++++ /tmp/tmp.3VmnNi9o6I/wt/js/main.js	2026-10-11 18:12:15.613802011 +0000
+@@ -1112,7 +1112,7 @@
+       !state.settings.kioskMode &&
+       e.pointerType !== 'mouse' &&
+       !document.querySelector('dialog[open]') &&
+-      Boolean(target.closest('#controls, #stage') || target === $('app') || target === $('empty'));
++      Boolean(target.closest('#controls, #stage') || target === $('app'));
+   },
+   { capture: true, passive: true },
+ );
+## test: npm run test:e2e -- touch-controls
+  ok  U13 rotation 90: angle and bounds
+  ok  U13 rotation 0: angle and bounds
+  ok  U13 rotation 270: angle and bounds
+  ok  U13 disableShortcuts: ? does nothing
+  ok  U13 ? in a field types
+  ok  R-CTRL-3 Diagnostics button: touch tap opens #shortcuts with 8 entries
+  ok  R-CTRL-3 Diagnostics button hidden with disableShortcuts
+  ok  TLM1 Control labels select: Always shows labels on desktop
+  ok  K58 Open settings first tap
+  ok  TLM2 keyboard Enter after an orphaned touch press acts
+  ok  TLM3 O cap shows o with a "letter O" label
+  ok  TLM4 Diagnostics first focus: diag-copy
+  ok  K36 contextmenu: stage, PIN keypad and Diagnostics prevented; Settings fields not
+case K58 unconfigured display: a touch tap on the #empty backdrop where the hidden Rotate button sits only reveals the bar; Open settings still works on the first tap failed:
+AssertionError [ERR_ASSERTION]: the first tap did not rotate
+
+90 !== 0
+
+    at file:///tmp/tmp.3VmnNi9o6I/wt/tests/e2e/touch-controls.spec.mjs:445:10
+    at async withApp (file:///tmp/tmp.3VmnNi9o6I/wt/tests/e2e/lib.mjs:242:20)
+    at async file:///tmp/tmp.3VmnNi9o6I/wt/tests/e2e/touch-controls.spec.mjs:574:9
+    at async Promise.all (index 2)
+    at async file:///tmp/tmp.3VmnNi9o6I/wt/tests/e2e/touch-controls.spec.mjs:569:1
+1 of 31 touch-controls cases failed
+FAIL touch-controls
+## summary (exit 1)
+1 failed

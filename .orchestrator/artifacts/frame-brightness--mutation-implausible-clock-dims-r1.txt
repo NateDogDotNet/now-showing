@@ -1,0 +1,42 @@
+Hazard: night dim on an unset clock
+Mutant: implausible-clock-dims (js/brightness.js) — ok
+## diff
+--- /tmp/tmp.dc1VRMzsng/orig	2026-10-10 19:54:41.782338950 +0000
++++ /tmp/tmp.dc1VRMzsng/wt/js/brightness.js	2026-10-10 19:54:41.795618679 +0000
+@@ -15,7 +15,7 @@
+  * reaches nightDimLevel.
+  */
+ function nightLevel(now, s) {
+-  if (!s.nightDim || !isPlausibleClock(now)) return 1;
++  if (!s.nightDim) return 1;
+   const start = parseHHMM(s.nightDimStart);
+   const end = parseHHMM(s.nightDimEnd);
+   if (start === null || end === null || start === end) return 1;
+## test: node --test tests/brightness.test.js
+  ---
+  duration_ms: 0.278757
+  type: 'test'
+  ...
+# Subtest: an empty window (start == end) and bad times never dim
+ok 12 - an empty window (start == end) and bad times never dim
+  ---
+  duration_ms: 0.117956
+  type: 'test'
+  ...
+# Subtest: DST night under America/New_York follows wall-clock minutes
+ok 13 - DST night under America/New_York follows wall-clock minutes
+  ---
+  duration_ms: 48.352921
+  type: 'test'
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 12
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 186.251807
+## summary (exit 1)
+1 failed

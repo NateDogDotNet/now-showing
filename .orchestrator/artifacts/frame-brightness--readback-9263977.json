@@ -1,0 +1,12 @@
+{
+ "cmd": "diff <(git log -1 --format=%B 9263977) /home/user/plex-poster-app/.orchestrator/artifacts/frame-brightness--commit-message-final.txt",
+ "sha": "9263977",
+ "equal": true,
+ "tokens": [],
+ "missing_tokens": [],
+ "exempt": {},
+ "stale": false,
+ "commit_rows": [],
+ "ok": true,
+ "checked_at": "2026-10-10T20:20:23.096090Z"
+}

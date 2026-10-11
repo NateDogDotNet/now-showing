@@ -1,0 +1,7 @@
+# Brief — touch-and-labels r2 (re-dispatch 1)
+
+Agent name: touch-and-labels-builder-r2 · effort: medium · worktree `/home/user/wt-touch-and-labels` (r1 staged). The r1 brief binds. E2E_PORT=24720 E2E_MOCK_PORT=24721. Stage, do not commit. Conductor rulings on your questions (phase record `.orchestrator/phases/touch-and-labels.md`, Step 4 r1): Q-tl1 → K55 and Q-tl3 → K56 accepted; **Q-tl2 → K57 changed**.
+
+One item, test first (paste it failing on r1): R-CTRL-3 names a "Keyboard shortcuts" button in Diagnostics. Add it: it opens the same `#shortcuts` dialog (from the shortcut table), works by touch (on a touch-only kiosk it is the only way to see the list), and is hidden when `disableShortcuts` is on. Diagnostics is already PIN-gated when a PIN is set; the button needs no extra gate. e2e in touch-controls.spec.mjs: touch tap on the button opens #shortcuts with ≥ 8 entries; with disableShortcuts the button is absent/hidden. Run criteria 1–5 and the full `npm run test:e2e` once at the end; lint with `/home/user/plex-poster-app/.orchestrator/artifacts/round--eslint-r1e.config.mjs`; paste outputs.
+
+Handback `/home/user/plex-poster-app/.orchestrator/artifacts/touch-and-labels--handback-builder-r2.md` — FIRST line `produced_by: orchestrator-builder · model: <model> · effort: <level> · phase: touch-and-labels · round: r2`, header fields, blank line, `Agent: touch-and-labels-builder-r2 · dispatched: <stamp>`.

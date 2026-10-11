@@ -1,0 +1,9 @@
+{
+ "phase": "kiosk-and-pin",
+ "kind": "code",
+ "failures": [
+  "no COMPLETE Step 4 tally on disk"
+ ],
+ "ok": false,
+ "checked_at": "2026-10-10T22:27:08.419160Z"
+}

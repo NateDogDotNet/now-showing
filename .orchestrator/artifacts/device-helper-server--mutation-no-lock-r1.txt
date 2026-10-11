@@ -1,0 +1,42 @@
+Hazard: concurrent requests stack hung commands
+Mutant: no-lock (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.r43mvtpXb6/orig	2026-10-08 22:33:45.256917756 +0000
++++ /tmp/tmp.r43mvtpXb6/wt/scripts/device-helper.mjs	2026-10-08 22:33:45.275282658 +0000
+@@ -144,7 +144,7 @@
+     }
+     if (!strategy) return send(res, 503, { error: 'no power strategy available' });
+     if (strategy === 'wlr-randr' && !cfg.env) return send(res, 503, { error: 'WAYLAND_DISPLAY and XDG_RUNTIME_DIR are required' });
+-    if (busy) return send(res, 503, { error: 'busy' });
++
+     busy = true;
+     try {
+       const cmd = COMMANDS[strategy](on, cfg);
+## test: node --test tests/device-helper.test.js
+  ---
+  duration_ms: 197.39146
+  type: 'test'
+  ...
+# Subtest: integration: without --helper the routes do not exist
+ok 28 - integration: without --helper the routes do not exist
+  ---
+  duration_ms: 140.236507
+  type: 'test'
+  ...
+# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+ok 29 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+  ---
+  duration_ms: 278.875331
+  type: 'test'
+  ...
+1..29
+# tests 29
+# suites 0
+# pass 28
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1473.664418
+## summary (exit 1)
+1 failed

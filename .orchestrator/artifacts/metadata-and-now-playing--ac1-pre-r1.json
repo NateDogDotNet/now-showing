@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/plex.test.js && test -f tests/engine.test.js && node --test tests/plex.test.js tests/engine.test.js",
+  "exit": 0,
+  "seconds": 0.26,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: pool(): without a limit the size is as asked and no rating filter is sent\nok 45 - pool(): without a limit the size is as asked and no rating filter is sent\n  ---\n  duration_ms: 1.416229\n  type: 'test'\n  ...\n# Subtest: pool(): with a limit the container size is 3x the pool size, capped at 500\nok 46 - pool(): with a limit the container size is 3x the pool size, capped at 500\n  ---\n  duration_ms: 3.24615\n  type: 'test'\n  ...\n# Subtest: pool(): the PG-13 request lists every allowed ladder and mapped prefixed value and nothing above\nok 47 - pool(): the PG-13 request lists every allowed ladder and mapped prefixed value and nothing above\n  ---\n  duration_ms: 0.749649\n  type: 'test'\n  ...\n# Subtest: pool(): a rating value with a plus sign survives the query string\nok 48 - pool(): a rating value with a plus sign survives the query string\n  ---\n  duration_ms: 0.562313\n  type: 'test'\n  ...\n# Subtest: pool() returns the rating of each item and does not filter by it (the engine does)\nok 49 - pool() returns the rating of each item and does not filter by it (the engine does)\n  ---\n  duration_ms: 0.611632\n  type: 'test'\n  ...\n1..49\n# tests 49\n# suites 0\n# pass 49\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 188.528954",
+  "stderr_tail": ""
+}

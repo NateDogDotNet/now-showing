@@ -1,0 +1,25 @@
+Move the stage a few pixels every few minutes with a 1.5 s glide
+
+With pixelShift on (the default), the stage keeps a 1.5 % border on each
+side (so it is about 3 % smaller on the limiting axis) and moves to the
+next point of a 3x3 grid every pixelShiftMinutes. It never stays on the
+same point twice in a row, and stage and frame stay inside the viewport
+at every rotation. The offset uses the separate CSS translate property,
+so it is in screen space whatever the rotation. Each step glides over
+1.5 s (ease-in-out) instead of jumping or drifting, and with reduced
+motion it moves without the glide. With pixelShift off the layout is
+full-bleed as before.
+
+stageSize() takes a margin and the new shiftOffset() gives each step's
+offset (js/layout.js). js/display.js runs the step timer and re-syncs it
+when settings are saved. A Display protection fieldset in Settings holds
+the pixelShift checkbox and pixelShiftMinutes.
+
+tests/layout.test.js and tests/e2e/pixel-shift.spec.mjs cover the
+margin, the path, the bounds at both screen shapes and rotations, the
+glide, reduced motion and the off setting.
+
+Phase: pixel-shift (E2, R-PROT-2, D6)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

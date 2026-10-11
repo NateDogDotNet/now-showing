@@ -1,0 +1,42 @@
+Hazard: idleSleepHours 0 still sleeps
+Mutant: idle-zero-sleeps (js/sleep.js) — ok
+## diff
+--- /tmp/tmp.omcCpEZACB/orig	2026-10-09 00:16:17.473301796 +0000
++++ /tmp/tmp.omcCpEZACB/wt/js/sleep.js	2026-10-09 00:16:17.490788186 +0000
+@@ -24,7 +24,7 @@
+   const why =
+     settings.sleepEnabled && clockOk && inWindow(now, settings.sleepStart, settings.sleepEnd)
+       ? 'schedule'
+-      : idleMs > 0 && t - lastPlaybackAt >= idleMs
++      : idleMs >= 0 && t - lastPlaybackAt >= idleMs
+         ? 'idle'
+         : '';
+   if (!why || (playingNow && settings.wakeOnPlayback)) return { asleep: false, why: '' };
+## test: node --test tests/sleep.test.js tests/engine.test.js
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///tmp/tmp.omcCpEZACB/wt/tests/sleep.test.js:94:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: the schedule wins the label when both triggers hold
+ok 27 - the schedule wins the label when both triggers hold
+  ---
+  duration_ms: 0.209229
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 21
+# fail 6
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 241.300359
+## summary (exit 1)
+6 failed

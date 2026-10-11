@@ -1,0 +1,23 @@
+{
+ "phase": "cache-first-fetch",
+ "round": 3,
+ "sha": "e764aee",
+ "form": "commit",
+ "handbacks": [
+  "cache-first-fetch--handback-builder-r1.md",
+  "cache-first-fetch--handback-builder-r2.md",
+  "cache-first-fetch--handback-builder-r3.md"
+ ],
+ "touched": [
+  "js/main.js",
+  "js/poster-cache.js",
+  "scripts/mock-plex.mjs",
+  "tests/e2e/cache-first.spec.mjs",
+  "tests/poster-cache.test.js"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-08T23:56:37.424943Z"
+}

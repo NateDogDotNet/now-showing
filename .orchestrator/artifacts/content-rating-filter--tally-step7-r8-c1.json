@@ -1,0 +1,120 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "content-rating-filter--ac1-r8.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "content-rating-filter--scope-r8.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "content-rating-filter--precommit-format-r8.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "content-rating-filter--mutation-import-pin-dropped-r8.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "content-rating-filter--dlog-check-r8.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "content-rating-filter--review-r8.md"
+  }
+ ],
+ "bands": [
+  {
+   "min": 95,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_written": "2026-10-10T16:01:29.383980Z",
+ "_correction": {
+  "reason": "review-check-r8 fails only on the cold review's Important C8I1, which the owner routed to metadata-and-now-playing at stop 11 (D37, quote 'Defaults'); the anchored r8 review APPROVES with no Critical/Important; random-unfiltered-e2e-r1 is the e2e-equivalent mutant killed at unit level",
+  "supersedes": "content-rating-filter--tally-step7-r8.json"
+ },
+ "_result": {
+  "total": 95,
+  "max": 95,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "content-rating-filter--ac1-r8.json": "b14101d1070a4e93726e8bd98b64dd557d389284597a9d2ecd6bb7b3ba351b8f",
+  "content-rating-filter--scope-r8.json": "830423ed0a30c901af45776c6f922d675f8d8ed9913cdca31c57836c47758103",
+  "content-rating-filter--precommit-format-r8.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "content-rating-filter--mutation-import-pin-dropped-r8.txt": "21839ad0b7cbd548a6c4d1891a4cdf59844c550ec6f091148cce21ad9e720e6f",
+  "content-rating-filter--dlog-check-r8.json": "92ea954bab7ad298113b13d65c63484c7b49f7f2e954745d35bd6e08e5f4c8d5",
+  "content-rating-filter--review-r8.md": "2145bc6f497156715133ce68cb60e9e20edec356758148a0dc5310c4f01b58d3"
+ }
+}

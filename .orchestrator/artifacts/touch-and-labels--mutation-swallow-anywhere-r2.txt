@@ -1,0 +1,42 @@
+Hazard: first tap swallowed outside controls/stage
+Mutant: swallow-anywhere (js/main.js) — ok
+## diff
+--- /tmp/tmp.yyhQvPQx86/orig	2026-10-11 17:29:09.663554188 +0000
++++ /tmp/tmp.yyhQvPQx86/wt/js/main.js	2026-10-11 17:29:09.690049554 +0000
+@@ -1109,7 +1109,7 @@
+       !state.settings.kioskMode &&
+       e.pointerType !== 'mouse' &&
+       !document.querySelector('dialog[open]') &&
+-      Boolean(target.closest('#controls, #stage') || target === $('app'));
++      true;
+   },
+   { capture: true, passive: true },
+ );
+## test: npm run test:e2e -- touch-controls
+  ok  U11 touch: labels under all 7 icons; the bar wraps inside the phone
+  ok  U11 rotation 90: labels and bar inside the screen
+  ok  U11 desktop: tooltip on hover and focus, no persistent label
+  ok  U11 'always' shows labels on desktop
+  ok  U11 'never' on touch
+  ok  U13 ? lists 8 shortcuts from the table; Esc closes; space and p still pause
+  ok  U11 'never' on desktop
+  ok  U13 rotation 90: angle and bounds
+  ok  U13 rotation 270: angle and bounds
+  ok  U13 rotation 0: angle and bounds
+  ok  U13 disableShortcuts: ? does nothing
+  ok  U13 ? in a field types
+  ok  R-CTRL-3 Diagnostics button: touch tap opens #shortcuts with 8 entries
+  ok  R-CTRL-3 Diagnostics button hidden with disableShortcuts
+  ok  K36 contextmenu: stage, PIN keypad and Diagnostics prevented; Settings fields not
+case U12 the empty-state card's Open settings works on the first tap failed:
+AssertionError [ERR_ASSERTION]: timed out waiting for Settings to open on the first tap
+    at until (file:///tmp/tmp.yyhQvPQx86/wt/tests/e2e/touch-controls.spec.mjs:50:43)
+    at async file:///tmp/tmp.yyhQvPQx86/wt/tests/e2e/touch-controls.spec.mjs:152:3
+    at async withApp (file:///tmp/tmp.yyhQvPQx86/wt/tests/e2e/lib.mjs:242:20)
+    at async file:///tmp/tmp.yyhQvPQx86/wt/tests/e2e/touch-controls.spec.mjs:496:9
+    at async Promise.all (index 1)
+    at async file:///tmp/tmp.yyhQvPQx86/wt/tests/e2e/touch-controls.spec.mjs:491:1
+1 of 25 touch-controls cases failed
+FAIL touch-controls
+## summary (exit 1)
+1 failed

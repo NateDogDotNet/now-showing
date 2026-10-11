@@ -1,0 +1,32 @@
+{
+ "phase": "sleep-mode",
+ "round": 8,
+ "sha": "e6f426b",
+ "form": "commit",
+ "handbacks": [
+  "sleep-mode--handback-builder-r1.md",
+  "sleep-mode--handback-builder-r2.md",
+  "sleep-mode--handback-builder-r3.md",
+  "sleep-mode--handback-builder-r4.md",
+  "sleep-mode--handback-builder-r5.md",
+  "sleep-mode--handback-builder-r6.md",
+  "sleep-mode--handback-builder-r7.md",
+  "sleep-mode--handback-builder-r8.md"
+ ],
+ "touched": [
+  "css/app.css",
+  "index.html",
+  "js/engine.js",
+  "js/main.js",
+  "js/sleep.js",
+  "sw.js",
+  "tests/e2e/sleep.spec.mjs",
+  "tests/engine.test.js",
+  "tests/sleep.test.js"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-09T03:21:38.019514Z"
+}

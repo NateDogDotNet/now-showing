@@ -1,0 +1,42 @@
+Hazard: above-limit cached poster shown offline
+Mutant: cache-unfiltered (js/poster-cache.js) — ok
+## diff
+--- /tmp/tmp.yAwY80M5PE/orig	2026-10-09 03:54:24.552176481 +0000
++++ /tmp/tmp.yAwY80M5PE/wt/js/poster-cache.js	2026-10-09 03:54:24.568260762 +0000
+@@ -91,7 +91,7 @@
+      * above it and entries with no stored rating (cached before 2.1) are never returned.
+      */
+     async random(excludeKey, maxContentRating = '') {
+-      const list = readIndex().filter((e) => allows(maxContentRating, e.contentRating));
++      const list = readIndex();
+       const pool = list.length > 1 ? list.filter((e) => e.ratingKey !== excludeKey) : list;
+       for (const meta of pool.sort(() => Math.random() - 0.5)) {
+         const blob = await this.get(meta.ratingKey);
+## test: node --test tests/ratings.test.js tests/plex.test.js tests/engine.test.js tests/poster-cache.test.js
+  ---
+  duration_ms: 0.522436
+  type: 'test'
+  ...
+# Subtest: every value in allowedValues(limit) is allowed by allows(limit) and every other table value is not
+ok 84 - every value in allowedValues(limit) is allowed by allows(limit) and every other table value is not
+  ---
+  duration_ms: 5.107161
+  type: 'test'
+  ...
+# Subtest: allowedValues grows with the limit
+ok 85 - allowedValues grows with the limit
+  ---
+  duration_ms: 0.568229
+  type: 'test'
+  ...
+1..85
+# tests 85
+# suites 0
+# pass 80
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1289.815541
+## summary (exit 1)
+5 failed

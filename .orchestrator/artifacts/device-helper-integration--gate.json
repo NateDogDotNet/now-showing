@@ -1,0 +1,13 @@
+{
+ "phase": "device-helper-integration",
+ "sha": "e1b7f07",
+ "tag": null,
+ "ok": false,
+ "failures": [
+  "probe line has no verdict (`meets criterion N` or `fails criterion N`): - PROBE: `sed -n 1,12p scripts/device-helper.mjs` \u2192 POST /__helper/display, GET /__helper/status, GET /__helper/calls (f"
+ ],
+ "phase_file_sha256": "3a17f81e043225a1551987e8a082761d55dcb4e634abb9bb649e35ac6be1813d",
+ "phase_file_sha256_noretro": "60f8150b4ce32ecef0faa9e7d0956130069bac01fd13a8faeed0e919b48cdb45",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-11T05:16:49.103073Z"
+}

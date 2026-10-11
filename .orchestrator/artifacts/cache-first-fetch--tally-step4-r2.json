@@ -1,0 +1,101 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "cache-first-fetch--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "cache-first-fetch--scope-r2b.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 0,
+   "max": 15,
+   "evidence": "cache-first-fetch--precommit-lint-r2b.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 0,
+   "max": 10,
+   "evidence": "cache-first-fetch--mutation-no-delete-corrupt-r2.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 4,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 50,
+  "max": 75,
+  "percentage": 67,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 0,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "cache-first-fetch--ac1-r2.json": "1c7120b1cfca4067d7c55a740faa4ea29601e49757c0da843dfac2ce237f5623",
+  "cache-first-fetch--scope-r2b.json": "d3ab93e8190000a14237448ea239a979b0e92f6f7071816ad1cc28fb3754015d",
+  "cache-first-fetch--precommit-lint-r2b.json": "ff8898391a8879fe28cb7dc119e874a50134863671e002a72781dfb8666cad16",
+  "cache-first-fetch--mutation-no-delete-corrupt-r2.txt": "ffa4e405778d004208b58d262b9fde114109b237bddd021449f0b92eeb555c2b"
+ },
+ "_written": "2026-10-08T23:44:36.699572Z"
+}

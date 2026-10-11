@@ -1,0 +1,14 @@
+{
+  "cmd": "node -e \"import('./js/schedule.js').then(m=>{for(const f of ['parseHHMM','inWindow','msUntilNext','isPlausibleClock'])if(typeof m[f]!=='function')process.exit(1); if(!m.inWindow(new Date(2026,0,5,2,0),'01:00','07:00')||!m.inWindow(new Date(2026,0,5,23,30),'22:00','07:00')||m.inWindow(new Date(2026,0,5,12,0),'22:00','07:00')||m.inWindow(new Date(2026,0,5,3,0),'03:00','03:00'))process.exit(1); if(m.isPlausibleClock(new Date(1970,0,1))||!m.isPlausibleClock(new Date(2026,9,8)))process.exit(1)})\"",
+  "exit": 1,
+  "seconds": 0.08,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": "node:internal/modules/esm/resolve:274\n    throw new ERR_MODULE_NOT_FOUND(\n          ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/user/wt-settings-and-schedule-core/js/schedule.js' imported from /home/user/wt-settings-and-schedule-core/[eval]\n    at finalizeResolution (node:internal/modules/esm/resolve:274:11)\n    at moduleResolve (node:internal/modules/esm/resolve:859:10)\n    at defaultResolve (node:internal/modules/esm/resolve:983:11)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:731:20)\n    at ModuleLoader.resolve (node:internal/modules/esm/loader:708:38)\n    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:310:38)\n    at onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:664:36)\n    at TracingChannel.tracePromise (node:diagnostics_channel:350:14)\n    at ModuleLoader.import (node:internal/modules/esm/loader:663:21)\n    at importModuleDynamically (node:internal/process/execution:381:33) {\n  code: 'ERR_MODULE_NOT_FOUND',\n  url: 'file:///home/user/wt-settings-and-schedule-core/js/schedule.js'\n}\n\nNode.js v22.22.0"
+}

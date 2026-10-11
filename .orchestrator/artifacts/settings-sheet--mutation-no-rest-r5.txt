@@ -1,0 +1,42 @@
+Hazard: code flow never rests
+Mutant: no-rest (js/main.js) — ok
+## diff
+--- /tmp/tmp.DGEpV01iJ6/orig	2026-10-11 12:25:12.743382451 +0000
++++ /tmp/tmp.DGEpV01iJ6/wt/js/main.js	2026-10-11 12:25:12.763319697 +0000
+@@ -1237,7 +1237,7 @@
+       // The code expired unused: the loop asks for a fresh one, after a rest once three have gone by.
+       if (++expired >= FIRST_RUN_EXPIRIES) {
+         showFirstRun('', 'No code was entered. A new one comes in 5 minutes…');
+-        await sleep(FIRST_RUN_REST_MS, ctl.signal);
++        void FIRST_RUN_REST_MS;
+         expired = 0;
+       }
+     } catch (err) {
+## test: npm run test:e2e -- settings-sheet first-run
+  ok  config.json provisioned: no pin request
+  ok  expiry: AAAA -> BBBB, two pins
+  ok  junk pin reply backs off
+  ok  Open settings works; the card's flow pauses and resumes
+  ok  network failure: 4 attempts in 121 s, 3 console errors, then recovers
+  ok  SSC3 no poll while the PIN prompt is open; the right PIN opens Settings
+  ok  approval -> Settings filled in -> Save -> poster
+  ok  SSC3 cancel -> fresh code -> approve -> PIN -> Settings pre-filled
+  ok  K50 12 polls in 60 s
+  ok  approval -> PIN -> Settings pre-filled
+  ok  K50 booted asleep: no pin until awake
+  ok  K50 asleep: silent; awake: a fresh code
+  ok  K50 one hour: 5 codes, 720 polls
+case K50 after 3 codes expire unapproved it waits 5 minutes before asking for the next failed:
+AssertionError [ERR_ASSERTION]: no fourth code yet
+
+8 !== 3
+
+    at file:///tmp/tmp.DGEpV01iJ6/wt/tests/e2e/first-run.spec.mjs:381:10
+    at async withApp (file:///tmp/tmp.DGEpV01iJ6/wt/tests/e2e/lib.mjs:247:20)
+    at async file:///tmp/tmp.DGEpV01iJ6/wt/tests/e2e/first-run.spec.mjs:447:9
+    at async Promise.all (index 1)
+    at async file:///tmp/tmp.DGEpV01iJ6/wt/tests/e2e/first-run.spec.mjs:442:1
+1 of 20 first-run cases failed
+FAIL first-run
+## summary (exit 1)
+1 failed

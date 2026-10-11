@@ -1,0 +1,129 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "rotation-layout-and-shell--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "rotation-layout-and-shell--scope-r2c.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "rotation-layout-and-shell--precommit-format-r2c.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "rotation-layout-and-shell--mutation-toast-physical-vw-r2.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "rotation-layout-and-shell--dlog-check-r2.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "rotation-layout-and-shell--review-check-r2.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 95,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 8,
+  "missing_rows": [],
+  "review_rows": [
+   8
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 95,
+  "max": 95,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "rotation-layout-and-shell--ac1-r2.json": "015e0d5dc18cf71f198011cdabf48eba5dc6a91a28d007abbc740bdc0a688c0e",
+  "rotation-layout-and-shell--scope-r2c.json": "b22c46beac465c4c899fdd21354f3839e27cf8691914f69b1b1f5aa01b9441fe",
+  "rotation-layout-and-shell--precommit-format-r2c.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "rotation-layout-and-shell--mutation-toast-physical-vw-r2.txt": "031c5cb7babca0a7513f20ee2a962f0c8ee2c4f54c6201dc078c0783f0bdc8b9",
+  "rotation-layout-and-shell--dlog-check-r2.json": "411ee795e772ee2eda8cb146bbd9206a06c686ee11f7186c310eacbdf4fb4820",
+  "rotation-layout-and-shell--review-check-r2.json": "f422d718bbfc3496184cc3788b94fe85d2431ba1844e064d562cd44960129d97"
+ },
+ "_written": "2026-10-08T23:53:05.899371Z"
+}

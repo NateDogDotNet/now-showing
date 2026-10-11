@@ -1,0 +1,140 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "pi-stability--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "pi-stability--derive-step8-r3-0.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "pi-stability--precommit-format-r3.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "pi-stability--mutation-bootat-not-shifted-r3.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "pi-stability--dlog-check-r3.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "pi-stability--review-check-r3.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "pi-stability--readback-1df3be1.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 99,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 5,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": true,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 100,
+  "max": 100,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "pi-stability--ac1-r3.json": "250223cf0ff5b58db5f5ea05e4153204aa1205b6536f7dc31c812d3b1320a056",
+  "pi-stability--derive-step8-r3-0.json": "1df604830454e5814e59b3c1ccd0b27f98d2871a127003cc7b8f693a9708eea6",
+  "pi-stability--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "pi-stability--mutation-bootat-not-shifted-r3.txt": "3ff169bb3d8e5e59c7b4260ccfafd722db9a229dfd3863c5fee278a76fb54a37",
+  "pi-stability--dlog-check-r3.json": "a60a3e7849561f2f31af5f8de06e510c2ebc91331db29575044df805459fd546",
+  "pi-stability--review-check-r3.json": "34372b6707a51febc2c345d2fe5a130de0fe142aa04263993839eac4bec8f899",
+  "pi-stability--readback-1df3be1.json": "da1b1b60ecfdd445dc317e90d1ca64fedafdcc9e2c316452781c1fb936e0b7ce"
+ },
+ "_written": "2026-10-11T07:18:54.357995Z"
+}

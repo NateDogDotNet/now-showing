@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/device-helper.test.js && node --test tests/device-helper.test.js",
+  "exit": 0,
+  "seconds": 6.15,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: integration: an oversized body gets a real 413 over the socket, not a reset\nok 38 - integration: an oversized body gets a real 413 over the socket, not a reset\n  ---\n  duration_ms: 146.161514\n  type: 'test'\n  ...\n# Subtest: integration: fake-mode status is power fake, or the explicit flag\nok 39 - integration: fake-mode status is power fake, or the explicit flag\n  ---\n  duration_ms: 264.159788\n  type: 'test'\n  ...\n# Subtest: integration: --helper alone has no calls route\nok 40 - integration: --helper alone has no calls route\n  ---\n  duration_ms: 186.370915\n  type: 'test'\n  ...\n# Subtest: integration: without --helper the routes do not exist\nok 41 - integration: without --helper the routes do not exist\n  ---\n  duration_ms: 136.17024\n  type: 'test'\n  ...\n# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start\nok 42 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start\n  ---\n  duration_ms: 242.44633\n  type: 'test'\n  ...\n1..42\n# tests 42\n# suites 0\n# pass 42\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 6083.956712",
+  "stderr_tail": ""
+}

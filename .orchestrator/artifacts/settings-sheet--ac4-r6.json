@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- first-run",
+  "exit": 0,
+  "seconds": 85.79,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs first-run\n\n  ok  rotation 90: block angle 90\n  ok  rotation 180: block angle 180\n  ok  rotation 270: block angle 270\n  ok  an already-expired pin is not a hot loop\n  ok  first run: code on the card, >= 64 px, one pin, Settings closed\n  ok  configured: no pin request\n  ok  config.json provisioned: no pin request\n  ok  expiry: AAAA -> BBBB, two pins\n  ok  junk pin reply backs off\n  ok  Open settings works; the card's flow pauses and resumes\n  ok  network failure: 4 attempts in 121 s, 3 console errors, then recovers\n  ok  approval -> Settings filled in -> Save -> poster\n  ok  SSC3 approved during the prompt -> PIN -> Settings filled in\n  ok  SSC3 Open settings variant\n  ok  SSC3 cancel keeps the token pending; the next open has it\n  ok  K50 falling asleep stops the polling\n  ok  K50 asleep: no requests; awake: a code\n  ok  K50 5 codes and 724 polls in 71 min\nall 18 first-run cases passed\nPASS first-run",
+  "stderr_tail": ""
+}

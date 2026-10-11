@@ -1,0 +1,13 @@
+{
+ "phase": "e2e-harness",
+ "sha": "d409ad7",
+ "tag": null,
+ "ok": true,
+ "failures": [],
+ "phase_file_sha256": "4f624e991f6a78e9e03befc699517a19e54562a666d119e26f7936b4a0cde9b5",
+ "phase_file_sha256_noretro": "e5c3fe727a3fc5b10983cb7d78acec54e409094823368c273e3f9d6d6b33cf18",
+ "scripts_sha256": {
+  "e2e-harness--hangcheck-r2.sh": "c43fe9794987d36b883ddfa8b2e454ed54eea41b6e0df5dd38cb63f2cb2c075a"
+ },
+ "gated_at": "2026-10-08T22:31:25.004034Z"
+}

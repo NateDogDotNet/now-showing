@@ -1,0 +1,131 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 29,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "content-rating-filter--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "content-rating-filter--scope-r3.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "content-rating-filter--precommit-format-r3.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 0,
+   "max": 10,
+   "evidence": "content-rating-filter--mutation-postdecode-check-removed-r3.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "content-rating-filter--dlog-check-r3.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 0,
+   "max": 10,
+   "evidence": "content-rating-filter--review-check-r3.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 95,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 6,
+  "missing_rows": [
+   "ac6"
+  ],
+  "review_rows": [
+   6
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 69,
+  "max": 95,
+  "percentage": 73,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 29,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "content-rating-filter--ac1-r3.json": "4c229ad0ece65d14b1c11f3ae3f30d7ab74b7fafc41acea851b6323a3e39293b",
+  "content-rating-filter--scope-r3.json": "dade1c120a52cc592e9d0e6a908177b6c5219a50f589c24a8e9f19ea60ab12af",
+  "content-rating-filter--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "content-rating-filter--mutation-postdecode-check-removed-r3.txt": "8fc9fa8527c681c995714bb73d76b80fe1399f7a9c84438e76ae30e1b23368a9",
+  "content-rating-filter--dlog-check-r3.json": "28da051648764a5f4e7e5a3661fcc5ea79d2fc3246eaa7cd07c21822eee52658",
+  "content-rating-filter--review-check-r3.json": "1b21f943582107364dffc535c71f7ce1f74cbab27f54d38cda807c9ed6f1ce08"
+ },
+ "_written": "2026-10-09T04:33:02.235907Z"
+}

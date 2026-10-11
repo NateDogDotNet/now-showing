@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/serve.test.js && node --test tests/serve.test.js",
+  "exit": 1,
+  "seconds": 0.0,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

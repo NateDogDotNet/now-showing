@@ -1,0 +1,14 @@
+{
+  "cmd": "grep -q 'Criterion 7 attacks: PASS' .orchestrator/artifacts/device-helper-server--review-r4.md && grep -q 'Verdict:\\*\\* APPROVE' .orchestrator/artifacts/device-helper-server--review-r4.md && grep -q 'Verdict:\\*\\* APPROVE' .orchestrator/artifacts/device-helper-server--review-cold-r4.md",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

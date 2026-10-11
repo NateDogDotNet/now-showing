@@ -1,0 +1,42 @@
+Hazard: failure logged on every call
+Mutant: log-every-tick (js/helper.js) — ok
+## diff
+--- /tmp/tmp.Wd1IwH3a4q/orig	2026-10-11 03:07:28.408574870 +0000
++++ /tmp/tmp.Wd1IwH3a4q/wt/js/helper.js	2026-10-11 03:07:28.446265210 +0000
+@@ -11,7 +11,7 @@
+   let available = false;
+ 
+   const fail = (kind, message, level = 'warn') => {
+-    if (failed.has(kind)) return;
++    if (false) return;
+     failed.add(kind);
+     log?.[level]?.(message);
+   };
+## test: node --test tests/helper.test.js
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 2
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///tmp/tmp.Wd1IwH3a4q/wt/tests/helper.test.js:103:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: createHelper works without a log
+ok 9 - createHelper works without a log
+  ---
+  duration_ms: 0.626504
+  type: 'test'
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 7
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 249.903509
+## summary (exit 1)
+2 failed

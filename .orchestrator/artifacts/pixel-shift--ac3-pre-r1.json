@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- pixel-shift",
+  "exit": 1,
+  "seconds": 0.67,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs pixel-shift\n\nFAIL pixel-shift (no such spec: /home/user/wt-pixel-shift/tests/e2e/pixel-shift.spec.mjs)",
+  "stderr_tail": ""
+}

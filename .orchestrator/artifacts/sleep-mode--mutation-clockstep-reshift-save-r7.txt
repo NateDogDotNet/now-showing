@@ -1,0 +1,41 @@
+Hazard: clock step re-applied to the idle clock on save
+Mutant: clockstep-reshift-save (js/main.js) — ok
+## diff
+--- /tmp/tmp.Gtf0bKRycm/orig	2026-10-09 02:45:54.671066657 +0000
++++ /tmp/tmp.Gtf0bKRycm/wt/js/main.js	2026-10-09 02:45:54.687121095 +0000
+@@ -363,7 +363,6 @@
+   document.body.classList.toggle('hide-cursor', state.settings.hideCursor);
+   updateWakeLock();
+   updatePinButton();
+-  syncSleepClock();
+   state.lastPlaybackAt = Date.now(); // a save counts as a fresh start for the idle clock
+   evaluateSleep();
+ 
+## test: npm run test:e2e -- sleep
+  ok  every poll failing (HTTP 500) for 61 min: idle sleep still starts (a failed poll is not playback)
+  ok  idle sleep: awake at 59 min, asleep at 61 min without playback; Sleep: asleep (idle)
+  ok  idle sleep: playback wakes the display and it stays awake
+  ok  veil back behind the open dialog: the FIRST press focuses the control under it, and a first Escape closes the dialog
+  ok  1970 clock: idle sleep still works, and a clock jump does not trigger it early
+  ok  idleSleepHours 0 -> 1 saved after 2 h: awake at save and at 58 min, asleep (idle) an hour after the save
+  ok  70 s of pointer activity, then 70 s of key presses, in Settings: the display stays awake; a checkbox click toggles
+  ok  veil back behind the open dialog: the next click and key press in the dialog act
+  ok  awake, sleep configured, now playing on: 10 sessions requests in 10 ticks (one each)
+  ok  paused: sleeping and waking make no sessions or image request
+  ok  veil aria-hidden="true"; #app inert while asleep and not after; a dialog above the veil takes clicks
+  ok  3 min outage while asleep, then mock.play(): awake 1076 ms after Plex returned
+  ok  Plex down inside the window with 2+ cached posters: nothing drawn while asleep (Last Reel (2004) — cache)
+  ok  clock stepped +1 h while asleep, key press in the same second: the manual wake lasts about 60 s, not an hour
+  ok  poster download in flight when the window opens: not drawn under the veil; the next wake shows a poster normally
+  ok  schedule on, wakeOnPlayback off, idle sleep off, now playing off: no /status/sessions request awake or asleep
+  ok  idle sleep: playback past the original deadline; awake after it stops, asleep one idle hour after the last playback
+case 19a idle clock: step, then a write in the same second failed:
+page.waitForFunction: Timeout 15000ms exceeded.
+    at waitAsleep (/tmp/tmp.Gtf0bKRycm/wt/tests/e2e/sleep.spec.mjs:29:8)
+    at /tmp/tmp.Gtf0bKRycm/wt/tests/e2e/sleep.spec.mjs:716:9
+    at async withApp (/tmp/tmp.Gtf0bKRycm/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.Gtf0bKRycm/wt/tests/e2e/sleep.spec.mjs:801:9
+    at async file:///tmp/tmp.Gtf0bKRycm/wt/tests/e2e/sleep.spec.mjs:796:1
+FAIL sleep
+## summary (exit 1)
+1 failed

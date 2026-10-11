@@ -1,0 +1,103 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "rotation-layout-and-shell--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "rotation-layout-and-shell--scope-r2.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 0,
+   "max": 15,
+   "evidence": "rotation-layout-and-shell--precommit-lint-r2.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "rotation-layout-and-shell--mutation-toast-physical-vw-r2.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 8,
+  "missing_rows": [],
+  "review_rows": [
+   8
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 60,
+  "max": 75,
+  "percentage": 80,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 0,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "rotation-layout-and-shell--ac1-r2.json": "015e0d5dc18cf71f198011cdabf48eba5dc6a91a28d007abbc740bdc0a688c0e",
+  "rotation-layout-and-shell--scope-r2.json": "b22c46beac465c4c899fdd21354f3839e27cf8691914f69b1b1f5aa01b9441fe",
+  "rotation-layout-and-shell--precommit-lint-r2.json": "88d211d9c234e591baeaae583a6adfb2bbd38e455535edb8b408aae1e5c4be64",
+  "rotation-layout-and-shell--mutation-toast-physical-vw-r2.txt": "031c5cb7babca0a7513f20ee2a962f0c8ee2c4f54c6201dc078c0783f0bdc8b9"
+ },
+ "_written": "2026-10-08T23:47:54.342943Z"
+}

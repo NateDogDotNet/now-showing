@@ -1,0 +1,14 @@
+{
+  "cmd": "node -e \"const fs=require('fs');const t=fs.readFileSync('README.md','utf8');const bad=[...t.matchAll(/\\]\\((?!https?:|#|mailto:)([^)\\s]+)\\)/g)].map(m=>m[1].split('#')[0]).filter(p=>p&&!fs.existsSync(p));if(bad.length){console.error(bad);process.exit(1)}\"",
+  "exit": 0,
+  "seconds": 0.04,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

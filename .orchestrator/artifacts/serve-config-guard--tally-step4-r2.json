@@ -1,0 +1,101 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "serve-config-guard--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "serve-config-guard--scope-r2.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "serve-config-guard--precommit-format-r2.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 0,
+   "max": 10,
+   "evidence": "serve-config-guard--mutation-allow-all-v2-r2.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 6,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 65,
+  "max": 75,
+  "percentage": 87,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "serve-config-guard--ac1-r2.json": "e18fad3729e8a3af4fc7c4a61c7888f5c570c40201df43fe8008fae09d9e9490",
+  "serve-config-guard--scope-r2.json": "699e06d98c7cb9b66f636634228884ce869afc6f8e0af58d6af9df86b581bc0b",
+  "serve-config-guard--precommit-format-r2.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "serve-config-guard--mutation-allow-all-v2-r2.txt": "d0422974442d94572d0278075ee27f631ef08d7b4f6dac629e27f1e810985361"
+ },
+ "_written": "2026-10-08T22:17:57.299454Z"
+}

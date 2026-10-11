@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- status",
+  "exit": 0,
+  "seconds": 37.47,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs status\n\n  ok  offline: idle dot, awake pill with countdown\n  ok  healthy idle: neither visible\n  ok  0 mutations over 3 s while hidden\n  ok  statusIndicator off: no dot\n  ok  dot cycles through the corners\n  ok  dot rotated 90\n  ok  asleep: no dot\nPASS status",
+  "stderr_tail": ""
+}

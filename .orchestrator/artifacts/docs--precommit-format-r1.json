@@ -1,0 +1,11 @@
+{
+  "cmd": "git diff --cached --check",
+  "exit": 2,
+  "seconds": 0.01,
+  "parsed": {
+    "error_lines": 0
+  },
+  "launched": true,
+  "stdout_tail": "README.md:355: trailing whitespace.\n+",
+  "stderr_tail": ""
+}

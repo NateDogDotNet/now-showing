@@ -1,0 +1,11 @@
+{
+  "cmd": "eslint --no-config-lookup -c /home/user/plex-poster-app/.orchestrator/artifacts/round--eslint.config.mjs scripts/check-precache.mjs tests/e2e/lib.mjs tests/e2e/run.mjs tests/e2e/smoke.spec.mjs  && for f in scripts/check-precache.mjs tests/e2e/lib.mjs tests/e2e/run.mjs tests/e2e/smoke.spec.mjs ; do node --check $f || exit 1; done",
+  "exit": 1,
+  "seconds": 0.39,
+  "parsed": {
+    "error_lines": 5
+  },
+  "launched": true,
+  "stdout_tail": "/home/user/wt-e2e-harness/tests/e2e/lib.mjs\n  89:19  error  'URLSearchParams' is not defined  no-undef\n\n/home/user/wt-e2e-harness/tests/e2e/smoke.spec.mjs\n  78:52  error  'localStorage' is not defined  no-undef\n  81:53  error  'localStorage' is not defined  no-undef\n  89:45  error  'localStorage' is not defined  no-undef\n  90:53  error  'localStorage' is not defined  no-undef\n\n\u2716 5 problems (5 errors, 0 warnings)",
+  "stderr_tail": ""
+}

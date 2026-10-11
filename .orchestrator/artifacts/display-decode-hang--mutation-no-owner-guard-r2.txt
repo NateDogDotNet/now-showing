@@ -1,0 +1,39 @@
+Hazard: cleanup clears a layer a newer draw is decoding on; rotation stalls
+Mutant: no-owner-guard (js/display.js) — ok
+## diff
+--- /tmp/tmp.HkSRUahScI/orig	2026-10-10 13:26:36.144559335 +0000
++++ /tmp/tmp.HkSRUahScI/wt/js/display.js	2026-10-10 13:26:36.161052500 +0000
+@@ -164,7 +164,7 @@
+       if (old) {
+         const owner = owners.get(prev);
+         setTimeout(() => {
+-          if (owners.get(prev) === owner && !prev.classList.contains('active')) {
++          if (!prev.classList.contains('active')) {
+             URL.revokeObjectURL(old);
+             objectUrls.delete(prev);
+             prev.removeAttribute('src');
+## test: npm run test:e2e -- display-decode
+
+> plex-poster-display@2.0.0 test:e2e
+> node tests/e2e/run.mjs display-decode
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: crossfadeMs 0: press 34 did not draw within 5000 ms (draws 34, active layer 0, pending decode ages [5003])
+    at file:///tmp/tmp.HkSRUahScI/wt/tests/e2e/display-decode.spec.mjs:132:14
+    at async withApp (file:///tmp/tmp.HkSRUahScI/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.HkSRUahScI/wt/tests/e2e/display-decode.spec.mjs:116:3 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: null,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL display-decode
+## summary (exit 1)
+1 failed

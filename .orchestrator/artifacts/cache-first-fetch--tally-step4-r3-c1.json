@@ -1,0 +1,94 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "cache-first-fetch--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "cache-first-fetch--scope-r3.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "cache-first-fetch--precommit-format-r3.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "cache-first-fetch--mutation-no-delete-and-retry-reads-cache-r2.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_written": "2026-10-08T23:56:15.758379Z",
+ "_correction": {
+  "reason": "no-delete-corrupt-r2 is an equivalent mutant (redundant safeguard, quoted under Mutations r2); no-delete-and-retry-reads-cache-r2 removes both and is killed (1 failed); every r3 mutant killed",
+  "supersedes": "cache-first-fetch--tally-step4-r3.json"
+ },
+ "_result": {
+  "total": 75,
+  "max": 75,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "cache-first-fetch--ac1-r3.json": "049b2e02a1f8759d885580480de581c250aaf630a3bdafc316f85dd4a6885eb7",
+  "cache-first-fetch--scope-r3.json": "b4ae5d0833ecdacda80707b20c1b37b51ab8021a0932361f44956ed147c79966",
+  "cache-first-fetch--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "cache-first-fetch--mutation-no-delete-and-retry-reads-cache-r2.txt": "62bfc989c2d72642b344344045971d851e4d4dfcebeb6fd9c10d08c6a654f9c3"
+ }
+}

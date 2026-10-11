@@ -1,0 +1,15 @@
+{
+ "cmd": "diff <(git log -1 --format=%B d409ad7) /home/user/plex-poster-app/.orchestrator/artifacts/e2e-harness--commit-message-final.txt",
+ "sha": "d409ad7",
+ "equal": true,
+ "tokens": [
+  "1.56.1",
+  "package-lock.json"
+ ],
+ "missing_tokens": [],
+ "exempt": {},
+ "stale": false,
+ "commit_rows": [],
+ "ok": true,
+ "checked_at": "2026-10-08T22:30:25.429215Z"
+}

@@ -1,0 +1,42 @@
+Hazard: call log exposed outside fake mode
+Mutant: calls-not-fake-only (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.30r8fZU8aJ/orig	2026-10-08 23:09:00.735549238 +0000
++++ /tmp/tmp.30r8fZU8aJ/wt/scripts/device-helper.mjs	2026-10-08 23:09:00.751432734 +0000
+@@ -232,7 +232,7 @@
+     const known =
+       (req.method === 'POST' && route === 'display') ||
+       (req.method === 'GET' && route === 'status') ||
+-      (req.method === 'GET' && route === 'calls' && fake);
++      (req.method === 'GET' && route === 'calls');
+     if (!known) { notFound(); return true; }
+     if (!guarded(req)) { send(res, 403, { error: 'forbidden' }); return true; }
+     const done = (p) => p.catch(() => send(res, 500, { error: 'internal error' }));
+## test: node --test tests/device-helper.test.js
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: integration: without --helper the routes do not exist
+ok 41 - integration: without --helper the routes do not exist
+  ---
+  duration_ms: 185.986455
+  type: 'test'
+  ...
+# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+ok 42 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+  ---
+  duration_ms: 256.098364
+  type: 'test'
+  ...
+1..42
+# tests 42
+# suites 0
+# pass 40
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6854.278809
+## summary (exit 1)
+2 failed

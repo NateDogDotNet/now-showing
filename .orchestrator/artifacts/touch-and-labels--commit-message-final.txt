@@ -1,0 +1,33 @@
+Label the controls, make the first tap only wake them, add a shortcut list
+
+On a touch screen the seven icon-only controls show a text label under
+each icon; on desktop they show one tooltip on hover or focus, with
+the shortcut key. A new "Control labels" setting (Auto, Always, Never)
+overrides this. The bar wraps at phone width and at rotation 90.
+
+When the controls are hidden, the first touch on them, on the bare
+stage or on the empty screen's backdrop only reveals them; it no
+longer also presses the button underneath. The rule never applies to
+a mouse, a keyboard press, anything inside an open dialog, the empty
+card's own buttons, kiosk mode, or a tap that wakes the display from
+sleep.
+
+js/shortcuts.js holds the one shortcut table. The key handler is built
+from it, and so is a new shortcuts dialog, opened with ? or with a
+Keyboard shortcuts button in Diagnostics (hidden when shortcuts are
+off). It rotates with the UI. In kiosk mode the long-press menu now
+works only in text fields and on the Settings sheet, not on the PIN
+keypad. The empty-library message suggests turning off "unwatched
+only" only when it is on, and the first-run rest screen shows only its
+own message.
+
+tests/shortcuts.test.js and tests/e2e/touch-controls.spec.mjs cover the
+table, the first-tap rule, labels and the dialog. tests/engine.test.js
+covers the hint, and tests/e2e/first-run.spec.mjs gains the rest-screen
+and post-rest checks with a longer real-time wait.
+
+Phase: touch-and-labels (U11, U12, U13, R-CTRL-1, R-CTRL-2, R-CTRL-3,
+D40, D43)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

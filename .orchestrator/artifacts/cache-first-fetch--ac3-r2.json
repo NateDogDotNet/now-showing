@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- cache-first",
+  "exit": 0,
+  "seconds": 31.5,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs cache-first\n\n  ok  24 shows: transcode 8 <= 8, Cache.put 8 <= 8\n  ok  after reload + reset-stats, 24 shows: transcode == 0\n  ok  corrupted cache: each poster fetched once (transcode 8), no decode loop, cache valid again\nPASS cache-first",
+  "stderr_tail": ""
+}

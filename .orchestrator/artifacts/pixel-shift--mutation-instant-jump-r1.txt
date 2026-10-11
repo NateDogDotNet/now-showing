@@ -1,0 +1,40 @@
+Hazard: steps jump instead of gliding (D6)
+Mutant: instant-jump (css/app.css) — ok
+## diff
+--- /tmp/tmp.ipOEQqr0ui/orig	2026-10-10 19:15:46.027444793 +0000
++++ /tmp/tmp.ipOEQqr0ui/wt/css/app.css	2026-10-10 19:15:46.040144076 +0000
+@@ -49,7 +49,7 @@
+      `translate` property, which composes before this transform. */
+   transform: translate(-50%, -50%) rotate(var(--rotation, 0deg));
+   /* Pixel shift glides over 1.5 s (D6): a step, never an instant jump or a continuous drift. */
+-  transition: transform 0.5s ease, translate 1.5s ease-in-out;
++  transition: transform 0.5s ease, translate 0s linear;
+ }
+ 
+ .poster-box {
+## test: npm run test:e2e -- pixel-shift
+
+> plex-poster-display@2.0.0 test:e2e
+> node tests/e2e/run.mjs pixel-shift
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: 1080x1920 rotation 90: translate duration 1-2 s (0.5s, 0s)
+    at file:///tmp/tmp.ipOEQqr0ui/wt/tests/e2e/pixel-shift.spec.mjs:75:14
+    at async withApp (file:///tmp/tmp.ipOEQqr0ui/wt/tests/e2e/lib.mjs:171:12)
+    at async Promise.all (index 3)
+    at async file:///tmp/tmp.ipOEQqr0ui/wt/tests/e2e/pixel-shift.spec.mjs:50:1 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL pixel-shift
+## summary (exit 1)
+1 failed

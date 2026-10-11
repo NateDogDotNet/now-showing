@@ -1,0 +1,41 @@
+Add kiosk mode, a settings PIN and a loopback-only PIN reset
+
+With kioskMode on, the on-screen controls are hidden and inert, so
+neither a tap nor Tab reaches them. A 3 s press in the viewer's
+bottom-right corner (it follows the UI rotation) or a 3 s Enter hold
+on a remote shows them for 15 s; key auto-repeat never arms the hold,
+and a press that wakes the display from sleep is still swallowed. In
+kiosk mode the long-press menu is blocked except inside open dialogs.
+disableShortcuts ignores the s, d, r, p, o, f and space keys.
+
+An optional PIN of 4 to 8 digits, entered twice and applied on Save,
+gates Settings, Diagnostics, import, Reset everything, showing the
+Plex token and exporting it. Every route goes through one check:
+keys, buttons, the empty card and first run. The PIN dialog has an
+on-screen keypad and says the PIN is a deterrent, not security.
+The PIN is a salted SHA-256 hash, using Web Crypto with a pure-JS
+fallback on plain-http origins. It never appears in an export, and an
+imported file cannot set it.
+
+From the 5th wrong PIN the dialog locks for 60 s, doubling with each
+further wrong PIN up to 15 min. Key repeats and entries shorter than 4
+digits do not count. The lock is kept in localStorage and read,
+capped at 15 min from now and written back on every attempt, so a
+reload, a clock step or a stored far-future value cannot stretch it.
+
+config.json is now fetched on every load, with a 2500 ms timeout. While
+it holds {"resetPin": true} (scripts/serve.mjs serves it to loopback
+only), each load clears the PIN and the lockout, cancels a PIN prompt
+opened before the reset finished, and Diagnostics shows "PIN reset
+flag present". Closing the settings sheet re-hides the token in the
+same step. The smoke spec ignores only the 404/403 a missing
+config.json logs.
+
+tests/kiosk.test.js and tests/e2e/kiosk.spec.mjs cover the hash and
+fallback, the lockout, the corner zone, the holds, the PIN gate on
+every route, export and import, and the reset.
+
+Phase: kiosk-and-pin (E12, E16, R-KIOSK-1, R-KIOSK-2, D10, D16)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- smoke",
+  "exit": 0,
+  "seconds": 5.7,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs smoke\n\n  ok  poster layer loads, no console errors\n  ok  serveArgs [] -> dedicated server, stop() ends it\n  ok  serveArgs passed through to the child\n  ok  service workers blocked by default\n  ok  serviceWorkers 'allow' registers and controls after a reload\n  ok  clock install + runFor\n  ok  hasTouch toggles maxTouchPoints\n  ok  localStorage seed + pixelShift false + wake lock stub\n  ok  whatsNew seeded, dailyReload false\n  ok  wake-lock stub counts and sentinel released/release event are faithful\n  ok  viewport sets innerWidth\n  ok  isMobile gives a mobile signal (980px layout without viewport meta)\nPASS smoke",
+  "stderr_tail": ""
+}

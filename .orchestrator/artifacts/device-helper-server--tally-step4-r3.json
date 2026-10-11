@@ -1,0 +1,103 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "device-helper-server--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "device-helper-server--scope-r3.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "device-helper-server--precommit-format-r3.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 0,
+   "max": 10,
+   "evidence": "device-helper-server--mutation-shell-true-spawn-r3.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 7,
+  "missing_rows": [],
+  "review_rows": [
+   7
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 65,
+  "max": 75,
+  "percentage": 87,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "device-helper-server--ac1-r3.json": "0f3a6e20faf3494c53b7c6bb00345aad89aec6b988e9acc3eff5fd7f0d23e1ba",
+  "device-helper-server--scope-r3.json": "95171e807cb971a57c93141e620f4b22f2fa0f95a04780136fdbb73e87ae2078",
+  "device-helper-server--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "device-helper-server--mutation-shell-true-spawn-r3.txt": "505c90ec8f939c87981787a23cf0e0966341e8fd8d7c31f26bbf7f8c39e8a9f8"
+ },
+ "_written": "2026-10-08T23:35:43.097067Z"
+}

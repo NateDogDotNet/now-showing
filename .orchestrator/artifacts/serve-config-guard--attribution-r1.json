@@ -1,0 +1,15 @@
+{
+ "phase": "serve-config-guard",
+ "round": 1,
+ "sha": null,
+ "form": "working tree",
+ "handbacks": [
+  "serve-config-guard--handback-builder-r1.md"
+ ],
+ "touched": [],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-08T22:09:29.830183Z"
+}

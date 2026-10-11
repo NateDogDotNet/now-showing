@@ -1,0 +1,20 @@
+{
+ "phase": "content-rating-filter",
+ "quote": "I agree",
+ "channel": "chat",
+ "stop": 10,
+ "recorded_at": "2026-10-10T13:53:46.558823Z",
+ "checked": true,
+ "transcript_checked": true,
+ "reply_time": "2026-10-10T13:53:31.003Z",
+ "skipped": [],
+ "items": {
+  "1": "I agree",
+  "2": "I agree",
+  "3": ""
+ },
+ "open_items": [
+  3
+ ],
+ "complete": false
+}

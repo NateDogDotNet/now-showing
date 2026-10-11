@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- pi-stability",
+  "exit": 1,
+  "seconds": 0.99,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs pi-stability\n\nFAIL pi-stability (no such spec: /home/user/wt-pi-stability/tests/e2e/pi-stability.spec.mjs)",
+  "stderr_tail": ""
+}

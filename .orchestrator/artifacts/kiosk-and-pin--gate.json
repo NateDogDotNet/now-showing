@@ -1,0 +1,11 @@
+{
+ "phase": "kiosk-and-pin",
+ "sha": "f7be8a9",
+ "tag": null,
+ "ok": true,
+ "failures": [],
+ "phase_file_sha256": "a4d7453ca45d19239e8fd92c2445b621261ba500e42fc3d5f7bc569766cc78c7",
+ "phase_file_sha256_noretro": "1864159352b5759e0d0d0f51092b8da36360ad85d864ea13fb00dfea9a1d1c09",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-11T00:09:53.618151Z"
+}

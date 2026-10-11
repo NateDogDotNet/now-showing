@@ -1,0 +1,42 @@
+Hazard: a loopback peer with a foreign Host (DNS rebinding) gets config.json
+Mutant: drop-host-check (scripts/serve.mjs) — ok
+## diff
+--- /tmp/tmp.Eo31gmNWJm/orig	2026-10-08 22:17:09.540472208 +0000
++++ /tmp/tmp.Eo31gmNWJm/wt/scripts/serve.mjs	2026-10-08 22:17:09.556420631 +0000
+@@ -60,7 +60,7 @@
+     if (path.toLowerCase() === '/config.json') {
+       // Only the exact spelling is ever served; case, dot-segment and slash variants are 404.
+       if (raw !== '/config.json') return send(res, 404, 'Not found');
+-      if (!isLoopback(req.socket.remoteAddress) || !isLoopbackHost(req.headers.host)) return send(res, 403, 'Forbidden');
++      if (!isLoopback(req.socket.remoteAddress) ) return send(res, 403, 'Forbidden');
+     } else {
+       if (path === '/') path = '/index.html';
+       if (!isAppPath(path)) return send(res, 404, 'Not found');
+## test: node --test tests/serve.test.js
+  ---
+  duration_ms: 2.166513
+  type: 'test'
+  ...
+# Subtest: symlinks leaving the root or reaching config.json are 404
+ok 9 - symlinks leaving the root or reaching config.json are 404
+  ---
+  duration_ms: 2.487405
+  type: 'test'
+  ...
+# Subtest: dotfiles under app directories are 404
+ok 10 - dotfiles under app directories are 404
+  ---
+  duration_ms: 1.276528
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 9
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 421.023307
+## summary (exit 1)
+1 failed

@@ -1,0 +1,37 @@
+{
+ "phase": "settings-sheet",
+ "round": 6,
+ "sha": "51f8aa9",
+ "form": "commit",
+ "handbacks": [
+  "settings-sheet--handback-builder-r1.md",
+  "settings-sheet--handback-builder-r2.md",
+  "settings-sheet--handback-builder-r3.md",
+  "settings-sheet--handback-builder-r4.md",
+  "settings-sheet--handback-builder-r5.md",
+  "settings-sheet--handback-builder-r6.md"
+ ],
+ "touched": [
+  "css/app.css",
+  "index.html",
+  "js/duration.js",
+  "js/main.js",
+  "js/plex.js",
+  "js/settings-ui.js",
+  "js/util.js",
+  "scripts/mock-plex.mjs",
+  "sw.js",
+  "tests/duration.test.js",
+  "tests/e2e/brightness.spec.mjs",
+  "tests/e2e/first-run.spec.mjs",
+  "tests/e2e/helper.spec.mjs",
+  "tests/e2e/lib.mjs",
+  "tests/e2e/settings-sheet.spec.mjs",
+  "tests/plex.test.js"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-11T14:50:07.502531Z"
+}

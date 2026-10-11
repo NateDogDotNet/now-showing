@@ -1,0 +1,103 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "display-decode-hang--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "display-decode-hang--scope-r2.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "display-decode-hang--precommit-format-r2.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 0,
+   "max": 10,
+   "evidence": "display-decode-hang--mutation-unbounded-decode-r1.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 5,
+  "missing_rows": [],
+  "review_rows": [
+   5
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 65,
+  "max": 75,
+  "percentage": 87,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "display-decode-hang--ac1-r2.json": "368f406acd8ff52583ba76d013cdd2436c24c3dc7b6e9db2526633f1bd325043",
+  "display-decode-hang--scope-r2.json": "aed4059be4705944b812a4b099b7411ab0400d1e7631689d3430224f5fdcc0c4",
+  "display-decode-hang--precommit-format-r2.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "display-decode-hang--mutation-unbounded-decode-r1.txt": "139d4100f2a96a3b7bf39ec3d335caacbef14162327e2b09cc6db511e74e8077"
+ },
+ "_written": "2026-10-10T13:28:39.749764Z"
+}

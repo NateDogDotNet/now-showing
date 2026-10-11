@@ -1,0 +1,42 @@
+Hazard: unknown limit fails open
+Mutant: corrupt-limit-open (js/ratings.js) — ok
+## diff
+--- /tmp/tmp.v4YgDZskLs/orig	2026-10-09 03:54:24.549342770 +0000
++++ /tmp/tmp.v4YgDZskLs/wt/js/ratings.js	2026-10-09 03:54:24.565227103 +0000
+@@ -48,7 +48,7 @@
+ export function allows(limit, rating) {
+   if (limit === '' || limit === undefined || limit === null) return true;
+   const max = LIMITS.indexOf(limit);
+-  if (max < 0) return false;
++  if (max < 0) return true;
+   const rank = ratingRank(rating);
+   return rank !== null && rank <= max;
+ }
+## test: node --test tests/ratings.test.js tests/plex.test.js tests/engine.test.js tests/poster-cache.test.js
+  ---
+  duration_ms: 0.528088
+  type: 'test'
+  ...
+# Subtest: every value in allowedValues(limit) is allowed by allows(limit) and every other table value is not
+ok 84 - every value in allowedValues(limit) is allowed by allows(limit) and every other table value is not
+  ---
+  duration_ms: 6.542701
+  type: 'test'
+  ...
+# Subtest: allowedValues grows with the limit
+ok 85 - allowedValues grows with the limit
+  ---
+  duration_ms: 0.505458
+  type: 'test'
+  ...
+1..85
+# tests 85
+# suites 0
+# pass 84
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1181.543685
+## summary (exit 1)
+1 failed

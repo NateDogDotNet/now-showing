@@ -1,0 +1,131 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 30,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "device-helper-server--ac1-r1.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "device-helper-server--scope-r1.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "device-helper-server--precommit-format-r1.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "device-helper-server--mutation-calls-not-fake-only-r1.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "device-helper-server--dlog-check-r1.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "device-helper-server--review-check-r1.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 95,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 7,
+  "missing_rows": [
+   "ac7"
+  ],
+  "review_rows": [
+   7
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 90,
+  "max": 95,
+  "percentage": 95,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 30,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "device-helper-server--ac1-r1.json": "6950c8f7f779a439e9345559694ac6cb61663ba7d2e746e10115461e3b58edd3",
+  "device-helper-server--scope-r1.json": "95171e807cb971a57c93141e620f4b22f2fa0f95a04780136fdbb73e87ae2078",
+  "device-helper-server--precommit-format-r1.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "device-helper-server--mutation-calls-not-fake-only-r1.txt": "4f888e0edce938d533ec51d85a7696b5c339c7a6325b6dd2b03602ccf88ab0f8",
+  "device-helper-server--dlog-check-r1.json": "6d0b6014c0c723a7205f60bb944e9228d3d84ceeae85ca0cea0c11e4f4facb3e",
+  "device-helper-server--review-check-r1.json": "655db2563efd1a50bda0ae523ee6c5afef06f03bed52e7d01f619e54881d6fbb"
+ },
+ "_written": "2026-10-08T22:50:32.121980Z"
+}

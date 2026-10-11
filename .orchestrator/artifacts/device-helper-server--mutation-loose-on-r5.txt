@@ -1,0 +1,42 @@
+Hazard: non boolean on accepted
+Mutant: loose-on (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.kc7Z7YGfuv/orig	2026-10-08 23:41:01.871492595 +0000
++++ /tmp/tmp.kc7Z7YGfuv/wt/scripts/device-helper.mjs	2026-10-08 23:41:01.889121499 +0000
+@@ -195,7 +195,7 @@
+     if (got.error) return send(res, 400, { error: 'request body could not be read' });
+     let body;
+     try { body = JSON.parse(got.text); } catch { return send(res, 400, { error: 'body must be JSON' }); }
+-    if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.on !== 'boolean') {
++    if (!body || typeof body !== 'object' || Array.isArray(body) || body.on === undefined) {
+       return send(res, 400, { error: '"on" must be true or false' });
+     }
+     const on = body.on;
+## test: node --test tests/device-helper.test.js
+  ---
+  duration_ms: 140.412058
+  type: 'test'
+  ...
+# Subtest: integration: without --helper the routes do not exist
+ok 45 - integration: without --helper the routes do not exist
+  ---
+  duration_ms: 150.976884
+  type: 'test'
+  ...
+# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+ok 46 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+  ---
+  duration_ms: 269.269176
+  type: 'test'
+  ...
+1..46
+# tests 46
+# suites 0
+# pass 44
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8604.038123
+## summary (exit 1)
+2 failed

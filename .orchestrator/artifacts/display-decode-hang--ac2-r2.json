@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- display-decode",
+  "exit": 0,
+  "seconds": 100.68,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs display-decode\n\n  ok  crossfadeMs 0: 60 presses, 62 decodes, 61 object URLs (1 live), 0/59 presses drifted over 50 ms from 200 ms\n  ok  crossfadeMs 1200: 60 presses, 62 decodes, 61 object URLs (1 live), 0/59 presses drifted over 50 ms from 1400 ms\nPASS display-decode",
+  "stderr_tail": ""
+}

@@ -1,0 +1,42 @@
+Hazard: custom header CSRF guard removed
+Mutant: no-custom-header (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.HSKpyVegeK/orig	2026-10-08 23:40:35.970220946 +0000
++++ /tmp/tmp.HSKpyVegeK/wt/scripts/device-helper.mjs	2026-10-08 23:40:35.985271868 +0000
+@@ -119,7 +119,7 @@
+     res.end(JSON.stringify(data));
+   };
+   const guarded = (req) =>
+-    isLoopback(req.socket?.remoteAddress) && isLoopbackHost(req.headers.host) && req.headers['x-poster-helper'] === '1';
++    isLoopback(req.socket?.remoteAddress) && isLoopbackHost(req.headers.host);
+ 
+   // Resolves { text } or { error: 'large' | 'read' }. On overflow the rest of the body is read
+   // and discarded (not destroyed) so the client still receives the 413.
+## test: node --test tests/device-helper.test.js
+  ---
+  duration_ms: 137.267675
+  type: 'test'
+  ...
+# Subtest: integration: without --helper the routes do not exist
+ok 42 - integration: without --helper the routes do not exist
+  ---
+  duration_ms: 133.349692
+  type: 'test'
+  ...
+# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+ok 43 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+  ---
+  duration_ms: 280.778532
+  type: 'test'
+  ...
+1..43
+# tests 43
+# suites 0
+# pass 40
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6778.993667
+## summary (exit 1)
+3 failed

@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/settings.test.js && test -f tests/schedule.test.js && node --test tests/settings.test.js tests/schedule.test.js",
+  "exit": 1,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

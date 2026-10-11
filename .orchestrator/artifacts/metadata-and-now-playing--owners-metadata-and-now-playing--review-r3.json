@@ -1,0 +1,20 @@
+{
+ "phase": "metadata-and-now-playing",
+ "review": "metadata-and-now-playing--review-r3.md",
+ "done_phases": [
+  "cache-first-fetch",
+  "content-rating-filter",
+  "device-helper-server",
+  "display-decode-hang",
+  "e2e-harness",
+  "rotation-layout-and-shell",
+  "serve-config-guard",
+  "settings-and-schedule-core",
+  "sleep-mode",
+  "validation-checklists"
+ ],
+ "hits": [],
+ "no_findings": false,
+ "flagged": [],
+ "checked_at": "2026-10-10T17:26:37.425667Z"
+}

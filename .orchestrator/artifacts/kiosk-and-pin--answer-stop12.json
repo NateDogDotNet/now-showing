@@ -1,0 +1,30 @@
+{
+ "phase": "kiosk-and-pin",
+ "quote": "defaults",
+ "channel": "chat",
+ "stop": 12,
+ "recorded_at": "2026-10-11T02:29:17.092809Z",
+ "checked": true,
+ "transcript_checked": true,
+ "reply_time": "2026-10-11T02:28:48.049Z",
+ "skipped": [],
+ "items": {
+  "1": "defaults",
+  "2": "defaults",
+  "3": "defaults",
+  "4": "defaults",
+  "5": "defaults",
+  "6": "defaults",
+  "7": "defaults",
+  "8": "defaults",
+  "9": "defaults",
+  "10": "defaults",
+  "11": "defaults",
+  "12": "defaults",
+  "13": ""
+ },
+ "open_items": [
+  13
+ ],
+ "complete": false
+}

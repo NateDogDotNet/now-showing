@@ -1,0 +1,20 @@
+Show the status pill only with the controls and add a quiet status dot
+
+The #status pill now shows only while the controls are visible. While
+they are idle-hidden it is never touched (0 mutations), and wake()
+brings its text up to date before it reappears. When there is something
+to report (paused, offline) and the controls are hidden, a 6 px dot at
+35 % opacity (#status-dot) shows instead. It moves to the next corner
+of the safe area every 5 minutes on its own timer, independent of pixel
+shift, so it never sits still. It follows --ui-rotation, and it is
+hidden while asleep and when statusIndicator is 'off'. When all is well
+and the controls are hidden, nothing is drawn.
+
+tests/e2e/status.spec.mjs covers the pill, the dot's size, opacity,
+corner cycle and rotation, the off setting, sleep, and the wake
+catch-up.
+
+Phase: status-indicator (F5, R-STAT-1, D6)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

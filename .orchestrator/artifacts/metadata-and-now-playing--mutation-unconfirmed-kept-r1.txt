@@ -1,0 +1,42 @@
+Hazard: a re-rated title not returned keeps its stale rating offline
+Mutant: unconfirmed-kept (js/engine.js) — ok
+## diff
+--- /tmp/tmp.K3aTUM1OUi/orig	2026-10-10 16:33:01.870773150 +0000
++++ /tmp/tmp.K3aTUM1OUi/wt/js/engine.js	2026-10-10 16:33:01.883301317 +0000
+@@ -48,7 +48,7 @@
+       // nothing is confirmed: every asked key is stored as unrated below
+     }
+     const byKey = new Map(returned.map((p) => [p.ratingKey, p]));
+-    onRatings(keys.map((k) => byKey.get(k) ?? { ratingKey: k, contentRating: '' }));
++    onRatings(keys.filter((k) => byKey.has(k)).map((k) => byKey.get(k)));
+   }
+ 
+   /** The sessions to look at: those already in hand, else a fetch. A refused call (401/403) means nothing is playing (K18). */
+## test: node --test tests/plex.test.js tests/engine.test.js && npm run test:e2e -- metadata && npm run test:e2e -- now-playing
+  ---
+  duration_ms: 0.09785
+  type: 'test'
+  ...
+# Subtest: pickNowPlaying carries the same fields from an XML session (attributes are strings)
+ok 69 - pickNowPlaying carries the same fields from an XML session (attributes are strings)
+  ---
+  duration_ms: 4.840809
+  type: 'test'
+  ...
+# Subtest: items(keys) is ONE request with the keys joined by literal commas, and returns each item with its rating
+ok 70 - items(keys) is ONE request with the keys joined by literal commas, and returns each item with its rating
+  ---
+  duration_ms: 0.815539
+  type: 'test'
+  ...
+1..70
+# tests 70
+# suites 0
+# pass 68
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 291.101291
+## summary (exit 1)
+2 failed

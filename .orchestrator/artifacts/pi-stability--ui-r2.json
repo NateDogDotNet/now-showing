@@ -1,0 +1,14 @@
+{
+  "cmd": "grep -q 'UI screenshots: PASS' .orchestrator/artifacts/pi-stability--review-r2.md && grep -q 'Verdict:\\*\\* APPROVE' .orchestrator/artifacts/pi-stability--review-cold-r2.md",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

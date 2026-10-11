@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- kiosk",
+  "exit": 0,
+  "seconds": 15.93,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ok  a far-future stored lock reads as 15 min\n  ok  lockout clears on success\nPASS a stored lock a day ahead is clamped to 15 minutes when read\nPASS a success clears the failures\n  ok  no PIN, no prompt\nPASS without a PIN the token toggle just works\n  ok  lockout persists across a reload\nPASS five wrong PINs lock the dialog; the lock survives a reload\n  ok  a short entry is a hint, not a failure\nPASS an entry shorter than a PIN is never a wrong PIN: it gets a hint and no failure\n  ok  imported PIN material ignored when no PIN is set\nPASS with no PIN set, an imported file cannot plant one\n  ok  token reveal is gated and re-hides on close\n  ok  export has no PIN material; the token export is gated\nPASS export never carries PIN material (also with the token); the token export asks for the PIN\nPASS #token-toggle asks for the PIN and the field re-hides when the sheet closes\n  ok  import is gated and its PIN material is ignored\nPASS import asks for the PIN and ignores any PIN material in the file\n  ok  preview leaves the PIN alone\n  ok  reset is gated\nPASS the live preview never changes the PIN or kiosk settings in force\nPASS Reset everything asks for the PIN first\n  ok  resetPin served: PIN cleared, Settings open, Diagnostics warns\nPASS config.json {\"resetPin\": true} clears the PIN; Settings opens without it; Diagnostics warns\n  ok  reset flag: every load, while served\nPASS the reset flag is read on every load and honoured while it is served; Diagnostics stops warning when it is gone\n  ok  first-run provisioning is unchanged\nPASS a first run still takes its settings from config.json\n  ok  PIN set / mismatch / too short / cancel / remove\nPASS a PIN is set, changed and removed in Settings, and Settings says it is a deterrent\n  ok  resetPin clears the lockout for the session\nPASS after a resetPin load the lockout is gone for the session: a new PIN works at once and one wrong PIN does not lock\n  ok  sleep swallowing still holds with the PIN gate\nPASS a press that wakes the display is swallowed, PIN or not; the next one reaches the gate\n  ok  Enter held through a wake does not reveal; a fresh hold does\nPASS an Enter held through a wake from sleep does not reveal the controls; a fresh hold still does\n  ok  no PIN reset without {\"resetPin\": true} from a 2xx config.json\nPASS the PIN stays without a true flag: {resetPin:false}, \"true\", 1, a 403 or 500 carrying the flag, a query string\nall 37 kiosk cases passed\nPASS kiosk",
+  "stderr_tail": ""
+}

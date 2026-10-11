@@ -1,0 +1,42 @@
+Hazard: extra reload after a clock-less boot
+Mutant: bootat-not-shifted (js/main.js) — ok
+## diff
+--- /tmp/tmp.fvWLWWzxnS/orig	2026-10-11 06:58:32.030318396 +0000
++++ /tmp/tmp.fvWLWWzxnS/wt/js/main.js	2026-10-11 06:58:32.048099182 +0000
+@@ -375,7 +375,7 @@
+   state.sleepClock = { wall, mono };
+   if (Math.abs(jump) > 5000) {
+     state.lastPlaybackAt += jump;
+-    bootAt += jump;
++    void jump;
+     if (state.manualWakeUntil) state.manualWakeUntil += jump;
+   }
+   if (Math.abs(jump) > BRIGHTNESS_JUMP_MS) evaluateBrightness(); // the clock moved: the night dim may be wrong now
+## test: npm run test:e2e -- pi-stability
+  ok  crossfade 8000 ms across 04:00: the reload came 9936 ms after the draw
+  ok  manual wake across 04:00: no reload until the 60 s were over
+  ok  helper on: power on, then the reload 8663 ms later, after the first poster
+  ok  html and body: overscroll-behavior none
+  ok  manual wake: no reload, 60 s wake ran; schedule end: one reload
+  ok  Settings: dailyReload checkbox and time, persisted by Save
+  ok  lastReload 11 minutes ago: the reload happens
+  ok  +6 h 1 min of fake clock, service workers blocked: reg.update() called 0x (0 rejected), no pageerror
+  ok  +6 h 1 min of fake clock, service workers allowed: reg.update() called 1x (0 rejected), no pageerror
+  ok  daily reload at 04:00: idle sleep still begins about an hour after the movie (~04:50), not an hour after the reload
+  ok  second reload within 10 minutes refused; log "4:00:00 AM  Daily reload skipped: the last reload was less than 10 minutes ago"
+  ok  service-worker update reload: the idle clock carries across (asleep ~04:50)
+  ok  a normal reload restarts the idle clock (K13)
+case 9g clock set after boot, then the schedule ends -> no wake reload failed:
+AssertionError [ERR_ASSERTION]: the page had been up for two minutes: the tab navigated
+
+2 !== 1
+
+    at staysPut (file:///tmp/tmp.fvWLWWzxnS/wt/tests/e2e/pi-stability.spec.mjs:77:10)
+    at async file:///tmp/tmp.fvWLWWzxnS/wt/tests/e2e/pi-stability.spec.mjs:507:5
+    at async withApp (file:///tmp/tmp.fvWLWWzxnS/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.fvWLWWzxnS/wt/tests/e2e/pi-stability.spec.mjs:691:9
+    at async Promise.all (index 0)
+    at async file:///tmp/tmp.fvWLWWzxnS/wt/tests/e2e/pi-stability.spec.mjs:686:1
+FAIL pi-stability
+## summary (exit 1)
+1 failed

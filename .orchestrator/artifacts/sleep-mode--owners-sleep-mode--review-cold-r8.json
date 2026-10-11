@@ -1,0 +1,17 @@
+{
+ "phase": "sleep-mode",
+ "review": "sleep-mode--review-cold-r8.md",
+ "done_phases": [
+  "cache-first-fetch",
+  "device-helper-server",
+  "e2e-harness",
+  "rotation-layout-and-shell",
+  "serve-config-guard",
+  "settings-and-schedule-core",
+  "validation-checklists"
+ ],
+ "hits": [],
+ "no_findings": false,
+ "flagged": [],
+ "checked_at": "2026-10-09T03:24:54.326282Z"
+}

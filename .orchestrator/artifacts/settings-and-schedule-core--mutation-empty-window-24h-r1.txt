@@ -1,0 +1,42 @@
+Hazard: start === end treated as 24 h (display always asleep)
+Mutant: empty-window-24h (js/schedule.js) — ok
+## diff
+--- /tmp/tmp.lW1mzE1kQn/orig	2026-10-08 22:49:23.220533098 +0000
++++ /tmp/tmp.lW1mzE1kQn/wt/js/schedule.js	2026-10-08 22:49:23.235729656 +0000
+@@ -21,7 +21,7 @@
+ export function inWindow(date, start, end) {
+   const s = parseHHMM(start);
+   const e = parseHHMM(end);
+-  if (s === null || e === null || s === e || !validDate(date)) return false;
++  if (s === null || e === null || !validDate(date)) return false;
+   const m = date.getHours() * 60 + date.getMinutes();
+   return s < e ? m >= s && m < e : m >= s || m < e;
+ }
+## test: TZ=America/New_York npm test && TZ=Europe/London npm test
+  ---
+  duration_ms: 0.57939
+  type: 'test'
+  ...
+# Subtest: a 2.0.0 export imports with the new keys at their defaults
+ok 66 - a 2.0.0 export imports with the new keys at their defaults
+  ---
+  duration_ms: 0.410575
+  type: 'test'
+  ...
+# Subtest: stored 2.0.0 settings load with new keys filled
+ok 67 - stored 2.0.0 settings load with new keys filled
+  ---
+  duration_ms: 0.177896
+  type: 'test'
+  ...
+1..67
+# tests 67
+# suites 0
+# pass 66
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 858.846896
+## summary (exit 1)
+1 failed

@@ -1,0 +1,140 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "frame-brightness--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "frame-brightness--derive-step8-r2-0.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "frame-brightness--precommit-format-r2.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "frame-brightness--mutation-ramp-jump-r1.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "frame-brightness--dlog-check-r2.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "frame-brightness--review-check-r2.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "frame-brightness--readback-9263977.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 99,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 5,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 100,
+  "max": 100,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "frame-brightness--ac1-r2.json": "ea872a90bf21a8acefc0b822e126ed328e3c4658fd1d4f78adbb93bd1e82f814",
+  "frame-brightness--derive-step8-r2-0.json": "c8d25ea352bde686f882c1e4a6d33d740d89cc6494bdbe70ad1d4518846b299e",
+  "frame-brightness--precommit-format-r2.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "frame-brightness--mutation-ramp-jump-r1.txt": "f3546ff9dfa8e1fe0a2817154ac89c5ca7f87f353f460efc4a035cc837591649",
+  "frame-brightness--dlog-check-r2.json": "d334fb426db865e2a79e36ace73215b5bd66e846e3604d39503bb57673f9c1f1",
+  "frame-brightness--review-check-r2.json": "5809648cc571e1debf93d49d0f6cc66a28ee339c56fa66ea1879d33ca1b33d8c",
+  "frame-brightness--readback-9263977.json": "ac6ab9310466791159faed960358425d5ef4a51b6284d6eca0f5af373bb84923"
+ },
+ "_written": "2026-10-10T20:29:44.260138Z"
+}

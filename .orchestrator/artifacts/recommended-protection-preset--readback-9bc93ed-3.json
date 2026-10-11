@@ -1,0 +1,16 @@
+{
+ "cmd": "diff <(git log -1 --format=%B 9bc93ed) .orchestrator/artifacts/recommended-protection-preset--commit-message-final.txt",
+ "sha": "9bc93ed",
+ "equal": true,
+ "tokens": [
+  "2.1"
+ ],
+ "missing_tokens": [],
+ "exempt": {},
+ "stale": false,
+ "commit_rows": [
+  6
+ ],
+ "ok": true,
+ "checked_at": "2026-10-11T20:30:19.348002Z"
+}

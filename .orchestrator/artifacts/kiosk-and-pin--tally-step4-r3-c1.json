@@ -1,0 +1,94 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "kiosk-and-pin--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "kiosk-and-pin--scope-r3.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "kiosk-and-pin--precommit-format-r3.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "kiosk-and-pin--mutation-hidden-focusable-r2.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_correction": {
+  "reason": "criterion 7 is narrated (risk:high reviewers attack the PIN gate) and has no command; derive counted it as a missing row (missing_rows: ac7). Criteria 1-6 exit 0 fresh (ac1-6-r3.json). Criterion 7 is scored at Step 7 from the anchored and cold reviews.",
+  "supersedes": "kiosk-and-pin--tally-step4-r3.json"
+ },
+ "_result": {
+  "total": 75,
+  "max": 75,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "kiosk-and-pin--ac1-r3.json": "b1e8306fb375d1df5d1a9eb4e8b28c5a59aa0434c7819a6756cfef82ff24b6e0",
+  "kiosk-and-pin--scope-r3.json": "fb1f2376990e70dc92e93ba3564b3237deeddfa3ff582ccbee509fda54ac39fa",
+  "kiosk-and-pin--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "kiosk-and-pin--mutation-hidden-focusable-r2.txt": "697f2afb26224c62a015c8af7d97835953d2b46219a2fd8af7c8cd7da6ee69a1"
+ },
+ "_written": "2026-10-10T22:27:46.393898Z"
+}

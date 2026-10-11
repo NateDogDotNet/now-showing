@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f scripts/device-helper.mjs && test -f scripts/serve.mjs && ! grep -n 'Access-Control-Allow' scripts/device-helper.mjs scripts/serve.mjs",
+  "exit": 1,
+  "seconds": 0.0,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

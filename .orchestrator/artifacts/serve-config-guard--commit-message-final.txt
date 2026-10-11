@@ -1,0 +1,20 @@
+Serve only app files from the dev server; config.json to loopback only
+
+scripts/serve.mjs replaces the path denylist with an allowlist: index.html,
+manifest.webmanifest, sw.js and paths under css/, js/ and assets/. Dotfile
+segments, symlinks whose real path leaves the served root, and anything that
+is not a regular file return 404. config.json is served only to a loopback
+peer whose Host hostname is localhost, 127.0.0.1 or [::1]; proxy headers are
+never consulted. Adds --root for tests.
+
+scripts/net.mjs holds isLoopback and isLoopbackHost so they can be imported
+without starting a server.
+
+tests/serve.test.js covers the loopback checks, Host and proxy-header
+spoofing, path and encoding variants, symlinks, dotfiles and the LAN
+allowlist, on a free port.
+
+Phase: serve-config-guard (F4, R-SEC-1, D9)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

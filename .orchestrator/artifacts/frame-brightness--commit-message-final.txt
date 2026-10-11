@@ -1,0 +1,26 @@
+Add frame brightness and a stepped night dim
+
+frameBrightness (10-100 %) dims the frame image with a CSS brightness
+filter. With nightDim on, the frame dims to nightDimLevel between
+nightDimStart and nightDimEnd. It eases in over the first 10 minutes and
+out over the last 10, in whole-minute steps, and a window shorter than
+20 minutes peaks below the level. The lower of the manual and night
+levels wins. There is no night dim while the clock is implausible.
+nightDimTarget 'stage' dims the whole poster instead; the filter is only
+ever on #frame or #stage, and the other is cleared.
+
+The filter is never transitioned or animated (Pi GPU). A single timer,
+aligned to minute boundaries, sets the value. It is re-evaluated when
+settings are applied (live preview, Save and Cancel), when the page
+becomes visible, and after a clock jump. The pure effectiveBrightness()
+lives in js/brightness.js (precached). The controls join the Display
+protection fieldset.
+
+tests/brightness.test.js covers the ramp, midnight, short windows, the
+implausible clock and a DST night; tests/e2e/brightness.spec.mjs covers
+the filter values, both targets, minute steps and live target switches.
+
+Phase: frame-brightness (E4, R-FRM-4, R-PROT-4, D6)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

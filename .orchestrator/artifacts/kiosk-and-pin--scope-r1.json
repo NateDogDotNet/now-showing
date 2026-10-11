@@ -1,0 +1,14 @@
+{
+  "cmd": "test -z \"$(git diff --cached --name-only | grep -vxE '(js/kiosk.js|tests/kiosk.test.js|js/main.js|js/settings-ui.js|index.html|css/app.css|sw.js|tests/e2e/kiosk.spec.mjs)')\" && test -z \"$(git status --porcelain | grep -v '^[AM]  ')\"",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

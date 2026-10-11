@@ -1,0 +1,14 @@
+{
+  "cmd": "grep -q 'UI screenshots: PASS' .orchestrator/artifacts/kiosk-and-pin--review-r3.md && grep -q 'Criterion 7: PASS' .orchestrator/artifacts/kiosk-and-pin--review-r3.md",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

@@ -1,0 +1,11 @@
+{
+  "cmd": "eslint --no-config-lookup -c /home/user/plex-poster-app/.orchestrator/artifacts/round--eslint-r1d.config.mjs js/schedule.js js/settings.js sw.js tests/schedule.test.js tests/settings.test.js  && for f in js/schedule.js js/settings.js sw.js tests/schedule.test.js tests/settings.test.js ; do node --check $f || exit 1; done",
+  "exit": 0,
+  "seconds": 0.53,
+  "parsed": {
+    "error_lines": 0
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

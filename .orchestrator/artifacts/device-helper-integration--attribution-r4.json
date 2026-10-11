@@ -1,0 +1,27 @@
+{
+ "phase": "device-helper-integration",
+ "round": 4,
+ "sha": "e1b7f07",
+ "form": "commit",
+ "handbacks": [
+  "device-helper-integration--handback-builder-r1.md",
+  "device-helper-integration--handback-builder-r2.md",
+  "device-helper-integration--handback-builder-r3.md",
+  "device-helper-integration--handback-builder-r4.md",
+  "device-helper-integration--handback-builder-r5.md"
+ ],
+ "touched": [
+  "css/app.css",
+  "index.html",
+  "js/helper.js",
+  "js/main.js",
+  "sw.js",
+  "tests/e2e/helper.spec.mjs",
+  "tests/helper.test.js"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-11T04:55:13.214133Z"
+}

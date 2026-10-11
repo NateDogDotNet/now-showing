@@ -1,0 +1,42 @@
+Hazard: auto-repeat arms the Enter hold
+Mutant: hold-on-repeat (js/main.js) — ok
+## diff
+--- /tmp/tmp.twDF3oP08c/orig	2026-10-10 23:39:45.697781522 +0000
++++ /tmp/tmp.twDF3oP08c/wt/js/main.js	2026-10-10 23:39:45.709870437 +0000
+@@ -789,7 +789,7 @@
+ document.addEventListener(
+   'keydown',
+   (e) => {
+-    if (e.key === 'Enter' && !e.repeat && state.settings.kioskMode && !e.target.closest?.('dialog')) enterHold.start();
++    if (e.key === 'Enter' && state.settings.kioskMode && !e.target.closest?.('dialog')) enterHold.start();
+   },
+   press,
+ );
+## test: npm run test:e2e -- kiosk
+  ok  PIN set / mismatch / too short / cancel / remove
+PASS a PIN is set, changed and removed in Settings, and Settings says it is a deterrent
+  ok  resetPin cancels an open PIN prompt
+PASS a PIN prompt open while the boot reset clears the PIN is cancelled: nothing counted, and Settings opens without a PIN
+  ok  first-run provisioning is unchanged
+PASS a first run still takes its settings from config.json
+  ok  resetPin: the lockout is cleared for the session
+PASS after a resetPin load the lockout is cleared for the session: a new PIN works at once and the failure count starts again
+FAIL an Enter held through a wake from sleep does not reveal the controls; a fresh hold afterwards does
+AssertionError [ERR_ASSERTION]: a hold that began asleep reveals nothing
+
+true !== false
+
+    at file:///tmp/tmp.twDF3oP08c/wt/tests/e2e/kiosk.spec.mjs:1015:10
+    at async withApp (file:///tmp/tmp.twDF3oP08c/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.twDF3oP08c/wt/tests/e2e/kiosk.spec.mjs:1035:11
+    at async Promise.all (index 1)
+    at async runPool (file:///tmp/tmp.twDF3oP08c/wt/tests/e2e/kiosk.spec.mjs:1030:3)
+    at async file:///tmp/tmp.twDF3oP08c/wt/tests/e2e/kiosk.spec.mjs:1050:18
+  ok  sleep swallowing still holds with the PIN gate
+PASS a press that wakes the display is swallowed, PIN or not; the next one reaches the gate
+  ok  no PIN reset without {"resetPin": true} from a 2xx config.json
+PASS the PIN stays without a true flag: {resetPin:false}, "true", 1, a 403 or 500 carrying the flag, a query string
+1 of 39 kiosk cases failed
+FAIL kiosk
+## summary (exit 1)
+1 failed

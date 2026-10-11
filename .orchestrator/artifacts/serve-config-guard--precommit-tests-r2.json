@@ -1,0 +1,14 @@
+{
+  "cmd": "npm test",
+  "exit": 0,
+  "seconds": 0.76,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: save + load round-trips\nok 35 - save + load round-trips\n  ---\n  duration_ms: 0.348782\n  type: 'test'\n  ...\n# Subtest: export omits the token unless asked\nok 36 - export omits the token unless asked\n  ---\n  duration_ms: 0.638455\n  type: 'test'\n  ...\n# Subtest: import merges over current settings and keeps the existing token\nok 37 - import merges over current settings and keeps the existing token\n  ---\n  duration_ms: 0.580747\n  type: 'test'\n  ...\n# Subtest: import accepts a bare object and the old CONFIG shape\nok 38 - import accepts a bare object and the old CONFIG shape\n  ---\n  duration_ms: 0.585066\n  type: 'test'\n  ...\n# Subtest: import rejects bad files with a readable message\nok 39 - import rejects bad files with a readable message\n  ---\n  duration_ms: 1.097439\n  type: 'test'\n  ...\n1..39\n# tests 39\n# suites 0\n# pass 39\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 503.552716",
+  "stderr_tail": ""
+}

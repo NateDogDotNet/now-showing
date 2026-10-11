@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- sleep",
+  "exit": 1,
+  "seconds": 0.85,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs sleep\n\nFAIL sleep (no such spec: /home/user/wt-sleep-mode/tests/e2e/sleep.spec.mjs)",
+  "stderr_tail": ""
+}

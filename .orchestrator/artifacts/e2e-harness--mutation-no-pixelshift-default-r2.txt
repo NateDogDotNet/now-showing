@@ -1,0 +1,42 @@
+Hazard: geometry specs see pixel shift (convention 7)
+Mutant: no-pixelshift-default (tests/e2e/lib.mjs) — ok
+## diff
+--- /tmp/tmp.H6ELkWfkOb/orig	2026-10-08 22:24:23.016479045 +0000
++++ /tmp/tmp.H6ELkWfkOb/wt/tests/e2e/lib.mjs	2026-10-08 22:24:23.031705109 +0000
+@@ -33,7 +33,7 @@
+ 
+ // Defaults every spec starts from (convention 7): geometry specs must not see pixel shift,
+ // and the upgrade toast must not interfere.
+-const DEFAULT_SETTINGS = { pixelShift: false, dailyReload: false };
++const DEFAULT_SETTINGS = { dailyReload: false };
+ const WHATS_NEW_MARKER = 'e2e';
+ 
+ export function freePort() {
+## test: npm run test:e2e -- smoke
+  ok  clock install + runFor
+  ok  hasTouch toggles maxTouchPoints
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ undefined
+- false
+
+    at file:///tmp/tmp.H6ELkWfkOb/wt/tests/e2e/smoke.spec.mjs:81:10
+    at async withApp (file:///tmp/tmp.H6ELkWfkOb/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.H6ELkWfkOb/wt/tests/e2e/smoke.spec.mjs:77:1 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: false,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL smoke
+## summary (exit 1)
+1 failed

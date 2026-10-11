@@ -1,0 +1,42 @@
+Hazard: offset applied with pixelShift off
+Mutant: shift-when-off (js/display.js) — ok
+## diff
+--- /tmp/tmp.DpA0kMtmv5/orig	2026-10-10 19:16:25.575241112 +0000
++++ /tmp/tmp.DpA0kMtmv5/wt/js/display.js	2026-10-10 19:16:25.588905464 +0000
+@@ -118,7 +118,7 @@
+       const { x, y } = shiftOffset(shiftStep, Math.max(0, Math.floor(room)));
+       el.stage.style.translate = `${x}px ${y}px`;
+     } else {
+-      el.stage.style.removeProperty('translate');
++      el.stage.style.translate = '6px 6px';
+     }
+     el.stage.style.setProperty('--rotation', `${settings.rotation}deg`);
+ 
+## test: npm run test:e2e -- pixel-shift
+> node tests/e2e/run.mjs pixel-shift
+
+  ok  1920x1080 rotation 0 (9 distinct positions)
+  ok  1080x1920 rotation 90 (9 distinct positions)
+  ok  1920x1080 rotation 90 (9 distinct positions)
+  ok  1080x1920 rotation 0 (9 distinct positions)
+  ok  reduced motion
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: off: no translate (6px 6px)
+    at file:///tmp/tmp.DpA0kMtmv5/wt/tests/e2e/pixel-shift.spec.mjs:105:12
+    at async withApp (file:///tmp/tmp.DpA0kMtmv5/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.DpA0kMtmv5/wt/tests/e2e/pixel-shift.spec.mjs:97:3 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL pixel-shift
+## summary (exit 1)
+1 failed

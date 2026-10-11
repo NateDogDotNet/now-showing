@@ -1,0 +1,127 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "settings-and-schedule-core--ac1-r1.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "settings-and-schedule-core--scope-r1.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "settings-and-schedule-core--precommit-format-r1.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 0,
+   "max": 10,
+   "evidence": "settings-and-schedule-core--mutation-late-start-boundary-r1.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "settings-and-schedule-core--dlog-check-r1.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 0,
+   "max": 10,
+   "evidence": "settings-and-schedule-core--review-check-r1.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 95,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 10,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 75,
+  "max": 95,
+  "percentage": 79,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "settings-and-schedule-core--ac1-r1.json": "8ce2b7121025d79996687173af48c3ea8f8cd2e7b190cab4c6589ac53a7d5c62",
+  "settings-and-schedule-core--scope-r1.json": "2d2a6f63e6e7da9afc41238251bf01e801b4400d6d313cb9a0cc85f8c4995e57",
+  "settings-and-schedule-core--precommit-format-r1.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "settings-and-schedule-core--mutation-late-start-boundary-r1.txt": "d6ad01abbac9bb11f303761090d31067a251de552cf295e1c0ca9eff6aaa23c9",
+  "settings-and-schedule-core--dlog-check-r1.json": "6e18430ca7a0430e33dc31ef1d06323fa0d0da1a0ab7f0b7019973b3ae814d0a",
+  "settings-and-schedule-core--review-check-r1.json": "172dbebc8fb30920c7958590147559d1126b19f697cd9311a4a0832d58d6c2d4"
+ },
+ "_written": "2026-10-08T23:01:18.724602Z"
+}

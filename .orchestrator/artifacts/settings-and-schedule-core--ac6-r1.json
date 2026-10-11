@@ -1,0 +1,14 @@
+{
+  "cmd": "node -e \"import('./js/settings.js').then(m=>{const d=m.defaults();const ok=d.pixelShift===true&&d.dailyReload===true&&d.posterCacheLimit===100&&d.statusIndicator==='dot'&&d.rotateUi===true&&d.sleepEnabled===false&&d.idleSleepHours===0&&d.wakeOnPlayback===true&&d.nightDim===false&&d.nightDimTarget==='frame'&&d.maxContentRating===''&&d.limitNowPlaying===true&&d.kioskMode===false&&d.deviceHelper===false&&d.fillMode==='none'&&d.showProgress===true&&d.showPlayer===false;if(!ok)process.exit(1)})\"",
+  "exit": 0,
+  "seconds": 0.06,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

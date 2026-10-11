@@ -1,0 +1,42 @@
+Hazard: second blind tap toggles Pause
+Mutant: multi-tap-click-through (js/main.js) — ok
+## diff
+--- /tmp/tmp.2Mwnl4sH26/orig	2026-10-09 02:15:11.043116001 +0000
++++ /tmp/tmp.2Mwnl4sH26/wt/js/main.js	2026-10-09 02:15:11.058802264 +0000
+@@ -260,7 +260,7 @@
+   if ((state.asleep || swallowing) && !inOpenDialog(e)) {
+     e.stopPropagation();
+     e.preventDefault();
+-    if (e.type === 'pointerdown') state.swallowUntil = performance.now() + SWALLOW_MS;
++    ;
+   }
+   evaluateSleep();
+ }
+## test: npm run test:e2e -- sleep
+  ok  veil aria-hidden="true"; #app inert while asleep and not after; a dialog above the veil takes clicks
+  ok  paused: sleeping and waking make no sessions or image request
+  ok  Plex down inside the window with 2+ cached posters: nothing drawn while asleep (Neon Matinee (1993) — cache)
+  ok  idle sleep: playback past the original deadline; awake after it stops, asleep one idle hour after the last playback
+case 6b touch tap wakes failed:
+AssertionError [ERR_ASSERTION]: the tap did not open Settings
+
+true !== false
+
+    at file:///tmp/tmp.2Mwnl4sH26/wt/tests/e2e/sleep.spec.mjs:262:10
+    at async withApp (file:///tmp/tmp.2Mwnl4sH26/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.2Mwnl4sH26/wt/tests/e2e/sleep.spec.mjs:677:9
+    at async Promise.all (index 2)
+    at async file:///tmp/tmp.2Mwnl4sH26/wt/tests/e2e/sleep.spec.mjs:672:1
+case 10 double and triple tap while asleep failed:
+AssertionError [ERR_ASSERTION]: 3 taps left Pause off
+
+'true' !== 'false'
+
+    at file:///tmp/tmp.2Mwnl4sH26/wt/tests/e2e/sleep.spec.mjs:372:12
+    at async withApp (file:///tmp/tmp.2Mwnl4sH26/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.2Mwnl4sH26/wt/tests/e2e/sleep.spec.mjs:677:9
+    at async Promise.all (index 2)
+    at async file:///tmp/tmp.2Mwnl4sH26/wt/tests/e2e/sleep.spec.mjs:672:1
+FAIL sleep
+## summary (exit 1)
+1 failed

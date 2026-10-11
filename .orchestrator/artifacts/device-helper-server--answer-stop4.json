@@ -1,0 +1,21 @@
+{
+ "phase": "device-helper-server",
+ "quote": "Defaults",
+ "channel": "chat",
+ "stop": 4,
+ "recorded_at": "2026-10-09T01:19:58.526360Z",
+ "checked": true,
+ "transcript_checked": true,
+ "reply_time": "2026-10-09T01:19:06.548Z",
+ "skipped": [],
+ "items": {
+  "1": "Defaults",
+  "2": "Defaults",
+  "3": "Defaults",
+  "4": ""
+ },
+ "open_items": [
+  4
+ ],
+ "complete": false
+}

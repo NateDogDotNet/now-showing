@@ -1,0 +1,27 @@
+Add one-tap recommended protection and a one-time What's new notice
+
+A "Recommended protection" button in Settings' Display protection
+section lists exactly what it will change, each with a checkbox:
+sleep from 01:00 to 07:00, night dim at 60 % on the whole picture
+(shown but not untickable), pixel shift and the daily reload. Apply
+fills the ticked values into the form and only Save stores them;
+Cancel changes nothing. It never turns on idle sleep and never touches
+the household content limit, the connection or any other setting. The
+preset values live in js/settings-ui.js.
+
+A display upgraded from the previous version and already configured
+shows "What's new in 2.1" once, with Open settings taking it (through the kiosk PIN gate)
+to Display protection. A fresh install never shows it. The marker
+plexPoster.whatsNew is written on the first boot either way.
+
+Also: the Control labels options read "Auto", "Always" and "Never
+(icons only)", and the smoke spec pauses its fake clock before the
+runFor check.
+
+tests/e2e/preset.spec.mjs covers the preset and the notice.
+
+Phase: recommended-protection-preset (R-PROT-5, R-UPG-1, D4, D5, D6,
+D44); closes milestone M2
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

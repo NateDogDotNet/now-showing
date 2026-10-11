@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- helper",
+  "exit": 0,
+  "seconds": 45.98,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs helper\n\n  ok  Diagnostics: CPU temperature: 42.5 \u00b0C (thermal_zone0)\n  ok  asleep: one power off, after the veil is up, no repeat\n  ok  wake: power on, then the poster fetch\n  ok  power calls failing: the display still wakes and fetches the poster\n  ok  deviceHelper:false: no /__helper/ request, no console error\n  ok  no helper: one probe, then silence, no console error\n  ok  temperature refreshes only while Diagnostics is open\n  ok  wake timing: first poster 4104 ms after the power-on request\n  ok  deviceHelper switched off while awake: no power off, no power on, no temperature\n  ok  deviceHelper switched off while asleep: the wake sends no power on\nPASS helper",
+  "stderr_tail": ""
+}

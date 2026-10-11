@@ -1,0 +1,25 @@
+Serve posters from the local cache first and heal corrupt cached copies
+
+fetchImage now looks the poster up in the Cache API store (one entry per
+ratingKey; the index records its thumb and rendered size) before
+downloading it, so a display
+that cycles a fixed library stops re-transcoding the same images. A new
+download is stored at its rendered size; a changed thumb or size is a miss.
+
+If a cached poster fails to decode, tick() logs a warning, deletes that
+entry and downloads the poster once from the server; a second failure goes
+to the normal failure path, so there is no retry loop.
+
+The cache limit follows the posterCacheLimit setting on every put; a limit
+that is not a number or numeric string, or is below 1, falls back to the
+default of 100 instead of emptying the cache.
+
+scripts/mock-plex.mjs counts image transcodes (GET /__mock/stats, POST
+/__mock/reset-stats). tests/e2e/cache-first.spec.mjs shows the 8 mock
+posters 3 times each with at most 8 transcodes, zero after a reload, and
+exactly one re-download per poster after the cache is corrupted.
+
+Phase: cache-first-fetch (E2, R-CACHE-1, K4)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

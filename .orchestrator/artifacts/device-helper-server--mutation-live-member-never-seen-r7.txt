@@ -1,0 +1,42 @@
+Hazard: lock released while a member is still running
+Mutant: live-member-never-seen (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.YLeD15tJxZ/orig	2026-10-09 01:30:35.676990442 +0000
++++ /tmp/tmp.YLeD15tJxZ/wt/scripts/device-helper.mjs	2026-10-09 01:30:35.700788095 +0000
+@@ -48,7 +48,7 @@
+     if (!/^\d+$/.test(n)) continue;
+     try {
+       const m = (await readFile(`/proc/${n}/stat`, 'utf8')).match(/^\d+ \(.*\) (\S) -?\d+ (-?\d+)/s); // state, ppid, pgrp
+-      if (m && Number(m[2]) === pgid && m[1] !== 'Z') return true;
++      if (m && Number(m[2]) === pgid && false) return true;
+     } catch { /* exited while we looked */ }
+   }
+   return false;
+## test: node --test tests/device-helper.test.js
+  ---
+  duration_ms: 131.376193
+  type: 'test'
+  ...
+# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+ok 51 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+  ---
+  duration_ms: 290.221848
+  type: 'test'
+  ...
+# Subtest: integration: a helper value option with no value refuses to start and names the option
+ok 52 - integration: a helper value option with no value refuses to start and names the option
+  ---
+  duration_ms: 639.666732
+  type: 'test'
+  ...
+1..52
+# tests 52
+# suites 0
+# pass 51
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5726.205144
+## summary (exit 1)
+1 failed

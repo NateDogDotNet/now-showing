@@ -1,0 +1,142 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "display-decode-hang--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "display-decode-hang--derive-step8-r2-0.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "display-decode-hang--precommit-format-r2.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 0,
+   "max": 10,
+   "evidence": "display-decode-hang--mutation-unbounded-decode-r1.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "display-decode-hang--dlog-check-r1.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "display-decode-hang--review-check-r1.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "display-decode-hang--readback-af55616.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 99,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 5,
+  "missing_rows": [],
+  "review_rows": [
+   5
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 90,
+  "max": 100,
+  "percentage": 90,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "display-decode-hang--ac1-r2.json": "368f406acd8ff52583ba76d013cdd2436c24c3dc7b6e9db2526633f1bd325043",
+  "display-decode-hang--derive-step8-r2-0.json": "c833b572232735fd8cbf043d69d94f650114280a7af6760ef66fa8b0429a13e4",
+  "display-decode-hang--precommit-format-r2.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "display-decode-hang--mutation-unbounded-decode-r1.txt": "139d4100f2a96a3b7bf39ec3d335caacbef14162327e2b09cc6db511e74e8077",
+  "display-decode-hang--dlog-check-r1.json": "9b197e68e6f4c120be67cc938d03e52df01894dd8e43ef87b1b9d44888d2829e",
+  "display-decode-hang--review-check-r1.json": "e6fccb81a85a96e33ad067ea437dd2c958caedb31c8919b67d5c99dc28085422",
+  "display-decode-hang--readback-af55616.json": "a00bd3a88a5ad7b62a48bafbf3a9ddc13e4b39fe692428bda9e16797bb10146f"
+ },
+ "_written": "2026-10-10T13:37:06.029142Z"
+}

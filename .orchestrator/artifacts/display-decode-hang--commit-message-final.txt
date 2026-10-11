@@ -1,0 +1,23 @@
+Stop a pending image decode from freezing poster rotation
+
+In Chromium, removing an <img>'s src before its load finishes leaves
+decode() pending forever. The previous draw's cleanup timer (crossfadeMs
++ 200 ms) could clear the layer the next draw was decoding on, so the
+show never finished, the app stayed busy and rotation stopped until a
+reload.
+
+Each draw now marks the layer it loads as its own, and a cleanup timer
+only clears a layer its draw still owns; a draw that takes over a layer
+revokes that layer's old object URL at once so nothing leaks. As a
+backstop, decode() is bounded at 20 s and a decode that cannot settle
+rejects into the existing failure path. The crossfade is unchanged.
+
+tests/e2e/display-decode.spec.mjs presses refresh 60 times at exactly
+crossfadeMs + 200 ms (crossfade 0 and 1200 ms) and checks every press
+draws, no decode is left pending, no object URL leaks, and the press
+timing did not drift.
+
+Phase: display-decode-hang (Q25, D30)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

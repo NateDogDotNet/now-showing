@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/sleep.test.js && test -f tests/engine.test.js && node --test tests/sleep.test.js tests/engine.test.js",
+  "exit": 0,
+  "seconds": 0.23,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: a manual wake while nothing would sleep the display is not reported\nok 23 - a manual wake while nothing would sleep the display is not reported\n  ---\n  duration_ms: 0.316292\n  type: 'test'\n  ...\n# Subtest: sleepEnabled:false with idleSleepHours:0 never sleeps\nok 24 - sleepEnabled:false with idleSleepHours:0 never sleeps\n  ---\n  duration_ms: 0.393119\n  type: 'test'\n  ...\n# Subtest: clockOk:false ignores the schedule but not idle sleep\nok 25 - clockOk:false ignores the schedule but not idle sleep\n  ---\n  duration_ms: 0.249711\n  type: 'test'\n  ...\n# Subtest: an empty window (start === end) never sleeps\nok 26 - an empty window (start === end) never sleeps\n  ---\n  duration_ms: 0.830654\n  type: 'test'\n  ...\n# Subtest: the schedule wins the label when both triggers hold\nok 27 - the schedule wins the label when both triggers hold\n  ---\n  duration_ms: 0.186018\n  type: 'test'\n  ...\n1..27\n# tests 27\n# suites 0\n# pass 27\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 148.626991",
+  "stderr_tail": ""
+}

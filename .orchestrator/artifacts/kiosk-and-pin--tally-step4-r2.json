@@ -1,0 +1,103 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 30,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "kiosk-and-pin--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "kiosk-and-pin--scope-r2.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "kiosk-and-pin--precommit-format-r2.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 0,
+   "max": 10,
+   "evidence": "kiosk-and-pin--mutation-lock-uncapped-r2.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 7,
+  "missing_rows": [
+   "ac7"
+  ],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 60,
+  "max": 75,
+  "percentage": 80,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 30,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "kiosk-and-pin--ac1-r2.json": "9085548586a8d43a58b54f2ee8d063907a6284a207c5dc47247089fe76d607fb",
+  "kiosk-and-pin--scope-r2.json": "6d064e5eebd8d0aabb177d92e6177e0cc36e0a7c1d5346846278efaf06eebda7",
+  "kiosk-and-pin--precommit-format-r2.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "kiosk-and-pin--mutation-lock-uncapped-r2.txt": "8b1c5d9d76fb15b204a6a8233793fc7ddd898198e94bd852ce075eb5383e8f14"
+ },
+ "_written": "2026-10-10T22:16:12.425432Z"
+}

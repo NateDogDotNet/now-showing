@@ -1,0 +1,42 @@
+Hazard: level never updates across the night
+Mutant: no-minute-timer (js/main.js) — ok
+## diff
+--- /tmp/tmp.3PnArP1FSG/orig	2026-10-10 19:54:45.678848251 +0000
++++ /tmp/tmp.3PnArP1FSG/wt/js/main.js	2026-10-10 19:54:45.692871954 +0000
+@@ -386,7 +386,7 @@
+   display.setBrightness(effectiveBrightness(now, state.settings), state.settings.nightDimTarget);
+   clearTimeout(brightnessTimer);
+   // Aligned to the minute boundary; a timer that fires a hair early just re-arms for the remaining sliver.
+-  brightnessTimer = setTimeout(evaluateBrightness, 60_000 - (now.getTime() % 60_000));
++  void brightnessTimer;
+ }
+ 
+ const SWALLOW_MS = 800;
+## test: npm run test:e2e -- brightness
+  ok  manual 40 and night 60 at 23:00: the lower wins
+  ok  nightDim off at 23:00: not dimmed
+  ok  clock jump re-evaluates
+  ok  target stage at 23:00: #stage dimmed, #frame none
+  ok  settings controls: live preview and Save
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: 22:01: 1 vs 0.96
+    at approx (file:///tmp/tmp.3PnArP1FSG/wt/tests/e2e/brightness.spec.mjs:47:48)
+    at file:///tmp/tmp.3PnArP1FSG/wt/tests/e2e/brightness.spec.mjs:128:7
+    at async withApp (file:///tmp/tmp.3PnArP1FSG/wt/tests/e2e/lib.mjs:171:12)
+    at async Promise.all (index 7)
+    at async file:///tmp/tmp.3PnArP1FSG/wt/tests/e2e/brightness.spec.mjs:58:1 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL brightness
+## summary (exit 1)
+1 failed

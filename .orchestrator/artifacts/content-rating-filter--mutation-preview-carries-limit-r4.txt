@@ -1,0 +1,42 @@
+Hazard: unsaved limit applied by the live preview
+Mutant: preview-carries-limit (js/main.js) — ok
+## diff
+--- /tmp/tmp.CnM7HgDHq4/orig	2026-10-09 05:34:15.291012051 +0000
++++ /tmp/tmp.CnM7HgDHq4/wt/js/main.js	2026-10-09 05:34:15.306143096 +0000
+@@ -422,7 +422,7 @@
+   const prev = state.settings;
+   // A live preview shows layout only. The household limit is never previewed (CCI1): while the dialog is open the
+   // previous, saved values keep applying, so only Save changes the limit and Cancel has nothing to undo for it.
+-  if (preview) next = { ...next, maxContentRating: prev.maxContentRating, limitNowPlaying: prev.limitNowPlaying };
++  ;
+   state.settings = persist ? save(storage, next) : next;
+   try {
+     await display.apply(state.settings);
+## test: npm run test:e2e -- content-rating
+  ]
+
+    at file:///tmp/tmp.CnM7HgDHq4/wt/tests/e2e/content-rating.spec.mjs:119:10
+    at async withApp (file:///tmp/tmp.CnM7HgDHq4/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.CnM7HgDHq4/wt/tests/e2e/content-rating.spec.mjs:648:9
+    at async Promise.all (index 2)
+    at async file:///tmp/tmp.CnM7HgDHq4/wt/tests/e2e/content-rating.spec.mjs:643:1
+case 14 CCI1 live preview keeps the saved limit failed:
+AssertionError [ERR_ASSERTION]: dialog open: only titles within PG-13 were drawn: 1,2,3,4,5,6,7,8
++ actual - expected
+
++ [
++   5,
++   4,
++   8,
++   7
++ ]
+- []
+
+    at file:///tmp/tmp.CnM7HgDHq4/wt/tests/e2e/content-rating.spec.mjs:538:10
+    at async withApp (file:///tmp/tmp.CnM7HgDHq4/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.CnM7HgDHq4/wt/tests/e2e/content-rating.spec.mjs:648:9
+    at async Promise.all (index 1)
+    at async file:///tmp/tmp.CnM7HgDHq4/wt/tests/e2e/content-rating.spec.mjs:643:1
+FAIL content-rating
+## summary (exit 1)
+1 failed

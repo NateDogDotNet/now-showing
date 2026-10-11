@@ -1,0 +1,24 @@
+{
+ "phase": "pi-stability",
+ "round": 3,
+ "sha": "1df3be1",
+ "form": "commit",
+ "handbacks": [
+  "pi-stability--handback-builder-r1.md",
+  "pi-stability--handback-builder-r2.md",
+  "pi-stability--handback-builder-r3.md"
+ ],
+ "touched": [
+  "css/app.css",
+  "index.html",
+  "js/main.js",
+  "sw.js",
+  "tests/e2e/helper.spec.mjs",
+  "tests/e2e/pi-stability.spec.mjs"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-11T07:05:08.985102Z"
+}

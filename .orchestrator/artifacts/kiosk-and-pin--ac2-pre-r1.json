@@ -1,0 +1,14 @@
+{
+  "cmd": "npm test",
+  "exit": 0,
+  "seconds": 5.61,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: a manual wake while nothing would sleep the display is not reported\nok 244 - a manual wake while nothing would sleep the display is not reported\n  ---\n  duration_ms: 0.250661\n  type: 'test'\n  ...\n# Subtest: sleepEnabled:false with idleSleepHours:0 never sleeps\nok 245 - sleepEnabled:false with idleSleepHours:0 never sleeps\n  ---\n  duration_ms: 0.242532\n  type: 'test'\n  ...\n# Subtest: clockOk:false ignores the schedule but not idle sleep\nok 246 - clockOk:false ignores the schedule but not idle sleep\n  ---\n  duration_ms: 0.217432\n  type: 'test'\n  ...\n# Subtest: an empty window (start === end) never sleeps\nok 247 - an empty window (start === end) never sleeps\n  ---\n  duration_ms: 0.817832\n  type: 'test'\n  ...\n# Subtest: the schedule wins the label when both triggers hold\nok 248 - the schedule wins the label when both triggers hold\n  ---\n  duration_ms: 0.207276\n  type: 'test'\n  ...\n1..248\n# tests 248\n# suites 0\n# pass 248\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 5397.232945",
+  "stderr_tail": ""
+}

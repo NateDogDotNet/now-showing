@@ -1,0 +1,42 @@
+Hazard: unsaved preview starts/stops the helper
+Mutant: preview-updates-saved (js/main.js) — ok
+## diff
+--- /tmp/tmp.lvzWytTitp/orig	2026-10-11 04:27:32.793658145 +0000
++++ /tmp/tmp.lvzWytTitp/wt/js/main.js	2026-10-11 04:27:32.808957866 +0000
+@@ -598,7 +598,7 @@
+     next = { ...next, maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt };
+   }
+   state.settings = persist ? save(storage, next) : next;
+-  if (!preview) savedSettings = state.settings;
++  savedSettings = state.settings;
+   evaluateBrightness(); // live preview and Save both show at once
+   // Whatever is on screen is re-checked against the settings now in force on EVERY apply, previews and Cancel
+   // included, even offline (K20, D29). This comes BEFORE the frame is applied, because a custom frame's load has no
+## test: npm run test:e2e -- helper
+  ok  no helper: one probe, then silence, no console error
+  ok  temperature refreshes only while Diagnostics is open
+  ok  wake timing: first poster 4092 ms after the power-on request
+  ok  deviceHelper switched off while awake: no power off, no power on, no temperature
+  ok  deviceHelper switched off while asleep: one power on at the save, none at the wake
+  ok  deviceHelper switched off with the TV off: one power on, then silence
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: condition not met within 10000 simulated ms
+    at advanceUntil (file:///tmp/tmp.lvzWytTitp/wt/tests/e2e/helper.spec.mjs:101:10)
+    at async file:///tmp/tmp.lvzWytTitp/wt/tests/e2e/helper.spec.mjs:383:5
+    at async withApp (file:///tmp/tmp.lvzWytTitp/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.lvzWytTitp/wt/tests/e2e/helper.spec.mjs:368:1 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: undefined,
+  operator: 'fail',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL helper
+## summary (exit 1)
+1 failed

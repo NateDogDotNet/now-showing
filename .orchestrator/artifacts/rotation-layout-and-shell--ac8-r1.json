@@ -1,0 +1,14 @@
+{
+  "cmd": "grep -qx 'Criterion 8 screenshots: PASS' .orchestrator/artifacts/rotation-layout-and-shell--review-r1.md && grep -q 'Verdict:\\*\\* APPROVE' .orchestrator/artifacts/rotation-layout-and-shell--review-r1.md",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

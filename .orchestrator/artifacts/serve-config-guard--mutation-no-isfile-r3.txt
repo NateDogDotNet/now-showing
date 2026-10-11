@@ -1,0 +1,42 @@
+Hazard: a FIFO or directory under an app dir hangs or errors the server
+Mutant: no-isfile (scripts/serve.mjs) — ok
+## diff
+--- /tmp/tmp.lFXVIJGPZ6/orig	2026-10-08 22:25:24.245994323 +0000
++++ /tmp/tmp.lFXVIJGPZ6/wt/scripts/serve.mjs	2026-10-08 22:25:24.262060491 +0000
+@@ -71,7 +71,7 @@
+     const real = await realpath(file);
+     const rel = '/' + relative(REAL_ROOT, real).split(sep).join('/');
+     if (rel.startsWith('/..') || (path !== '/config.json' && !isAppPath(rel))) return send(res, 404, 'Not found');
+-    if (!(await stat(file)).isFile()) return send(res, 404, 'Not found');
++    
+     const body = await readFile(file);
+     res.writeHead(200, {
+       'Content-Type': TYPES[extname(file)] || 'application/octet-stream',
+## test: node --test tests/serve.test.js
+    Socket._onTimeout (node:net:604:8)
+    listOnTimeout (node:internal/timers:588:17)
+    process.processTimers (node:internal/timers:523:7)
+  ...
+# Subtest: config.json that is a symlink leaving the root is 404 even for loopback
+ok 13 - config.json that is a symlink leaving the root is 404 even for loopback
+  ---
+  duration_ms: 165.96498
+  type: 'test'
+  ...
+# Subtest: a served root that is itself a symlink still serves the app, config.json loopback-only
+ok 14 - a served root that is itself a symlink still serves the app, config.json loopback-only
+  ---
+  duration_ms: 149.605462
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 13
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2779.318737
+## summary (exit 1)
+1 failed

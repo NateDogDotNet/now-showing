@@ -1,0 +1,42 @@
+Hazard: idle clock never reset by playback
+Mutant: playback-not-recorded (js/main.js) — ok
+## diff
+--- /tmp/tmp.09UKPtmXvb/orig	2026-10-09 01:09:52.975769444 +0000
++++ /tmp/tmp.09UKPtmXvb/wt/js/main.js	2026-10-09 01:09:52.993596801 +0000
+@@ -180,7 +180,7 @@
+     return;
+   }
+   state.playing = Boolean(await engine.playing());
+-  if (state.playing) state.lastPlaybackAt = Date.now();
++  ;
+   evaluateSleep();
+ }
+ 
+## test: npm run test:e2e -- sleep
+  ok  wakeOnPlayback:false: veil stays up while playing during the window
+  ok  window opens during playback: stays awake, sleeps when playback stops
+  ok  idle sleep: awake at 59 min, asleep at 61 min without playback; Sleep: asleep (idle)
+  ok  idle sleep: playback wakes the display and it stays awake
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: awake right after playback ends (idle counts from the last playback)
+
+true !== false
+
+    at file:///tmp/tmp.09UKPtmXvb/wt/tests/e2e/sleep.spec.mjs:206:10
+    at async withApp (file:///tmp/tmp.09UKPtmXvb/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.09UKPtmXvb/wt/tests/e2e/sleep.spec.mjs:189:1 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: true,
+  expected: false,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL sleep
+## summary (exit 1)
+1 failed

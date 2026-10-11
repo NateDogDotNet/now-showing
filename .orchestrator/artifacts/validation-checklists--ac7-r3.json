@@ -1,0 +1,14 @@
+{
+  "cmd": "python3 ~/.claude/scripts/cc_utils/score.py rubric --input .orchestrator/artifacts/validation-checklists--review-doc-r3.json --md | grep -qE 'Overall.*(Complete|Ready)'",
+  "exit": 0,
+  "seconds": 0.07,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

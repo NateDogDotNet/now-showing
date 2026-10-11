@@ -1,0 +1,42 @@
+Hazard: PIN material exported
+Mutant: export-leaks-pin (js/settings.js) — ok
+## diff
+--- /tmp/tmp.4hDLjXfRrk/orig	2026-10-08 23:03:38.005088216 +0000
++++ /tmp/tmp.4hDLjXfRrk/wt/js/settings.js	2026-10-08 23:03:38.020536198 +0000
+@@ -195,7 +195,7 @@
+ export function toExport(settings, { includeSecrets = false } = {}) {
+   const data = sanitize(settings);
+   if (!includeSecrets) for (const k of SECRET_KEYS) delete data[k];
+-  for (const k of NEVER_EXPORT_KEYS) delete data[k];
++
+   return { format: EXPORT_FORMAT, version: EXPORT_VERSION, exportedAt: new Date().toISOString(), settings: data };
+ }
+ 
+## test: TZ=America/New_York npm test && TZ=Europe/London npm test
+  ---
+  duration_ms: 1.048249
+  type: 'test'
+  ...
+# Subtest: a 2.0.0 export imports with the new keys at their defaults
+ok 66 - a 2.0.0 export imports with the new keys at their defaults
+  ---
+  duration_ms: 0.402274
+  type: 'test'
+  ...
+# Subtest: stored 2.0.0 settings load with new keys filled
+ok 67 - stored 2.0.0 settings load with new keys filled
+  ---
+  duration_ms: 0.172508
+  type: 'test'
+  ...
+1..67
+# tests 67
+# suites 0
+# pass 66
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 783.089319
+## summary (exit 1)
+1 failed

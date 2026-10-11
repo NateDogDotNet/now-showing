@@ -1,0 +1,23 @@
+{
+ "phase": "content-rating-filter",
+ "quote": "defaults",
+ "channel": "chat",
+ "stop": 9,
+ "recorded_at": "2026-10-10T12:46:56.438525Z",
+ "checked": true,
+ "transcript_checked": true,
+ "reply_time": "2026-10-09T21:57:46.019Z",
+ "skipped": [],
+ "items": {
+  "1": "defaults",
+  "2": "defaults",
+  "3": "defaults",
+  "4": "defaults",
+  "5": "defaults",
+  "6": ""
+ },
+ "open_items": [
+  6
+ ],
+ "complete": false
+}

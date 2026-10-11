@@ -1,0 +1,16 @@
+{
+ "phase": "sleep-mode",
+ "quote": "Defaults",
+ "channel": "chat",
+ "stop": 7,
+ "recorded_at": "2026-10-09T03:21:01.558641Z",
+ "checked": true,
+ "transcript_checked": true,
+ "reply_time": "2026-10-09T03:20:46.322Z",
+ "skipped": [],
+ "items": {
+  "1": "Defaults"
+ },
+ "open_items": [],
+ "complete": true
+}

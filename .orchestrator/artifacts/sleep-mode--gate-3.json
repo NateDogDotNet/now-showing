@@ -1,0 +1,14 @@
+{
+ "phase": "sleep-mode",
+ "sha": "e6f426b",
+ "tag": null,
+ "ok": false,
+ "failures": [
+  "a review is on disk with no passing `closer predispatch` before it (rule 2: the table precedes any reviewer)",
+  "a Step 7 code review is on disk with no passing `closer predispatch --kind code` before it (the Step 4 tally is COMPLETE before any code reviewer)"
+ ],
+ "phase_file_sha256": "e45cb764857b1c7b40a1e5ecdfb05644b8cca78ba85d35b09ebd386cea49c156",
+ "phase_file_sha256_noretro": "de0e5ccb58ca489dc2bd49b2b52368a290f87c70c418e8d56d0b1ce9f69b1be2",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-09T03:25:55.908024Z"
+}

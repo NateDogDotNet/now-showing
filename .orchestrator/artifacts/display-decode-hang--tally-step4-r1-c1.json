@@ -1,0 +1,94 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "display-decode-hang--ac1-r1.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "display-decode-hang--scope-r1.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "display-decode-hang--precommit-format-r1.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "display-decode-hang--mutation-no-owner-guard-r1.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_written": "2026-10-10T13:03:26.066320Z",
+ "_correction": {
+  "reason": "unbounded-decode is equivalent individually: the 20 s decode bound is a redundant backstop behind the owner guard; with both removed (the base js/display.js) the spec fails (display-decode-hang--ac2-pre-r1.json exit 1); no-owner-guard killed",
+  "supersedes": "display-decode-hang--tally-step4-r1.json"
+ },
+ "_result": {
+  "total": 75,
+  "max": 75,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "display-decode-hang--ac1-r1.json": "9b15322340b260b2df8e1883c6405d1f339ba68287e43b3032d0c88778ca8825",
+  "display-decode-hang--scope-r1.json": "aed4059be4705944b812a4b099b7411ab0400d1e7631689d3430224f5fdcc0c4",
+  "display-decode-hang--precommit-format-r1.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "display-decode-hang--mutation-no-owner-guard-r1.txt": "8fdae10957d8cd4b0c29b6a1b7964b3184e4d6d2037091875e6f19e19b66ec9f"
+ }
+}

@@ -1,0 +1,14 @@
+{
+  "cmd": "for k in 'plex.tv/link' 'Sign in with Plex' firstReachable CORS '/photo/:/transcode' '/status/sessions' 'plex.direct' 'Image mode'; do grep -qF -- \"$k\" docs/validation/real-server-core.md || { echo \"core missing: $k\"; exit 1; }; done",
+  "exit": 1,
+  "seconds": 0.0,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "core missing: plex.tv/link",
+  "stderr_tail": "grep: docs/validation/real-server-core.md: No such file or directory"
+}

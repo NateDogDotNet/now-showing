@@ -1,0 +1,24 @@
+{
+ "phase": "kiosk-and-pin",
+ "review": "kiosk-and-pin--review-r3.md",
+ "done_phases": [
+  "cache-first-fetch",
+  "content-rating-filter",
+  "device-helper-server",
+  "display-decode-hang",
+  "e2e-harness",
+  "frame-brightness",
+  "metadata-and-now-playing",
+  "pixel-shift",
+  "rotation-layout-and-shell",
+  "serve-config-guard",
+  "settings-and-schedule-core",
+  "sleep-mode",
+  "status-indicator",
+  "validation-checklists"
+ ],
+ "hits": [],
+ "no_findings": false,
+ "flagged": [],
+ "checked_at": "2026-10-11T00:09:52.874295Z"
+}

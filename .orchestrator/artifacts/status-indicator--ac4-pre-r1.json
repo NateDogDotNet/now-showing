@@ -1,0 +1,14 @@
+{
+  "cmd": "grep -q 'id=\"status-dot\"' index.html",
+  "exit": 1,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

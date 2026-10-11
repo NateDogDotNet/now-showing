@@ -1,0 +1,94 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "cache-first-fetch--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "cache-first-fetch--scope-r2b.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "cache-first-fetch--lint-r2b.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "cache-first-fetch--mutation-no-delete-and-retry-reads-cache-r2.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_written": "2026-10-08T23:45:02.971655Z",
+ "_correction": {
+  "reason": "precommit-lint-r2b used the stale r1 config (known conductor defect); cache-first-fetch--lint-r2b.json with round--eslint-r1e.config.mjs exits 0. no-delete-corrupt and retry-reads-cache are equivalent mutants (redundant safeguards); no-delete-and-retry-reads-cache removes both and is killed (1 failed)",
+  "supersedes": "cache-first-fetch--tally-step4-r2.json"
+ },
+ "_result": {
+  "total": 75,
+  "max": 75,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "cache-first-fetch--ac1-r2.json": "1c7120b1cfca4067d7c55a740faa4ea29601e49757c0da843dfac2ce237f5623",
+  "cache-first-fetch--scope-r2b.json": "d3ab93e8190000a14237448ea239a979b0e92f6f7071816ad1cc28fb3754015d",
+  "cache-first-fetch--lint-r2b.json": "a5e6465682fa9ae940f7de6c268b5d8c34aa78b9a7349bd19fd46d5468ec43d4",
+  "cache-first-fetch--mutation-no-delete-and-retry-reads-cache-r2.txt": "62bfc989c2d72642b344344045971d851e4d4dfcebeb6fd9c10d08c6a654f9c3"
+ }
+}

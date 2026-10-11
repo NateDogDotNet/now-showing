@@ -1,0 +1,42 @@
+Hazard: sessions polled when the answer cannot matter
+Mutant: playback-polled-needlessly (js/main.js) — ok
+## diff
+--- /tmp/tmp.FHHRX3D0mS/orig	2026-10-09 02:47:32.603741316 +0000
++++ /tmp/tmp.FHHRX3D0mS/wt/js/main.js	2026-10-09 02:47:32.624557115 +0000
+@@ -178,7 +178,7 @@
+ 
+ const MAX_POLL_FAILURES = 3;
+ // Playback can change the sleep decision only if it wakes a schedule sleep or restarts the idle clock.
+-const playbackMatters = (s) => (s.sleepEnabled && s.wakeOnPlayback) || s.idleSleepHours > 0;
++const playbackMatters = (s) => s.sleepEnabled || s.idleSleepHours > 0;
+ 
+ /**
+  * Asks Plex whether anything is playing, when sleep needs to know, and returns the sessions it saw
+## test: npm run test:e2e -- sleep
+  ok  clock stepped +1 h while asleep, key press in the same second: the manual wake lasts about 60 s, not an hour
+  ok  poster download in flight when the window opens: not drawn under the veil; the next wake shows a poster normally
+  ok  1970 clock stepped to 2026, key press in the same second: idle sleep starts an hour after it, not never
+  ok  idle sleep: playback past the original deadline; awake after it stops, asleep one idle hour after the last playback
+case 3 wakeOnPlayback false failed:
+AssertionError [ERR_ASSERTION]: wakeOnPlayback off and no idle sleep: the answer cannot matter, so it is not asked
+
+5 !== 0
+
+    at file:///tmp/tmp.FHHRX3D0mS/wt/tests/e2e/sleep.spec.mjs:142:12
+    at async withApp (file:///tmp/tmp.FHHRX3D0mS/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.FHHRX3D0mS/wt/tests/e2e/sleep.spec.mjs:801:9
+    at async Promise.all (index 1)
+    at async file:///tmp/tmp.FHHRX3D0mS/wt/tests/e2e/sleep.spec.mjs:796:1
+case 20 no sessions polling when it cannot matter failed:
+AssertionError [ERR_ASSERTION]: no /status/sessions request while awake
+
+7 !== 0
+
+    at file:///tmp/tmp.FHHRX3D0mS/wt/tests/e2e/sleep.spec.mjs:744:12
+    at async withApp (file:///tmp/tmp.FHHRX3D0mS/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.FHHRX3D0mS/wt/tests/e2e/sleep.spec.mjs:801:9
+    at async Promise.all (index 2)
+    at async file:///tmp/tmp.FHHRX3D0mS/wt/tests/e2e/sleep.spec.mjs:796:1
+FAIL sleep
+## summary (exit 1)
+1 failed

@@ -1,0 +1,12 @@
+{
+ "cmd": "diff <(git log -1 --format=%B af55616) .orchestrator/artifacts/display-decode-hang--commit-message-final.txt",
+ "sha": "af55616",
+ "equal": true,
+ "tokens": [],
+ "missing_tokens": [],
+ "exempt": {},
+ "stale": false,
+ "commit_rows": [],
+ "ok": true,
+ "checked_at": "2026-10-10T13:32:13.414374Z"
+}

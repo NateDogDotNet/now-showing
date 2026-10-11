@@ -1,0 +1,90 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "validation-checklists--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "validation-checklists--scope-r3.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "validation-checklists--precommit-format-r3.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 65,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 7,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {
+   "tests where implied": "docs phase: no code to mutate"
+  },
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 65,
+  "max": 65,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "validation-checklists--ac1-r3.json": "1a2c88bd391da4a850cefb40c78805e692fd961d310d276f33ea4e104ee83e8c",
+  "validation-checklists--scope-r3.json": "1f24b1820ffe2726511de55a8bb8d345b5631b9b3a7875b274316020d12f5f4b",
+  "validation-checklists--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee"
+ },
+ "_written": "2026-10-08T22:56:52.959465Z"
+}

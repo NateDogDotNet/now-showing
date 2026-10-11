@@ -1,0 +1,42 @@
+Hazard: fix offered when it cannot help
+Mutant: unwatched-always-offered (js/main.js) — ok
+## diff
+--- /tmp/tmp.Z04JGDxkMA/orig	2026-10-11 12:27:23.030057224 +0000
++++ /tmp/tmp.Z04JGDxkMA/wt/js/main.js	2026-10-11 12:27:23.050338408 +0000
+@@ -673,7 +673,7 @@
+ /** The fixes for an error kind, as [{ id, label }]; none for a kind the table does not know. */
+ const fixesFor = (kind) =>
+   (FIXES_BY_KIND[kind] || [])
+-    .filter((id) => id !== 'unwatched' || state.settings.unwatchedOnly) // with the switch already off the fix would change nothing
++    .filter(() => true) // with the switch already off the fix would change nothing
+     .map((id) => ({ id, label: FIXES[id] }));
+ 
+ async function runFix(id) {
+## test: npm run test:e2e -- settings-sheet
+  ok  K30 the rest of the fieldset is not live; brightness is
+  ok  SSA2 an unrouted plex.tv path is flagged although another plex.tv path is routed
+  ok  SSA2 fallback() is not routing
+  ok  K30 pixel shift follows Save, not the live preview
+  ok  SSA2 a fulfilled plex.tv request passes
+  ok  SSC1 toast: unwatched fix asks for the PIN
+case SSC2 limit G with every title rated R and "unwatched only" off: no unwatched fix on the empty card failed:
+AssertionError [ERR_ASSERTION]: only Open settings
++ actual - expected
+
+  [
++   'Turn off "unwatched only"',
+    'Open settings'
+  ]
+
+    at file:///tmp/tmp.Z04JGDxkMA/wt/tests/e2e/settings-sheet.spec.mjs:444:10
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at process.processImmediate (node:internal/timers:453:9)
+    at process.callbackTrampoline (node:internal/async_hooks:130:17)
+    at async withApp (file:///tmp/tmp.Z04JGDxkMA/wt/tests/e2e/lib.mjs:247:20)
+    at async file:///tmp/tmp.Z04JGDxkMA/wt/tests/e2e/settings-sheet.spec.mjs:704:9
+    at async Promise.all (index 1)
+    at async file:///tmp/tmp.Z04JGDxkMA/wt/tests/e2e/settings-sheet.spec.mjs:699:1
+1 of 30 settings-sheet cases failed
+FAIL settings-sheet
+## summary (exit 1)
+1 failed

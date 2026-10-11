@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/plex.test.js && test -f tests/duration.test.js && node --test tests/plex.test.js tests/duration.test.js",
+  "exit": 0,
+  "seconds": 0.52,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: pinSignIn resolves null when the code expires unused\nok 40 - pinSignIn resolves null when the code expires unused\n  ---\n  duration_ms: 62.467781\n  type: 'test'\n  ...\n# Subtest: pinSignIn never trusts a lifetime shorter than its floor\nok 41 - pinSignIn never trusts a lifetime shorter than its floor\n  ---\n  duration_ms: 81.564518\n  type: 'test'\n  ...\n# Subtest: pinSignIn: a failing poll is not an error, the code stays good\nok 42 - pinSignIn: a failing poll is not an error, the code stays good\n  ---\n  duration_ms: 18.169209\n  type: 'test'\n  ...\n# Subtest: pinSignIn throws when no code can be had, and shows no code\nok 43 - pinSignIn throws when no code can be had, and shows no code\n  ---\n  duration_ms: 1.955466\n  type: 'test'\n  ...\n# Subtest: pinSignIn stops at once when aborted, before or during the wait\nok 44 - pinSignIn stops at once when aborted, before or during the wait\n  ---\n  duration_ms: 22.088607\n  type: 'test'\n  ...\n1..44\n# tests 44\n# suites 0\n# pass 44\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 441.7264",
+  "stderr_tail": ""
+}

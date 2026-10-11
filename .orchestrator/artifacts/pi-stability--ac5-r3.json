@@ -1,0 +1,14 @@
+{
+  "cmd": "grep -q 'no-store' sw.js && node scripts/check-precache.mjs",
+  "exit": 0,
+  "seconds": 0.07,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "29 precached files OK",
+  "stderr_tail": ""
+}

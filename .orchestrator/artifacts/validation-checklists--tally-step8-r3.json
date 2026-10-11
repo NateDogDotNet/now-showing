@@ -1,0 +1,129 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "validation-checklists--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "validation-checklists--derive-step8-r3-0.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "validation-checklists--precommit-format-r3.json"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "validation-checklists--dlog-check-r3.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "validation-checklists--review-check-r3.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "validation-checklists--readback-7b49e94.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 90,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 7,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {
+   "tests where implied": "docs phase: no code to mutate"
+  },
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 90,
+  "max": 90,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "validation-checklists--ac1-r3.json": "1a2c88bd391da4a850cefb40c78805e692fd961d310d276f33ea4e104ee83e8c",
+  "validation-checklists--derive-step8-r3-0.json": "cec3ed9cd8733cb21317a8085ed407eac90c54f001fb3636ae7d2a42e7580528",
+  "validation-checklists--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "validation-checklists--dlog-check-r3.json": "1f12700530d80a192fed69bdb81c50fa0b583f28d76e91c5ca760d9c429ea055",
+  "validation-checklists--review-check-r3.json": "9e1b8930f6f2c4c90a37c247a16764d88d6139ffbc3c4739a4a3d7d131e99365",
+  "validation-checklists--readback-7b49e94.json": "adb9b0712129f75362a81285269e40db9441cfce5f43f9347d06a318f945a466"
+ },
+ "_written": "2026-10-08T22:57:04.831229Z"
+}

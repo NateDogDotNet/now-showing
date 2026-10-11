@@ -1,0 +1,42 @@
+Hazard: held Enter repeats submit
+Mutant: repeat-counted (js/kiosk.js) — ok
+## diff
+--- /tmp/tmp.ktL0n8Gr8Q/orig	2026-10-10 23:09:31.602934092 +0000
++++ /tmp/tmp.ktL0n8Gr8Q/wt/js/kiosk.js	2026-10-10 23:09:31.618361265 +0000
+@@ -320,7 +320,7 @@
+   dialog.addEventListener('keydown', (e) => {
+     if (e.ctrlKey || e.metaKey || e.altKey) return;
+     const onButton = e.target.closest?.('button');
+-    if (e.repeat) {
++    if (false) {
+       // A held key sends one press, not a stream of them (and a held Enter on a button must not click it again).
+       if (/^\d$/.test(e.key) || e.key === 'Backspace' || e.key === 'Enter') e.preventDefault();
+       return;
+## test: npm run test:e2e -- kiosk
+PASS with no PIN set, an imported file cannot plant one
+  ok  import is gated and its PIN material is ignored
+PASS import asks for the PIN and ignores any PIN material in the file
+  ok  reset is gated
+  ok  preview leaves the PIN alone
+PASS Reset everything asks for the PIN first
+PASS the live preview never changes the PIN or kiosk settings in force
+  ok  resetPin served: PIN cleared, Settings open, Diagnostics warns
+PASS config.json {"resetPin": true} clears the PIN; Settings opens without it; Diagnostics warns
+  ok  reset flag: every load, while served
+PASS the reset flag is read on every load and honoured while it is served; Diagnostics stops warning when it is gone
+  ok  PIN set / mismatch / too short / cancel / remove
+PASS a PIN is set, changed and removed in Settings, and Settings says it is a deterrent
+  ok  first-run provisioning is unchanged
+PASS a first run still takes its settings from config.json
+  ok  resetPin: the lockout is cleared for the session
+  ok  sleep swallowing still holds with the PIN gate
+PASS a press that wakes the display is swallowed, PIN or not; the next one reaches the gate
+PASS after a resetPin load the lockout is cleared for the session: a new PIN works at once and the failure count starts again
+  ok  Enter held through a wake does not reveal the controls
+PASS an Enter held through a wake from sleep does not reveal the controls; a fresh hold afterwards does
+  ok  no PIN reset without {"resetPin": true} from a 2xx config.json
+PASS the PIN stays without a true flag: {resetPin:false}, "true", 1, a 403 or 500 carrying the flag, a query string
+1 of 36 kiosk cases failed
+FAIL kiosk
+## summary (exit 1)
+1 failed

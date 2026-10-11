@@ -1,0 +1,42 @@
+Hazard: key or press aimed at an open dialog while asleep eaten
+Mutant: dialog-input-swallowed (js/main.js) — ok
+## diff
+--- /tmp/tmp.phbuC1Dv6z/orig	2026-10-09 02:23:56.604229949 +0000
++++ /tmp/tmp.phbuC1Dv6z/wt/js/main.js	2026-10-09 02:23:56.624309553 +0000
+@@ -257,7 +257,7 @@
+   const swallowing = e.type === 'pointerdown' && performance.now() < state.swallowUntil;
+   if (!state.asleep && !swallowing && state.sleepWhy !== 'manual wake') return;
+   state.manualWakeUntil = Date.now() + MANUAL_WAKE_MS;
+-  if ((state.asleep || swallowing) && !inOpenDialog(e)) {
++  if ((state.asleep || swallowing)) {
+     e.stopPropagation();
+     e.preventDefault();
+     if (e.type === 'pointerdown') state.swallowUntil = performance.now() + SWALLOW_MS;
+## test: npm run test:e2e -- sleep
+  ok  idle sleep: awake at 59 min, asleep at 61 min without playback; Sleep: asleep (idle)
+  ok  idle sleep: playback wakes the display and it stays awake
+  ok  70 s of pointer activity, then 70 s of key presses, in Settings: the display stays awake; a checkbox click toggles
+  ok  veil back behind the open dialog: the next click and key press in the dialog act
+  ok  idleSleepHours 0 -> 1 saved after 2 h: awake at save and at 58 min, asleep (idle) an hour after the save
+  ok  1970 clock: idle sleep still works, and a clock jump does not trigger it early
+  ok  awake, sleep configured, now playing on: 10 sessions requests in 10 ticks (one each)
+  ok  paused: sleeping and waking make no sessions or image request
+  ok  veil aria-hidden="true"; #app inert while asleep and not after; a dialog above the veil takes clicks
+  ok  3 min outage while asleep, then mock.play(): awake 5056 ms after Plex returned
+  ok  Plex down inside the window with 2+ cached posters: nothing drawn while asleep (The Grand Marquee (1954) — cache)
+  ok  idle sleep: playback past the original deadline; awake after it stops, asleep one idle hour after the last playback
+case 12b first input in a dialog behind the veil is not swallowed failed:
+AssertionError [ERR_ASSERTION]: the first press on the checkbox behind the veil focuses it
++ actual - expected
+
++ ''
+- 'wakeOnPlayback'
+
+    at file:///tmp/tmp.phbuC1Dv6z/wt/tests/e2e/sleep.spec.mjs:559:10
+    at async withApp (file:///tmp/tmp.phbuC1Dv6z/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.phbuC1Dv6z/wt/tests/e2e/sleep.spec.mjs:711:9
+    at async Promise.all (index 3)
+    at async file:///tmp/tmp.phbuC1Dv6z/wt/tests/e2e/sleep.spec.mjs:706:1
+FAIL sleep
+## summary (exit 1)
+1 failed

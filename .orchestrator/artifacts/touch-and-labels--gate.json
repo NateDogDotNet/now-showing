@@ -1,0 +1,11 @@
+{
+ "phase": "touch-and-labels",
+ "sha": "0bf5655",
+ "tag": null,
+ "ok": true,
+ "failures": [],
+ "phase_file_sha256": "4c1e1d9128d515edbfb1c97437a8521e661d89258919cadd33ac29e7801bdf7c",
+ "phase_file_sha256_noretro": "d106731708b8e45d43d4ca01f206cffad17e9c5e52bb2f0ded803261d5f85612",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-11T18:58:43.357769Z"
+}

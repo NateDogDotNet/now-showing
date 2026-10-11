@@ -1,0 +1,42 @@
+Hazard: above-limit now-playing shown
+Mutant: nowplaying-unfiltered (js/engine.js) — ok
+## diff
+--- /tmp/tmp.qo7K7ZLmrT/orig	2026-10-09 03:54:24.581809267 +0000
++++ /tmp/tmp.qo7K7ZLmrT/wt/js/engine.js	2026-10-09 03:54:24.599061531 +0000
+@@ -76,7 +76,7 @@
+       // Now playing wins over everything; a pinned poster replaces random rotation.
+       if (s.showNowPlaying) {
+         let np = pickNowPlaying(sessions ?? (await client.sessions()), s);
+-        if (np && s.limitNowPlaying !== false && !permitted(s, np)) np = null; // above the limit or unrated: nothing is playing
++        ; // above the limit or unrated: nothing is playing
+         if (np) {
+           if (!force && current?.source === 'now-playing' && current.ratingKey === np.ratingKey) return null;
+           return { poster: np, reason: np.user ? `now playing for ${np.user}` : 'now playing' };
+## test: node --test tests/ratings.test.js tests/plex.test.js tests/engine.test.js tests/poster-cache.test.js
+  ---
+  duration_ms: 0.515712
+  type: 'test'
+  ...
+# Subtest: every value in allowedValues(limit) is allowed by allows(limit) and every other table value is not
+ok 84 - every value in allowedValues(limit) is allowed by allows(limit) and every other table value is not
+  ---
+  duration_ms: 0.843347
+  type: 'test'
+  ...
+# Subtest: allowedValues grows with the limit
+ok 85 - allowedValues grows with the limit
+  ---
+  duration_ms: 0.481213
+  type: 'test'
+  ...
+1..85
+# tests 85
+# suites 0
+# pass 81
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1356.579334
+## summary (exit 1)
+4 failed

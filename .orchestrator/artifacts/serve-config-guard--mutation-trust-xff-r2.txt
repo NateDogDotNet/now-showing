@@ -1,0 +1,42 @@
+Hazard: a spoofed proxy header lets a LAN client read config.json
+Mutant: trust-xff (scripts/serve.mjs) — ok
+## diff
+--- /tmp/tmp.uBaabIDNEi/orig	2026-10-08 22:17:12.114513952 +0000
++++ /tmp/tmp.uBaabIDNEi/wt/scripts/serve.mjs	2026-10-08 22:17:12.130912625 +0000
+@@ -60,7 +60,7 @@
+     if (path.toLowerCase() === '/config.json') {
+       // Only the exact spelling is ever served; case, dot-segment and slash variants are 404.
+       if (raw !== '/config.json') return send(res, 404, 'Not found');
+-      if (!isLoopback(req.socket.remoteAddress) || !isLoopbackHost(req.headers.host)) return send(res, 403, 'Forbidden');
++      if (!isLoopback(String(req.headers['x-' + 'forwarded-for'] || req.socket.remoteAddress)) || !isLoopbackHost(req.headers.host)) return send(res, 403, 'Forbidden');
+     } else {
+       if (path === '/') path = '/index.html';
+       if (!isAppPath(path)) return send(res, 404, 'Not found');
+## test: node --test tests/serve.test.js
+  ---
+  duration_ms: 2.044366
+  type: 'test'
+  ...
+# Subtest: symlinks leaving the root or reaching config.json are 404
+ok 9 - symlinks leaving the root or reaching config.json are 404
+  ---
+  duration_ms: 2.854244
+  type: 'test'
+  ...
+# Subtest: dotfiles under app directories are 404
+ok 10 - dotfiles under app directories are 404
+  ---
+  duration_ms: 1.238403
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 9
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 388.029099
+## summary (exit 1)
+1 failed

@@ -1,0 +1,13 @@
+{
+ "phase": "sleep-mode",
+ "stop": 7,
+ "kind": "decision",
+ "carried_not_listed": [],
+ "carried_not_in_index": [],
+ "promised_not_listed": [],
+ "dismissed_minors_not_listed": [],
+ "items_without_placement": [],
+ "grids_failing_check": [],
+ "checked_at": "2026-10-09T03:13:21.116467Z",
+ "ok": true
+}

@@ -1,0 +1,24 @@
+Add a Playwright browser-test harness and a recursive precache check
+
+tests/e2e/run.mjs runs tests/e2e/<name>.spec.mjs by exact name against a
+shared serve.mjs --mock child (E2E_PORT / E2E_MOCK_PORT), prints one PASS or
+FAIL line per spec, enforces a per-spec deadline (E2E_SPEC_TIMEOUT) and kills
+each spec's process group on timeout, exit and signals.
+
+tests/e2e/lib.mjs provides withApp() with settings seeding, a counting
+wake-lock stub, fake clock, touch, service-worker opt-in, localStorage
+seeding, dedicated servers via serveArgs on free ports, and generic mock
+helpers. tests/e2e/smoke.spec.mjs loads a poster and asserts each option.
+
+scripts/check-precache.mjs checks that every SHELL entry in sw.js exists and
+that every file under js/ (recursively) is precached.
+
+Playwright 1.56.1 is an exact-pinned devDependency with a committed
+package-lock.json; the app keeps no runtime dependencies. CI installs from
+the lockfile, runs the precache check, installs Chromium and runs
+npm run test:e2e with a 20-minute job timeout.
+
+Phase: e2e-harness (R-REL-1, D12, D15)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/brightness.test.js && node --test tests/brightness.test.js",
+  "exit": 0,
+  "seconds": 0.25,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: nightDim:false never dims at night\nok 9 - nightDim:false never dims at night\n  ---\n  duration_ms: 0.694869\n  type: 'test'\n  ...\n# Subtest: an implausible clock gives no night dim but keeps the manual level\nok 10 - an implausible clock gives no night dim but keeps the manual level\n  ---\n  duration_ms: 0.474486\n  type: 'test'\n  ...\n# Subtest: the night level is clamped to [0.1, 1]\nok 11 - the night level is clamped to [0.1, 1]\n  ---\n  duration_ms: 0.233981\n  type: 'test'\n  ...\n# Subtest: an empty window (start == end) and bad times never dim\nok 12 - an empty window (start == end) and bad times never dim\n  ---\n  duration_ms: 0.124193\n  type: 'test'\n  ...\n# Subtest: DST night under America/New_York follows wall-clock minutes\nok 13 - DST night under America/New_York follows wall-clock minutes\n  ---\n  duration_ms: 56.12986\n  type: 'test'\n  ...\n1..13\n# tests 13\n# suites 0\n# pass 13\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 172.505282",
+  "stderr_tail": ""
+}

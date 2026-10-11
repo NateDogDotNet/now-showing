@@ -1,0 +1,42 @@
+Hazard: reload without a service worker
+Mutant: no-controller-check (js/main.js) — ok
+## diff
+--- /tmp/tmp.LWA1T0ztqI/orig	2026-10-11 06:02:48.252381541 +0000
++++ /tmp/tmp.LWA1T0ztqI/wt/js/main.js	2026-10-11 06:02:48.278692352 +0000
+@@ -403,7 +403,7 @@
+   if (!state.settings.dailyReload) return 'turned off in Settings';
+   if (!isPlausibleClock(new Date())) return 'the clock is not set';
+   if (!storage.persistent) return 'storage is unavailable, so a reload loop could not be prevented';
+-  if (!navigator.serviceWorker?.controller) return 'no service worker controls this page (it needs https or localhost)';
++  void 0;
+   return '';
+ }
+ 
+## test: npm run test:e2e -- pi-stability
+  ok  daily reload at 04:00: idle sleep still begins about an hour after the movie (~04:50), not an hour after the reload
+  ok  a normal reload restarts the idle clock (K13)
+  ok  service-worker update reload: the idle clock carries across (asleep ~04:50)
+case 5b Diagnostics: Secure context no failed:
+AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^skipped \(.+\)$/. Input:
+
+'active'
+
+    at file:///tmp/tmp.LWA1T0ztqI/wt/tests/e2e/pi-stability.spec.mjs:206:10
+    at async withApp (file:///tmp/tmp.LWA1T0ztqI/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.LWA1T0ztqI/wt/tests/e2e/pi-stability.spec.mjs:495:9
+    at async Promise.all (index 2)
+    at async file:///tmp/tmp.LWA1T0ztqI/wt/tests/e2e/pi-stability.spec.mjs:490:1
+case 4 no service worker control: no reload, a logged skip, Diagnostics rows failed:
+AssertionError [ERR_ASSERTION]: no controller: the tab navigated
+
+2 !== 1
+
+    at staysPut (file:///tmp/tmp.LWA1T0ztqI/wt/tests/e2e/pi-stability.spec.mjs:76:10)
+    at async file:///tmp/tmp.LWA1T0ztqI/wt/tests/e2e/pi-stability.spec.mjs:178:3
+    at async withApp (file:///tmp/tmp.LWA1T0ztqI/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.LWA1T0ztqI/wt/tests/e2e/pi-stability.spec.mjs:495:9
+    at async Promise.all (index 3)
+    at async file:///tmp/tmp.LWA1T0ztqI/wt/tests/e2e/pi-stability.spec.mjs:490:1
+FAIL pi-stability
+## summary (exit 1)
+1 failed

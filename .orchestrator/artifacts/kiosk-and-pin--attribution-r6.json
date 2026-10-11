@@ -1,0 +1,30 @@
+{
+ "phase": "kiosk-and-pin",
+ "round": 6,
+ "sha": "e0f7c6b",
+ "form": "commit",
+ "handbacks": [
+  "kiosk-and-pin--handback-builder-r1.md",
+  "kiosk-and-pin--handback-builder-r2.md",
+  "kiosk-and-pin--handback-builder-r3.md",
+  "kiosk-and-pin--handback-builder-r4.md",
+  "kiosk-and-pin--handback-builder-r5.md",
+  "kiosk-and-pin--handback-builder-r6.md"
+ ],
+ "touched": [
+  "css/app.css",
+  "index.html",
+  "js/kiosk.js",
+  "js/main.js",
+  "js/settings-ui.js",
+  "sw.js",
+  "tests/e2e/kiosk.spec.mjs",
+  "tests/e2e/smoke.spec.mjs",
+  "tests/kiosk.test.js"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-10T23:59:54.924607Z"
+}

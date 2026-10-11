@@ -1,0 +1,42 @@
+Hazard: unsaved preview starts/stops the helper
+Mutant: preview-applies-helper (js/main.js) — ok
+## diff
+--- /tmp/tmp.wRmM3rQ2NR/orig	2026-10-11 04:41:33.970036536 +0000
++++ /tmp/tmp.wRmM3rQ2NR/wt/js/main.js	2026-10-11 04:41:33.991007955 +0000
+@@ -588,7 +588,7 @@
+   // kiosk switches, the settings PIN and the device helper: an unsaved change to any of them is never in force.
+   if (preview) {
+     const { maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
+-    next = { ...next, maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper };
++    next = { ...next, maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt };
+   }
+   state.settings = persist ? save(storage, next) : next;
+   evaluateBrightness(); // live preview and Save both show at once
+## test: npm run test:e2e -- helper
+  ok  no helper: one probe, then silence, no console error
+  ok  temperature refreshes only while Diagnostics is open
+  ok  wake timing: first poster 4131 ms after the power-on request
+  ok  deviceHelper switched off while awake: no power off, no power on, no temperature
+  ok  deviceHelper switched off while asleep: one power on at the save, none at the wake
+  ok  deviceHelper switched off with the TV off: one power on, then silence
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: condition not met within 10000 simulated ms
+    at advanceUntil (file:///tmp/tmp.wRmM3rQ2NR/wt/tests/e2e/helper.spec.mjs:101:10)
+    at async file:///tmp/tmp.wRmM3rQ2NR/wt/tests/e2e/helper.spec.mjs:387:5
+    at async withApp (file:///tmp/tmp.wRmM3rQ2NR/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.wRmM3rQ2NR/wt/tests/e2e/helper.spec.mjs:375:1 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: undefined,
+  operator: 'fail',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL helper
+## summary (exit 1)
+1 failed

@@ -1,0 +1,14 @@
+{
+  "cmd": "for k in 'first-run code' contentRating 'gb/' totalSize viewOffset Player.title overscroll-history-navigation disable-pinch DeveloperToolsAvailability chromium-browser 'cec-ctl' 'cec-client' wlr-randr WAYLAND_DISPLAY 'power cycle' thermal_zone0 'disk-cache-dir' 'Authorized Devices' 'Sign out of connected devices' 'Wake Lock'; do grep -qF -- \"$k\" docs/validation/real-server-extended.md || { echo \"extended missing: $k\"; exit 1; }; done",
+  "exit": 0,
+  "seconds": 0.05,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

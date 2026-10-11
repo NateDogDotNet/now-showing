@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- first-run",
+  "exit": 1,
+  "seconds": 0.93,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs first-run\n\nFAIL first-run (no such spec: /home/user/wt-settings-sheet/tests/e2e/first-run.spec.mjs)",
+  "stderr_tail": ""
+}

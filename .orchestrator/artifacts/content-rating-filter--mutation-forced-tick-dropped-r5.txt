@@ -1,0 +1,42 @@
+Hazard: limit saved during a tick waits a full rotation
+Mutant: forced-tick-dropped (js/main.js) — ok
+## diff
+--- /tmp/tmp.ZBzeC7FDc9/orig	2026-10-09 05:39:33.273626448 +0000
++++ /tmp/tmp.ZBzeC7FDc9/wt/js/main.js	2026-10-09 05:39:33.300323593 +0000
+@@ -124,7 +124,7 @@
+  */
+ function requestTick({ force = false } = {}) {
+   if (state.busy) {
+-    state.rerun = state.rerun || force;
++    ;
+     return;
+   }
+   tick({ force });
+## test: npm run test:e2e -- content-rating
+  ok  offline: PG-13 saved while title 4 is up and nothing allowed is cached -> poster gone within 2 ms, empty card, 4 rotations show nothing
+PASS case 11 K20 offline limit change, no allowed cached poster
+  ok  PG-13 saved while title 4's download is in flight: never drawn; an allowed poster (1) followed; drawn ever: 1,2,3,6
+PASS case 12 R4 in-flight download vs a stricter limit
+  ok  PG-13 saved while title 4's heal re-download is in flight: not drawn; an allowed poster (1) followed
+PASS case 13 R4 heal re-download in flight vs a stricter limit
+  ok  an unsaved G limit previewed through a layout change replaces title 4 at once; only title 1 is drawn
+  ok  unsaved "no limit" + a layout change, 30 refreshes: only allowed titles drawn (1,2,3,6)
+  ok  Cancel restores the saved settings: no limit, title 4 can return
+PASS case 15 CCI1 live preview of a stricter unsaved limit, then Cancel
+  ok  offline: PG-13 saved while title 4 is up -> replaced within 9 ms by a cached allowed poster; 8 rotations never return it (1,2,3)
+PASS case 10 K20 offline limit change, allowed cached poster available
+  ok  Cancel: nothing above PG-13 on screen (title 2); 12 more refreshes only 1,2,3,6
+PASS case 14 CCI1 live preview of an unsaved looser limit vs the saved limit
+  ok  20 offline rotations under PG-13 never show title 4 (shown: 1,2,3,6)
+  ok  cached entries without a stored rating (pre-2.1) are never shown offline while a limit is set
+PASS case 4 cached posters offline
+case 16 A3 limit saved during a running tick keeps its forced tick failed:
+AssertionError [ERR_ASSERTION]: a new poster followed without waiting for the rotation (the saved limit was not left without its forced tick)
+    at file:///tmp/tmp.ZBzeC7FDc9/wt/tests/e2e/content-rating.spec.mjs:634:10
+    at async withApp (file:///tmp/tmp.ZBzeC7FDc9/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.ZBzeC7FDc9/wt/tests/e2e/content-rating.spec.mjs:653:9
+    at async Promise.all (index 0)
+    at async file:///tmp/tmp.ZBzeC7FDc9/wt/tests/e2e/content-rating.spec.mjs:648:1
+FAIL content-rating
+## summary (exit 1)
+1 failed

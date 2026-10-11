@@ -1,0 +1,42 @@
+Hazard: argument injection through a shell
+Mutant: shell-true (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.Jooj2D8VTi/orig	2026-10-08 22:33:46.980174032 +0000
++++ /tmp/tmp.Jooj2D8VTi/wt/scripts/device-helper.mjs	2026-10-08 22:33:46.996397298 +0000
+@@ -121,7 +121,7 @@
+         end('timeout');
+       }, timeoutMs);
+       try {
+-        child = execFile(file, args, { env: cenv, timeout: timeoutMs, killSignal: 'SIGKILL', shell: false, windowsHide: true },
++        child = execFile(file, args, { env: cenv, timeout: timeoutMs, killSignal: 'SIGKILL', shell: true, windowsHide: true },
+           (err) => end(err ? 'error' : 'ok'));
+         child?.stdin?.on?.('error', () => {});
+         child?.stdin?.end?.(input);
+## test: node --test tests/device-helper.test.js
+  ---
+  duration_ms: 157.439164
+  type: 'test'
+  ...
+# Subtest: integration: without --helper the routes do not exist
+ok 28 - integration: without --helper the routes do not exist
+  ---
+  duration_ms: 139.747959
+  type: 'test'
+  ...
+# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+ok 29 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+  ---
+  duration_ms: 250.199573
+  type: 'test'
+  ...
+1..29
+# tests 29
+# suites 0
+# pass 28
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1405.209334
+## summary (exit 1)
+1 failed

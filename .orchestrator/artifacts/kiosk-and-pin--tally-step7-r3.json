@@ -1,0 +1,131 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 30,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "kiosk-and-pin--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "kiosk-and-pin--scope-r3.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "kiosk-and-pin--precommit-format-r3.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "kiosk-and-pin--mutation-hidden-focusable-r2.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "kiosk-and-pin--dlog-check-r3.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 0,
+   "max": 10,
+   "evidence": "kiosk-and-pin--review-check-r3.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 95,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 7,
+  "missing_rows": [
+   "ac7"
+  ],
+  "review_rows": [
+   7
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 80,
+  "max": 95,
+  "percentage": 84,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 30,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "kiosk-and-pin--ac1-r3.json": "b1e8306fb375d1df5d1a9eb4e8b28c5a59aa0434c7819a6756cfef82ff24b6e0",
+  "kiosk-and-pin--scope-r3.json": "fb1f2376990e70dc92e93ba3564b3237deeddfa3ff582ccbee509fda54ac39fa",
+  "kiosk-and-pin--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "kiosk-and-pin--mutation-hidden-focusable-r2.txt": "697f2afb26224c62a015c8af7d97835953d2b46219a2fd8af7c8cd7da6ee69a1",
+  "kiosk-and-pin--dlog-check-r3.json": "ab6b02cb1d84067dd52d4beb7fb006647f94d870e4fee3a7986b8b7212108d31",
+  "kiosk-and-pin--review-check-r3.json": "b2f9e5f883f404c2db7293df0357c8b7981da88ff4fe86fa4d49934aa45fb35f"
+ },
+ "_written": "2026-10-10T22:52:45.696935Z"
+}

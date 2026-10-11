@@ -1,0 +1,42 @@
+Hazard: click on an open Settings dialog swallowed
+Mutant: dialog-input-swallowed (js/main.js) — ok
+## diff
+--- /tmp/tmp.NENAQoBRZe/orig	2026-10-09 02:15:11.053068656 +0000
++++ /tmp/tmp.NENAQoBRZe/wt/js/main.js	2026-10-09 02:15:11.070217687 +0000
+@@ -257,7 +257,7 @@
+   const swallowing = e.type === 'pointerdown' && performance.now() < state.swallowUntil;
+   if (!state.asleep && !swallowing && state.sleepWhy !== 'manual wake') return;
+   state.manualWakeUntil = Date.now() + MANUAL_WAKE_MS;
+-  if ((state.asleep || swallowing) && !inOpenDialog(e)) {
++  if ((state.asleep || swallowing)) {
+     e.stopPropagation();
+     e.preventDefault();
+     if (e.type === 'pointerdown') state.swallowUntil = performance.now() + SWALLOW_MS;
+## test: npm run test:e2e -- sleep
+  ok  key press: wakes (Settings not opened), awake until 60 s, then asleep again
+  ok  pointer press on the veil wakes without activating the control under it
+  ok  touch tap on the veil wakes; the control under the finger is not activated (one click swallowed, the next works)
+  ok  offline start inside the window: veil up; after Plex returns, playback wakes it and shows the poster
+  ok  settings saved (schedule off) after a manual wake: stays awake past 60 s, wake lock untouched
+  ok  1970 clock inside the window: does not sleep; Diagnostics says Clock not set
+  ok  clock set into the window -> asleep (schedule)
+  ok  double and triple tap on the Pause button while asleep: Pause stays off, mock.play() still wakes the display
+  ok  sessions 403 (idle sleep on, now playing off): 5 posters shown in 48 s, no error shown
+  ok  one failed poll, then two in a row, mid-playback: veil stays down; it comes up after the playback really ends
+  ok  idle sleep: awake at 59 min, asleep at 61 min without playback; Sleep: asleep (idle)
+  ok  idle sleep: playback wakes the display and it stays awake
+  ok  every poll failing (HTTP 500) for 61 min: idle sleep still starts (a failed poll is not playback)
+  ok  Plex down mid-movie (poll 20 s): veil up 62452 ms after the outage began, lock held (1, releases 0); the movie wakes it again once Plex is back
+  ok  idleSleepHours 0 -> 1 saved after 2 h: awake at save and at 58 min, asleep (idle) an hour after the save
+  ok  1970 clock: idle sleep still works, and a clock jump does not trigger it early
+  ok  70 s of pointer activity, then 70 s of key presses, in Settings: the display stays awake; a checkbox click toggles
+  ok  awake, sleep configured, now playing on: 10 sessions requests in 10 ticks (one each)
+  ok  3 min outage while asleep, then mock.play(): awake 2453 ms after Plex returned
+  ok  veil back behind the open dialog: the next click and key press in the dialog act
+  ok  veil aria-hidden="true"; #app inert while asleep and not after; a dialog above the veil takes clicks
+  ok  paused: sleeping and waking make no sessions or image request
+  ok  Plex down inside the window with 2+ cached posters: nothing drawn while asleep (Popcorn Skies (1985) — cache)
+  ok  idle sleep: playback past the original deadline; awake after it stops, asleep one idle hour after the last playback
+PASS sleep
+## summary (exit 0)
+0 failed

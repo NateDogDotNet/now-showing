@@ -1,0 +1,42 @@
+Hazard: 1970 clock sleeps on schedule
+Mutant: schedule-ignores-clock (js/sleep.js) — ok
+## diff
+--- /tmp/tmp.hRRjmJmyr2/orig	2026-10-09 00:16:17.458154773 +0000
++++ /tmp/tmp.hRRjmJmyr2/wt/js/sleep.js	2026-10-09 00:16:17.474931043 +0000
+@@ -22,7 +22,7 @@
+   const t = now.getTime();
+   const idleMs = settings.idleSleepHours * 3600_000;
+   const why =
+-    settings.sleepEnabled && clockOk && inWindow(now, settings.sleepStart, settings.sleepEnd)
++    settings.sleepEnabled && inWindow(now, settings.sleepStart, settings.sleepEnd)
+       ? 'schedule'
+       : idleMs > 0 && t - lastPlaybackAt >= idleMs
+         ? 'idle'
+## test: node --test tests/sleep.test.js tests/engine.test.js
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: an empty window (start === end) never sleeps
+ok 26 - an empty window (start === end) never sleeps
+  ---
+  duration_ms: 4.384449
+  type: 'test'
+  ...
+# Subtest: the schedule wins the label when both triggers hold
+ok 27 - the schedule wins the label when both triggers hold
+  ---
+  duration_ms: 1.033085
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 26
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 303.31503
+## summary (exit 1)
+1 failed

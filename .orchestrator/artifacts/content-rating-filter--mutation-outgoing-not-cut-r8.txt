@@ -1,0 +1,42 @@
+Hazard: an above-limit poster keeps fading after a stricter limit
+Mutant: outgoing-not-cut (js/main.js) — ok
+## diff
+--- /tmp/tmp.SbhLSCC2da/orig	2026-10-10 14:04:35.064004083 +0000
++++ /tmp/tmp.SbhLSCC2da/wt/js/main.js	2026-10-10 14:04:35.077807293 +0000
+@@ -454,7 +454,7 @@
+   // included, even offline (K20, D29). This comes BEFORE the frame is applied, because a custom frame's load has no
+   // timeout and must not keep an above-limit poster on screen.
+   if (display.currentPoster && !allowedOnScreen(display.currentPoster)) blockPoster();
+-  else cutOutgoing(); // a poster still fading out under a crossfade is not allowed to finish its fade (C7M1)
++  else; // a poster still fading out under a crossfade is not allowed to finish its fade (C7M1)
+   try {
+     await display.apply(state.settings);
+   } catch (err) {
+## test: npm run test:e2e -- content-rating
+  ok  offline: PG-13 saved while title 4 is up -> replaced within 27 ms by a cached allowed poster; 8 rotations never return it (1,2,3)
+PASS case 10 K20 offline limit change, allowed cached poster available
+  ok  PG-13 saved during title 4's decode: taken down once decoded (nothing on screen while the forced tick was held); then an allowed poster (6)
+PASS case 18 C4I1 limit saved during a poster decode
+  ok  unsaved import of a pin on title 4: 22 refreshes drew only 1,2,3,6; Cancel left an allowed poster; nothing saved
+  ok  import a pin then Cancel: saved pin unchanged, 16 refreshes drew only 1,2,3,6, reopened dialog shows no pin
+PASS case 19 C6I1 import an unsaved pin, refresh, Cancel
+  ok  import a pin then Save: pin stored and shown (exempt from PG-13); reopen shows it; Unpin + Save clears it
+PASS case 20 C7I1 import a pin, Cancel, then import and Save
+  ok  stale stored rating PG for title 4 -> shown online again -> the index says R
+PASS case 22 C7M2 a poster seen online refreshes its cached rating
+  ok  20 offline rotations under PG-13 never show title 4 (shown: 1,2,3,6)
+  ok  cached entries without a stored rating (pre-2.1) are never shown offline while a limit is set
+PASS case 4 cached posters offline
+case 21 C7M1 limit saved mid-crossfade hides the outgoing poster failed:
+AssertionError [ERR_ASSERTION]: title 4's layer is invisible after the save (opacity 0.301918 after 1054 ms)
+
+0.301918 !== 0
+
+    at file:///tmp/tmp.SbhLSCC2da/wt/tests/e2e/content-rating.spec.mjs:885:10
+    at async withApp (file:///tmp/tmp.SbhLSCC2da/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.SbhLSCC2da/wt/tests/e2e/content-rating.spec.mjs:936:9
+    at async Promise.all (index 1)
+    at async file:///tmp/tmp.SbhLSCC2da/wt/tests/e2e/content-rating.spec.mjs:931:1
+FAIL content-rating
+## summary (exit 1)
+1 failed

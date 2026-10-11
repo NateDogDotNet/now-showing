@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- touch-controls",
+  "exit": 1,
+  "seconds": 1.29,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs touch-controls\n\nFAIL touch-controls (no such spec: /home/user/wt-touch-and-labels/tests/e2e/touch-controls.spec.mjs)",
+  "stderr_tail": ""
+}

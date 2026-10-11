@@ -1,0 +1,120 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "serve-config-guard--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "serve-config-guard--scope-r3.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "serve-config-guard--precommit-format-r3.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "serve-config-guard--mutation-allow-all-both-r3.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "serve-config-guard--dlog-check-r3.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "serve-config-guard--review-check-r3.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 95,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_result": {
+  "total": 95,
+  "max": 95,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "serve-config-guard--ac1-r3.json": "535085de05a1576effb966070eec8ed92200685b70fa1551efaca61f485a5d9d",
+  "serve-config-guard--scope-r3.json": "699e06d98c7cb9b66f636634228884ce869afc6f8e0af58d6af9df86b581bc0b",
+  "serve-config-guard--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "serve-config-guard--mutation-allow-all-both-r3.txt": "e1a06bc765269ab260b25c0d8f58e380ab43b82e9cc220ffce49eb56a452430d",
+  "serve-config-guard--dlog-check-r3.json": "a71bd630e544e7bf4a103ccc913dc3e69e3eaa2a895ed3f477743ab7ec29d3f2",
+  "serve-config-guard--review-check-r3.json": "1adc5d524f733b0e8a8e50b00284dd123fc9ad8a57dc786e420ef7eee3f8b39a"
+ },
+ "_written": "2026-10-08T22:25:55.055420Z",
+ "_correction": {
+  "reason": "allow-all-v2 is an equivalent mutant: the post-realpath check (path !== '/config.json' && !isAppPath(rel)) still rejects every non-app path; allow-all-both (both checks disabled) kills 5 tests in r3, so the hazard is defended",
+  "supersedes": "serve-config-guard--tally-step7-r3.json"
+ }
+}

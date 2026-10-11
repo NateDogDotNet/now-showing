@@ -1,0 +1,42 @@
+Hazard: the bar moves while buffering
+Mutant: buffering-animates (js/display.js) — ok
+## diff
+--- /tmp/tmp.2ufhsuNlpU/orig	2026-10-10 17:13:14.967886318 +0000
++++ /tmp/tmp.2ufhsuNlpU/wt/js/display.js	2026-10-10 17:13:14.981197247 +0000
+@@ -123,7 +123,7 @@
+     bar.hidden = !showBar;
+     bar.style.transition = 'none';
+     if (showBar) {
+-      const playing = session.playerState === 'playing'; // paused and buffering sit still
++      const playing = session.playerState !== 'paused'; // paused and buffering sit still
+       const offset = Math.min(session.duration, session.viewOffset + (playing ? elapsed : 0));
+       bar.style.transform = `scaleX(${offset / session.duration})`;
+       if (playing && offset < session.duration) {
+## test: npm run test:e2e -- now-playing
+  ok  R title playing under PG-13: no poster, no bar, no label
+PASS case 8 an above-limit title playing shows no bar
+  ok  401 on /status/sessions (engine fetch only): 3 different posters, no error card; playback shows once allowed
+PASS case 9 K18 401 on sessions, engine fetch only
+  ok  403 on /status/sessions (engine fetch only): 3 different posters, no error card; playback shows once allowed
+PASS case 9 K18 403 on sessions, engine fetch only
+  ok  401 on /status/sessions (sleep poll also asks): 3 different posters, no error card; playback shows once allowed
+PASS case 9 K18 401 on sessions, sleep poll also asks
+  ok  403 on /status/sessions (sleep poll also asks): 3 different posters, no error card; playback shows once allowed
+PASS case 9 K18 403 on sessions, sleep poll also asks
+  ok  500 on /status/sessions: a tick with a failed playback poll makes exactly one request (3 forced ticks)
+PASS case 10 C8M1 500 poll, one request per tick
+  ok  toggling the bar and the label previews at once; Cancel undoes it
+  ok  Save with a tick running: the bar and the label appear, and go, at once
+PASS case 12 progress and player toggles apply at once
+  ok  403 on /status/sessions: a tick with a failed playback poll makes exactly one request (3 forced ticks)
+PASS case 10 C8M1 403 poll, one request per tick
+case 11 buffering freezes the bar failed:
+AssertionError [ERR_ASSERTION]: buffering: the bar stays put (0.5031662326388889 -> 0.523165767609127)
+    at file:///tmp/tmp.2ufhsuNlpU/wt/tests/e2e/now-playing.spec.mjs:237:10
+    at async withApp (file:///tmp/tmp.2ufhsuNlpU/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.2ufhsuNlpU/wt/tests/e2e/now-playing.spec.mjs:327:9
+    at async Promise.all (index 1)
+    at async file:///tmp/tmp.2ufhsuNlpU/wt/tests/e2e/now-playing.spec.mjs:322:1
+FAIL now-playing
+## summary (exit 1)
+1 failed

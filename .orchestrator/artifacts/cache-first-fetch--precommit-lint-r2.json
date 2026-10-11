@@ -1,0 +1,11 @@
+{
+  "cmd": "eslint --no-config-lookup -c /home/user/plex-poster-app/.orchestrator/artifacts/round--eslint.config.mjs js/main.js js/poster-cache.js scripts/mock-plex.mjs tests/e2e/cache-first.spec.mjs tests/poster-cache.test.js  && for f in js/main.js js/poster-cache.js scripts/mock-plex.mjs tests/e2e/cache-first.spec.mjs tests/poster-cache.test.js ; do node --check $f || exit 1; done",
+  "exit": 1,
+  "seconds": 0.45,
+  "parsed": {
+    "error_lines": 3
+  },
+  "launched": true,
+  "stdout_tail": "/home/user/wt-cache-first-fetch/tests/e2e/cache-first.spec.mjs\n  16:62  error  'localStorage' is not defined  no-undef\n  21:17  error  'Cache' is not defined         no-undef\n  22:5   error  'Cache' is not defined         no-undef\n\n\u2716 3 problems (3 errors, 0 warnings)",
+  "stderr_tail": ""
+}

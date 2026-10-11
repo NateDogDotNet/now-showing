@@ -1,0 +1,116 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "serve-config-guard--ac1-r1.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "serve-config-guard--scope-r1.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "serve-config-guard--precommit-format-r1.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 0,
+   "max": 10,
+   "evidence": "serve-config-guard--mutation-dir-no-slash-r1.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "serve-config-guard--dlog-check-r1.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 85,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 6,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {
+   "code reads cleanly": "no serve-config-guard--review-check record"
+  }
+ },
+ "_result": {
+  "total": 75,
+  "max": 85,
+  "percentage": 88,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "serve-config-guard--ac1-r1.json": "c8d988c5153a4bb22c9ffde25cb98bb97eff1b5d1220593b608236f272d8a9a6",
+  "serve-config-guard--scope-r1.json": "699e06d98c7cb9b66f636634228884ce869afc6f8e0af58d6af9df86b581bc0b",
+  "serve-config-guard--precommit-format-r1.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "serve-config-guard--mutation-dir-no-slash-r1.txt": "20c75bd7bd8a3bb863136f961ba85ad5f327fe58168c2ed5d8f1bb6cb110ea9b",
+  "serve-config-guard--dlog-check-r1.json": "a27b48ddb59de47c6f1f29b4d79aff3d8ef460fe54028abcf7cd28f2f24998d4"
+ },
+ "_written": "2026-10-08T22:14:53.945250Z"
+}

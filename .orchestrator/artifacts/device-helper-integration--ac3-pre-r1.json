@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- helper",
+  "exit": 1,
+  "seconds": 1.03,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs helper\n\nFAIL helper (no such spec: /home/user/wt-device-helper-integration/tests/e2e/helper.spec.mjs)",
+  "stderr_tail": ""
+}

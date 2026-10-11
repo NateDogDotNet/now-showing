@@ -1,0 +1,29 @@
+Hazard: helper used with deviceHelper off
+Mutant: helper-ignores-setting (js/main.js) — ok
+## diff
+--- /tmp/tmp.3wSJUskGy9/orig	2026-10-11 03:06:49.680396161 +0000
++++ /tmp/tmp.3wSJUskGy9/wt/js/main.js	2026-10-11 03:06:49.696093552 +0000
+@@ -369,7 +369,7 @@
+ let diagTimer = 0;
+ 
+ /** The setting is on and the last probe found a helper. Everything else about the helper is gated on this. */
+-const helperActive = () => state.settings.deviceHelper && helper.available;
++const helperActive = () => helper.available;
+ 
+ /** Probes once (boot, Settings opening, the setting being switched on); a display already asleep is switched off now. */
+ async function probeHelper() {
+## test: npm run test:e2e -- helper
+
+> plex-poster-display@2.0.0 test:e2e
+> node tests/e2e/run.mjs helper
+
+  ok  Diagnostics: CPU temperature: 42.5 °C (thermal_zone0)
+  ok  asleep: one power off, after the veil is up, no repeat
+  ok  wake: power on, then the poster fetch
+  ok  power calls failing: the display still wakes and fetches the poster
+  ok  deviceHelper:false: no /__helper/ request, no console error
+  ok  no helper: one probe, then silence, no console error
+  ok  temperature refreshes only while Diagnostics is open
+PASS helper
+## summary (exit 0)
+0 failed

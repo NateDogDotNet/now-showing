@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- content-rating",
+  "exit": 0,
+  "seconds": 80.5,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs content-rating\n\n  ok  PG-13 request: contentRating lists gb/12 and every allowed value, none above; container size 300\n  ok  no limit: title 4 (R) was shown and cached; the index stores contentRating\n  ok  limit \"\": all 8 titles appear; no contentRating parameter; container size = pool size\nPASS case 3 no limit\n  ok  mock.play(4) under PG-13: title 4 is never displayed; a random allowed poster is\n  ok  limitNowPlaying:false: the playing R title is displayed\n  ok  no limit: the playing title is displayed\nPASS case 5 now-playing\n  ok  toggle on -> Save stores maxContentRating PG-13 (limitNowPlaying visible, on)\n  ok  the select changes the limit (R) and limitNowPlaying can be switched off\n  ok  under R titles 4 (R) and 5 (TV-MA) also appear, and 7 (gb/15); never 8 (unrated): 1,2,3,4,5,6,7\n  ok  toggle off -> Save clears maxContentRating to \"\"\nPASS case 2 R random posters\n  ok  toggling on again defaults to PG-13; Cancel changes nothing\nPASS case 6 household toggle\n  ok  saving PG-13 while title 4 (R) is up replaces it at once\nPASS case 7 tightening the limit replaces the poster on screen\n  ok  50 refreshes under PG-13 show only titles 1, 2, 3 and 6 (all four appear)\nPASS case 1 PG-13 random posters\n  ok  heal download in flight when the sleep window opens: not drawn under the veil\nPASS case 9 A8-d heal download vs sleep\n  ok  offline: an undecodable cached poster is deleted and another is shown; no uncaught error\n  ok  offline with every cached poster undecodable: all dropped, nothing shown, no loop\nPASS case 8 K5 undecodable cached poster offline\n  ok  20 offline rotations under PG-13 never show title 4 (shown: 1,2,3,6)\n  ok  cached entries without a stored rating (pre-2.1) are never shown offline while a limit is set\nPASS case 4 cached posters offline\nPASS content-rating",
+  "stderr_tail": ""
+}

@@ -1,0 +1,13 @@
+{
+ "phase": "docs",
+ "stop": 14,
+ "kind": "decision",
+ "carried_not_listed": [],
+ "carried_not_in_index": [],
+ "promised_not_listed": [],
+ "dismissed_minors_not_listed": [],
+ "items_without_placement": [],
+ "grids_failing_check": [],
+ "checked_at": "2026-10-11T21:22:13.670786Z",
+ "ok": true
+}

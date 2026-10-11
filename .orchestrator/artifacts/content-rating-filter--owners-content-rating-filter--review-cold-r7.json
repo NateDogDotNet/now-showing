@@ -1,0 +1,19 @@
+{
+ "phase": "content-rating-filter",
+ "review": "content-rating-filter--review-cold-r7.md",
+ "done_phases": [
+  "cache-first-fetch",
+  "device-helper-server",
+  "display-decode-hang",
+  "e2e-harness",
+  "rotation-layout-and-shell",
+  "serve-config-guard",
+  "settings-and-schedule-core",
+  "sleep-mode",
+  "validation-checklists"
+ ],
+ "hits": [],
+ "no_findings": false,
+ "flagged": [],
+ "checked_at": "2026-10-10T16:10:11.591449Z"
+}

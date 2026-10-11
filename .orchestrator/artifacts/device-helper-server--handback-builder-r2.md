@@ -1,0 +1,19 @@
+produced_by: orchestrator-builder · model: claude-sonnet-5-5 · effort: high · phase: device-helper-server · round: r2
+status: complete        failure_class: n/a
+paths: scripts/device-helper.mjs, scripts/serve.mjs (r1 staged diff, not edited in r2), tests/device-helper.test.js
+criteria:
+- 1 (413 over a real socket, accurate message): met. `node --test tests/device-helper.test.js` -> pass 42 / fail 0. Integration test posts 2000 B and 200 KB to `serve.mjs --helper --helper-fake` and asserts 413 + JSON "body too large (limit 1024 bytes)"; mutation `req.destroy()` on overflow fails 1 test. A body that errors mid-read is now 400, not 413.
+- 2 (fake status): met. `power: 'fake'` or the explicit flag value; fake mode no longer probes the host. Unit and integration tests. Two mutants (re-enable auto-detect; use `strategy`) survive because in fake mode they are behaviourally equivalent after the guard (the output is the same); the guard itself is what the tests pin.
+- 3 (child env): met. cec-ctl and cec-client tests assert env deepEquals `{PATH}` with PLEX_TOKEN/HOME/WAYLAND_* present in the helper env; mutant `...env` fails 3.
+- 4 (process group): met. Real test: fake `cec-ctl` forks `sleep 300` and waits; 504 within the 600 ms injected timeout, grandchild dead (/proc state), next call runs (not 503). Fake-exec test: opts.detached true, killGroup(pid) called, a second call is 503 until the group-kill resolves. Mutants: no detached 1 fail, no group kill 2, lock released early 1.
+- 5 (temperature): met. thermal_zone0 / 1000, else `vcgencmd measure_temp` (fixed argv, PATH-only env, 5 s timeout, one-command lock), parse `temp=48.3'C`; status `{power, temperature, tempC}`, temperature in `thermal_zone0|vcgencmd|null`. Garbage/failure/hang -> nulls. Mutants killed.
+- 6 (absolute WAYLAND_DISPLAY): met. Flag and env accept bare name or absolute path; `..`, spaces, newline, relative rejected. Mutant killed.
+- 7 (call log cap): met. Last 100 kept (130 calls -> 100, oldest = call 30). Mutant killed.
+- Plan 1: met, 42/42. Plan 2 `npm test`: pass 85 / fail 0. Plan 3 (no exec/execSync/shell:true grep): met after renaming a `.exec(` regex call to `.match(`; exit 0. Plan 4 (no Access-Control-Allow): exit 0. Plan 5 (no brightness|ddcutil|backlight|vcgencmd display_power): exit 0. Plan 6 scope probe: exit 0.
+deviations:
+- Node's `execFile` silently drops the `detached` option (confirmed: the child stayed in the parent's group), so the default executor is now a small execFile-shaped wrapper around `spawn` (shell:false, detached:true, stderr ignored, stdout capped at 64 KB). The injectable `execFile` seam and the fixed-argv/no-shell rules are unchanged. New injectable `killGroup` option (default: SIGKILL the group, then poll until ESRCH, up to about 2 s).
+- Judgement calls: while a display command holds the lock, `status` skips the vcgencmd fallback and reports `temperature: null, tempC: null` instead of queueing. In fake mode `temperature` is the canned `'thermal_zone0'`.
+- scripts/serve.mjs was not touched in r2 (r1 staged diff stands).
+questions: none
+
+Agent: device-helper-server-builder-r2 · dispatched: 2026-10-08T22:50:49Z

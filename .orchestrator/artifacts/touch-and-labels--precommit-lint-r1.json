@@ -1,0 +1,11 @@
+{
+  "cmd": "eslint --no-config-lookup -c /home/user/plex-poster-app/.orchestrator/artifacts/round--eslint-r1e.config.mjs js/engine.js js/main.js js/shortcuts.js sw.js tests/e2e/first-run.spec.mjs tests/e2e/touch-controls.spec.mjs tests/engine.test.js tests/shortcuts.test.js  && for f in js/engine.js js/main.js js/shortcuts.js sw.js tests/e2e/first-run.spec.mjs tests/e2e/touch-controls.spec.mjs tests/engine.test.js tests/shortcuts.test.js ; do node --check $f || exit 1; done",
+  "exit": 0,
+  "seconds": 1.34,
+  "parsed": {
+    "error_lines": 0
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

@@ -1,0 +1,42 @@
+Hazard: unrated title shown under a limit
+Mutant: unrated-allowed (js/ratings.js) — ok
+## diff
+--- /tmp/tmp.KLJv3s9rmx/orig	2026-10-09 03:54:24.584624439 +0000
++++ /tmp/tmp.KLJv3s9rmx/wt/js/ratings.js	2026-10-09 03:54:24.605128939 +0000
+@@ -50,7 +50,7 @@
+   const max = LIMITS.indexOf(limit);
+   if (max < 0) return false;
+   const rank = ratingRank(rating);
+-  return rank !== null && rank <= max;
++  return rank === null || rank <= max;
+ }
+ 
+ /**
+## test: node --test tests/ratings.test.js tests/plex.test.js tests/engine.test.js tests/poster-cache.test.js
+  ---
+  duration_ms: 0.87948
+  type: 'test'
+  ...
+# Subtest: every value in allowedValues(limit) is allowed by allows(limit) and every other table value is not
+ok 84 - every value in allowedValues(limit) is allowed by allows(limit) and every other table value is not
+  ---
+  duration_ms: 5.081182
+  type: 'test'
+  ...
+# Subtest: allowedValues grows with the limit
+ok 85 - allowedValues grows with the limit
+  ---
+  duration_ms: 0.76067
+  type: 'test'
+  ...
+1..85
+# tests 85
+# suites 0
+# pass 75
+# fail 10
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1404.317727
+## summary (exit 1)
+10 failed

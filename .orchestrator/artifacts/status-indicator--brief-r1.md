@@ -1,0 +1,68 @@
+# Brief — status-indicator r1
+
+Agent name: status-indicator-builder-r1 · phase: status-indicator · round: r1 · effort: medium
+
+You are the `orchestrator-builder` for exactly this phase (`~/.claude/agents/orchestrator-builder.md`).
+
+## Where you work
+- Worktree `/home/user/wt-status-indicator` (branch `orch/status-indicator` from `51d8ff3`). Work ONLY there; never touch `/home/user/plex-poster-app` except the two `.orchestrator` paths below.
+- Every server a test starts uses a free port; for the e2e suite set your own `E2E_PORT`/`E2E_MOCK_PORT` (D12).
+- Handback: `/home/user/plex-poster-app/.orchestrator/artifacts/status-indicator--handback-builder-r1.md`. Questions: append to `/home/user/plex-poster-app/.orchestrator/questions.md` as `Q<n> — status-indicator r1: where · why it matters · work held · proposed reading`.
+- `git add` your Output files only. Do not commit.
+
+## Process
+Use E2E_PORT=21920 E2E_MOCK_PORT=21921. TDD: write tests/e2e/status.spec.mjs first (every case in criterion 1; `pixelShift: false` in its settings), watch it fail, then implement in index.html (`id="status-dot"`), css/app.css and js/main.js. Tie the pill's visibility to the existing `.controls.visible` / `body.idle` state from wake() — do not add a second idle timer. Stop the once-a-second updateStatus re-render while the controls are hidden (0 mutations on #status over 3 s). The dot cycles slowly through the safe-area corners on its own timer (≈ every 5 min), independent of pixel shift, follows --ui-rotation, and never sits still for hours (burn-in). statusIndicator:'off' hides the dot. The dot must respect what's already landed: hidden while asleep (body.asleep) and under body.poster-blocked it may still show status. Run criteria 1–5 and paste outputs.
+
+## Binding rulings
+`docs/decisions.md` (every entry binds: D1–D19). Conductor rulings at the end of `.orchestrator/questions.md`. Read the code you touch plus two neighbouring files and match their idioms (plain ES modules, no build step, `node --test`, the e2e `withApp` contract in `tests/e2e/lib.mjs`, which you must not edit).
+
+## Hard rules
+- Touch only the phase's Output paths. Anything else is scope creep and fails the phase.
+- Add no behaviour the plan does not name; a behaviour question goes to questions.md.
+- Do not edit the plan, the spec or docs/decisions.md.
+- Do not touch js/sleep.js, js/display.js or js/settings.js.
+
+## Conventions every phase follows (verbatim from the plan)
+1. **Output is a whitelist.** A phase may create or modify only its `Output` paths. The plan file and `.orchestrator/` are never Output. A parenthetical after a path is a condition, not part of the path.
+2. **Acceptance criteria are shell commands run from the repo root; exit 0 is a pass.** An item starting `narrated:` is not a command: it names what a human or reviewer checks, and scores as narrated.
+3. **Concurrent phases run in separate git worktrees with their own ports (D12).** Each worktree sets its own `E2E_PORT` and `E2E_MOCK_PORT`, so e2e runs do not collide and a worktree's `git status` shows only that phase's edits. Every server a test spawns (unit, integration or e2e) listens on a free port probed at run time, never a fixed one, apart from the shared e2e server's `E2E_PORT`/`E2E_MOCK_PORT`, because every worktree runs `npm test`. Scope probes are therefore valid per worktree. A scope probe is `test -z "$(git status --porcelain -- <paths>)"`: unlike `git diff HEAD` it also sees untracked new files. The conductor's reconcile step is the cross-check.
+4. **Negative checks and unit-test lists are guarded.** `! grep … F` passes when `F` is missing, and `node --test a b` silently skips a missing path when another path exists, so every negative grep is written `test -f F && ! grep … F` and every `node --test` criterion is prefixed with `test -f` for each test file it names.
+5. **New files under `js/` go into `SHELL` in `sw.js` in the phase that creates them**, which therefore lists `sw.js` in Output. `VERSION` is bumped **once**, in `release-bump` (spec R-REL-1; D16): the rationale is clean releases, not that per-phase bumps would reload clients (any `sw.js` edit already triggers a service-worker update).
+6. **Output overlap is a scheduling constraint, not a dependency.** Many UI phases edit `index.html`, `css/app.css`, `js/main.js`, `js/display.js`, `js/settings-ui.js` and `scripts/mock-plex.mjs`. Two phases whose Output lists share a path must not run concurrently even when neither blocks the other. The *Concurrency* section lists only Output-disjoint sets.
+7. **Pixel shift is on by default, so geometry specs run without it.** `tests/e2e/lib.mjs` (built in `e2e-harness`) seeds `pixelShift:false`, `dailyReload:false` and the `plexPoster.whatsNew` marker by default; a spec that tests those features sets them explicitly. Every spec that measures stage geometry also names `pixelShift: false` in its own settings.
+8. **The e2e `mock` helper is generic** (`mock.get(action)`, `mock.post(action, params)` call `/__mock/<action>`), so later phases add mock endpoints without editing `tests/e2e/lib.mjs`.
+9. **(verify)** marks a Plex parameter, Chromium flag or hardware command that could not be exercised in the authoring environment; each is carried into `docs/validation/`.
+10. **Settings keys are added once** (`settings-and-schedule-core`); feature phases add controls (bound by `name`) and consume keys, and do not edit `js/settings.js`.
+11. **Plan edits commit separately** from phase output. `Findings: —` means the phase delivers no source finding directly (an enabler, or documentation of shipped work).
+12. **No gate phases.** The r1 milestone gates are gone. The phase that closes each milestone (named in the *Milestones* table) carries the full-suite criteria (`npm test`, `npm run test:e2e`, `node scripts/check-precache.mjs`), and the conductor runs `/phase-gate` on it at Step 7. `release-bump` carries the release checks (D11).
+13. **The run ends with a push to the working branch only (D13).** A pull request or merge happens only when the owner asks, so no phase is tagged `publish`.
+
+## The phase (verbatim from the plan)
+### 7. `status-indicator` — Quiet status indicator
+
+- **Goal:** Replace the always-on top-left status pill with a controls-bound pill and a tiny drifting dot, and stop the once-a-second re-render when hidden.
+- **Findings:** F5 · **Requirements:** R-STAT-1 · **Rulings:** D6
+- **Mode:** afk · **Tags:** ui · **Blocked by:** `rotation-layout-and-shell`, `settings-and-schedule-core`
+- **Output:** `index.html`, `css/app.css`, `js/main.js`, `tests/e2e/status.spec.mjs`
+- **Acceptance criteria:**
+  1. `npm run test:e2e -- status`  (mock down after first poster, controls idle-hidden after 4 s: `#status` hidden, `#status-dot` visible and `<= 8x8` px, opacity `<= 0.4`; wake controls: `#status` shows retry countdown; healthy + idle: neither visible; a `MutationObserver` on `#status` records 0 mutations over 3 s while controls are hidden; fake clock +5 min moves the dot to a different corner, always inside the viewport; `statusIndicator:'off'` hides the dot; at rotation 90 with `rotateUi` true the dot's computed transform angle is 90)
+  2. `grep -Eq 'pixelShift: *false' tests/e2e/status.spec.mjs`
+  3. `npm test`
+  4. `grep -q 'id="status-dot"' index.html`
+  5. `node scripts/check-precache.mjs`
+- **Notes/hazards:**
+  - Tie visibility to the existing `.controls.visible` / `body.idle` state set by `wake()`; do not add a second idle timer.
+  - The dot has its own slow position cycle (corners of the safe area), independent of pixel shift, and follows `--ui-rotation` from the shell phase.
+  - Burn-in hazard: even the dot must never sit still for hours; the cycle is the requirement, not an optimisation.
+
+## Handback (write it before you return)
+The file's FIRST line is the `produced_by:` line — nothing above it:
+```
+produced_by: orchestrator-builder · model: <model> · effort: <level> · phase: status-indicator · round: r1
+status: complete | blocked | failed        failure_class: <transient|deterministic|capability|ambiguity|n/a>
+paths: <every path created, edited or staged>
+criteria: <one line per acceptance criterion — met / not met / not attempted, with the command you ran>
+deviations: <or none>
+questions: <ids or none>
+```
+Then a blank line, `Agent: status-indicator-builder-r1 · dispatched: <stamp from your prompt>`, then each acceptance command with its real output tail.

@@ -1,0 +1,14 @@
+{
+  "cmd": "grep -q 'UI screenshots: PASS' .orchestrator/artifacts/settings-sheet--review-r4.md && grep -q 'Verdict:\\*\\* APPROVE' .orchestrator/artifacts/settings-sheet--review-cold-r4.md",
+  "exit": 0,
+  "seconds": 0.02,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

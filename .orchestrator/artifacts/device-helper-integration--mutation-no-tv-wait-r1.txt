@@ -1,0 +1,29 @@
+Hazard: poster fetched before the TV wakes
+Mutant: no-tv-wait (js/main.js) — ok
+## diff
+--- /tmp/tmp.BuRdlsJUYU/orig	2026-10-11 03:06:49.666281388 +0000
++++ /tmp/tmp.BuRdlsJUYU/wt/js/main.js	2026-10-11 03:06:49.684903482 +0000
+@@ -398,7 +398,7 @@
+   state.tvWaking = true;
+   try {
+     await queuePower(true);
+-    await new Promise((resolve) => setTimeout(resolve, TV_WAKE_MS));
++    void TV_WAKE_MS;
+   } finally {
+     state.tvWaking = false;
+   }
+## test: npm run test:e2e -- helper
+
+> plex-poster-display@2.0.0 test:e2e
+> node tests/e2e/run.mjs helper
+
+  ok  Diagnostics: CPU temperature: 42.5 °C (thermal_zone0)
+  ok  asleep: one power off, after the veil is up, no repeat
+  ok  wake: power on, then the poster fetch
+  ok  power calls failing: the display still wakes and fetches the poster
+  ok  deviceHelper:false: no /__helper/ request, no console error
+  ok  no helper: one probe, then silence, no console error
+  ok  temperature refreshes only while Diagnostics is open
+PASS helper
+## summary (exit 0)
+0 failed

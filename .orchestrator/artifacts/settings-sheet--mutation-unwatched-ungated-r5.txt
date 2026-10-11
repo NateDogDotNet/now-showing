@@ -1,0 +1,42 @@
+Hazard: fix saves without the PIN
+Mutant: unwatched-ungated (js/main.js) — ok
+## diff
+--- /tmp/tmp.OU3mOWZobG/orig	2026-10-11 12:25:12.749894407 +0000
++++ /tmp/tmp.OU3mOWZobG/wt/js/main.js	2026-10-11 12:25:12.767548036 +0000
+@@ -681,7 +681,7 @@
+   if (id === 'test') return requestSettings({ test: true });
+   if (id === 'diagnostics') return requestDiagnostics();
+   // A setting changed from the card or the toast, so it asks for the PIN like every other way to change one.
+-  if (id === 'unwatched' && (await requestPin())) return applySettings({ ...state.settings, unwatchedOnly: false }); // saves, rebuilds the pool request and ticks
++  if (id === 'unwatched') return applySettings({ ...state.settings, unwatchedOnly: false }); // saves, rebuilds the pool request and ticks
+ }
+ 
+ // ---------- UI state ----------
+## test: npm run test:e2e -- settings-sheet first-run
+    at async file:///tmp/tmp.OU3mOWZobG/wt/tests/e2e/settings-sheet.spec.mjs:699:1
+3 of 30 settings-sheet cases failed
+FAIL settings-sheet
+  ok  rotation 90: block angle 90
+  ok  rotation 180: block angle 180
+  ok  rotation 270: block angle 270
+  ok  an already-expired pin is not a hot loop
+  ok  first run: code on the card, >= 64 px, one pin, Settings closed
+  ok  configured: no pin request
+  ok  config.json provisioned: no pin request
+  ok  expiry: AAAA -> BBBB, two pins
+  ok  Open settings works; the card's flow pauses and resumes
+  ok  junk pin reply backs off
+  ok  network failure: 4 attempts in 121 s, 3 console errors, then recovers
+  ok  approval -> Settings filled in -> Save -> poster
+  ok  SSC3 no poll while the PIN prompt is open; the right PIN opens Settings
+  ok  SSC3 cancel -> fresh code -> approve -> PIN -> Settings pre-filled
+  ok  K50 12 polls in 60 s
+  ok  approval -> PIN -> Settings pre-filled
+  ok  K50 booted asleep: no pin until awake
+  ok  K50 3 codes, then a 5 minute rest, then the 4th
+  ok  K50 asleep: silent; awake: a fresh code
+  ok  K50 one hour: 4 codes, 660 polls
+all 20 first-run cases passed
+PASS first-run
+## summary (exit 1)
+1 failed

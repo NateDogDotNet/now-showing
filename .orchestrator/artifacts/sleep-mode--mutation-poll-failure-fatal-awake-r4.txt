@@ -1,0 +1,42 @@
+Hazard: refused sessions stops rotation
+Mutant: poll-failure-fatal-awake (js/main.js) — ok
+## diff
+--- /tmp/tmp.wRIQOCKm7A/orig	2026-10-09 02:15:11.036149145 +0000
++++ /tmp/tmp.wRIQOCKm7A/wt/js/main.js	2026-10-09 02:15:11.051895127 +0000
+@@ -195,7 +195,7 @@
+     sessions = await client.sessions();
+   } catch (err) {
+     if (++state.pollFailures >= MAX_POLL_FAILURES) state.playing = false; // the 1 s evaluateSleep() timer acts on it
+-    if (state.asleep) throw err;
++    throw err;
+     if (!state.pollFailing) log.warn(`Playback check failed: ${err.message}`);
+     state.pollFailing = true;
+     return undefined;
+## test: npm run test:e2e -- sleep
+  ok  1970 clock: idle sleep still works, and a clock jump does not trigger it early
+  ok  idleSleepHours 0 -> 1 saved after 2 h: awake at save and at 58 min, asleep (idle) an hour after the save
+  ok  70 s of pointer activity, then 70 s of key presses, in Settings: the display stays awake; a checkbox click toggles
+  ok  veil back behind the open dialog: the next click and key press in the dialog act
+  ok  awake, sleep configured, now playing on: 10 sessions requests in 10 ticks (one each)
+  ok  3 min outage while asleep, then mock.play(): awake 1079 ms after Plex returned
+  ok  veil aria-hidden="true"; #app inert while asleep and not after; a dialog above the veil takes clicks
+  ok  paused: sleeping and waking make no sessions or image request
+  ok  Plex down inside the window with 2+ cached posters: nothing drawn while asleep (Encore (2023) — cache)
+  ok  idle sleep: playback past the original deadline; awake after it stops, asleep one idle hour after the last playback
+case 11 sessions 403 does not stop rotation failed:
+page.waitForFunction: Timeout 15000ms exceeded.
+    at posterShown (/tmp/tmp.wRIQOCKm7A/wt/tests/e2e/sleep.spec.mjs:31:36)
+    at /tmp/tmp.wRIQOCKm7A/wt/tests/e2e/sleep.spec.mjs:394:11
+    at async withApp (/tmp/tmp.wRIQOCKm7A/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.wRIQOCKm7A/wt/tests/e2e/sleep.spec.mjs:677:9
+    at async file:///tmp/tmp.wRIQOCKm7A/wt/tests/e2e/sleep.spec.mjs:672:1
+case 11c failed polls do not count as playback failed:
+page.waitForFunction: Timeout 15000ms exceeded.
+    at posterShown (/tmp/tmp.wRIQOCKm7A/wt/tests/e2e/sleep.spec.mjs:31:36)
+    at /tmp/tmp.wRIQOCKm7A/wt/tests/e2e/sleep.spec.mjs:490:11
+    at async withApp (/tmp/tmp.wRIQOCKm7A/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.wRIQOCKm7A/wt/tests/e2e/sleep.spec.mjs:677:9
+    at async file:///tmp/tmp.wRIQOCKm7A/wt/tests/e2e/sleep.spec.mjs:672:1
+FAIL sleep
+## summary (exit 1)
+1 failed

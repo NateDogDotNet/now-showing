@@ -1,0 +1,11 @@
+{
+ "phase": "settings-and-schedule-core",
+ "sha": "33976fe",
+ "tag": null,
+ "ok": true,
+ "failures": [],
+ "phase_file_sha256": "e53eb8840192040fc03bbe85d38d65d0a97a9c1a10ca5ad95503550b07654796",
+ "phase_file_sha256_noretro": "e6f841b2913195aa597c743da2c18ce9f5bbd0514272ab16ed636a8985409bf6",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-08T23:04:39.954733Z"
+}

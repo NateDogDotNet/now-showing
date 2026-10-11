@@ -1,0 +1,42 @@
+Hazard: empty entry counts as wrong PIN
+Mutant: short-entry-counted (js/kiosk.js) — ok
+## diff
+--- /tmp/tmp.JPBlvSaSmG/orig	2026-10-10 23:39:45.698306612 +0000
++++ /tmp/tmp.JPBlvSaSmG/wt/js/kiosk.js	2026-10-10 23:39:45.711307594 +0000
+@@ -280,7 +280,7 @@
+       const wait = lockRemainingMs(readLock(), now());
+       if (wait > 0) return clearEntry(lockMessage(wait));
+       // A held key or an OK with nothing typed is not an attempt, and no PIN is shorter than PIN_MIN.
+-      if (s.entry.length < PIN_MIN) return clearEntry(`Enter your PIN (${PIN_MIN} to ${PIN_MAX} digits).`);
++      if (false) return clearEntry(`Enter your PIN (${PIN_MIN} to ${PIN_MAX} digits).`);
+       s.busy = true;
+       const ok = await verifyPin(s.entry, getAuth(), { crypto });
+       s.busy = false;
+## test: npm run test:e2e -- kiosk
+PASS import asks for the PIN and ignores any PIN material in the file
+  ok  reset is gated
+PASS Reset everything asks for the PIN first
+  ok  preview leaves the PIN alone
+  ok  resetPin served: PIN cleared, Settings open, Diagnostics warns
+PASS the live preview never changes the PIN or kiosk settings in force
+PASS config.json {"resetPin": true} clears the PIN; Settings opens without it; Diagnostics warns
+  ok  reset flag: every load, while served
+PASS the reset flag is read on every load and honoured while it is served; Diagnostics stops warning when it is gone
+  ok  PIN set / mismatch / too short / cancel / remove
+  ok  resetPin: the lockout is cleared for the session
+PASS a PIN is set, changed and removed in Settings, and Settings says it is a deterrent
+PASS after a resetPin load the lockout is cleared for the session: a new PIN works at once and the failure count starts again
+  ok  resetPin cancels an open PIN prompt
+PASS a PIN prompt open while the boot reset clears the PIN is cancelled: nothing counted, and Settings opens without a PIN
+  ok  first-run provisioning is unchanged
+  ok  sleep swallowing still holds with the PIN gate
+PASS a first run still takes its settings from config.json
+PASS a press that wakes the display is swallowed, PIN or not; the next one reaches the gate
+  ok  Enter held through a wake does not reveal the controls
+PASS an Enter held through a wake from sleep does not reveal the controls; a fresh hold afterwards does
+  ok  no PIN reset without {"resetPin": true} from a 2xx config.json
+PASS the PIN stays without a true flag: {resetPin:false}, "true", 1, a 403 or 500 carrying the flag, a query string
+1 of 39 kiosk cases failed
+FAIL kiosk
+## summary (exit 1)
+1 failed

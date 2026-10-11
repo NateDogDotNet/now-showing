@@ -1,0 +1,42 @@
+Hazard: reload with a dialog open or mid-fade
+Mutant: no-wait (js/main.js) — ok
+## diff
+--- /tmp/tmp.udiwiUiIVu/orig	2026-10-11 06:03:29.804395141 +0000
++++ /tmp/tmp.udiwiUiIVu/wt/js/main.js	2026-10-11 06:03:29.821863736 +0000
+@@ -449,7 +449,7 @@
+   if (reloading || reloadChecking) return;
+   const blocker = dailyReloadBlocker();
+   if (blocker) return skipReload(blocker);
+-  if (reloadMustWait()) return; // stays pending: looked at again in a second
++  // stays pending: looked at again in a second
+   const last = Number(storage.getItem(LAST_RELOAD_KEY)) || 0;
+   const age = Date.now() - last;
+   if (last && age >= 0 && age < RELOAD_GAP_MS) return skipReload('the last reload was less than 10 minutes ago');
+## test: npm run test:e2e -- pi-stability
+> node tests/e2e/run.mjs pi-stability
+
+  ok  no-store rejects with the server stopped, resolves ok with it running; ordinary fetch and reload served from the cache
+  ok  Diagnostics: Daily reload: active · Secure context: yes · Service worker: controlling
+  ok  Diagnostics: Secure context: no · Service worker: none · Daily reload: skipped (...)
+  ok  reload at 04:00 (30550 ms after 03:59:30), lastReload written, paused cleared, settings persisted, no loop
+  ok  no controller: no reload; log "4:00:00 AM  Daily reload skipped: no service worker controls this page (it needs https or localhost)"
+  ok  server down at 04:00: no reload; log "4:00:01 AM  Daily reload skipped: the server did not answer"; Diagnostics "skipped (the server did not answer)"
+  ok  Settings open at 04:00: no reload; one after Cancel
+  ok  Diagnostics open at 04:00: no reload; one after close
+  ok  04:00 passes with a poster download in flight: no reload until it finishes, then one
+  ok  dailyReload:false: no reload
+  ok  wake with lastReload older than 12 h: one reload, then none
+  ok  clock at 1970: no reload
+  ok  wake with lastReload newer than 12 h: no reload
+  ok  html and body: overscroll-behavior none
+  ok  second reload within 10 minutes refused; log "4:00:00 AM  Daily reload skipped: the last reload was less than 10 minutes ago"
+  ok  Settings: dailyReload checkbox and time, persisted by Save
+  ok  lastReload 11 minutes ago: the reload happens
+  ok  +6 h 1 min of fake clock, service workers blocked: reg.update() called 0x (0 rejected), no pageerror
+  ok  +6 h 1 min of fake clock, service workers allowed: reg.update() called 1x (0 rejected), no pageerror
+  ok  daily reload at 04:00: idle sleep still begins about an hour after the movie (~04:50), not an hour after the reload
+  ok  service-worker update reload: the idle clock carries across (asleep ~04:50)
+  ok  a normal reload restarts the idle clock (K13)
+PASS pi-stability
+## summary (exit 0)
+0 failed

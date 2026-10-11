@@ -1,0 +1,11 @@
+{
+ "phase": "device-helper-integration",
+ "sha": "e1b7f07",
+ "tag": null,
+ "ok": true,
+ "failures": [],
+ "phase_file_sha256": "b5ad0e09054eafcbf11e3d478208f2f949ff620306f0762651df5125c4482210",
+ "phase_file_sha256_noretro": "01cdf30321e1b7804a57334a3685603f1b3781d795313e6370fa87f3b382fbc3",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-11T05:16:55.438619Z"
+}

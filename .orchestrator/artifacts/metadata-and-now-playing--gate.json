@@ -1,0 +1,15 @@
+{
+ "phase": "metadata-and-now-playing",
+ "sha": "51d8ff3",
+ "tag": null,
+ "ok": false,
+ "failures": [
+  "open offer with deadline metadata-and-now-playing: K18 (D24) \u2014 metadata-and-now-playing must keep posters rotating when /status/sessions returns 401/403 with showNowPlaying on (engine.decide() now-playing fetch) \u2014 ask the user and record the answer before this gate",
+  "open offer with deadline metadata-and-now-playing: C8M1 (D28) \u2014 metadata-and-now-playing: with showNowPlaying on, a failed playback poll must not make decide() fetch /status/sessions again in the same tick \u2014 ask the user and record the answer before this gate",
+  "open offer with deadline metadata-and-now-playing: C8I1 (D37) \u2014 metadata-and-now-playing: while a limit is set, on each online pool load re-fetch the cached titles' ratings with one batched GET /library/metadata/<cached keys> (<=100), refreshRating each returned item and store '' (fail closed) for any key not returned; never treat absence from the random pool as re-rated; e2e for the upward re-rate (cached PG, really R, offline under PG-13) \u2014 ask the user and record the answer before this gate"
+ ],
+ "phase_file_sha256": "18b563b58a33e42526080a157eef6c8aac75332f15c815a9adc6e68d1595aeec",
+ "phase_file_sha256_noretro": "75d3276d8335670b0daf253a7b0794992524bfc6e59452481054c06141eff78d",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-10T17:26:37.710011Z"
+}

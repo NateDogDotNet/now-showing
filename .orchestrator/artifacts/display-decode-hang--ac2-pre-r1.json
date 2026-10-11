@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- display-decode",
+  "exit": 1,
+  "seconds": 0.84,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs display-decode\n\nFAIL display-decode (no such spec: /home/user/wt-display-decode-hang/tests/e2e/display-decode.spec.mjs)",
+  "stderr_tail": ""
+}

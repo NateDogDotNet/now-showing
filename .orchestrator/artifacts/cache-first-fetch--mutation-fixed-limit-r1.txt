@@ -1,0 +1,42 @@
+Hazard: the posterCacheLimit setting is ignored
+Mutant: fixed-limit (js/poster-cache.js) — ok
+## diff
+--- /tmp/tmp.433NB0e0rI/orig	2026-10-08 23:26:18.975087544 +0000
++++ /tmp/tmp.433NB0e0rI/wt/js/poster-cache.js	2026-10-08 23:26:18.994114054 +0000
+@@ -7,7 +7,7 @@
+ 
+ // `limit` is a number or a function returning one, re-read on every put so a settings change applies.
+ export function createPosterCache({ storage, limit = 30, caches = globalThis.caches } = {}) {
+-  const maxEntries = () => (typeof limit === 'function' ? limit() : limit);
++  const maxEntries = () => (typeof limit === 'function' ? 30 : limit);
+   const available = Boolean(caches && typeof caches.open === 'function');
+ 
+   const readIndex = () => {
+## test: node --test tests/poster-cache.test.js
+    TestContext.<anonymous> (file:///tmp/tmp.433NB0e0rI/wt/tests/poster-cache.test.js:124:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: eviction deletes the evicted entries from the cache
+ok 12 - eviction deletes the evicted entries from the cache
+  ---
+  duration_ms: 0.900554
+  type: 'test'
+  ...
+# Subtest: unavailable caches: lookup is a miss, put is a no-op
+ok 13 - unavailable caches: lookup is a miss, put is a no-op
+  ---
+  duration_ms: 0.183823
+  type: 'test'
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 12
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 186.886526
+## summary (exit 1)
+1 failed

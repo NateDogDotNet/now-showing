@@ -1,0 +1,22 @@
+{
+ "phase": "pixel-shift",
+ "round": 1,
+ "sha": "1b31344",
+ "form": "commit",
+ "handbacks": [
+  "pixel-shift--handback-builder-r1.md"
+ ],
+ "touched": [
+  "css/app.css",
+  "index.html",
+  "js/display.js",
+  "js/layout.js",
+  "tests/e2e/pixel-shift.spec.mjs",
+  "tests/layout.test.js"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-10T19:40:31.689899Z"
+}

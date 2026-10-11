@@ -1,0 +1,42 @@
+Hazard: dim jumps instead of ramping
+Mutant: ramp-jump (js/brightness.js) — ok
+## diff
+--- /tmp/tmp.E3ldp2EU7y/orig	2026-10-10 19:54:41.768724963 +0000
++++ /tmp/tmp.E3ldp2EU7y/wt/js/brightness.js	2026-10-10 19:54:41.791775114 +0000
+@@ -24,7 +24,7 @@
+   const untilEnd = (end - m + DAY_MIN) % DAY_MIN; // 1..: the minute in progress counts
+   const length = (end - start + DAY_MIN) % DAY_MIN;
+   if (sinceStart >= length) return 1; // outside [start, end)
+-  const strength = Math.min(sinceStart, untilEnd, RAMP_MINUTES) / RAMP_MINUTES;
++  const strength = 1;
+   return 1 - strength * (1 - clamp(s.nightDimLevel / 100));
+ }
+ 
+## test: node --test tests/brightness.test.js
+  error: '0.6 != 0.8'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    near (file:///tmp/tmp.E3ldp2EU7y/wt/tests/brightness.test.js:10:31)
+    TestContext.<anonymous> (file:///tmp/tmp.E3ldp2EU7y/wt/tests/brightness.test.js:129:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 7
+# fail 6
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 183.159529
+## summary (exit 1)
+6 failed

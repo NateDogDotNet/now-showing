@@ -1,0 +1,42 @@
+Hazard: zombies hold the lock for the full wait
+Mutant: zombie-counts-alive (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.nNrPe3enEN/orig	2026-10-09 00:21:37.768472065 +0000
++++ /tmp/tmp.nNrPe3enEN/wt/scripts/device-helper.mjs	2026-10-09 00:21:37.784303360 +0000
+@@ -48,7 +48,7 @@
+     if (!/^\d+$/.test(n)) continue;
+     try {
+       const m = (await readFile(`/proc/${n}/stat`, 'utf8')).match(/^\d+ \(.*\) (\S) -?\d+ (-?\d+)/s); // state, ppid, pgrp
+-      if (m && Number(m[2]) === pgid && m[1] !== 'Z') return true;
++      if (m && Number(m[2]) === pgid && true) return true;
+     } catch { /* exited while we looked */ }
+   }
+   return false;
+## test: node --test tests/device-helper.test.js
+  ---
+  duration_ms: 148.353174
+  type: 'test'
+  ...
+# Subtest: integration: without --helper the routes do not exist
+ok 49 - integration: without --helper the routes do not exist
+  ---
+  duration_ms: 189.168366
+  type: 'test'
+  ...
+# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+ok 50 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+  ---
+  duration_ms: 295.4071
+  type: 'test'
+  ...
+1..50
+# tests 50
+# suites 0
+# pass 49
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 16332.575721
+## summary (exit 1)
+1 failed

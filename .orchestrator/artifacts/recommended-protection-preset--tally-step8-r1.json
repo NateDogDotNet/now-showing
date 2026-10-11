@@ -1,0 +1,142 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "recommended-protection-preset--ac1-r1.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "recommended-protection-preset--derive-step8-r1-0.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "recommended-protection-preset--precommit-format-r1.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "recommended-protection-preset--mutation-untick-ignored-r1.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "recommended-protection-preset--dlog-check-r1.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "recommended-protection-preset--review-check-r1.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "recommended-protection-preset--readback-9bc93ed-3.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 99,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 6,
+  "missing_rows": [],
+  "review_rows": [
+   6
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": true,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 100,
+  "max": 100,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "recommended-protection-preset--ac1-r1.json": "79478ae12d2f7b6c43703a050359f14527858db4fb5b8cd8f2ccc7a8d8fb6300",
+  "recommended-protection-preset--derive-step8-r1-0.json": "fc9bedc6bbb1e33ce540ceb883b71981e529c447beddfbefae9529d037de1f57",
+  "recommended-protection-preset--precommit-format-r1.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "recommended-protection-preset--mutation-untick-ignored-r1.txt": "4c56b0b6bc277b44e6806fb351bb1014e43c1bfc1f3e80f7954fcbe40d71dde2",
+  "recommended-protection-preset--dlog-check-r1.json": "ddfb1e960f9dd8db21bf7dae3303e9bfc4ee4c7fc0099730c04fece036e40b39",
+  "recommended-protection-preset--review-check-r1.json": "49d6f73b01be3072cd89644fc9c06f37839e5eae0a74c957be12f64c3536d936",
+  "recommended-protection-preset--readback-9bc93ed-3.json": "d5372a7b5a3adb605aa574ba4f263fa1b61a90512c1ecf5fe74e1c948908e90f"
+ },
+ "_written": "2026-10-11T20:47:04.961307Z"
+}

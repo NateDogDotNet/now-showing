@@ -1,0 +1,14 @@
+{
+  "cmd": "node -e \"import('./js/settings.js').then(m=>{const d=m.defaults();const need=['rotateUi','statusIndicator','posterCacheLimit','maxContentRating','limitNowPlaying','sleepEnabled','sleepStart','sleepEnd','idleSleepHours','wakeOnPlayback','pixelShift','pixelShiftMinutes','frameBrightness','nightDim','nightDimStart','nightDimEnd','nightDimLevel','nightDimTarget','dailyReload','dailyReloadTime','kioskMode','disableShortcuts','settingsPinHash','settingsPinSalt','deviceHelper','controlLabels','showMeta','showProgress','showPlayer','fillMode'];const gone=['bulbAnimation','frameRotation','frameRotationIds','frameIdRandom','fillCount'];const miss=need.filter(k=>!(k in d));const extra=gone.filter(k=>k in d);if(miss.length||extra.length){console.error(miss,extra);process.exit(1)}})\"",
+  "exit": 1,
+  "seconds": 0.06,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": "[\n  'rotateUi',         'statusIndicator',\n  'posterCacheLimit', 'maxContentRating',\n  'limitNowPlaying',  'sleepEnabled',\n  'sleepStart',       'sleepEnd',\n  'idleSleepHours',   'wakeOnPlayback',\n  'pixelShift',       'pixelShiftMinutes',\n  'frameBrightness',  'nightDim',\n  'nightDimStart',    'nightDimEnd',\n  'nightDimLevel',    'nightDimTarget',\n  'dailyReload',      'dailyReloadTime',\n  'kioskMode',        'disableShortcuts',\n  'settingsPinHash',  'settingsPinSalt',\n  'deviceHelper',     'controlLabels',\n  'showMeta',         'showProgress',\n  'showPlayer',       'fillMode'\n] []"
+}

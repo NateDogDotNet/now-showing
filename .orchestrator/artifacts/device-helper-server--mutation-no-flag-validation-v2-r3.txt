@@ -1,0 +1,42 @@
+Hazard: a hostile --helper-output / env value reaches the command
+Mutant: no-flag-validation-v2 (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.zt0dmXDH3l/orig	2026-10-08 23:20:54.148707255 +0000
++++ /tmp/tmp.zt0dmXDH3l/wt/scripts/device-helper.mjs	2026-10-08 23:20:54.164953119 +0000
+@@ -73,7 +73,7 @@
+ }
+ 
+ function check(label, value, ...res) {
+-  if (typeof value !== 'string' || !res.some((re) => re.test(value)) || value.split('/').includes('..')) {
++  if (typeof value !== 'string' || value.split('/').includes('..')) {
+     throw new Error(`device helper: invalid ${label}: ${JSON.stringify(value)}`);
+   }
+   return value;
+## test: node --test tests/device-helper.test.js
+  ...
+# Subtest: integration: an oversized body gets a real 413 over the socket, not a reset
+ok 38 - integration: an oversized body gets a real 413 over the socket, not a reset
+  ---
+  duration_ms: 132.859261
+  type: 'test'
+  ...
+# Subtest: integration: fake-mode status is power fake, or the explicit flag
+ok 39 - integration: fake-mode status is power fake, or the explicit flag
+  ---
+  duration_ms: 254.380368
+  type: 'test'
+  ...
+# Subtest: integration: --helper alone has no calls route
+ok 40 - integration: --helper alone has no calls route
+  ---
+  duration_ms: 168.391744
+  type: 'test'
+  ...
+# Subtest: integration: without --helper the routes do not exist
+ok 41 - integration: without --helper the routes do not exist
+  ---
+  duration_ms: 136.889894
+  type: 'test'
+  ...
+## summary (exit 124)
+1 failed

@@ -1,0 +1,16 @@
+{
+ "cmd": "diff <(git log -1 --format=%B cc16968) .orchestrator/artifacts/rotation-layout-and-shell--commit-message-final.txt",
+ "sha": "cc16968",
+ "equal": true,
+ "tokens": [
+  "2.0.0"
+ ],
+ "missing_tokens": [],
+ "exempt": {
+  "2.0.0": "the shipped app version (VERSION in sw.js:5 and js/main.js) whose CSS the rotation spec fails against; not a token of this diff"
+ },
+ "stale": false,
+ "commit_rows": [],
+ "ok": true,
+ "checked_at": "2026-10-08T23:53:27.329400Z"
+}

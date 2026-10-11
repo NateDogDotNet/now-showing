@@ -1,0 +1,21 @@
+{
+ "phase": "serve-config-guard",
+ "round": 3,
+ "sha": "0914090",
+ "form": "commit",
+ "handbacks": [
+  "serve-config-guard--handback-builder-r1.md",
+  "serve-config-guard--handback-builder-r2.md",
+  "serve-config-guard--handback-builder-r3.md"
+ ],
+ "touched": [
+  "scripts/net.mjs",
+  "scripts/serve.mjs",
+  "tests/serve.test.js"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-08T22:26:17.226953Z"
+}

@@ -1,0 +1,42 @@
+Hazard: reload mid-fade
+Mutant: mid-fade-reload (js/main.js) — ok
+## diff
+--- /tmp/tmp.YJ5tqSe4fZ/orig	2026-10-11 06:57:49.162640649 +0000
++++ /tmp/tmp.YJ5tqSe4fZ/wt/js/main.js	2026-10-11 06:57:49.186471538 +0000
+@@ -418,7 +418,7 @@
+   if (document.querySelector('dialog[open]')) return 'a dialog is open';
+   if (state.busy || state.tvWaking) return 'a poster is loading';
+   if (Date.now() < state.manualWakeUntil) return 'a manual wake is running'; // it would lose its 60 s to the reload
+-  if (performance.now() - lastDrawAt < (state.settings.crossfadeMs ?? 0) + 250) return 'a poster is fading in';
++  void lastDrawAt;
+   return '';
+ }
+ 
+## test: npm run test:e2e -- pi-stability
+  ok  manual wake across 04:00: no reload until the 60 s were over
+  ok  helper on: power on, then the reload 7413 ms later, after the first poster
+  ok  clock set after boot: the wake after the schedule end does not reload
+  ok  html and body: overscroll-behavior none
+  ok  manual wake: no reload, 60 s wake ran; schedule end: one reload
+  ok  lastReload 11 minutes ago: the reload happens
+  ok  Settings: dailyReload checkbox and time, persisted by Save
+  ok  +6 h 1 min of fake clock, service workers blocked: reg.update() called 0x (0 rejected), no pageerror
+  ok  daily reload at 04:00: idle sleep still begins about an hour after the movie (~04:50), not an hour after the reload
+  ok  +6 h 1 min of fake clock, service workers allowed: reg.update() called 1x (0 rejected), no pageerror
+  ok  second reload within 10 minutes refused; log "4:00:00 AM  Daily reload skipped: the last reload was less than 10 minutes ago"
+  ok  service-worker update reload: the idle clock carries across (asleep ~04:50)
+  ok  a normal reload restarts the idle clock (K13)
+case 9d a crossfade still running at 04:00 holds the reload until the fade has ended failed:
+AssertionError [ERR_ASSERTION]: the fade is running at 04:00:01: the tab navigated
+
+2 !== 1
+
+    at staysPut (file:///tmp/tmp.YJ5tqSe4fZ/wt/tests/e2e/pi-stability.spec.mjs:77:10)
+    at async file:///tmp/tmp.YJ5tqSe4fZ/wt/tests/e2e/pi-stability.spec.mjs:418:5
+    at async withApp (file:///tmp/tmp.YJ5tqSe4fZ/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.YJ5tqSe4fZ/wt/tests/e2e/pi-stability.spec.mjs:691:9
+    at async Promise.all (index 1)
+    at async file:///tmp/tmp.YJ5tqSe4fZ/wt/tests/e2e/pi-stability.spec.mjs:686:1
+FAIL pi-stability
+## summary (exit 1)
+1 failed

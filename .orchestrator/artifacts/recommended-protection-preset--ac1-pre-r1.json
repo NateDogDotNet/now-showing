@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- preset",
+  "exit": 1,
+  "seconds": 0.91,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs preset\n\nFAIL preset (no such spec: /home/user/wt-recommended-protection-preset/tests/e2e/preset.spec.mjs)",
+  "stderr_tail": ""
+}

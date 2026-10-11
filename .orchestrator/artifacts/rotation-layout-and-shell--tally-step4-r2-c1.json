@@ -1,0 +1,94 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "rotation-layout-and-shell--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "rotation-layout-and-shell--scope-r2.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "rotation-layout-and-shell--precommit-lint-r2c.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "rotation-layout-and-shell--mutation-toast-physical-vw-r2.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_written": "2026-10-08T23:48:13.131648Z",
+ "_correction": {
+  "reason": "precommit-lint-r2 used the stale first eslint config (conductor defect); round--step4-generic-r2.sh re-run -r2c lints with round--eslint-r1e.config.mjs: exit 0",
+  "supersedes": "rotation-layout-and-shell--tally-step4-r2.json"
+ },
+ "_result": {
+  "total": 75,
+  "max": 75,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "rotation-layout-and-shell--ac1-r2.json": "015e0d5dc18cf71f198011cdabf48eba5dc6a91a28d007abbc740bdc0a688c0e",
+  "rotation-layout-and-shell--scope-r2.json": "b22c46beac465c4c899fdd21354f3839e27cf8691914f69b1b1f5aa01b9441fe",
+  "rotation-layout-and-shell--precommit-lint-r2c.json": "8a8cfe88e29d2d85244fded7f2b833bd2733834bb129152f3ee3b6440cd56978",
+  "rotation-layout-and-shell--mutation-toast-physical-vw-r2.txt": "031c5cb7babca0a7513f20ee2a962f0c8ee2c4f54c6201dc078c0783f0bdc8b9"
+ }
+}

@@ -1,0 +1,14 @@
+{
+  "cmd": "node -e \"const l=require('./package-lock.json'); if (!l.packages || !l.packages['node_modules/playwright'] || (l.packages[''].dependencies && Object.keys(l.packages[''].dependencies).length)) process.exit(1)\" && git ls-files --error-unmatch package-lock.json",
+  "exit": 0,
+  "seconds": 0.05,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "package-lock.json",
+  "stderr_tail": ""
+}

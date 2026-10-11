@@ -1,0 +1,42 @@
+Hazard: spring-forward: nonexistent time resolves to the wrong instant
+Mutant: no-gap-walk (js/schedule.js) — ok
+## diff
+--- /tmp/tmp.FajdDoHtQk/orig	2026-10-08 23:03:40.363437704 +0000
++++ /tmp/tmp.FajdDoHtQk/wt/js/schedule.js	2026-10-08 23:03:40.379428091 +0000
+@@ -29,7 +29,7 @@
+ /** Local time of day on the given calendar day; a time skipped by spring-forward resolves to the transition instant. */
+ function occurrence(y, mo, d, h, mi) {
+   const c = new Date(y, mo, d, h, mi);
+-  if (c.getHours() === h && c.getMinutes() === mi) return c.getTime();
++  return c.getTime();
+   // Nonexistent local time: walk back to the first valid instant after the gap.
+   let t = c.getTime();
+   const off = c.getTimezoneOffset();
+## test: TZ=America/New_York npm test && TZ=Europe/London npm test
+  ---
+  duration_ms: 1.386662
+  type: 'test'
+  ...
+# Subtest: a 2.0.0 export imports with the new keys at their defaults
+ok 66 - a 2.0.0 export imports with the new keys at their defaults
+  ---
+  duration_ms: 0.652717
+  type: 'test'
+  ...
+# Subtest: stored 2.0.0 settings load with new keys filled
+ok 67 - stored 2.0.0 settings load with new keys filled
+  ---
+  duration_ms: 0.249095
+  type: 'test'
+  ...
+1..67
+# tests 67
+# suites 0
+# pass 66
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 757.372519
+## summary (exit 1)
+1 failed

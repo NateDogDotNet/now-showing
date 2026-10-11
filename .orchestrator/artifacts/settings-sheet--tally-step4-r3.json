@@ -1,0 +1,90 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "settings-sheet--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "settings-sheet--scope-r3.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "settings-sheet--precommit-format-r3.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 65,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 8,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": true,
+  "dropped": {
+   "tests where implied": "no mutation record"
+  }
+ },
+ "_result": {
+  "total": 65,
+  "max": 65,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "settings-sheet--ac1-r3.json": "3b3d594978cf7c0aa2ccd277f5ba9cd37bfdf0b81b87fedd26fde7be26d0b6a6",
+  "settings-sheet--scope-r3.json": "927e1fca5c2eb881658ae6fc1535edc1c00db3862713718abf7edf2ae09262fa",
+  "settings-sheet--precommit-format-r3.json": "67d6a4fe970b28203c05471e682de78c2670b8f76a111c71e9500cf95e5a0eeb"
+ },
+ "_written": "2026-10-11T11:00:34.165989Z"
+}

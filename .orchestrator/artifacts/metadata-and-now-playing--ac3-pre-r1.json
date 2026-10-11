@@ -1,0 +1,14 @@
+{
+  "cmd": "npm run test:e2e -- metadata",
+  "exit": 1,
+  "seconds": 0.69,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "> plex-poster-display@2.0.0 test:e2e\n> node tests/e2e/run.mjs metadata\n\nFAIL metadata (no such spec: /home/user/wt-metadata-and-now-playing/tests/e2e/metadata.spec.mjs)",
+  "stderr_tail": ""
+}

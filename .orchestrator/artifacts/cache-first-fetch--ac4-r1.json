@@ -1,0 +1,14 @@
+{
+  "cmd": "test -z \"$(git status --porcelain -- index.html css sw.js)\"",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

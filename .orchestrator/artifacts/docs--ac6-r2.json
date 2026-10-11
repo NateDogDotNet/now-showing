@@ -1,0 +1,14 @@
+{
+  "cmd": "for k in 'Multi-poster landscape layout' 'Frame per poster source' 'Animated frame bulbs' 'Frame rotation' 'Remote control'; do grep -qF -- \"$k\" Roadmap.md || { echo \"roadmap missing: $k\"; exit 1; }; done && grep -q 'PIN-locked' Roadmap.md && ! sed -n '/Ideas/,$p' Roadmap.md | grep -qE 'Scheduled dimming|Playback progress'",
+  "exit": 0,
+  "seconds": 0.02,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

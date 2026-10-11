@@ -1,0 +1,101 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "status-indicator--ac1-r1.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "status-indicator--scope-r1.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 0,
+   "max": 15,
+   "evidence": "status-indicator--precommit-lint-r1.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "status-indicator--mutation-dot-never-moves-r1.txt"
+  }
+ ],
+ "bands": [
+  {
+   "min": 75,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 5,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 60,
+  "max": 75,
+  "percentage": 80,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 0,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "status-indicator--ac1-r1.json": "15014c2791ca912a8fccd9c6cd4fad6c262314d4c1324b46612fe139873b092d",
+  "status-indicator--scope-r1.json": "790a6d682650bf0c045448bf71aa1f56bbaf039180178cd4d65d3c80434d2782",
+  "status-indicator--precommit-lint-r1.json": "360e3c369e21b79adf6b392938b0320a66d2031d1f50d8d164844e78eb077385",
+  "status-indicator--mutation-dot-never-moves-r1.txt": "b78f292806888f0da0522b6cea894bcc237d8fd0219e1b447492ef2e6b8f76aa"
+ },
+ "_written": "2026-10-10T17:50:12.821048Z"
+}

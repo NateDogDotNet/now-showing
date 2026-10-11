@@ -1,0 +1,14 @@
+{
+  "cmd": "for k in 'Sleep' 'Pixel shift' 'Kiosk' 'PIN' 'Content rating' 'Progress' 'Recommended protection' 'npm run test:e2e'; do grep -qiF -- \"$k\" README.md || { echo \"missing: $k\"; exit 1; }; done && grep -qi 'shortcuts overlay' README.md",
+  "exit": 0,
+  "seconds": 0.03,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

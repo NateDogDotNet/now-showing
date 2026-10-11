@@ -1,0 +1,42 @@
+Hazard: only the newest 100 cached titles are re-checked
+Mutant: one-batch-only (js/engine.js) — ok
+## diff
+--- /tmp/tmp.9jwP5B9OMJ/orig	2026-10-10 17:13:14.985809978 +0000
++++ /tmp/tmp.9jwP5B9OMJ/wt/js/engine.js	2026-10-10 17:13:14.998676520 +0000
+@@ -44,7 +44,7 @@
+     const keys = cachedKeys();
+     if (!keys.length) return;
+     const byKey = new Map();
+-    for (let n = 0; n < RECHECK_REQUESTS && n * RECHECK_BATCH < keys.length; n++) {
++    for (let n = 0; n < 1 && n * RECHECK_BATCH < keys.length; n++) {
+       try {
+         for (const p of await client.items(keys.slice(n * RECHECK_BATCH, (n + 1) * RECHECK_BATCH))) byKey.set(p.ratingKey, p);
+       } catch {
+## test: node --test tests/engine.test.js
+    TestContext.<anonymous> (file:///tmp/tmp.9jwP5B9OMJ/wt/tests/engine.test.js:494:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: D37: no limit, no cached keys, or a cached pool: no request
+ok 50 - D37: no limit, no cached keys, or a cached pool: no request
+  ---
+  duration_ms: 0.647963
+  type: 'test'
+  ...
+# Subtest: D37: a failed batched request stores unrated for every key it asked about, and the pool load still succeeds (Q-mnp1)
+ok 51 - D37: a failed batched request stores unrated for every key it asked about, and the pool load still succeeds (Q-mnp1)
+  ---
+  duration_ms: 0.307435
+  type: 'test'
+  ...
+1..51
+# tests 51
+# suites 0
+# pass 47
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 209.062177
+## summary (exit 1)
+4 failed

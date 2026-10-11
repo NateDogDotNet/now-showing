@@ -1,0 +1,30 @@
+{
+ "phase": "docs",
+ "review": "docs--review-r2.md",
+ "done_phases": [
+  "cache-first-fetch",
+  "content-rating-filter",
+  "device-helper-integration",
+  "device-helper-server",
+  "display-decode-hang",
+  "e2e-harness",
+  "frame-brightness",
+  "kiosk-and-pin",
+  "metadata-and-now-playing",
+  "pi-stability",
+  "pixel-shift",
+  "recommended-protection-preset",
+  "rotation-layout-and-shell",
+  "serve-config-guard",
+  "settings-and-schedule-core",
+  "settings-sheet",
+  "sleep-mode",
+  "status-indicator",
+  "touch-and-labels",
+  "validation-checklists"
+ ],
+ "hits": [],
+ "no_findings": false,
+ "flagged": [],
+ "checked_at": "2026-10-11T21:21:42.266715Z"
+}

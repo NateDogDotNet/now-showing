@@ -1,0 +1,42 @@
+Hazard: a typo'd limit turns the filter off
+Mutant: unknown-limit-fails-open (js/settings.js) — ok
+## diff
+--- /tmp/tmp.u0sI57WgFQ/orig	2026-10-10 12:58:53.215555237 +0000
++++ /tmp/tmp.u0sI57WgFQ/wt/js/settings.js	2026-10-10 12:58:53.231802327 +0000
+@@ -74,7 +74,7 @@
+ 
+   // Content filter
+   // An unknown limit (a typo, a hand-edited file) fails closed to PG-13, never to "no limit" (K21, D31). Absent stays ''.
+-  maxContentRating: ['', (v) => (['', 'G', 'PG', 'PG-13', 'R', 'NC-17'].includes(v) ? v : 'PG-13')],
++  maxContentRating: ['', (v) => (['', 'G', 'PG', 'PG-13', 'R', 'NC-17'].includes(v) ? v : '')],
+   limitNowPlaying: [true, bool],
+ 
+   // Display protection
+## test: node --test tests/settings.test.js
+  ---
+  duration_ms: 0.379139
+  type: 'test'
+  ...
+# Subtest: a 2.0.0 export imports with the new keys at their defaults
+ok 19 - a 2.0.0 export imports with the new keys at their defaults
+  ---
+  duration_ms: 0.421862
+  type: 'test'
+  ...
+# Subtest: stored 2.0.0 settings load with new keys filled
+ok 20 - stored 2.0.0 settings load with new keys filled
+  ---
+  duration_ms: 0.140903
+  type: 'test'
+  ...
+1..20
+# tests 20
+# suites 0
+# pass 19
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 127.652926
+## summary (exit 1)
+1 failed

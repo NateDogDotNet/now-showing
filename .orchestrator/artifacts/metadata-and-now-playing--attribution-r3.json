@@ -1,0 +1,30 @@
+{
+ "phase": "metadata-and-now-playing",
+ "round": 3,
+ "sha": "51d8ff3",
+ "form": "commit",
+ "handbacks": [
+  "metadata-and-now-playing--handback-builder-r1.md",
+  "metadata-and-now-playing--handback-builder-r2.md",
+  "metadata-and-now-playing--handback-builder-r3.md"
+ ],
+ "touched": [
+  "css/app.css",
+  "index.html",
+  "js/display.js",
+  "js/engine.js",
+  "js/main.js",
+  "js/plex.js",
+  "js/poster-cache.js",
+  "scripts/mock-plex.mjs",
+  "tests/e2e/metadata.spec.mjs",
+  "tests/e2e/now-playing.spec.mjs",
+  "tests/engine.test.js",
+  "tests/plex.test.js"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-10T17:18:40.527310Z"
+}

@@ -1,0 +1,661 @@
+diff --git a/scripts/device-helper.mjs b/scripts/device-helper.mjs
+new file mode 100644
+index 0000000..86e75fe
+--- /dev/null
++++ b/scripts/device-helper.mjs
+@@ -0,0 +1,184 @@
++// Opt-in loopback device helper (serve.mjs --helper): switches display power and reads the
++// CPU temperature on a Pi. Routes (only when enabled; otherwise they do not exist):
++//
++//   POST /__helper/display   {"on": true|false}   screen power
++//   GET  /__helper/status                         { power: <strategy>|null, tempC: <number>|null }
++//   GET  /__helper/calls                          fake mode only: recorded calls, oldest first
++//
++// Guards, in order, on every route that exists: loopback socket peer, loopback Host
++// (hostname only), and the custom header `X-Poster-Helper: 1`. The header forces a CORS
++// preflight for any page script, and no CORS grant is ever sent, so a web page cannot make
++// the browser call this. Proxy headers are never consulted.
++// Commands run through execFile with fixed argv arrays, never a shell. One at a time,
++// 5 s timeout, killed on timeout.
++// Hazard: a reverse proxy on this machine makes every client look like loopback.
++
++import { execFile as realExecFile } from 'node:child_process';
++import { access, readFile } from 'node:fs/promises';
++import { constants } from 'node:fs';
++import { delimiter, join } from 'node:path';
++import { isLoopback, isLoopbackHost } from './net.mjs';
++
++const PREFIX = '/__helper/';
++const MAX_BODY = 1024;
++const TIMEOUT_MS = 5000;
++const STRATEGIES = ['cec-ctl', 'cec-client', 'wlr-randr', 'none'];
++const NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$/; // output / display names; never starts with '-'
++const DIR = /^\/[A-Za-z0-9_.\/-]*$/; // absolute, no spaces, newlines or NULs
++const THERMAL = '/sys/class/thermal/thermal_zone0/temp';
++
++// Fixed argv per strategy. All command syntax is (verify) on real hardware.
++const COMMANDS = {
++  'cec-ctl': (on) => ({ file: 'cec-ctl', args: ['-d', '/dev/cec0', '--to', '0', on ? '--image-view-on' : '--standby'] }),
++  'cec-client': (on) => ({ file: 'cec-client', args: ['-s', '-d', '1'], input: on ? 'on 0\n' : 'standby 0\n' }),
++  'wlr-randr': (on, cfg) => ({ file: 'wlr-randr', args: ['--output', cfg.output, on ? '--on' : '--off'] }),
++};
++
++async function defaultWhich(bin) {
++  for (const d of (process.env.PATH || '').split(delimiter).filter(Boolean)) {
++    try { await access(join(d, bin), constants.X_OK); return true; } catch { /* next */ }
++  }
++  return false;
++}
++
++function check(label, value, re) {
++  if (typeof value !== 'string' || !re.test(value) || value.split('/').includes('..')) {
++    throw new Error(`device helper: invalid ${label}: ${JSON.stringify(value)}`);
++  }
++  return value;
++}
++
++// Async so auto-detection (probing PATH for the binaries) finishes, and bad flag or env
++// values reject, before the server starts listening.
++export async function createHelper({
++  execFile = realExecFile, thermalPath = THERMAL, power, output, waylandDisplay, xdgRuntimeDir,
++  fake = false, env = process.env, which = defaultWhich, timeoutMs = TIMEOUT_MS,
++} = {}) {
++  if (power !== undefined && !STRATEGIES.includes(power)) throw new Error(`device helper: invalid power strategy: ${JSON.stringify(power)}`);
++  if (output !== undefined) check('output name', output, NAME);
++  if (waylandDisplay !== undefined) check('wayland display', waylandDisplay, NAME);
++  if (xdgRuntimeDir !== undefined) check('XDG runtime dir', xdgRuntimeDir, DIR);
++
++  let strategy = null; // resolved strategy, or null
++  if (power && power !== 'none') strategy = power;
++  else if (!power) {
++    // Auto-detect by probing for the binaries. wlr-randr needs an output name, so it is
++    // only considered when one was given.
++    for (const bin of ['cec-ctl', 'cec-client', ...(output ? ['wlr-randr'] : [])]) {
++      if (await which(bin)) { strategy = bin; break; }
++    }
++  }
++  // Compositor environment for wlr-randr: flags, else this process's environment.
++  let wlrEnv = null;
++  if (strategy === 'wlr-randr') {
++    if (!output) throw new Error('device helper: --helper-output is required for wlr-randr');
++    const wd = waylandDisplay ?? env.WAYLAND_DISPLAY;
++    const xd = xdgRuntimeDir ?? env.XDG_RUNTIME_DIR;
++    if (wd !== undefined) check('WAYLAND_DISPLAY', wd, NAME);
++    if (xd !== undefined) check('XDG_RUNTIME_DIR', xd, DIR);
++    if (wd && xd) wlrEnv = { WAYLAND_DISPLAY: wd, XDG_RUNTIME_DIR: xd };
++  }
++  const cfg = { output, env: wlrEnv };
++
++  const calls = [];
++  let busy = false;
++
++  const send = (res, status, data) => {
++    res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
++    res.end(JSON.stringify(data));
++  };
++  const guarded = (req) =>
++    isLoopback(req.socket?.remoteAddress) && isLoopbackHost(req.headers.host) && req.headers['x-poster-helper'] === '1';
++
++  async function readTemp() {
++    try {
++      const t = (await readFile(thermalPath, 'utf8')).trim();
++      return /^-?\d{1,7}$/.test(t) ? Math.round(Number(t) / 100) / 10 : null;
++    } catch { return null; }
++  }
++
++  function readBody(req) {
++    return new Promise((ok) => {
++      const chunks = [];
++      let size = 0;
++      req.on('data', (c) => {
++        size += c.length;
++        if (size > MAX_BODY) { ok(null); req.destroy?.(); return; }
++        chunks.push(c);
++      });
++      req.on('end', () => ok(Buffer.concat(chunks).toString('utf8')));
++      req.on('error', () => ok(null));
++    });
++  }
++
++  function run({ file, args, input, env: cenv }) {
++    return new Promise((ok) => {
++      let done = false;
++      let child;
++      const end = (result) => { if (!done) { done = true; clearTimeout(timer); ok(result); } };
++      const timer = setTimeout(() => {
++        try { child?.kill('SIGKILL'); } catch { /* already gone */ }
++        end('timeout');
++      }, timeoutMs);
++      try {
++        child = execFile(file, args, { env: cenv, timeout: timeoutMs, killSignal: 'SIGKILL', shell: false, windowsHide: true },
++          (err) => end(err ? 'error' : 'ok'));
++        child?.stdin?.on?.('error', () => {});
++        child?.stdin?.end?.(input);
++      } catch { end('error'); }
++    });
++  }
++
++  async function display(req, res) {
++    const text = await readBody(req);
++    if (text === null) return send(res, 413, { error: 'body too large' });
++    let body;
++    try { body = JSON.parse(text); } catch { return send(res, 400, { error: 'body must be JSON' }); }
++    if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.on !== 'boolean') {
++      return send(res, 400, { error: '"on" must be true or false' });
++    }
++    const on = body.on;
++    if (fake) {
++      calls.push({ action: 'display', on, at: new Date().toISOString() });
++      return send(res, 200, { ok: true, on });
++    }
++    if (!strategy) return send(res, 503, { error: 'no power strategy available' });
++    if (strategy === 'wlr-randr' && !cfg.env) return send(res, 503, { error: 'WAYLAND_DISPLAY and XDG_RUNTIME_DIR are required' });
++    if (busy) return send(res, 503, { error: 'busy' });
++    busy = true;
++    try {
++      const cmd = COMMANDS[strategy](on, cfg);
++      const base = { PATH: env.PATH || '/usr/local/bin:/usr/bin:/bin' };
++      const result = await run({ ...cmd, env: strategy === 'wlr-randr' ? { ...base, ...cfg.env } : base });
++      if (result === 'ok') return send(res, 200, { ok: true, on });
++      return send(res, result === 'timeout' ? 504 : 502, { error: result === 'timeout' ? 'command timed out' : 'command failed' });
++    } finally { busy = false; }
++  }
++
++  async function status(res) {
++    if (fake) return send(res, 200, { power: strategy ?? 'fake', tempC: 42.5 });
++    send(res, 200, { power: strategy, tempC: await readTemp() });
++  }
++
++  // Returns false when the URL is not under /__helper/ (serve.mjs carries on); otherwise
++  // true, and the response is sent.
++  function handle(req, res) {
++    const path = (req.url || '').split(/[?#]/)[0];
++    if (path !== PREFIX.slice(0, -1) && !path.startsWith(PREFIX)) return false;
++    const notFound = () => send(res, 404, { error: 'not found' });
++    const route = path.slice(PREFIX.length);
++    const known =
++      (req.method === 'POST' && route === 'display') ||
++      (req.method === 'GET' && route === 'status') ||
++      (req.method === 'GET' && route === 'calls' && fake);
++    if (!known) { notFound(); return true; }
++    if (!guarded(req)) { send(res, 403, { error: 'forbidden' }); return true; }
++    const done = (p) => p.catch(() => send(res, 500, { error: 'internal error' }));
++    if (route === 'display') done(display(req, res));
++    else if (route === 'status') done(status(res));
++    else send(res, 200, calls);
++    return true;
++  }
++
++  return { handle, power: strategy };
++}
+diff --git a/scripts/serve.mjs b/scripts/serve.mjs
+index ae5d05f..b45abf0 100644
+--- a/scripts/serve.mjs
++++ b/scripts/serve.mjs
+@@ -7,6 +7,10 @@
+ //   node scripts/serve.mjs --host 0.0.0.0  # reachable from other devices on the LAN
+ //   node scripts/serve.mjs --mock          # plus a fake Plex server on :32401 for demos/tests
+ //   node scripts/serve.mjs --root <dir>    # serve <dir> instead of the repo root (tests)
++//   node scripts/serve.mjs --helper        # opt-in loopback device helper (screen power, CPU temp)
++//       --helper-power cec-ctl|cec-client|wlr-randr|none   (default: auto-detect)
++//       --helper-output <name>  --helper-wayland-display <name>  --helper-xdg-runtime-dir <dir>
++//       --helper-fake           # with --helper: record calls, run nothing (tests)
+ //
+ // Only an allowlist of app paths is served. config.json (the Plex token) goes only to a
+ // loopback peer whose Host is localhost, 127.0.0.1 or [::1]; everything else is 404.
+@@ -19,6 +23,7 @@ import { readFile, stat, realpath } from 'node:fs/promises';
+ import { extname, join, resolve, sep, posix, relative } from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ import { isLoopback, isLoopbackHost } from './net.mjs';
++import { createHelper } from './device-helper.mjs';
+ 
+ const args = process.argv.slice(2);
+ const opt = (name, fallback) => {
+@@ -50,7 +55,26 @@ const isAppPath = (p) =>
+   (FILES.has(p) || DIRS.some((d) => p.startsWith(d))) && !p.split('/').some((seg) => seg.startsWith('.'));
+ const REAL_ROOT = await realpath(ROOT).catch(() => ROOT);
+ 
++// Without --helper the /__helper/ routes do not exist (they fall through to the 404 below).
++// --helper-fake alone does not enable the helper.
++let helper = null;
++if (args.includes('--helper')) {
++  try {
++    helper = await createHelper({
++      power: opt('helper-power'),
++      output: opt('helper-output'),
++      waylandDisplay: opt('helper-wayland-display'),
++      xdgRuntimeDir: opt('helper-xdg-runtime-dir'),
++      fake: args.includes('--helper-fake'),
++    });
++  } catch (e) {
++    console.error(e.message);
++    process.exit(1);
++  }
++}
++
+ createServer(async (req, res) => {
++  if (helper?.handle(req, res)) return;
+   try {
+     // Normalise first (decode, resolve . and .., collapse //, strip trailing slash), check second.
+     const raw = decodeURIComponent(req.url.split(/[?#]/)[0]);
+diff --git a/tests/device-helper.test.js b/tests/device-helper.test.js
+new file mode 100644
+index 0000000..8d9a4cf
+--- /dev/null
++++ b/tests/device-helper.test.js
+@@ -0,0 +1,415 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { spawn } from 'node:child_process';
++import { createServer, request } from 'node:http';
++import { Readable } from 'node:stream';
++import { mkdtempSync, writeFileSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { createHelper } from '../scripts/device-helper.mjs';
++
++// ---- helpers ---------------------------------------------------------------
++const dir = mkdtempSync(join(tmpdir(), 'helper-test-'));
++const thermal = join(dir, 'temp');
++writeFileSync(thermal, '48312\n');
++
++// Fake execFile: records every call; `hang` leaves the callback uncalled.
++function fakeExec({ hang = false } = {}) {
++  const calls = [];
++  const execFile = (file, args, opts, cb) => {
++    const rec = { file, args, opts, input: undefined, killed: false };
++    calls.push(rec);
++    if (!hang) setImmediate(() => cb(null, '', ''));
++    return { stdin: { end: (s) => { rec.input = s; } }, kill: () => { rec.killed = true; } };
++  };
++  return { calls, execFile };
++}
++
++async function make(opts = {}) {
++  const ex = fakeExec(opts.exec);
++  const helper = await createHelper({
++    execFile: ex.execFile,
++    thermalPath: thermal,
++    power: 'cec-ctl',
++    which: () => false,
++    env: {},
++    ...opts.config,
++  });
++  return { helper, ex };
++}
++
++// Drive the handler with mock req/res so the peer address can be anything.
++function call(helper, { method = 'POST', url = '/__helper/display', body, headers = {}, peer = '127.0.0.1', host = 'localhost:8080', poster = true } = {}) {
++  return new Promise((ok) => {
++    const req = Readable.from(body === undefined ? [] : [Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))]);
++    req.method = method;
++    req.url = url;
++    req.headers = { host, ...(poster ? { 'x-poster-helper': '1' } : {}), ...headers };
++    if (host === null) delete req.headers.host;
++    req.socket = { remoteAddress: peer === null ? undefined : peer };
++    const res = {
++      writeHead(status) { this.status = status; },
++      end(text = '') { ok({ status: this.status, body: String(text) }); },
++    };
++    const handled = helper.handle(req, res);
++    if (!handled) ok({ status: 'unhandled' });
++  });
++}
++const json = (r) => JSON.parse(r.body);
++const on = (v) => ({ body: { on: v } });
++
++// ---- strategies ------------------------------------------------------------
++test('cec-ctl runs exactly the standby / image-view-on argv', async () => {
++  const { helper, ex } = await make();
++  assert.equal((await call(helper, on(false))).status, 200);
++  assert.equal((await call(helper, on(true))).status, 200);
++  assert.deepEqual(ex.calls.map((c) => [c.file, c.args]), [
++    ['cec-ctl', ['-d', '/dev/cec0', '--to', '0', '--standby']],
++    ['cec-ctl', ['-d', '/dev/cec0', '--to', '0', '--image-view-on']],
++  ]);
++});
++
++test('cec-client gets standby 0 / on 0 on stdin', async () => {
++  const { helper, ex } = await make({ config: { power: 'cec-client' } });
++  await call(helper, on(false));
++  await call(helper, on(true));
++  assert.deepEqual(ex.calls.map((c) => [c.file, c.args, c.input]), [
++    ['cec-client', ['-s', '-d', '1'], 'standby 0\n'],
++    ['cec-client', ['-s', '-d', '1'], 'on 0\n'],
++  ]);
++});
++
++test('wlr-randr runs --off / --on with only the compositor env', async () => {
++  const { helper, ex } = await make({ config: {
++    power: 'wlr-randr', output: 'HDMI-A-1',
++    env: { WAYLAND_DISPLAY: 'wayland-1', XDG_RUNTIME_DIR: '/run/user/1000', PLEX_TOKEN: 'SECRET', HOME: '/root' },
++  } });
++  await call(helper, on(false));
++  await call(helper, on(true));
++  assert.deepEqual(ex.calls.map((c) => [c.file, c.args]), [
++    ['wlr-randr', ['--output', 'HDMI-A-1', '--off']],
++    ['wlr-randr', ['--output', 'HDMI-A-1', '--on']],
++  ]);
++  for (const c of ex.calls) {
++    assert.equal(c.opts.env.WAYLAND_DISPLAY, 'wayland-1');
++    assert.equal(c.opts.env.XDG_RUNTIME_DIR, '/run/user/1000');
++    assert.ok(Object.keys(c.opts.env).every((k) => ['WAYLAND_DISPLAY', 'XDG_RUNTIME_DIR', 'PATH'].includes(k)), JSON.stringify(c.opts.env));
++    assert.ok(!JSON.stringify(c.opts).includes('SECRET'));
++    assert.ok(!c.opts.shell);
++  }
++});
++
++test('flags beat the helper environment for wlr-randr', async () => {
++  const { helper, ex } = await make({ config: {
++    power: 'wlr-randr', output: 'DP-1', waylandDisplay: 'wayland-9', xdgRuntimeDir: '/run/user/42',
++    env: { WAYLAND_DISPLAY: 'wayland-1', XDG_RUNTIME_DIR: '/run/user/1000' },
++  } });
++  await call(helper, on(false));
++  assert.equal(ex.calls[0].opts.env.WAYLAND_DISPLAY, 'wayland-9');
++  assert.equal(ex.calls[0].opts.env.XDG_RUNTIME_DIR, '/run/user/42');
++});
++
++test('wlr-randr without a compositor environment runs nothing', async () => {
++  const { helper, ex } = await make({ config: { power: 'wlr-randr', output: 'DP-1' } });
++  assert.equal((await call(helper, on(false))).status, 503);
++  assert.equal(ex.calls.length, 0);
++});
++
++test('power none and nothing detected -> 503, no command', async () => {
++  for (const config of [{ power: 'none' }, { power: undefined }]) {
++    const { helper, ex } = await make({ config });
++    assert.equal((await call(helper, on(false))).status, 503);
++    assert.equal(ex.calls.length, 0);
++  }
++});
++
++test('auto-detect probes for the binaries in order', async () => {
++  const probe = async (have, extra = {}) => (await createHelper({ execFile: fakeExec().execFile, thermalPath: thermal, env: {}, which: (b) => have.includes(b), ...extra })).power;
++  assert.equal((await probe(['cec-ctl', 'cec-client'])), 'cec-ctl');
++  assert.equal((await probe(['cec-client'])), 'cec-client');
++  assert.equal((await probe([])), null);
++  assert.equal((await probe(['wlr-randr'])), null, 'wlr-randr needs an output name');
++  assert.equal((await probe(['wlr-randr'], { output: 'HDMI-A-1' })), 'wlr-randr');
++});
++
++// ---- body validation -------------------------------------------------------
++test('non-boolean or missing on -> 400 and no command', async () => {
++  const { helper, ex } = await make();
++  for (const body of [{ on: 'yes' }, { on: 1 }, { on: 0 }, { on: null }, {}, [], 'null', '{bad json', '"x"', '']) {
++    assert.equal((await call(helper, { body })).status, 400, JSON.stringify(body));
++  }
++  assert.equal((await call(helper, {})).status, 400, 'no body at all');
++  assert.equal((await call(helper, { body: { on: true, argv: ['x'], cmd: 'rm -rf /' } })).status, 200, 'extra keys are ignored');
++  assert.deepEqual(ex.calls.map((c) => c.file), ['cec-ctl']);
++  assert.deepEqual(ex.calls[0].args, ['-d', '/dev/cec0', '--to', '0', '--image-view-on']);
++});
++
++test('an oversized body is refused and runs nothing', async () => {
++  const { helper, ex } = await make();
++  const r = await call(helper, { body: JSON.stringify({ on: true, pad: 'x'.repeat(5000) }) });
++  assert.equal(r.status, 413);
++  assert.equal(ex.calls.length, 0);
++});
++
++// ---- guards ---------------------------------------------------------------
++test('non-loopback peer, missing header, hostile Host -> 403 and no command', async () => {
++  const { helper, ex } = await make();
++  const cases = [
++    { peer: '192.168.1.5' },
++    { peer: '::ffff:192.168.1.5' },
++    { peer: null },
++    { poster: false },
++    { headers: { 'x-poster-helper': '0' }, poster: false },
++    { headers: { 'x-poster-helper': 'true' }, poster: false },
++    { host: 'evil.example' },
++    { host: 'localhost.evil.com' },
++    { host: 'localhost@evil.example' },
++    { host: null },
++    { headers: { 'content-type': 'text/plain' }, poster: false }, // CSRF simple request
++  ];
++  for (const c of cases) {
++    for (const [method, url] of [['POST', '/__helper/display'], ['GET', '/__helper/status']]) {
++      const r = await call(helper, { ...on(false), method, url, ...c });
++      assert.equal(r.status, 403, `${method} ${url} ${JSON.stringify(c)}`);
++    }
++  }
++  assert.equal(ex.calls.length, 0);
++});
++
++test('X-Forwarded-For / Forwarded from a non-loopback peer is still 403', async () => {
++  const { helper, ex } = await make();
++  const r = await call(helper, { ...on(false), peer: '192.168.1.5', headers: { 'x-forwarded-for': '127.0.0.1', forwarded: 'for=127.0.0.1', 'x-real-ip': '127.0.0.1' } });
++  assert.equal(r.status, 403);
++  assert.equal(ex.calls.length, 0);
++});
++
++test('Host localhost:8080, 127.0.0.1 and [::1] are accepted; ::1 and mapped peers too', async () => {
++  const { helper } = await make();
++  for (const host of ['localhost:8080', 'localhost', '127.0.0.1:3000', '[::1]:8080']) {
++    assert.equal((await call(helper, { ...on(true), host })).status, 200, host);
++  }
++  for (const peer of ['::1', '::ffff:127.0.0.1', '127.0.0.5']) {
++    assert.equal((await call(helper, { ...on(true), peer })).status, 200, peer);
++  }
++});
++
++test('no CORS grant, and OPTIONS preflight is never answered with one', async () => {
++  const { helper } = await make();
++  const r = await call(helper, { method: 'OPTIONS', headers: { origin: 'http://evil.example', 'access-control-request-method': 'POST' } });
++  assert.notEqual(r.status, 200);
++  assert.notEqual(r.status, 204);
++});
++
++// ---- routes ------------------------------------------------------------
++test('status lists the strategy and tempC from the thermal file', async () => {
++  const { helper } = await make();
++  const r = await call(helper, { method: 'GET', url: '/__helper/status' });
++  assert.equal(r.status, 200);
++  assert.deepEqual(json(r), { power: 'cec-ctl', tempC: 48.3 });
++});
++
++test('status reports null power and null tempC when nothing is available', async () => {
++  const { helper } = await make({ config: { power: 'none', thermalPath: join(dir, 'missing') } });
++  assert.deepEqual(json(await call(helper, { method: 'GET', url: '/__helper/status' })), { power: null, tempC: null });
++  writeFileSync(join(dir, 'junk'), 'hot\n');
++  const { helper: h2 } = await make({ config: { thermalPath: join(dir, 'junk') } });
++  assert.equal(json(await call(h2, { method: 'GET', url: '/__helper/status' })).tempC, null);
++});
++
++test('brightness and unknown helper routes are 404; wrong methods are 404', async () => {
++  const { helper, ex } = await make();
++  for (const [method, url] of [['POST', '/__helper/brightness'], ['GET', '/__helper/brightness'], ['POST', '/__helper/nope'],
++    ['GET', '/__helper/display'], ['POST', '/__helper/status'], ['POST', '/__helper/calls'], ['GET', '/__helper/'], ['GET', '/__helper'],
++    ['POST', '/__helper/display/'], ['POST', '/__helper/../display']]) {
++    assert.equal((await call(helper, { method, url, ...on(true) })).status, 404, `${method} ${url}`);
++  }
++  assert.equal(ex.calls.length, 0);
++});
++
++test('paths outside /__helper/ are not handled', async () => {
++  const { helper } = await make();
++  for (const url of ['/', '/index.html', '/__helperx/status', '/x/__helper/status']) {
++    assert.equal((await call(helper, { method: 'GET', url })).status, 'unhandled', url);
++  }
++});
++
++test('query strings do not change the route', async () => {
++  const { helper, ex } = await make();
++  assert.equal((await call(helper, { url: '/__helper/display?x=1', ...on(false) })).status, 200);
++  assert.equal(ex.calls.length, 1);
++});
++
++// ---- fake mode ----------------------------------------------------------
++test('fake mode records calls, runs nothing and serves GET /__helper/calls', async () => {
++  const { helper, ex } = await make({ config: { fake: true } });
++  assert.deepEqual(json(await call(helper, { method: 'GET', url: '/__helper/calls' })), []);
++  await call(helper, on(false));
++  await call(helper, on(true));
++  assert.equal((await call(helper, { ...on('yes') })).status, 400);
++  const calls = json(await call(helper, { method: 'GET', url: '/__helper/calls' }));
++  assert.equal(calls.length, 2);
++  assert.deepEqual(calls.map((c) => [c.action, c.on]), [['display', false], ['display', true]]);
++  for (const c of calls) {
++    assert.deepEqual(Object.keys(c).sort(), ['action', 'at', 'on']);
++    assert.ok(Number.isFinite(Date.parse(c.at)) || Number.isFinite(c.at));
++  }
++  assert.equal(ex.calls.length, 0);
++  const s = json(await call(helper, { method: 'GET', url: '/__helper/status' }));
++  assert.equal(typeof s.tempC, 'number');
++  assert.ok(s.power);
++});
++
++test('calls is 404 without fake mode, and guarded with it', async () => {
++  const { helper } = await make();
++  assert.equal((await call(helper, { method: 'GET', url: '/__helper/calls' })).status, 404);
++  const { helper: f } = await make({ config: { fake: true } });
++  for (const c of [{ peer: '10.0.0.2' }, { poster: false }, { host: 'evil.example' }]) {
++    assert.equal((await call(f, { method: 'GET', url: '/__helper/calls', ...c })).status, 403, JSON.stringify(c));
++  }
++});
++
++// ---- hostile configuration ------------------------------------------------
++test('invalid flag / env values are refused at startup', async () => {
++  const base = { execFile: fakeExec().execFile, thermalPath: thermal, which: () => false };
++  const bad = [
++    { power: 'sh' }, { power: 'wlr-randr' }, // wlr-randr without output
++    { power: 'wlr-randr', output: '--off' }, { power: 'wlr-randr', output: '-x' }, { power: 'wlr-randr', output: 'a b' },
++    { power: 'wlr-randr', output: 'a;rm -rf /' }, { power: 'wlr-randr', output: '$(id)' }, { power: 'wlr-randr', output: 'a\nb' },
++    { power: 'wlr-randr', output: '' }, { power: 'wlr-randr', output: 'x'.repeat(65) },
++    { power: 'wlr-randr', output: 'DP-1', waylandDisplay: '../x' }, { power: 'wlr-randr', output: 'DP-1', waylandDisplay: '-x' },
++    { power: 'wlr-randr', output: 'DP-1', xdgRuntimeDir: 'relative' }, { power: 'wlr-randr', output: 'DP-1', xdgRuntimeDir: '/run/../etc' },
++    { power: 'wlr-randr', output: 'DP-1', xdgRuntimeDir: '/run/user/1000\nX=1' }, { power: 'wlr-randr', output: 'DP-1', xdgRuntimeDir: '/a b' },
++    { power: 'wlr-randr', output: 'DP-1', env: { WAYLAND_DISPLAY: 'x;y' } },
++    { power: 'wlr-randr', output: 'DP-1', env: { XDG_RUNTIME_DIR: '/run/\0x' } },
++  ];
++  for (const b of bad) await assert.rejects(createHelper({ ...base, env: {}, ...b }), JSON.stringify(b));
++});
++
++// ---- timeout and lock -----------------------------------------------------
++test('a hung command is killed after the timeout and the lock is released', async () => {
++  const { helper, ex } = await make({ exec: { hang: true }, config: { timeoutMs: 50 } });
++  const r = await call(helper, on(false));
++  assert.equal(r.status, 504);
++  assert.equal(ex.calls[0].killed, true);
++  assert.ok(ex.calls[0].opts.timeout > 0);
++  const r2 = await call(helper, on(true));
++  assert.equal(r2.status, 504, 'a second command is allowed to start (and times out too)');
++  assert.equal(ex.calls.length, 2);
++});
++
++test('the default timeout is 5 seconds', async () => {
++  const { helper, ex } = await make();
++  await call(helper, on(false));
++  assert.equal(ex.calls[0].opts.timeout, 5000);
++});
++
++test('one command at a time: a concurrent request is refused while one runs', async () => {
++  const { helper, ex } = await make({ exec: { hang: true }, config: { timeoutMs: 300 } });
++  const first = call(helper, on(false));
++  await new Promise((r) => setTimeout(r, 30));
++  const second = await call(helper, on(true));
++  assert.equal(second.status, 503);
++  assert.equal(ex.calls.length, 1);
++  assert.equal((await first).status, 504);
++});
++
++test('a failing command -> 502 and the lock is released', async () => {
++  const calls = [];
++  const execFile = (f, a, o, cb) => { calls.push(f); setImmediate(() => cb(new Error('boom: SECRET'), '', 'stderr SECRET')); return { stdin: { end() {} }, kill() {} }; };
++  const helper = await createHelper({ execFile, thermalPath: thermal, power: 'cec-ctl', which: () => false, env: {} });
++  const r = await call(helper, on(false));
++  assert.equal(r.status, 502);
++  assert.ok(!r.body.includes('SECRET'), 'command output is not echoed');
++  assert.equal((await call(helper, on(false))).status, 502);
++  assert.equal(calls.length, 2);
++});
++
++// ---- integration: serve.mjs --helper ----------------------------------------
++function freePort() {
++  return new Promise((ok, fail) => {
++    const s = createServer();
++    s.once('error', fail);
++    s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => ok(port)); });
++  });
++}
++const root = mkdtempSync(join(tmpdir(), 'helper-root-'));
++writeFileSync(join(root, 'index.html'), 'INDEX');
++
++async function spawnServer(extra) {
++  for (let attempt = 0; attempt < 5; attempt++) {
++    const p = await freePort();
++    const c = spawn(process.execPath, ['scripts/serve.mjs', '--port', String(p), '--root', root, ...extra], {
++      cwd: new URL('..', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'],
++    });
++    const outcome = await new Promise((ok) => {
++      c.stdout.once('data', () => ok('up'));
++      c.once('exit', () => ok('exit'));
++    });
++    if (outcome === 'up') return { child: c, port: p };
++  }
++  throw new Error('could not start serve.mjs');
++}
++function http(port, method, path, { headers = {}, body } = {}) {
++  return new Promise((ok, fail) => {
++    const req = request({ host: '127.0.0.1', port, path, method, headers: { Host: `localhost:${port}`, ...headers } }, (res) => {
++      let b = '';
++      res.on('data', (c) => (b += c));
++      res.on('end', () => ok({ status: res.statusCode, body: b, headers: res.headers }));
++    });
++    req.on('error', fail);
++    req.end(body);
++  });
++}
++const H = { 'X-Poster-Helper': '1' };
++
++test('integration: serve.mjs --helper --helper-fake', async () => {
++  const { child, port } = await spawnServer(['--helper', '--helper-fake']);
++  try {
++    assert.equal((await http(port, 'GET', '/__helper/status', { headers: H })).status, 200);
++    assert.equal((await http(port, 'GET', '/__helper/status')).status, 403);
++    assert.equal((await http(port, 'GET', '/__helper/status', { headers: { ...H, Host: 'evil.example' } })).status, 403);
++    assert.equal((await http(port, 'POST', '/__helper/display', { headers: { 'Content-Type': 'text/plain' }, body: '{"on":false}' })).status, 403);
++    assert.equal((await http(port, 'GET', '/__helper/calls', { headers: H })).body, '[]');
++    const d = await http(port, 'POST', '/__helper/display', { headers: { ...H, 'Content-Type': 'application/json' }, body: '{"on":false}' });
++    assert.equal(d.status, 200);
++    const calls = JSON.parse((await http(port, 'GET', '/__helper/calls', { headers: H })).body);
++    assert.equal(calls.length, 1);
++    assert.equal(calls[0].action, 'display');
++    assert.equal(calls[0].on, false);
++    assert.equal((await http(port, 'GET', '/__helper/calls')).status, 403);
++    assert.equal((await http(port, 'POST', '/__helper/brightness', { headers: H, body: '{}' })).status, 404);
++    for (const r of [await http(port, 'GET', '/__helper/status', { headers: H }), await http(port, 'GET', '/__helper/status')]) {
++      assert.ok(!Object.keys(r.headers).some((k) => k.startsWith('access-control-')));
++    }
++    assert.equal((await http(port, 'GET', '/index.html')).body, 'INDEX', 'static serving is unchanged');
++  } finally { child.kill(); }
++});
++
++test('integration: --helper alone has no calls route', async () => {
++  const { child, port } = await spawnServer(['--helper', '--helper-power', 'none']);
++  try {
++    assert.equal((await http(port, 'GET', '/__helper/calls', { headers: H })).status, 404);
++    const s = await http(port, 'GET', '/__helper/status', { headers: H });
++    assert.equal(s.status, 200);
++    assert.equal(JSON.parse(s.body).power, null);
++  } finally { child.kill(); }
++});
++
++test('integration: without --helper the routes do not exist', async () => {
++  const { child, port } = await spawnServer([]);
++  try {
++    assert.equal((await http(port, 'GET', '/__helper/status', { headers: H })).status, 404);
++    assert.equal((await http(port, 'POST', '/__helper/display', { headers: H, body: '{"on":false}' })).status, 404);
++  } finally { child.kill(); }
++});
++
++test('integration: --helper-fake alone does not enable the helper; bad flag values refuse to start', async () => {
++  const { child, port } = await spawnServer(['--helper-fake']);
++  try {
++    assert.equal((await http(port, 'GET', '/__helper/status', { headers: H })).status, 404);
++  } finally { child.kill(); }
++  const c = spawn(process.execPath, ['scripts/serve.mjs', '--port', String(await freePort()), '--root', root,
++    '--helper', '--helper-power', 'wlr-randr', '--helper-output', 'a;b'], { cwd: new URL('..', import.meta.url), stdio: 'ignore' });
++  const code = await new Promise((ok) => c.once('exit', ok));
++  assert.notEqual(code, 0);
++});

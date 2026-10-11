@@ -1,0 +1,42 @@
+Hazard: posters fetched while asleep
+Mutant: decide-while-asleep (js/main.js) — ok
+## diff
+--- /tmp/tmp.wgddecRfCf/orig	2026-10-09 01:09:52.977485484 +0000
++++ /tmp/tmp.wgddecRfCf/wt/js/main.js	2026-10-09 01:09:52.994136861 +0000
+@@ -113,7 +113,7 @@
+   try {
+     await pollPlayback();
+     // Asleep: Plex is polled above, but no poster is chosen, fetched or shown.
+-    const decision = state.asleep ? null : await engine.decide({ force });
++    const decision = await engine.decide({ force });
+     if (decision) {
+       let image = await fetchImage(decision.poster);
+       try {
+## test: npm run test:e2e -- sleep
+    ^
+
+AssertionError [ERR_ASSERTION]: no image request while asleep
++ actual - expected
+
++ [
++   'http://127.0.0.1:31537/photo/:/transcode?url=%2Flibrary%2Fmetadata%2F5%2Fthumb%2F1700000000&width=400&height=600&minSize=1&upscale=1&X-Plex-Token=demo-token'
++ ]
+- []
+
+    at file:///tmp/tmp.wgddecRfCf/wt/tests/e2e/sleep.spec.mjs:99:10
+    at async withApp (file:///tmp/tmp.wgddecRfCf/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.wgddecRfCf/wt/tests/e2e/sleep.spec.mjs:65:1 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [
+    'http://127.0.0.1:31537/photo/:/transcode?url=%2Flibrary%2Fmetadata%2F5%2Fthumb%2F1700000000&width=400&height=600&minSize=1&upscale=1&X-Plex-Token=demo-token'
+  ],
+  expected: [],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL sleep
+## summary (exit 1)
+1 failed

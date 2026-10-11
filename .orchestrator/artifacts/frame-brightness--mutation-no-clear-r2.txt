@@ -1,0 +1,42 @@
+Hazard: switching target leaves the old one dimmed
+Mutant: no-clear (js/display.js) — ok
+## diff
+--- /tmp/tmp.0bv0Qen0ow/orig	2026-10-10 19:57:06.026561114 +0000
++++ /tmp/tmp.0bv0Qen0ow/wt/js/display.js	2026-10-10 19:57:06.039623562 +0000
+@@ -182,7 +182,7 @@
+       const dim = target === 'stage' ? el.stage : el.frame;
+       const clear = dim === el.stage ? el.frame : el.stage;
+       dim.style.filter = value;
+-      clear.style.filter = '';
++      void clear;
+     },
+     async apply(s) {
+       const barOrLabelChanged = settings && (settings.showProgress !== s.showProgress || settings.showPlayer !== s.showPlayer);
+## test: npm run test:e2e -- brightness
+    ^
+
+AssertionError [ERR_ASSERTION]: preview stage: #frame is not dimmed a second time
++ actual - expected
+
++ 'brightness(0.6)'
+- 'none'
+
+    at dimmedOnly (file:///tmp/tmp.0bv0Qen0ow/wt/tests/e2e/brightness.spec.mjs:191:14)
+    at async file:///tmp/tmp.0bv0Qen0ow/wt/tests/e2e/brightness.spec.mjs:197:5
+    at async file:///tmp/tmp.0bv0Qen0ow/wt/tests/e2e/brightness.spec.mjs:53:5
+    at async withApp (file:///tmp/tmp.0bv0Qen0ow/wt/tests/e2e/lib.mjs:171:12)
+    at async atTime (file:///tmp/tmp.0bv0Qen0ow/wt/tests/e2e/brightness.spec.mjs:50:3)
+    at async Promise.all (index 10)
+    at async file:///tmp/tmp.0bv0Qen0ow/wt/tests/e2e/brightness.spec.mjs:58:1 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'brightness(0.6)',
+  expected: 'none',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL brightness
+## summary (exit 1)
+1 failed

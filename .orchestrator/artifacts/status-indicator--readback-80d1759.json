@@ -1,0 +1,12 @@
+{
+ "cmd": "diff <(git log -1 --format=%B 80d1759) /home/user/plex-poster-app/.orchestrator/artifacts/status-indicator--commit-message-final.txt",
+ "sha": "80d1759",
+ "equal": true,
+ "tokens": [],
+ "missing_tokens": [],
+ "exempt": {},
+ "stale": false,
+ "commit_rows": [],
+ "ok": true,
+ "checked_at": "2026-10-10T18:27:21.995196Z"
+}

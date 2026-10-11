@@ -1,0 +1,14 @@
+{
+  "cmd": "grep -q 'Criterion 6 attacks: PASS' .orchestrator/artifacts/sleep-mode--review-r8.md && grep -q 'UI screenshots: PASS' .orchestrator/artifacts/sleep-mode--review-r8.md && grep -q 'Verdict:\\*\\* APPROVE' .orchestrator/artifacts/sleep-mode--review-r8.md && grep -q 'Verdict:\\*\\* APPROVE' .orchestrator/artifacts/sleep-mode--review-cold-r8.md",
+  "exit": 0,
+  "seconds": 0.02,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

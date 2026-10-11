@@ -1,0 +1,131 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 29,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "sleep-mode--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "sleep-mode--scope-r2.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "sleep-mode--precommit-format-r2.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "sleep-mode--mutation-playback-not-recorded-r2.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "sleep-mode--dlog-check-r2.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 0,
+   "max": 10,
+   "evidence": "sleep-mode--review-check-r2.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 95,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 6,
+  "missing_rows": [
+   "ac6"
+  ],
+  "review_rows": [
+   6
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 79,
+  "max": 95,
+  "percentage": 83,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 29,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "sleep-mode--ac1-r2.json": "833562db2f1e93c134a74c90a566e868103d2bb58d181a5f2450f08391e13d7b",
+  "sleep-mode--scope-r2.json": "61662208ea5a4f7f5bbeff2cea7ce76f0a51a7c7e429d3c858734ea86733c449",
+  "sleep-mode--precommit-format-r2.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "sleep-mode--mutation-playback-not-recorded-r2.txt": "15e85294a50656f75d0c8c306118b1ed5cc8eb46e87458f86415fdc14a7c11fc",
+  "sleep-mode--dlog-check-r2.json": "f978c091893db322d15ccd2a0745a1b17b3c0be0ef76c98bffb6d8b03a439edd",
+  "sleep-mode--review-check-r2.json": "b83cfa7367e9bfe0db1a6991bf83c998f79ba6622550f03c7c10379b49612254"
+ },
+ "_written": "2026-10-09T01:32:56.920633Z"
+}

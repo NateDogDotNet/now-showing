@@ -1,0 +1,11 @@
+{
+ "phase": "content-rating-filter",
+ "sha": "f0b3425",
+ "tag": null,
+ "ok": true,
+ "failures": [],
+ "phase_file_sha256": "4442129dcb5d832cb279d8ea6bfbd3094327ccba7b6d2295fad2989b7594ed3b",
+ "phase_file_sha256_noretro": "a134b30118b8ec7ed09594363ff67941a10b1e48f2392903b5818c8a5a65a93d",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-10T16:10:12.327681Z"
+}

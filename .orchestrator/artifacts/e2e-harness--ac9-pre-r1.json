@@ -1,0 +1,14 @@
+{
+  "cmd": "grep -q 'npm ci' .github/workflows/ci.yml && grep -q 'playwright install' .github/workflows/ci.yml && grep -q 'test:e2e' .github/workflows/ci.yml && grep -q 'check-precache' .github/workflows/ci.yml && test -f .github/workflows/ci.yml && ! grep -q 'readdirSync' .github/workflows/ci.yml",
+  "exit": 1,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

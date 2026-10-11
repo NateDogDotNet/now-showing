@@ -1,0 +1,131 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "docs--ac1-r3.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "docs--derive-step8-r3-0.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "docs--precommit-format-r3.json"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "docs--dlog-check-r3.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "docs--review-check-r3.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "docs--readback-78b9f67.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 90,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 8,
+  "missing_rows": [],
+  "review_rows": [
+   8
+  ],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": true,
+  "dropped": {
+   "tests where implied": "no mutation record"
+  }
+ },
+ "_result": {
+  "total": 90,
+  "max": 90,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "docs--ac1-r3.json": "789e1cd4fdfd1610d8c5cb0e5724eff3685ad7138d423815068b55c21e7f10ee",
+  "docs--derive-step8-r3-0.json": "7ac4597857103181116dda15aa8a6e739c7f4b0e2e8a9788c3faf0477934ff1b",
+  "docs--precommit-format-r3.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "docs--dlog-check-r3.json": "eb6c560a50ce1460323c2bd175c47c6618554fe7a84cbb98481260bc31b7ea42",
+  "docs--review-check-r3.json": "2020b2cc5e4bc9b2e5d9b0db35d1f5dcd704dd85b41041379fe6780cd373c3c6",
+  "docs--readback-78b9f67.json": "161e55844ba52e89cf5eecaf7f56ab6241c8ac747295574d3ca9a5e46c92c4b1"
+ },
+ "_written": "2026-10-11T21:21:42.058662Z"
+}

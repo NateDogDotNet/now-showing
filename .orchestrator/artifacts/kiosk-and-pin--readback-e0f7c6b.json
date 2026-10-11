@@ -1,0 +1,17 @@
+{
+ "cmd": "diff <(git log -1 --format=%B e0f7c6b) /home/user/plex-poster-app/.orchestrator/artifacts/kiosk-and-pin--commit-message-final.txt",
+ "sha": "e0f7c6b",
+ "equal": true,
+ "tokens": [
+  "2.5",
+  "config.json"
+ ],
+ "missing_tokens": [
+  "2.5"
+ ],
+ "exempt": {},
+ "stale": false,
+ "commit_rows": [],
+ "ok": false,
+ "checked_at": "2026-10-10T23:59:54.821330Z"
+}

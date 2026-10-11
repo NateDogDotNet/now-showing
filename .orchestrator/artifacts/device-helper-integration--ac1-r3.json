@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/helper.test.js && node --test tests/helper.test.js",
+  "exit": 0,
+  "seconds": 0.3,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: power(false) posts {\"on\":false}; power(true) posts {\"on\":true}\nok 5 - power(false) posts {\"on\":false}; power(true) posts {\"on\":true}\n  ---\n  duration_ms: 2.46715\n  type: 'test'\n  ...\n# Subtest: power: an HTTP error or a network error is {ok:false} and never throws\nok 6 - power: an HTTP error or a network error is {ok:false} and never throws\n  ---\n  duration_ms: 0.449477\n  type: 'test'\n  ...\n# Subtest: failures are logged once per kind, not on every call\nok 7 - failures are logged once per kind, not on every call\n  ---\n  duration_ms: 1.048528\n  type: 'test'\n  ...\n# Subtest: a success re-arms the log: a later failure is logged again\nok 8 - a success re-arms the log: a later failure is logged again\n  ---\n  duration_ms: 0.788446\n  type: 'test'\n  ...\n# Subtest: createHelper works without a log\nok 9 - createHelper works without a log\n  ---\n  duration_ms: 0.595648\n  type: 'test'\n  ...\n1..9\n# tests 9\n# suites 0\n# pass 9\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 212.237114",
+  "stderr_tail": ""
+}

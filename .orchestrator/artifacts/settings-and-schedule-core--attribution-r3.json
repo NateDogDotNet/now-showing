@@ -1,0 +1,22 @@
+{
+ "phase": "settings-and-schedule-core",
+ "round": 3,
+ "sha": "33976fe",
+ "form": "commit",
+ "handbacks": [
+  "settings-and-schedule-core--handback-builder-r1.md",
+  "settings-and-schedule-core--handback-builder-r2.md"
+ ],
+ "touched": [
+  "js/schedule.js",
+  "js/settings.js",
+  "sw.js",
+  "tests/schedule.test.js",
+  "tests/settings.test.js"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-08T23:04:16.950561Z"
+}

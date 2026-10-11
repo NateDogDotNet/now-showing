@@ -1,0 +1,42 @@
+Hazard: child group survives timeout
+Mutant: no-group-kill (scripts/device-helper.mjs) — ok
+## diff
+--- /tmp/tmp.8U4P0bdUik/orig	2026-10-08 23:41:12.189463108 +0000
++++ /tmp/tmp.8U4P0bdUik/wt/scripts/device-helper.mjs	2026-10-08 23:41:12.209980253 +0000
+@@ -37,7 +37,7 @@
+ // until the group is gone, so a forked grandchild cannot outlive the lock.
+ async function defaultKillGroup(pid) {
+   if (!Number.isInteger(pid) || pid <= 1) return;
+-  try { process.kill(-pid, 'SIGKILL'); } catch { return; } // ESRCH: already gone
++  try { process.kill(pid, 'SIGKILL'); } catch { return; } // ESRCH: already gone
+   for (let i = 0; i < 200; i++) {
+     try { process.kill(-pid, 0); } catch { return; }
+     await new Promise((r) => setTimeout(r, 10));
+## test: node --test tests/device-helper.test.js
+  ...
+# Subtest: integration: fake-mode status is power fake, or the explicit flag
+ok 40 - integration: fake-mode status is power fake, or the explicit flag
+  ---
+  duration_ms: 324.557566
+  type: 'test'
+  ...
+# Subtest: integration: --helper alone has no calls route
+ok 41 - integration: --helper alone has no calls route
+  ---
+  duration_ms: 150.089793
+  type: 'test'
+  ...
+# Subtest: integration: without --helper the routes do not exist
+ok 42 - integration: without --helper the routes do not exist
+  ---
+  duration_ms: 133.887431
+  type: 'test'
+  ...
+# Subtest: integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+ok 43 - integration: --helper-fake alone does not enable the helper; bad flag values refuse to start
+  ---
+  duration_ms: 310.890085
+  type: 'test'
+  ...
+## summary (exit 124)
+1 failed

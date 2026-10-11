@@ -1,0 +1,42 @@
+Hazard: wake-lock stub less faithful than the API (released never true)
+Mutant: stub-released-stays-false (tests/e2e/lib.mjs) — ok
+## diff
+--- /tmp/tmp.enV3ZIM9Ti/orig	2026-10-08 22:24:17.862828185 +0000
++++ /tmp/tmp.enV3ZIM9Ti/wt/tests/e2e/lib.mjs	2026-10-08 22:24:17.878348528 +0000
+@@ -152,7 +152,7 @@
+                 },
+                 release: async () => {
+                   if (sentinel.released) return;
+-                  sentinel.released = true;
++
+                   wl.held--;
+                   wl.releases++;
+                   for (const fn of [...listeners]) fn.call(sentinel, { type: 'release', target: sentinel });
+## test: npm run test:e2e -- smoke
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
++ actual - expected
+
+  {
+    held: 0,
++   released: false,
+-   released: true,
+    releases: 1,
+    requests: 1
+  }
+
+    at file:///tmp/tmp.enV3ZIM9Ti/wt/tests/e2e/smoke.spec.mjs:107:10
+    at async withApp (file:///tmp/tmp.enV3ZIM9Ti/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.enV3ZIM9Ti/wt/tests/e2e/smoke.spec.mjs:95:1 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: { held: 0, requests: 1, releases: 1, released: false },
+  expected: { held: 0, requests: 1, releases: 1, released: true },
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL smoke
+## summary (exit 1)
+1 failed

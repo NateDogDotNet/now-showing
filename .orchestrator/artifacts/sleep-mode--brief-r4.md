@@ -1,0 +1,10 @@
+# Brief — sleep-mode r4 (branch candidate; third re-dispatch)
+
+Agent name: sleep-mode-builder-r4 · effort: high · worktree `/home/user/wt-sleep-mode-r4` (a detached copy of the r3 staged tree 8159801 — work ONLY there). The r1–r3 briefs bind. E2E_PORT=18910 E2E_MOCK_PORT=18911. Stage, do not commit. Touch only js/main.js and tests/e2e/sleep.spec.mjs (plus tests/engine.test.js or tests/sleep.test.js only if a unit test is the natural home).
+
+One item — ruling K11 AMENDED (see `.orchestrator/phases/sleep-mode.md`, "CONDUCTOR DEFECT in ruling K11"): today a failed `/status/sessions` poll leaves `state.playing` unchanged forever, so a Plex outage that begins during a movie keeps the display awake inside the sleep window for as long as Plex is down. Change it so a failed poll keeps the last playing state for at most 3 consecutive failed polls (about one minute at the default 20 s), after which `playing` counts as false. A failed poll must still never refresh `lastPlaybackAt`, never be fatal, and never stop rotation.
+Use the SMALLEST change: count consecutive failed playback polls in main.js state; reset the counter on any successful poll; once it reaches 3, set `state.playing = false` (until a successful poll says otherwise).
+
+Tests first (paste them failing on the r3 code): an e2e case — sleep window active, a movie playing (`mock.play()`), then Plex down (`mock.down()`) for 2 simulated minutes → the veil is up within ~1.5 min of the outage starting, and the wake lock is still held (`held === 1`, `releases` unchanged); and keep (or add) the case that ONE failed poll mid-movie does not raise the veil. Criteria 1–5 must still pass; paste them. Lint with `/home/user/plex-poster-app/.orchestrator/artifacts/round--eslint-r1e.config.mjs`. Do not write mutation records into .orchestrator/artifacts.
+
+Handback `/home/user/plex-poster-app/.orchestrator/artifacts/sleep-mode--handback-builder-r4.md` — FIRST line `produced_by: orchestrator-builder · model: <model> · effort: <level> · phase: sleep-mode · round: r4`, header fields, blank line, `Agent: sleep-mode-builder-r4 · dispatched: <stamp>`.

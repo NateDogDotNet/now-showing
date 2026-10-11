@@ -1,0 +1,20 @@
+{
+ "phase": "validation-checklists",
+ "round": 4,
+ "sha": "7b49e94",
+ "form": "commit",
+ "handbacks": [
+  "validation-checklists--handback-builder-r1.md",
+  "validation-checklists--handback-builder-r2.md",
+  "validation-checklists--handback-builder-r3.md"
+ ],
+ "touched": [
+  "docs/validation/real-server-core.md",
+  "docs/validation/real-server-extended.md"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-08T22:58:07.135199Z"
+}

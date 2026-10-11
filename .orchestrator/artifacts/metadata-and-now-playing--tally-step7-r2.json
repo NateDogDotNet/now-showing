@@ -1,0 +1,127 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "metadata-and-now-playing--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "metadata-and-now-playing--scope-r2.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "metadata-and-now-playing--precommit-format-r2.json"
+  },
+  {
+   "name": "tests where implied",
+   "score": 10,
+   "max": 10,
+   "evidence": "metadata-and-now-playing--mutation-no-recheck-r1.txt"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "metadata-and-now-playing--dlog-check-r2.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 0,
+   "max": 10,
+   "evidence": "metadata-and-now-playing--review-check-r2.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 95,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 6,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 85,
+  "max": 95,
+  "percentage": 89,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "tests where implied",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 0,
+    "max": 10,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "metadata-and-now-playing--ac1-r2.json": "4806ab3fa8f0b661c4b66a2073d05f6132c5c3c3a1b677076528a2c0fb1bfeec",
+  "metadata-and-now-playing--scope-r2.json": "61661beddd98e637571c5cd6aa1119e4ff232813a831aa5517a61d1a047bfef3",
+  "metadata-and-now-playing--precommit-format-r2.json": "745a99220bd45a6010cd2ba435ad603ec8554f8c4c7ea7d86ef737784d5bd9ee",
+  "metadata-and-now-playing--mutation-no-recheck-r1.txt": "9fd362e0d551fa1bc9b7e7fd3251a2ce8e2a5eeb16b88e2e9f2a39f185039e94",
+  "metadata-and-now-playing--dlog-check-r2.json": "da5e5934bb5fe74bc3792abca6193229155a2bcce451cc34228812e27707d8c0",
+  "metadata-and-now-playing--review-check-r2.json": "dde595fd52420e9181a5813c0c51b89583f93affed8b6dfe515e8b6d829fda3b"
+ },
+ "_written": "2026-10-10T17:00:27.893226Z"
+}

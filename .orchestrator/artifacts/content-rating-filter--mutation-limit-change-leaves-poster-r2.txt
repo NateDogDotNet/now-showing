@@ -1,0 +1,42 @@
+Hazard: above-limit poster stays on screen after the limit is set offline
+Mutant: limit-change-leaves-poster (js/main.js) — ok
+## diff
+--- /tmp/tmp.79GkkDLeiM/orig	2026-10-09 04:10:32.318294913 +0000
++++ /tmp/tmp.79GkkDLeiM/wt/js/main.js	2026-10-09 04:10:32.335712344 +0000
+@@ -430,7 +430,7 @@
+   // A new limit applies at once, even offline: a poster already up may now be above it (K20). Online, the
+   // forced tick below then picks the replacement; offline, handleFailure shows an allowed cached poster or the empty card.
+   const limitChanged = ['maxContentRating', 'limitNowPlaying'].some((k) => prev[k] !== state.settings[k]);
+-  if (display.currentPoster && !allowedOnScreen(display.currentPoster)) blockPoster();
++  ;
+   tick({ force: connectionChanged || limitChanged });
+ }
+ 
+## test: npm run test:e2e -- content-rating
+  ok  50 refreshes under PG-13 show only titles 1, 2, 3 and 6 (all four appear)
+PASS case 1 PG-13 random posters
+  ok  heal download in flight when the sleep window opens: not drawn under the veil
+PASS case 9 A8-d heal download vs sleep
+  ok  offline: an undecodable cached poster is deleted and another is shown; no uncaught error
+  ok  offline with every cached poster undecodable: all dropped, nothing shown, no loop
+PASS case 8 K5 undecodable cached poster offline
+  ok  20 offline rotations under PG-13 never show title 4 (shown: 1,2,3,6)
+  ok  cached entries without a stored rating (pre-2.1) are never shown offline while a limit is set
+PASS case 4 cached posters offline
+case 11 K20 offline limit change, no allowed cached poster failed:
+AssertionError [ERR_ASSERTION]: title 4 (R) stays on screen offline after PG-13 is saved
+    at file:///tmp/tmp.79GkkDLeiM/wt/tests/e2e/content-rating.spec.mjs:395:10
+    at async withApp (file:///tmp/tmp.79GkkDLeiM/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.79GkkDLeiM/wt/tests/e2e/content-rating.spec.mjs:426:9
+    at async Promise.all (index 2)
+    at async file:///tmp/tmp.79GkkDLeiM/wt/tests/e2e/content-rating.spec.mjs:421:1
+case 10 K20 offline limit change, allowed cached poster available failed:
+AssertionError [ERR_ASSERTION]: title 4 (R) stays on screen offline after PG-13 is saved
+    at file:///tmp/tmp.79GkkDLeiM/wt/tests/e2e/content-rating.spec.mjs:368:10
+    at async withApp (file:///tmp/tmp.79GkkDLeiM/wt/tests/e2e/lib.mjs:171:12)
+    at async file:///tmp/tmp.79GkkDLeiM/wt/tests/e2e/content-rating.spec.mjs:426:9
+    at async Promise.all (index 0)
+    at async file:///tmp/tmp.79GkkDLeiM/wt/tests/e2e/content-rating.spec.mjs:421:1
+FAIL content-rating
+## summary (exit 1)
+1 failed

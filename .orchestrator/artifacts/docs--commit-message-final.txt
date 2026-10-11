@@ -1,0 +1,25 @@
+Document 2.1 as it shipped: setups, 24/7 hardening, kiosk, helper
+
+README.md is rewritten for 2.1. A banner says that real-server and
+Raspberry Pi validation is still pending, and every flag, policy,
+package name, OS or helper command and Plex behaviour not yet checked
+on real hardware is marked "(verify)". New sections cover the
+supported setups (and what an http LAN page loses), hardening for
+24/7 displays (sleep, Recommended protection, OS screen blanking,
+smart plugs, the read-only overlay file system, a RAM disk cache),
+tablets, kiosk Chromium flags and policy, network isolation, a Plex
+Home managed user, the device helper, rotation, the clock, and
+config.json. The feature list and the project layout describe what
+was actually built, and landscape fill and drag/nudge positioning are
+listed as planned for 2.2.
+
+Roadmap.md gains a "Done in 2.1" list and moves the shipped ideas out
+of Ideas. Remote control now carries its PIN-locked constraint, and
+each deferred item (multi-poster layout, frame per source, animated
+bulbs, frame rotation) gives its reason. All entries added at the
+owner's request are kept, and a 2.1.x polish entry is added.
+
+Phase: docs (R-DOC-1..9, R-TOPO-1, D1, D7, D9, D16, D41)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

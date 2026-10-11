@@ -1,0 +1,42 @@
+Hazard: a 127-prefixed non-loopback string treated as loopback
+Mutant: loose-127 (scripts/net.mjs) — ok
+## diff
+--- /tmp/tmp.zfP6oVcMyn/orig	2026-10-08 22:17:12.750011426 +0000
++++ /tmp/tmp.zfP6oVcMyn/wt/scripts/net.mjs	2026-10-08 22:17:12.768964476 +0000
+@@ -7,7 +7,7 @@
+   const a = addr.toLowerCase().replace(/^::ffff:/, ''); // IPv4-mapped IPv6
+   if (a === '::1') return true;
+   const m = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(a);
+-  return !!m && m.slice(1).every((n) => Number(n) <= 255);
++  return a.startsWith('127');
+ }
+ 
+ // True when a Host header names localhost, 127.0.0.1 or [::1]. Only the hostname is
+## test: node --test tests/serve.test.js
+  ---
+  duration_ms: 2.028993
+  type: 'test'
+  ...
+# Subtest: symlinks leaving the root or reaching config.json are 404
+ok 9 - symlinks leaving the root or reaching config.json are 404
+  ---
+  duration_ms: 2.587794
+  type: 'test'
+  ...
+# Subtest: dotfiles under app directories are 404
+ok 10 - dotfiles under app directories are 404
+  ---
+  duration_ms: 1.445761
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 9
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 506.383762
+## summary (exit 1)
+1 failed

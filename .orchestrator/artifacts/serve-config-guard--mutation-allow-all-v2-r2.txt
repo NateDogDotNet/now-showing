@@ -1,0 +1,42 @@
+Hazard: repo internals served to the LAN
+Mutant: allow-all-v2 (scripts/serve.mjs) — ok
+## diff
+--- /tmp/tmp.snKF3wTHrp/orig	2026-10-08 22:17:29.390994178 +0000
++++ /tmp/tmp.snKF3wTHrp/wt/scripts/serve.mjs	2026-10-08 22:17:29.406307580 +0000
+@@ -63,7 +63,7 @@
+       if (!isLoopback(req.socket.remoteAddress) || !isLoopbackHost(req.headers.host)) return send(res, 403, 'Forbidden');
+     } else {
+       if (path === '/') path = '/index.html';
+-      if (!isAppPath(path)) return send(res, 404, 'Not found');
++      
+     }
+     const file = join(ROOT, path);
+     if (!file.startsWith(ROOT + sep)) return send(res, 404, 'Not found');
+## test: node --test tests/serve.test.js
+  ---
+  duration_ms: 2.344868
+  type: 'test'
+  ...
+# Subtest: symlinks leaving the root or reaching config.json are 404
+ok 9 - symlinks leaving the root or reaching config.json are 404
+  ---
+  duration_ms: 3.468225
+  type: 'test'
+  ...
+# Subtest: dotfiles under app directories are 404
+ok 10 - dotfiles under app directories are 404
+  ---
+  duration_ms: 2.367767
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 387.666067
+## summary (exit 0)
+0 failed

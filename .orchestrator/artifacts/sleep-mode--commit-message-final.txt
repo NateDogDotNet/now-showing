@@ -1,0 +1,33 @@
+Add a sleep schedule and idle sleep that keep the wake lock held
+
+During the sleepStart-sleepEnd window (local time, once the clock looks
+set) or after idleSleepHours without playback, the display shows an
+opaque black #sleep-veil, sets body.asleep and makes #app inert. The
+screen wake lock stays held (D4); no poster is chosen, fetched or drawn
+while asleep, including one whose download was already in flight.
+
+While asleep the app still polls /status/sessions through the new
+engine.playing() when playback can matter ((sleepEnabled &&
+wakeOnPlayback) || idleSleepHours > 0), retrying at the poll rate during
+an outage. Playback wakes a scheduled sleep when wakeOnPlayback is on
+and always restarts the idle clock. A failed poll is never fatal and
+keeps the last playing state for at most 3 failures in a row. One
+sessions request is made per tick; decide() reuses it.
+
+A touch or key press wakes the display for 60 s without reaching the
+control underneath; clicks stay swallowed for 800 ms after the last
+waking press, input aimed at an open dialog is never swallowed, and any
+activity restarts the minute. Page load and settings saves restart the
+idle clock. A clock step (NTP arriving, a manual change) is absorbed
+before every timestamp write so it never reads as idleness or stretches
+a wake. Diagnostics shows the sleep state, the local time and "Clock not
+set".
+
+js/sleep.js holds the pure decideSleep(); sw.js precaches it.
+tests/e2e/sleep.spec.mjs covers the schedule, idle sleep, playback,
+manual wake, outages, clock steps and the wake lock.
+
+Phase: sleep-mode (E1, R-PROT-1, D4, D21, D23, D24, D27, D28)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KFtb8s2cHXREwbQeQM2L4B

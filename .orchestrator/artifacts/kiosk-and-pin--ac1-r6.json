@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/kiosk.test.js && node --test tests/kiosk.test.js",
+  "exit": 0,
+  "seconds": 0.22,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: the distance is measured from where the press began, not from the last move\nok 32 - the distance is measured from where the press began, not from the last move\n  ---\n  duration_ms: 0.070716\n  type: 'test'\n  ...\n# Subtest: a second start while a hold runs does not restart or double it (key repeat)\nok 33 - a second start while a hold runs does not restart or double it (key repeat)\n  ---\n  duration_ms: 0.127803\n  type: 'test'\n  ...\n# Subtest: a hold with no coordinates (a key) ignores moves, and end() with nothing running is harmless\nok 34 - a hold with no coordinates (a key) ignores moves, and end() with nothing running is harmless\n  ---\n  duration_ms: 0.08835\n  type: 'test'\n  ...\n# Subtest: a hold can be started again after it fired or was cancelled\nok 35 - a hold can be started again after it fired or was cancelled\n  ---\n  duration_ms: 0.190686\n  type: 'test'\n  ...\n# Subtest: shouldResetPin is true only for resetPin: true\nok 36 - shouldResetPin is true only for resetPin: true\n  ---\n  duration_ms: 0.160523\n  type: 'test'\n  ...\n1..36\n# tests 36\n# suites 0\n# pass 36\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 160.593082",
+  "stderr_tail": ""
+}

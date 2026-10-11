@@ -1,0 +1,42 @@
+Hazard: limit tightened during decode leaves the poster up
+Mutant: postdecode-check-removed (js/main.js) — ok
+## diff
+--- /tmp/tmp.YsXen56lVZ/orig	2026-10-09 04:21:53.805538287 +0000
++++ /tmp/tmp.YsXen56lVZ/wt/js/main.js	2026-10-09 04:21:53.822535078 +0000
+@@ -107,7 +107,7 @@
+ async function showPoster(poster, image) {
+   if (!allowedOnScreen(poster)) return false;
+   await display.show(poster, image);
+-  if (!allowedOnScreen(poster)) {
++  if (false) {
+     blockPoster(); // the limit was tightened during the decode
+     return false;
+   }
+## test: npm run test:e2e -- content-rating
+PASS case 1 PG-13 random posters
+  ok  toggle on -> Save stores maxContentRating PG-13 (limitNowPlaying visible, on)
+  ok  the select changes the limit (R) and limitNowPlaying can be switched off
+  ok  saving PG-13 while title 4 (R) is up replaces it at once
+PASS case 7 tightening the limit replaces the poster on screen
+  ok  toggle off -> Save clears maxContentRating to ""
+  ok  toggling on again defaults to PG-13; Cancel changes nothing
+PASS case 6 household toggle
+  ok  heal download in flight when the sleep window opens: not drawn under the veil
+PASS case 9 A8-d heal download vs sleep
+  ok  offline: an undecodable cached poster is deleted and another is shown; no uncaught error
+  ok  offline with every cached poster undecodable: all dropped, nothing shown, no loop
+PASS case 8 K5 undecodable cached poster offline
+  ok  offline: PG-13 saved while title 4 is up and nothing allowed is cached -> poster gone within 8 ms, empty card, 4 rotations show nothing
+PASS case 11 K20 offline limit change, no allowed cached poster
+  ok  PG-13 saved while title 4's download is in flight: never drawn; an allowed poster (2) followed; drawn ever: 1,2,3,6
+PASS case 12 R4 in-flight download vs a stricter limit
+  ok  PG-13 saved while title 4's heal re-download is in flight: not drawn; an allowed poster (2) followed
+PASS case 13 R4 heal re-download in flight vs a stricter limit
+  ok  offline: PG-13 saved while title 4 is up -> replaced within 17 ms by a cached allowed poster; 8 rotations never return it (1,2,3)
+PASS case 10 K20 offline limit change, allowed cached poster available
+  ok  20 offline rotations under PG-13 never show title 4 (shown: 1,2,3,6)
+  ok  cached entries without a stored rating (pre-2.1) are never shown offline while a limit is set
+PASS case 4 cached posters offline
+PASS content-rating
+## summary (exit 0)
+0 failed

@@ -1,0 +1,42 @@
+Hazard: toast shows on every load
+Mutant: toast-repeats (js/main.js) — ok
+## diff
+--- /tmp/tmp.WbXzhlD94y/orig	2026-10-11 19:44:35.820811176 +0000
++++ /tmp/tmp.WbXzhlD94y/wt/js/main.js	2026-10-11 19:44:35.849830874 +0000
+@@ -1430,7 +1430,7 @@
+  */
+ function announceWhatsNew() {
+   if (storage.getItem(WHATS_NEW_KEY) !== null) return;
+-  storage.setItem(WHATS_NEW_KEY, '2.1');
++  void WHATS_NEW_KEY;
+   if (!isConfigured(state.settings)) return;
+   toast("What's new in 2.1: one-tap display protection for always-on screens.", {
+     action: 'Open settings',
+## test: npm run test:e2e -- preset
+> node tests/e2e/run.mjs preset
+
+  ok  list of the keys, stage row untickable, Cancel changes nothing
+  ok  Apply then Save persists the preset (maxContentRating 'R')
+  ok  Apply then Save persists the preset (maxContentRating '')
+  ok  an unticked row keeps its value
+  ok  button sits in Display protection
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: marker written
+    at file:///tmp/tmp.WbXzhlD94y/wt/tests/e2e/preset.spec.mjs:141:10
+    at async withApp (file:///tmp/tmp.WbXzhlD94y/wt/tests/e2e/lib.mjs:242:20)
+    at async file:///tmp/tmp.WbXzhlD94y/wt/tests/e2e/preset.spec.mjs:135:1 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: null,
+  expected: null,
+  operator: 'notStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.22.0
+FAIL preset
+## summary (exit 1)
+1 failed

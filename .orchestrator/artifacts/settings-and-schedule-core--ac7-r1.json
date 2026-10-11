@@ -1,0 +1,14 @@
+{
+  "cmd": "node -e \"import('./js/settings.js').then(m=>{const o=m.toExport({...m.defaults(),plexToken:'t',settingsPinHash:'a'.repeat(64),settingsPinSalt:'b'},{includeSecrets:true});if('settingsPinHash' in o.settings||'settingsPinSalt' in o.settings||o.settings.plexToken!=='t')process.exit(1)})\"",
+  "exit": 0,
+  "seconds": 0.04,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}
