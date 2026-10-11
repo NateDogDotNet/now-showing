@@ -2,252 +2,394 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Plex Poster Display</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: black;
-      overflow: hidden;
-      height: 100%;
-      width: 100%;
-    }
-    .poster-container {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    .poster, .frame {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      object-fit: contain;
-    }
-    .frame {
-      z-index: 2;
-      pointer-events: none;
-      max-width: 100vw;
-      max-height: 100vh;
-    }
-    .poster {
-      z-index: 1;
-      transition: transform 0.3s ease;
-    }
-    .controls {
-      position: fixed;
-      bottom: 10px;
-      right: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      opacity: 0;
-      transition: opacity 0.3s;
-      z-index: 3;
-    }
-    .controls.visible {
-      opacity: 1;
-    }
-    .controls button {
-      font-size: 20px;
-      padding: 8px;
-      cursor: pointer;
-    }
-    .config-form, .diagnostics {
-      position: fixed;
-      background: white;
-      color: black;
-      padding: 20px;
-      border-radius: 10px;
-      top: 10%;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 5;
-    }
-    .diagnostics pre {
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-  </style>
+  <meta name="description" content="Full-screen Plex movie poster display with a decorative frame — built for always-on screens." />
+  <meta name="theme-color" content="#000000" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Posters" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="assets/icons/icon-192.png" type="image/png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="css/app.css" />
+  <script type="module" src="js/main.js"></script>
 </head>
 <body>
-  <div class="poster-container">
-    <img id="poster" class="poster" alt="Movie Poster" />
-    <img id="frame" class="frame" alt="Frame Overlay" />
-  </div>
+  <svg xmlns="http://www.w3.org/2000/svg" hidden>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5-12-7.5Z"/></symbol>
+    <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"/><path d="M21 3v5h-5"/><rect x="8" y="10" width="8" height="10" rx="1"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6Z"/></symbol>
+    <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  </svg>
 
-  <div class="controls" id="controls">
-    <button onclick="showForm()">⚙️</button>
-    <button onclick="showDiagnostics()">📊</button>
-    <button onclick="fetchPoster(true)">🔄</button>
-  </div>
+  <main id="app" class="app" aria-live="polite">
+    <div id="stage" class="stage">
+      <div id="poster-box" class="poster-box">
+        <img id="poster-a" class="poster-layer" alt="" decoding="async" />
+        <img id="poster-b" class="poster-layer" alt="" decoding="async" />
+        <div id="title-card" class="title-card" hidden></div>
+        <div id="player-label" class="player-label" hidden></div>
+        <div id="progress" class="progress" aria-hidden="true" hidden></div>
+      </div>
+      <img id="frame" class="frame" alt="" />
+    </div>
+    <div id="empty" class="empty" hidden>
+      <div class="empty-card">
+        <img src="assets/icons/icon.svg" alt="" width="72" height="72" />
+        <h1>Plex Poster Display</h1>
+        <p id="empty-message">Connect to your Plex server to get started.</p>
+        <div id="firstrun" class="firstrun" hidden>
+          <p class="firstrun-lead">On any device, go to <strong>plex.tv/link</strong> and enter this code:</p>
+          <div id="signin-code-large" class="pin-code-large" aria-live="polite">····</div>
+          <p id="firstrun-status" class="muted small"></p>
+        </div>
+        <div id="empty-actions" class="empty-actions"></div>
+        <button type="button" class="btn primary" data-action="settings">Open settings</button>
+      </div>
+    </div>
+  </main>
 
-  <div class="config-form" id="form" style="display:none">
-    <h3>Configuration</h3>
-    <label>Plex Token <input id="PLEX_TOKEN" /></label><br>
-    <label>Plex Server URL <input id="PLEX_SERVER_URL" /></label><br>
-    <label>Plex Username <input id="PLEX_USERNAME" /></label><br>
-    <label>Library Key <input id="LIBRARY_KEY" /></label><br>
-    <label>Refresh Interval (ms) <input id="REFRESH_INTERVAL_MS" /></label><br>
-    <label>Frame Path <input id="FRAME_PATH" /></label><br>
-    <label>Poster Scale (%) <input id="POSTER_SCALE" type="number" value="100" /></label><br>
-    <label>Poster Offset X (%) <input id="POSTER_OFFSET_X" type="number" value="0" /></label><br>
-    <label>Poster Offset Y (%) <input id="POSTER_OFFSET_Y" type="number" value="0" /></label><br>
-    <button onclick="saveConfig()">Save</button>
-  </div>
+  <div id="status" class="status-pill" role="status" hidden></div>
+  <div id="status-dot" class="status-dot" aria-hidden="true" hidden></div>
 
-  <div class="diagnostics" id="diagnostics" style="display:none">
-    <h3>Diagnostics</h3>
-    <pre id="diag-output"></pre>
-    <button onclick="document.getElementById('diagnostics').style.display='none'">Close</button>
-  </div>
+  <nav id="controls" class="controls" data-labels="auto" aria-label="Display controls">
+    <button type="button" data-action="settings" aria-label="Settings"><svg><use href="#i-settings"/></svg><span class="label" aria-hidden="true">Settings</span></button>
+    <button type="button" data-action="diagnostics" aria-label="Diagnostics"><svg><use href="#i-info"/></svg><span class="label" aria-hidden="true">Diagnostics</span></button>
+    <button type="button" data-action="refresh" aria-label="Next poster"><svg><use href="#i-refresh"/></svg><span class="label" aria-hidden="true">Next poster</span></button>
+    <button type="button" data-action="pause" aria-label="Pause auto-refresh" aria-pressed="false"><svg><use href="#i-pause"/></svg><span class="label" aria-hidden="true">Pause</span></button>
+    <button type="button" data-action="pin" aria-label="Pin this poster" aria-pressed="false"><svg><use href="#i-pin"/></svg><span class="label" aria-hidden="true">Pin</span></button>
+    <button type="button" data-action="rotate" aria-label="Rotate display"><svg><use href="#i-rotate"/></svg><span class="label" aria-hidden="true">Rotate</span></button>
+    <button type="button" data-action="fullscreen" aria-label="Full screen"><svg><use href="#i-fullscreen"/></svg><span class="label" aria-hidden="true">Full screen</span></button>
+  </nav>
 
-  <script>
-    let lastPosterUrl = '[none]';
-    let lastStatus = '[not fetched]';
-    let lastFetch = '[never]';
-    let lastSource = '[unknown]';
+  <dialog id="settings" class="sheet" aria-labelledby="settings-title">
+    <form id="settings-form" method="dialog" novalidate>
+      <header class="sheet-head">
+        <h2 id="settings-title">Settings</h2>
+        <p class="muted" id="first-run-hint" hidden>Welcome! Sign in with Plex (or enter a token and server URL), choose a library, then save.</p>
+      </header>
 
-    function getConfig() {
-      return {
-        PLEX_TOKEN: localStorage.getItem('PLEX_TOKEN') || '',
-        PLEX_SERVER_URL: localStorage.getItem('PLEX_SERVER_URL') || '',
-        PLEX_USERNAME: localStorage.getItem('PLEX_USERNAME') || '',
-        LIBRARY_KEY: localStorage.getItem('LIBRARY_KEY') || '',
-        REFRESH_INTERVAL_MS: +localStorage.getItem('REFRESH_INTERVAL_MS') || 300000,
-        FRAME_PATH: localStorage.getItem('FRAME_PATH') || 'frame.png',
-        POSTER_SCALE: +localStorage.getItem('POSTER_SCALE') || 100,
-        POSTER_OFFSET_X: +localStorage.getItem('POSTER_OFFSET_X') || 0,
-        POSTER_OFFSET_Y: +localStorage.getItem('POSTER_OFFSET_Y') || 0
-      };
-    }
+      <div class="sheet-body">
+        <fieldset>
+          <legend>Plex connection</legend>
 
-    function showForm() {
-      const cfg = getConfig();
-      for (const key in cfg) {
-        const el = document.getElementById(key);
-        if (el) el.value = cfg[key];
-      }
-      document.getElementById('form').style.display = 'block';
-    }
+          <div id="connected-card" class="connected-card" hidden>
+            <p id="connected-text" class="connected-text">Connected</p>
+            <button type="button" class="btn small" id="connected-change">Change</button>
+          </div>
 
-    function saveConfig() {
-      ['PLEX_TOKEN','PLEX_SERVER_URL','PLEX_USERNAME','LIBRARY_KEY','REFRESH_INTERVAL_MS','FRAME_PATH','POSTER_SCALE','POSTER_OFFSET_X','POSTER_OFFSET_Y']
-        .forEach(k => localStorage.setItem(k, document.getElementById(k).value));
-      document.getElementById('form').style.display = 'none';
-      location.reload();
-    }
+          <div id="signin-controls" class="signin">
+            <button type="button" class="btn primary" id="signin-btn">Sign in with Plex</button>
+            <div id="signin-panel" class="signin-panel" hidden>
+              <p>On any device, go to <a href="https://plex.tv/link" target="_blank" rel="noopener">plex.tv/link</a> and enter:</p>
+              <p id="signin-code" class="pin-code" aria-live="polite">····</p>
+              <p class="muted" id="signin-status">Waiting for you to approve…</p>
+              <button type="button" class="btn" id="signin-cancel">Cancel</button>
+            </div>
+            <label id="server-pick" hidden>Server
+              <select id="server-select"></select>
+            </label>
+          </div>
 
-    function showDiagnostics() {
-      const cfg = getConfig();
-      document.getElementById('diag-output').textContent = `
-PLEX_TOKEN: ${cfg.PLEX_TOKEN.slice(0,5)}…
-PLEX_SERVER_URL: ${cfg.PLEX_SERVER_URL}
-PLEX_USERNAME: ${cfg.PLEX_USERNAME}
-LIBRARY_KEY: ${cfg.LIBRARY_KEY}
-REFRESH_INTERVAL_MS: ${cfg.REFRESH_INTERVAL_MS}
-FRAME_PATH: ${cfg.FRAME_PATH}
-POSTER_SCALE: ${cfg.POSTER_SCALE}
-POSTER_OFFSET_X: ${cfg.POSTER_OFFSET_X}
-POSTER_OFFSET_Y: ${cfg.POSTER_OFFSET_Y}
-Last Poster URL: ${lastPosterUrl}
-Last Fetch: ${lastFetch}
-Last Status: ${lastStatus}
-Last Source: ${lastSource}`;
-      document.getElementById('diagnostics').style.display = 'block';
-    }
+          <details id="manual-connection">
+            <summary>Enter token and server manually</summary>
+            <label>Plex token
+              <span class="input-row">
+                <input name="plexToken" type="password" autocomplete="off" spellcheck="false" />
+                <button type="button" class="btn small" id="token-toggle" aria-label="Show token">Show</button>
+              </span>
+            </label>
+            <label>Server URL
+              <input name="serverUrl" type="url" placeholder="http://192.168.1.10:32400" spellcheck="false" />
+            </label>
+          </details>
 
-    async function fetchPoster(force = false) {
-      const cfg = getConfig();
-      const base = cfg.PLEX_SERVER_URL;
-      const token = cfg.PLEX_TOKEN;
-      try {
-        const nowPlayingRes = await fetch(`${base}/status/sessions?X-Plex-Token=${token}`);
-        const xmlText = await nowPlayingRes.text();
-        const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
-        const video = xml.querySelector('Video');
+          <div class="input-row">
+            <button type="button" class="btn" id="test-btn">Test connection</button>
+          </div>
+          <p id="test-result" class="test-result muted small" aria-live="polite"></p>
 
-        let posterUrl;
+          <label>Library
+            <select name="libraryKey" id="library-select">
+              <option value="">— test the connection to load libraries —</option>
+            </select>
+          </label>
+        </fieldset>
 
-        if (video && video.getAttribute('thumb')) {
-          posterUrl = `${base}${video.getAttribute('thumb')}?X-Plex-Token=${token}`;
-          lastSource = 'Now Playing';
-        } else {
-          const recRes = await fetch(`${base}/library/sections/${cfg.LIBRARY_KEY}/all?unwatched=1&sort=rating:desc&X-Plex-Token=${token}`);
-          const recText = await recRes.text();
-          const recXml = new DOMParser().parseFromString(recText, 'application/xml');
-          const items = Array.from(recXml.querySelectorAll('Video'));
-          if (items.length > 0) {
-            const randomItem = items[Math.floor(Math.random() * items.length)];
-            posterUrl = `${base}${randomItem.getAttribute('thumb')}?X-Plex-Token=${token}`;
-            lastSource = 'Fallback (Random)';
-          }
-        }
+        <fieldset>
+          <legend>What to show</legend>
+          <label class="check"><input name="showNowPlaying" type="checkbox" /> Show what's playing right now</label>
+          <label>Only for this Plex user <span class="muted">(blank = anyone)</span>
+            <input name="username" type="text" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="check"><input name="includeEpisodes" type="checkbox" /> Include TV episodes (shows the series poster)</label>
+          <label class="check"><input name="unwatchedOnly" type="checkbox" /> Random posters: unwatched only</label>
+          <div class="pinned">
+            <span>Pinned poster: <strong id="pinned-title">none</strong></span>
+            <button type="button" class="btn small" id="unpin-btn" hidden>Unpin</button>
+          </div>
+          <p class="muted small">Pin the poster on screen with the pin button. A pinned poster stays up until unpinned (now playing still takes over if enabled).</p>
+        </fieldset>
 
-        if (posterUrl) {
-          lastPosterUrl = posterUrl;
-          lastStatus = `HTTP ${nowPlayingRes.status}`;
-          lastFetch = new Date().toLocaleString();
-          const poster = document.getElementById('poster');
-          const frame = document.getElementById('frame');
-          poster.src = posterUrl + '&t=' + Date.now();
+        <fieldset>
+          <legend>Household</legend>
+          <label class="check"><input id="household-toggle" type="checkbox" /> Household with children</label>
+          <div id="household-options" hidden>
+            <label>Show posters rated up to
+              <select name="maxContentRating">
+                <option value="G">G (TV-Y, TV-G)</option>
+                <option value="PG">PG (TV-Y7, TV-PG)</option>
+                <option value="PG-13">PG-13 (TV-14)</option>
+                <option value="R">R (TV-MA)</option>
+                <option value="NC-17">NC-17</option>
+              </select>
+            </label>
+            <label class="check"><input name="limitNowPlaying" type="checkbox" /> Apply the limit to what's playing right now</label>
+          </div>
+          <p id="household-help" class="muted small">Posters above the limit are never shown, online or from the offline cache, and unrated titles are hidden too. The exceptions are a poster you pinned and saved, and the title playing right now when "Apply the limit to what's playing right now" is off.</p>
+        </fieldset>
 
-          const rect = frame.getBoundingClientRect();
-          const scaleFactor = cfg.POSTER_SCALE / 100;
-          const offsetX = rect.width * (cfg.POSTER_OFFSET_X / 100);
-          const offsetY = rect.height * (cfg.POSTER_OFFSET_Y / 100);
-          poster.style.width = rect.width * scaleFactor + 'px';
-          poster.style.height = rect.height * scaleFactor + 'px';
-          poster.style.transform = `translate(-50%, -50%) translate(${offsetX}px, ${offsetY}px)`;
+        <fieldset>
+          <legend>Timing</legend>
+          <div id="rotate-field" role="group" aria-labelledby="rotate-label">
+            <span id="rotate-label" class="field-label">Change poster every</span>
+            <div class="seg">
+              <label class="seg-opt"><input type="radio" name="rotatePreset" value="60" /><span>1 min</span></label>
+              <label class="seg-opt"><input type="radio" name="rotatePreset" value="300" /><span>5 min</span></label>
+              <label class="seg-opt"><input type="radio" name="rotatePreset" value="900" /><span>15 min</span></label>
+              <label class="seg-opt"><input type="radio" name="rotatePreset" value="3600" /><span>60 min</span></label>
+              <label class="seg-opt"><input type="radio" name="rotatePreset" value="custom" /><span>Custom…</span></label>
+            </div>
+            <span id="rotate-custom" class="input-row" hidden>
+              <input name="rotateMinutes" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Minutes between posters" />
+              <span class="muted">minutes</span>
+            </span>
+            <!-- What is stored: whole seconds. The buttons and the Custom field above map to and from it (settings-ui.js). -->
+            <input name="rotateSeconds" type="hidden" />
+          </div>
+          <details id="advanced">
+            <summary>Advanced</summary>
+            <label>Check for now playing every
+              <span class="input-row"><input name="nowPlayingPollSeconds" type="number" min="5" step="5" /> <span class="muted">seconds</span></span>
+            </label>
+            <label>Random pool: top-rated
+              <span class="input-row"><input name="randomPoolSize" type="number" min="1" max="1000" step="1" /> <span class="muted">titles</span></span>
+            </label>
+            <label>Cross-fade
+              <span class="input-row"><input name="crossfadeMs" type="number" min="0" max="10000" step="100" /> <span class="muted">ms</span></span>
+            </label>
+          </details>
+        </fieldset>
 
-          window.posterFrameRect = rect;
-          window.posterCfg = cfg;
-        }
-      } catch (err) {
-        lastStatus = 'Fetch failed: ' + err.message;
-        lastFetch = new Date().toLocaleString();
-        console.error('Error fetching poster:', err);
-      }
-    }
+        <fieldset data-live>
+          <legend>Frame &amp; layout</legend>
+          <label>Frame
+            <select name="frameId" id="frame-select"></select>
+          </label>
+          <label id="custom-frame-row" hidden>Custom frame image URL
+            <input name="customFrameUrl" type="text" placeholder="frames/my-frame.png" spellcheck="false" />
+          </label>
+          <label>Poster fit
+            <select name="posterFit">
+              <option value="cover">Fill window (crop edges)</option>
+              <option value="contain">Fit inside window (no crop)</option>
+              <option value="fill">Stretch to window</option>
+            </select>
+          </label>
+          <label>Poster size <output data-for="posterScale"></output>
+            <input name="posterScale" type="range" min="50" max="150" step="0.5" />
+          </label>
+          <label>Horizontal offset <output data-for="posterOffsetX"></output>
+            <input name="posterOffsetX" type="range" min="-25" max="25" step="0.1" />
+          </label>
+          <label>Vertical offset <output data-for="posterOffsetY"></output>
+            <input name="posterOffsetY" type="range" min="-25" max="25" step="0.1" />
+          </label>
+          <div class="input-row"><button type="button" class="btn small" id="reset-layout">Reset layout</button></div>
+          <label>Rotation
+            <select name="rotation">
+              <option value="0">0° (portrait)</option>
+              <option value="90">90°</option>
+              <option value="180">180°</option>
+              <option value="270">270°</option>
+            </select>
+          </label>
+          <label>Control labels
+            <select name="controlLabels">
+              <option value="auto">Auto</option>
+              <option value="always">Always</option>
+              <option value="never">Never (icons only)</option>
+            </select>
+          </label>
+          <label class="check"><input name="showTitle" type="checkbox" /> Show title below poster</label>
+          <label class="check"><input name="showMeta" type="checkbox" /> Show rating, runtime and year below poster</label>
+          <label class="check"><input name="showProgress" type="checkbox" /> Show a progress bar while something plays</label>
+          <label class="check"><input name="showPlayer" type="checkbox" /> Show which player is playing</label>
+        </fieldset>
 
-    function applyPosterConstraints() {
-      const poster = document.getElementById('poster');
-      const frame = document.getElementById('frame');
-      if (!poster || !frame || !window.posterCfg) return;
+        <fieldset>
+          <legend>Device</legend>
+          <label class="check"><input name="keepAwake" type="checkbox" /> Keep the screen awake</label>
+          <label class="check"><input name="hideCursor" type="checkbox" /> Hide mouse cursor when idle</label>
+          <div class="button-grid">
+            <button type="button" class="btn" id="export-btn">Export settings</button>
+            <label class="check small"><input type="checkbox" id="export-secrets" /> include token</label>
+            <button type="button" class="btn" id="import-btn">Import settings…</button>
+            <input type="file" id="import-file" accept="application/json,.json" hidden />
+            <button type="button" class="btn" id="clear-cache-btn">Clear poster cache</button>
+            <button type="button" class="btn danger" id="reset-btn">Reset everything</button>
+          </div>
+        </fieldset>
 
-      const rect = frame.getBoundingClientRect();
-      const cfg = window.posterCfg;
-      const scaleFactor = cfg.POSTER_SCALE / 100;
-      const offsetX = rect.width * (cfg.POSTER_OFFSET_X / 100);
-      const offsetY = rect.height * (cfg.POSTER_OFFSET_Y / 100);
+        <fieldset id="protection-fieldset">
+          <legend>Display protection</legend>
+          <div class="preset">
+            <button type="button" class="btn" id="preset-btn" aria-controls="preset-panel">Recommended protection</button>
+            <p class="muted small">Sleep at night, dim the picture, shift it a little and reload once a day. You see the list first and can untick anything.</p>
+            <div id="preset-panel" class="preset-panel" role="group" aria-labelledby="preset-title" hidden>
+              <strong id="preset-title">This will change</strong>
+              <ul id="preset-list" class="preset-list"></ul>
+              <p class="muted small">Nothing is saved until you press Save. Idle sleep, the content limit and the connection are never touched.</p>
+              <div class="input-row">
+                <button type="button" class="btn small primary" id="preset-apply">Apply</button>
+                <button type="button" class="btn small" id="preset-cancel">Cancel</button>
+              </div>
+            </div>
+          </div>
+          <label class="check"><input name="pixelShift" type="checkbox" /> Shift the picture a few pixels now and then</label>
+          <label>Shift every
+            <span class="input-row"><input name="pixelShiftMinutes" type="number" min="1" max="60" step="1" /> <span class="muted">minutes</span></span>
+          </label>
+          <p class="muted small">The picture glides to a new spot inside a thin margin, so no pixel stays lit for hours. Turning it off fills the screen edge to edge.</p>
+          <div data-live>
+            <label>Frame brightness <output data-for="frameBrightness"></output>
+              <span class="input-row"><input name="frameBrightness" type="range" min="10" max="100" step="1" /> <span id="brightness-hint" class="muted nowrap">10–100 %</span></span>
+            </label>
+            <label class="check"><input name="nightDim" type="checkbox" /> Dim automatically at night</label>
+            <label>From
+              <input name="nightDimStart" type="time" />
+            </label>
+            <label>Until
+              <input name="nightDimEnd" type="time" />
+            </label>
+            <label>Night brightness
+              <span class="input-row"><input name="nightDimLevel" type="number" min="10" max="100" step="5" /> <span class="muted">%</span></span>
+            </label>
+            <label>Dim
+              <select name="nightDimTarget">
+                <option value="frame">The frame only</option>
+                <option value="stage">The whole picture</option>
+              </select>
+            </label>
+            <p class="muted small">At night the dimming eases in over ten minutes and out again before the end, one step a minute. The lower of the two brightness values applies. It waits until the clock is set.</p>
+          </div>
+          <label class="check"><input name="dailyReload" type="checkbox" /> Reload the page once a day</label>
+          <label>Reload at
+            <input name="dailyReloadTime" type="time" />
+          </label>
+          <p class="muted small">Gives a display that runs for weeks a fresh start (and after a long sleep, if it has been 12 hours). It only happens when the page is controlled by its offline copy (https or localhost) and the server answers, never while Settings or Diagnostics is open; otherwise it is skipped and Diagnostics says why.</p>
+          <label class="check"><input name="deviceHelper" type="checkbox" /> Switch the screen off while asleep and show the CPU temperature</label>
+          <p class="muted small">Only works when the app is served by <code>serve.mjs --helper</code> on the device itself. Off by default: it lets this page run a screen-power command on the device.</p>
+        </fieldset>
 
-      poster.style.width = rect.width * scaleFactor + 'px';
-      poster.style.height = rect.height * scaleFactor + 'px';
-      poster.style.transform = `translate(-50%, -50%) translate(${offsetX}px, ${offsetY}px)`;
-    }
+        <fieldset>
+          <legend>Sleep</legend>
+          <label class="check"><input name="sleepEnabled" type="checkbox" /> Go black on a schedule</label>
+          <label>From
+            <input name="sleepStart" type="time" />
+          </label>
+          <label>Until
+            <input name="sleepEnd" type="time" />
+          </label>
+          <label>Also go black after
+            <span class="input-row"><input name="idleSleepHours" type="number" min="0" max="48" step="1" /> <span class="muted">hours without playback (0 = off)</span></span>
+          </label>
+          <label class="check"><input name="wakeOnPlayback" type="checkbox" /> Wake the screen when something starts playing</label>
+          <p class="muted small">Asleep is a black screen that keeps the display awake, so playback can wake it. With idle sleep the screen stays black between movies. Touch or press a key to wake it for a minute. Turn off your system's own screen blanking.</p>
+        </fieldset>
 
-    let hideTimer;
-    function showControlsTemporarily() {
-      document.getElementById('controls').classList.add('visible');
-      clearTimeout(hideTimer);
-      hideTimer = setTimeout(() => {
-        document.getElementById('controls').classList.remove('visible');
-      }, 3000);
-    }
-    document.addEventListener('mousemove', showControlsTemporarily);
-    document.getElementById('controls').addEventListener('mouseenter', () => clearTimeout(hideTimer));
+        <fieldset>
+          <legend>Kiosk</legend>
+          <label class="check"><input name="kioskMode" type="checkbox" /> Hide the controls (kiosk mode)</label>
+          <label class="check"><input name="disableShortcuts" type="checkbox" /> Ignore the keyboard shortcuts</label>
+          <p class="muted small">In kiosk mode the controls never appear on a touch, click or key press. Hold a finger or the mouse in the bottom-right corner for 3 seconds, or hold Enter for 3 seconds, to show them for 15 seconds.</p>
+          <div class="pinned">
+            <span>Settings PIN: <strong id="pin-status">not set</strong></span>
+            <span class="input-row">
+              <button type="button" class="btn small" id="pin-set-btn">Set PIN…</button>
+              <button type="button" class="btn small" id="pin-clear-btn" hidden>Remove PIN</button>
+            </span>
+          </div>
+          <p class="muted small">The PIN is a deterrent, not security: it keeps casual hands out of Settings, Diagnostics, import, reset and the token. It is stored on this device, so anyone who controls the device can get around it. It is never exported.</p>
+        </fieldset>
+      </div>
 
-    window.onload = () => {
-      const cfg = getConfig();
-      document.getElementById('frame').src = cfg.FRAME_PATH;
-      fetchPoster();
-      setInterval(fetchPoster, cfg.REFRESH_INTERVAL_MS);
-      window.addEventListener('resize', applyPosterConstraints);
-    };
-  </script>
+      <footer class="sheet-foot">
+        <span id="form-error" class="error" role="alert"></span>
+        <button type="button" class="btn" id="settings-cancel">Cancel</button>
+        <button type="submit" class="btn primary" id="settings-save">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="diagnostics" class="sheet" aria-labelledby="diag-title">
+    <header class="sheet-head"><h2 id="diag-title">Diagnostics</h2></header>
+    <div class="sheet-body">
+      <dl id="diag-list" class="diag-list"></dl>
+      <h3>Recent events</h3>
+      <ol id="diag-log" class="diag-log" reversed></ol>
+    </div>
+    <footer class="sheet-foot">
+      <button type="button" class="btn" id="diag-shortcuts">Keyboard shortcuts</button>
+      <button type="button" class="btn" id="diag-copy" autofocus>Copy</button>
+      <button type="button" class="btn primary" id="diag-close">Close</button>
+    </footer>
+  </dialog>
+
+  <dialog id="pin-dialog" class="sheet pin-sheet" aria-labelledby="pin-title">
+    <div class="pin-box">
+      <h2 id="pin-title">Enter PIN</h2>
+      <output id="pin-dots" class="pin-dots" tabindex="-1" aria-live="polite"></output>
+      <p id="pin-error" class="error" role="alert"></p>
+      <div class="keypad" role="group" aria-label="PIN keypad">
+        <button type="button" data-key="1">1</button>
+        <button type="button" data-key="2">2</button>
+        <button type="button" data-key="3">3</button>
+        <button type="button" data-key="4">4</button>
+        <button type="button" data-key="5">5</button>
+        <button type="button" data-key="6">6</button>
+        <button type="button" data-key="7">7</button>
+        <button type="button" data-key="8">8</button>
+        <button type="button" data-key="9">9</button>
+        <button type="button" data-key="back" aria-label="Delete the last digit">⌫</button>
+        <button type="button" data-key="0">0</button>
+        <button type="button" data-key="ok" class="ok" aria-label="Enter">OK</button>
+      </div>
+      <button type="button" class="btn" id="pin-cancel">Cancel</button>
+      <p id="pin-note" class="muted small"></p>
+    </div>
+  </dialog>
+
+  <dialog id="shortcuts" class="sheet pin-sheet shortcuts-sheet" aria-labelledby="shortcuts-title">
+    <div class="pin-box">
+      <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+      <dl id="shortcuts-list" class="shortcuts-list"></dl>
+      <button type="button" class="btn" id="shortcuts-close">Close</button>
+    </div>
+  </dialog>
+
+  <div id="sleep-veil" class="sleep-veil" aria-hidden="true" hidden></div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <noscript><p class="noscript">This app needs JavaScript.</p></noscript>
 </body>
 </html>

@@ -1,0 +1,576 @@
+:root {
+  --accent: #e5a00d;
+  --accent-ink: #1a1200;
+  --panel: rgba(18, 18, 20, 0.98); /* near-opaque instead of a backdrop blur (R-PROT-4) */
+  --panel-line: rgba(255, 255, 255, 0.12);
+  --text: #f2f2f2;
+  --muted: #a3a3a8;
+  --danger: #ff6b6b;
+  --radius: 12px;
+  --fade-ms: 1200ms;
+  /* Set by display.layout(): the UI rotation (0 when rotateUi is off) and the size of the screen
+     as the viewer sees it (width/height swap at 90/270). */
+  --ui-rotation: 0deg;
+  --vw: 100vw;
+  --vh: 100vh;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  overscroll-behavior: none; /* in-page backstop for swipe-back (R-PROT-4, R-DOC-4) */
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.idle.hide-cursor, body.idle.hide-cursor * { cursor: none !important; }
+
+[hidden] { display: none !important; }
+
+/* ---------- Stage ---------- */
+
+.app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.stage {
+  /* Centred by position, not by grid: a grid row would size itself to the unrotated layout box. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  /* width/height/rotation are set from JS (see layout.js). Pixel shift uses the separate
+     `translate` property, which composes before this transform. */
+  transform: translate(-50%, -50%) rotate(var(--rotation, 0deg));
+  /* Pixel shift glides over 1.5 s (D6): a step, never an instant jump or a continuous drift. */
+  transition: transform 0.5s ease, translate 1.5s ease-in-out;
+}
+
+.poster-box {
+  position: absolute;
+  overflow: hidden;
+  background: #000;
+}
+
+.poster-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: var(--poster-fit, cover);
+  opacity: 0;
+  transition: opacity var(--fade-ms) ease;
+}
+.poster-layer.active { opacity: 1; }
+/* A poster that is above the household limit is taken off the screen at once, without the fade (K20). */
+body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-blocked .player-label, body.poster-blocked .progress { opacity: 0; transition: none; visibility: hidden; }
+/* A poster still fading out when the limit is tightened is hidden at once, not faded (C7M1). */
+.poster-layer.cut:not(.active) { opacity: 0; transition: none; }
+
+.frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+.title-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 18% 8% 5%;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+  text-align: center;
+  font-weight: 600;
+  font-size: clamp(14px, 2.6vmin, 34px);
+  text-shadow: 0 2px 6px #000, 0 0 2px #000;
+  pointer-events: none;
+}
+
+/* "Playing in {player}": top of the poster window, over a soft scrim. */
+.player-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  padding: 3% 8% 12%;
+  background: linear-gradient(rgba(0, 0, 0, 0.7), transparent);
+  text-align: center;
+  font-weight: 600;
+  font-size: clamp(12px, 2vmin, 26px);
+  text-shadow: 0 2px 6px #000, 0 0 2px #000;
+  pointer-events: none;
+}
+
+/* Playback progress: 3 px along the bottom edge of the poster window, inside the stage so it moves with pixel shift.
+   Only its transform is animated (one linear transition set from main/display), which the compositor runs. */
+.progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.85);
+  transform: scaleX(0);
+  transform-origin: left center;
+  pointer-events: none;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.empty-card {
+  transform: rotate(var(--ui-rotation));
+  transition: transform 0.5s ease;
+  max-width: 420px;
+  text-align: center;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: var(--radius);
+  padding: 28px;
+}
+.empty-card h1 { font-size: 1.4rem; margin: 12px 0 6px; }
+.empty-card p { color: var(--muted); margin: 0 0 18px; }
+
+/* The plex.tv code of the keyboardless first run: large, and upright for the viewer because the card itself carries the UI rotation. */
+.firstrun { margin: 0 0 18px; }
+.empty-card .firstrun p { margin: 0 0 6px; }
+.empty-card .firstrun-lead { color: var(--text); }
+/* Resting between codes: only the status line shows, with no instruction, no placeholder squares and not the general
+   invitation either (K53, D43): the rest message is the one line that speaks. */
+.firstrun.resting .firstrun-lead,
+.firstrun.resting .pin-code-large { display: none; }
+.empty-card:has(.firstrun.resting:not([hidden])) #empty-message { display: none; }
+.pin-code-large {
+  margin: 8px 0 10px;
+  font: 700 clamp(64px, 12vmin, 112px)/1.1 ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  user-select: all;
+}
+/* The fixes for what went wrong (R-SET-6) sit above Open settings. */
+.empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 0 0 12px; }
+.empty-actions:empty { display: none; }
+
+/* ---------- Controls ---------- */
+
+.controls {
+  /* Anchored at the viewport centre, then moved to the viewer's bottom-right corner in the
+     rotated frame: rotate(ui) translate(corner offset). */
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: max-content;
+  /* Labelled buttons are wider: the bar wraps to a second row rather than leave a phone's screen (R-CTRL-1). */
+  max-width: calc(var(--vw) - 24px);
+  transform-origin: 0 0;
+  --nudge: 8px;
+  /* Label mode, set below: the label's display and the shape of a button (a circle without one, a rounded tile with one). */
+  --label-display: none;
+  --button-radius: 50%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 28px;
+  opacity: 0;
+  transform: rotate(var(--ui-rotation)) translate(0, var(--nudge))
+    translate(calc(var(--vw) / 2 - max(12px, env(safe-area-inset-right)) - 100%), calc(var(--vh) / 2 - max(12px, env(safe-area-inset-bottom)) - 100%));
+  transition: opacity 0.25s, transform 0.25s;
+  pointer-events: none;
+  z-index: 10;
+}
+.controls.visible { --nudge: 0px; opacity: 1; pointer-events: auto; }
+
+.controls button {
+  position: relative; /* the tooltip is placed against its button */
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column; /* icon over text */
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--button-radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.controls svg { flex: none; }
+
+/* Control labels (R-CTRL-1). 'always': a label under every icon. 'auto' (the default): under every icon where there is no
+   hover, a tooltip on hover and keyboard focus where there is. 'never': neither. */
+.controls .label { display: var(--label-display); font-size: 11px; line-height: 1.2; white-space: nowrap; }
+.controls[data-labels="always"] { --label-display: block; --button-radius: 14px; }
+@media (hover: none) {
+  .controls[data-labels="auto"] { --label-display: block; --button-radius: 14px; }
+}
+@media (hover: hover) {
+  .controls[data-labels="auto"] button:hover .label,
+  .controls[data-labels="auto"] button:focus-visible .label {
+    display: block;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    font-size: 12px;
+    pointer-events: none;
+  }
+  .controls[data-labels="auto"] button:hover .label[data-key]::after,
+  .controls[data-labels="auto"] button:focus-visible .label[data-key]::after {
+    content: " (" attr(data-key) ")";
+    color: var(--muted);
+  }
+}
+.controls button:hover, .controls button:focus-visible { background: rgba(255, 255, 255, 0.12); outline: none; }
+.controls button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.controls svg, .btn svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.status-pill {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: max-content;
+  transform-origin: 0 0;
+  transform: rotate(var(--ui-rotation))
+    translate(calc(var(--vw) / -2 + max(12px, env(safe-area-inset-left))), calc(var(--vh) / -2 + max(12px, env(safe-area-inset-top))));
+  transition: transform 0.5s ease;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  font-size: 13px;
+  color: var(--muted);
+  z-index: 10;
+}
+.status-pill.warn { color: var(--accent); }
+/* The pill belongs to the controls: it goes when they do (body.idle, set by wake()). */
+body.idle .status-pill { visibility: hidden; }
+
+/* The quiet indicator: a tiny dim dot in a safe-area corner that moves to the next one every few
+   minutes (main.js sets data-corner), so even it never sits still for hours (burn-in). Shown only
+   while the controls are hidden. */
+.status-dot {
+  --m: max(12px, env(safe-area-inset-left, 0px));
+  --size: 6px;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 10;
+  transform-origin: 0 0;
+  --x: calc(var(--vw) / -2 + var(--m));
+  --y: calc(var(--vh) / -2 + max(12px, env(safe-area-inset-top, 0px)));
+  transform: rotate(var(--ui-rotation)) translate(var(--x), var(--y));
+}
+.status-dot[data-corner="1"] { --x: calc(var(--vw) / 2 - max(12px, env(safe-area-inset-right, 0px)) - var(--size)); }
+.status-dot[data-corner="2"] {
+  --x: calc(var(--vw) / 2 - max(12px, env(safe-area-inset-right, 0px)) - var(--size));
+  --y: calc(var(--vh) / 2 - max(12px, env(safe-area-inset-bottom, 0px)) - var(--size));
+}
+.status-dot[data-corner="3"] { --y: calc(var(--vh) / 2 - max(12px, env(safe-area-inset-bottom, 0px)) - var(--size)); }
+body:not(.idle) .status-dot, body.asleep .status-dot { visibility: hidden; }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform-origin: 0 0;
+  transform: rotate(var(--ui-rotation)) translate(-50%, calc(var(--vh) / 2 - 88px - 100%));
+  max-width: min(calc(var(--vw) * 0.92), 520px);
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  z-index: 30;
+}
+.toast button { margin-left: 12px; }
+
+/* ---------- Sleep ---------- */
+
+/* Pure black over everything except top-layer dialogs. The wake lock stays held (D4). */
+.sleep-veil {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 100;
+  cursor: none;
+}
+body.asleep .controls, body.asleep .status-pill, body.asleep .toast { visibility: hidden; }
+
+/* ---------- Sheets (dialogs) ---------- */
+
+.sheet {
+  /* Top-layer dialogs ignore ancestor transforms, so each carries its own rotation. The box is
+     laid out in the viewer's frame (--vw x --vh), then rotated about the viewport centre so the
+     sheet docks to the viewer's right edge. The ::backdrop stays full-screen. */
+  position: fixed;
+  inset: auto;
+  left: 50%;
+  top: 50%;
+  margin: 0;
+  width: min(440px, var(--vw));
+  height: var(--vh);
+  max-width: none;
+  max-height: none;
+  transform-origin: 0 0;
+  transform: rotate(var(--ui-rotation)) translate(calc(var(--vw) / 2 - 100%), calc(var(--vh) / -2));
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--panel-line);
+  background: var(--panel);
+  color: var(--text);
+}
+.sheet::backdrop { background: rgba(0, 0, 0, 0.25); }
+.sheet[open] { display: flex; flex-direction: column; }
+.sheet > form { display: flex; flex-direction: column; height: 100%; }
+
+.sheet-head { padding: 18px 20px 6px; }
+.sheet-head h2 { margin: 0; font-size: 1.25rem; }
+.sheet-body { flex: 1; overflow-y: auto; padding: 8px 20px 20px; overscroll-behavior: contain; }
+.sheet-foot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px 20px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--panel-line);
+}
+.sheet-foot .error { margin-right: auto; }
+
+fieldset {
+  border: 1px solid var(--panel-line);
+  border-radius: var(--radius);
+  margin: 14px 0 0;
+  padding: 10px 14px 14px;
+}
+legend { padding: 0 6px; font-weight: 600; color: var(--accent); }
+
+label { display: block; margin-top: 10px; }
+label.check { display: flex; gap: 8px; align-items: center; }
+label output { float: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.field-label { display: block; margin-top: 10px; }
+
+input[type="text"], input[type="url"], input[type="password"], input[type="number"], select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+}
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+input[type="checkbox"] { flex: none; width: 18px; height: 18px; accent-color: var(--accent); }
+input:focus-visible, select:focus-visible, .btn:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.input-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.input-row input { margin-top: 0; }
+label .input-row { margin-top: 4px; }
+label .input-row input[type="number"] { width: 120px; }
+/* A slider with its hint beside it: the slider takes what is left and the hint never wraps (K31). */
+label .input-row input[type="range"] { flex: 1 1 auto; width: auto; min-width: 0; }
+.nowrap { white-space: nowrap; flex: none; }
+
+details { margin-top: 12px; }
+summary { cursor: pointer; color: var(--muted); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-line);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { background: rgba(255, 255, 255, 0.14); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--danger); }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn:disabled { opacity: 0.5; cursor: progress; }
+
+.signin-panel {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(229, 160, 13, 0.08);
+  border: 1px solid rgba(229, 160, 13, 0.3);
+  text-align: center;
+}
+.signin-panel p { margin: 4px 0; }
+.signin-panel a { color: var(--accent); }
+.pin-code { font: 700 2.2rem/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.3em; color: var(--accent); }
+
+/* The rotation presets: a radio group drawn as buttons. The input covers its label so a tap anywhere on it counts. */
+.seg { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.seg-opt { position: relative; margin: 0; }
+.seg-opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.seg-opt span {
+  display: inline-block;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-line);
+  background: rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+.seg-opt input:hover + span { background: rgba(255, 255, 255, 0.14); }
+.seg-opt input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.seg-opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+#rotate-custom input { width: 120px; }
+
+/* "Connected to ... Change" (R-SET-1) */
+.connected-card {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(229, 160, 13, 0.08);
+  border: 1px solid rgba(229, 160, 13, 0.3);
+}
+.connected-text { margin: 0; overflow-wrap: anywhere; }
+
+/* The connection test's verdict, with its fix buttons under it. */
+.test-result { margin: 6px 0 0; }
+.test-result:empty { display: none; }
+.test-result .btn { margin: 6px 8px 0 0; }
+
+.preset .btn { margin-top: 6px; }
+.preset-panel { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--panel-line); border-radius: 8px; }
+.preset-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.preset-list li { margin: 0; }
+.preset-list label.check { margin-top: 6px; }
+.preset-list .muted { margin-left: auto; padding-left: 12px; text-align: right; }
+.preset-list li[data-locked] { opacity: 0.8; }
+.pinned { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-top: 12px; }
+.button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; align-items: center; }
+.button-grid label.check { margin: 0; }
+
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.error { color: var(--danger); font-size: 13px; }
+
+.diag-list { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 8px 0; font-size: 13px; }
+.diag-list dt { color: var(--muted); }
+.diag-list dd { margin: 0; word-break: break-word; font-variant-numeric: tabular-nums; }
+.diag-log { margin: 0; padding-left: 0; list-style: none; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+.diag-log li { padding: 3px 0; border-bottom: 1px solid var(--panel-line); }
+.diag-log .warn { color: var(--accent); }
+.diag-log .error { color: var(--danger); }
+
+.noscript { position: fixed; inset: 0; display: grid; place-items: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .poster-layer, .stage, .controls, .empty-card, .status-pill { transition: none; }
+}
+
+/* ---------- Kiosk and the PIN dialog ---------- */
+
+/* Kiosk: a press must reach the corner hold, not scroll, select or open a long-press menu. */
+body.kiosk #app { touch-action: none; user-select: none; -webkit-user-select: none; }
+
+/* A small keypad dialog, centred in the viewer's frame; like every dialog it carries its own rotation (D2). */
+.pin-sheet {
+  width: min(340px, var(--vw));
+  height: auto;
+  max-height: var(--vh);
+  overflow-y: auto;
+  border: 1px solid var(--panel-line);
+  border-radius: var(--radius);
+  transform: rotate(var(--ui-rotation)) translate(-50%, -50%);
+}
+.pin-box { padding: 18px 20px 16px; text-align: center; }
+.pin-box h2 { margin: 0; font-size: 1.25rem; }
+.pin-dots { display: block; min-height: 1.8em; margin-top: 8px; font-size: 1.5rem; line-height: 1.8; letter-spacing: 0.3em; }
+.pin-dots:focus { outline: none; }
+.pin-box .error { min-height: 1.4em; margin: 2px 0 6px; }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.keypad button {
+  min-height: 48px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-line);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+.keypad button:hover { background: rgba(255, 255, 255, 0.14); }
+.keypad button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.keypad button.ok { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.pin-box .btn { min-height: 48px; justify-content: center; }
+.pin-box .muted.small { margin: 12px 0 0; }
+
+/* Scrollable regions are focusable in Chromium; the ring around the whole panel is noise. */
+.sheet:focus, .sheet-body:focus, .sheet-body:focus-visible { outline: none; }
+.sheet .muted code { font: 12px ui-monospace, Menlo, Consolas, monospace; }
+
+/* ---------- Shortcuts dialog ---------- */
+
+/* Centred in the viewer's frame like the PIN dialog (it shares .pin-sheet, so it carries the UI rotation too, D2). */
+.shortcuts-sheet { width: min(380px, var(--vw)); }
+.shortcuts-list { margin: 12px 0 16px; text-align: left; }
+.shortcuts-list > div { display: flex; gap: 14px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--panel-line); }
+.shortcuts-list dt { flex: none; min-width: 4.5em; margin: 0; }
+.shortcuts-list dd { margin: 0; color: var(--muted); }
+.shortcuts-list kbd {
+  display: inline-block;
+  min-width: 1.8em;
+  padding: 1px 7px;
+  border: 1px solid var(--panel-line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font: 600 13px ui-monospace, Menlo, Consolas, monospace;
+  text-align: center;
+}

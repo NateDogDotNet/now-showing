@@ -1,0 +1,9 @@
+# Local provisioning file — contains your Plex token. See config.example.json.
+config.json
+
+node_modules/
+.DS_Store
+Thumbs.db
+
+# integration-orchestrator audit trail (local)
+.orchestrator/
