@@ -469,7 +469,7 @@ Settings and input ergonomics for a keyboardless, remote-or-touch-only device. E
 - **Goal:** Label the icon-only controls, make the first touch only wake them (without eating taps inside dialogs), and list shortcuts under `?`.
 - **Findings:** U11, U12, U13 · **Requirements:** R-CTRL-1, R-CTRL-2, R-CTRL-3
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `kiosk-and-pin`, `sleep-mode`
-- **Output:** `js/shortcuts.js`, `tests/shortcuts.test.js`, `js/main.js`, `index.html`, `css/app.css`, `sw.js`, `tests/e2e/touch-controls.spec.mjs`
+- **Output:** `js/shortcuts.js`, `tests/shortcuts.test.js`, `js/main.js`, `index.html`, `css/app.css`, `sw.js`, `tests/e2e/touch-controls.spec.mjs`, `js/engine.js`, `tests/engine.test.js`, `tests/e2e/first-run.spec.mjs` (K54: the routed engine.js empty-library hint and the settings-sheet first-run test fixes)
 - **Acceptance criteria:**
   1. `test -f tests/shortcuts.test.js && node --test tests/shortcuts.test.js`  (the table has `r p space o f s d ?` with a label each; no duplicate keys; `listShortcuts({disableShortcuts:true})` is empty)
   2. `npm test`
