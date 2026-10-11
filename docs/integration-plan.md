@@ -422,7 +422,7 @@ Protect the screen, the Pi and the SD card, and keep children out of the setting
 - **Goal:** A single Settings button that applies the recommended protection values after showing what it will change, and a one-time "What's new in 2.1" toast. Closes M2.
 - **Findings:** — (applies the E1, E4 and E2 settings in one tap) · **Requirements:** R-PROT-5, R-UPG-1 · **Rulings:** D4, D5, D6
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `sleep-mode`, `frame-brightness`, `pixel-shift`, `pi-stability`, `content-rating-filter`, `kiosk-and-pin`, `device-helper-integration`
-- **Output:** `index.html`, `css/app.css`, `js/settings-ui.js`, `js/main.js`, `tests/e2e/preset.spec.mjs`
+- **Output:** `index.html`, `css/app.css`, `js/settings-ui.js`, `js/main.js`, `tests/e2e/preset.spec.mjs`, `tests/e2e/smoke.spec.mjs` (K59: test-only fix for the running fake-clock race)
 - **Acceptance criteria:**
   1. `npm run test:e2e -- preset`  (click **Recommended protection**: a list of the keys it will change appears; Cancel changes nothing; Apply then Save persists `sleepEnabled:true`, `sleepStart:'01:00'`, `sleepEnd:'07:00'`, `nightDim:true`, `nightDimLevel:60`, `nightDimTarget:'stage'`, `pixelShift:true`, `dailyReload:true`; `idleSleepHours` stays 0, `maxContentRating` and `limitNowPlaying` keep their seeded values (test with `maxContentRating:'R'` and with `''`), and `plexToken`, `serverUrl`, `libraryKey` are unchanged)
   2. `npm run test:e2e -- preset`  (upgrade toast: with the harness default `plexPoster.whatsNew` removed and the app configured, a toast containing `What's new in 2.1` with an **Open settings** action appears once and not after a reload; unconfigured it never appears)
