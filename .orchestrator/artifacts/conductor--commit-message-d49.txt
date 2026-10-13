@@ -1,0 +1,10 @@
+Purge by deleting and re-creating the repository (D49)
+
+The owner chose to delete and re-create the GitHub repository. A
+force-push leaves pull request #1's read-only ref reaching the token
+commit. D49 records the choice, the plan's purge checklist now
+deletes and re-creates the repository, and criterion 1 also requires
+no refs/pull/* on origin. The purge still waits for the 401 and the
+owner's explicit approval.
+
+Co-Authored-By: Claude <noreply@anthropic.com>

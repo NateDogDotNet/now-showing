@@ -56,7 +56,6 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 - FOLLOW-UP (owner: conductor): C8I1 (D37) — real-server-validation-extended: confirm Plex accepts the batched GET /library/metadata/<k1>,<k2>,... request the upward re-rate fix uses; add the row to docs/validation/real-server-extended.md (deadline: real-server-validation-extended)
 - FOLLOW-UP (owner: release-bump): K61 — after real-server-validation and -extended pass, update README.md's (verify)/unverified tags from their results (a flag or command proven on the real server or Pi loses its tag; a failed one is corrected or removed), then re-run the docs criteria (deadline: release-bump)
 - FOLLOW-UP (owner: release-bump): docs r3 wording (with the K61 tag update): README 'Daily reload' — the reload waits while ANY dialog is open (PIN, shortcuts, Settings, Diagnostics), and a key, touch or mouse click wake does not trigger the 12-hour reload; also drop the internal id '(K60)' from Roadmap.md's 2.1.x polish line (deadline: release-bump)
-- FOLLOW-UP (owner: Nathan): purge rehearsal r1 — after the force-push, pull request #1 (refs/pull/1/head → 13af5b0) still reaches the token commit on GitHub, and plan criterion 1 cannot see it; decide before the purge: ask GitHub Support to remove PR #1's refs, or delete and re-create the repository, and whether criterion 1 should also check the PR refs (deadline: purge-git-history)
 - FOLLOW-UP (owner: conductor): purge rehearsal r1 — at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped (deadline: purge-git-history)
 
 ## Follow-ups answered
@@ -127,6 +126,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 - FOLLOW-UP ANSWERED (owner: Nathan, "Always auto accept "defaults" for me when you normally want to stop and ask me a question." at 2026-10-11T21:22:44Z): K56 — touch-and-labels Q-tl3: the seven control buttons drop their native title tooltips so desktop shows one tooltip, generated from the shortcut table; Pin's 'Unpin <title>' text moves to its aria-label
 - FOLLOW-UP ANSWERED (owner: Nathan, "Always auto accept "defaults" for me when you normally want to stop and ask me a question." at 2026-10-11T21:22:44Z): K55 — touch-and-labels Q-tl1: in kiosk mode the long-press menu is also allowed on the Settings sheet's own box, not only its text fields (an existing kiosk test asserts it); still prevented on the PIN keypad, Diagnostics and the stage
 - FOLLOW-UP ANSWERED (owner: Nathan, "Always auto accept "defaults" for me when you normally want to stop and ask me a question." at 2026-10-11T21:22:44Z): K54 — touch-and-labels' Output gains js/engine.js and tests/engine.test.js (the empty-library hint names 'unwatched only' only when it is on) and tests/e2e/first-run.spec.mjs (settings-sheet's routed test-only fixes S6C1/S6C2); list at the next stop
+- FOLLOW-UP ANSWERED (owner: Nathan, "b" at 2026-10-13T16:51:55Z): purge rehearsal r1 — after the force-push, pull request #1 (refs/pull/1/head → 13af5b0) still reaches the token commit on GitHub, and plan criterion 1 cannot see it; decide before the purge: ask GitHub Support to remove PR #1's refs, or delete and re-create the repository, and whether criterion 1 should also check the PR refs
 
 <!-- cc_utils:state
 {
@@ -620,11 +620,6 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "deadline": "release-bump"
     },
     {
-      "text": "purge rehearsal r1 \u2014 after the force-push, pull request #1 (refs/pull/1/head \u2192 13af5b0) still reaches the token commit on GitHub, and plan criterion 1 cannot see it; decide before the purge: ask GitHub Support to remove PR #1's refs, or delete and re-create the repository, and whether criterion 1 should also check the PR refs",
-      "owner": "Nathan",
-      "deadline": "purge-git-history"
-    },
-    {
       "text": "purge rehearsal r1 \u2014 at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped",
       "owner": "conductor",
       "deadline": "purge-git-history"
@@ -1093,6 +1088,14 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "quote": "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question.",
       "at": "2026-10-11T21:22:44Z",
       "time_source": "conductor clock"
+    },
+    {
+      "text": "purge rehearsal r1 \u2014 after the force-push, pull request #1 (refs/pull/1/head \u2192 13af5b0) still reaches the token commit on GitHub, and plan criterion 1 cannot see it; decide before the purge: ask GitHub Support to remove PR #1's refs, or delete and re-create the repository, and whether criterion 1 should also check the PR refs",
+      "owner": "Nathan",
+      "deadline": "purge-git-history",
+      "quote": "b",
+      "at": "2026-10-13T16:51:55Z",
+      "time_source": "reply"
     }
   ],
   "header": "run 1 \u00b7 plan docs/integration-plan.md @ 0f1f82e \u00b7 kernel dotclaude@b4a6fb5 \u00b7 conductor-1 \u00b7 started 2026-10-08T22:05Z \u00b7 goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters \u00b7 invocation: phases/_invocation.md \u00b7 resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user \u2192 /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed \u00b7 conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) \u00b7 next action: owner \u2014 stop 15 in phases/rotate-plex-token.md (token receipt, then the two real-server checklists)"

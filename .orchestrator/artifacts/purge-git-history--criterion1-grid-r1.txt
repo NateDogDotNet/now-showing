@@ -1,0 +1,8 @@
+| origin state | old exit | new exit |
+|---|---|---|
+| before purge (mirror of today's GitHub) | 1 | 1 |
+| after force-push, PR ref kept (option a without Support) | 0 | 1 |
+warning: remote HEAD refers to nonexistent ref, unable to checkout
+warning: remote HEAD refers to nonexistent ref, unable to checkout
+| re-created repo: purged branches only (option b) | 0 | 0 |
+| re-created repo but an unpurged branch pushed by mistake | 1 | 1 |
