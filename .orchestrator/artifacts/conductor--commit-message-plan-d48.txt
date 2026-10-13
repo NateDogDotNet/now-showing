@@ -1,0 +1,8 @@
+Let release-bump touch README.md and Roadmap.md (D48)
+
+release-bump carries follow-up K61 (the "(verify)" tags) and the docs
+r3 wording fix. Its Output now lists README.md and Roadmap.md.
+Criterion 7 now ignores the tracked .orchestrator/ snapshot and sorts
+with LC_ALL=C.
+
+Co-Authored-By: Claude <noreply@anthropic.com>

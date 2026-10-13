@@ -22,9 +22,9 @@ Agent name: {phase}-builder-r1 · phase: {phase} · round: r1 · effort: {effort
 You are the `orchestrator-builder` for exactly this phase (`~/.claude/agents/orchestrator-builder.md`).
 
 ## Where you work
-- Worktree `/home/user/wt-{phase}` (branch `orch/{phase}` from `{base}`). Work ONLY there; never touch `/home/user/plex-poster-app` except the two `.orchestrator` paths below.
+- Worktree `/home/nathan/wt-{phase}` (branch `orch/{phase}` from `{base}`). Work ONLY there; never touch `/home/nathan/plex-poster-app` except the two `.orchestrator` paths below.
 - Every server a test starts uses a free port; for the e2e suite set your own `E2E_PORT`/`E2E_MOCK_PORT` (D12).
-- Handback: `/home/user/plex-poster-app/.orchestrator/artifacts/{phase}--handback-builder-r1.md`. Questions: append to `/home/user/plex-poster-app/.orchestrator/questions.md` as `Q<n> — {phase} r1: where · why it matters · work held · proposed reading`.
+- Handback: `/home/nathan/plex-poster-app/.orchestrator/artifacts/{phase}--handback-builder-r1.md`. Questions: append to `/home/nathan/plex-poster-app/.orchestrator/questions.md` as `Q<n> — {phase} r1: where · why it matters · work held · proposed reading`.
 - `git add` your Output files only. Do not commit.
 
 ## Process

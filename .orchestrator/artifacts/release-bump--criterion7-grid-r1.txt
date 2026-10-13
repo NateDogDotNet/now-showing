@@ -1,0 +1,10 @@
+| case | old exit | new exit |
+|---|---|---|
+| nothing changed | 1 | 1 |
+| the five version files only | 0 | 1 |
+| five + README.md + Roadmap.md (the phase as the follow-ups need it) | 1 | 0 |
+| five + README + Roadmap + a .orchestrator/ edit (tracked snapshot) | 1 | 0 |
+| five + README + Roadmap + an extra app file (js/engine.js) | 1 | 1 |
+| five + README, Roadmap missing | 1 | 1 |
+| five + README + Roadmap + new untracked file | 1 | 1 |
+| five + README + Roadmap + docs/decisions.md | 1 | 1 |

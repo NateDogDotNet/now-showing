@@ -6,7 +6,7 @@
 # node --test "# fail N" count when present). Append-only: never edited after first run.
 set -u
 P=$1; NAME=$2; HAZ=$3; FILE=$4; FROM=$5; TO=$6; shift 6
-A=/home/user/plex-poster-app/.orchestrator/artifacts; WT=/home/user/wt-$P; OUT=$A/$P--mutation-$NAME-r1.txt
+A=/home/nathan/plex-poster-app/.orchestrator/artifacts; WT=/home/nathan/wt-$P; OUT=$A/$P--mutation-$NAME-r1.txt
 d=$(mktemp -d) || exit 2
 git -C "$WT" worktree add -q --detach "$d/wt" HEAD || exit 2
 (cd "$WT" && git diff --cached --binary) | (cd "$d/wt" && git apply --index) || exit 2

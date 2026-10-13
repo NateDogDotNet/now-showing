@@ -5,7 +5,7 @@
 # from evidence.py exec in the worktree. Append-only: never edited after first run.
 set -u
 P=$1; WT=$2; L=$3; OUT=$4
-A=/home/user/plex-poster-app/.orchestrator/artifacts
+A=/home/nathan/plex-poster-app/.orchestrator/artifacts
 E="python3 $HOME/.claude/scripts/cc_utils/evidence.py exec --timeout 900"
 cd "$WT" || exit 2
 JS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(m?js)$' | tr '\n' ' ')

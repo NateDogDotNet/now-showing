@@ -1,0 +1,9 @@
+Record the purge order and stop 15's defaults (D46-D48)
+
+D46 quotes the owner's 2026-10-13 instruction: the history purge
+waits for a confirmed 401 and an explicit approval. This closes stop 8.
+D47 keeps token rotation as a 2.1.0 release requirement. D48 adds
+README.md and Roadmap.md to release-bump's change set, and makes its
+criterion 7 ignore the tracked .orchestrator/ snapshot.
+
+Co-Authored-By: Claude <noreply@anthropic.com>

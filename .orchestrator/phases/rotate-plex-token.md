@@ -54,3 +54,21 @@ Reply e.g. "1a, 2a, noted" — "1a" is the go-ahead for the force-push.
 <!-- end stop 8 -->
 - Stop 8 sent 2026-10-09T03:34:43Z verbatim from `closer show --stop 8`.
 - Stop 8 re-saved with item 3 (P1) after stopcheck flagged the unlisted promise; sent 2026-10-09T03:35:02Z verbatim.
+
+## Stop message 15
+**Stop 15 — resumed locally; everything left waits on you**
+
+The run is resumed on this machine at `claude/intelligent-rubin-4vsi63`. 21 of 28 phases are done, 2 moved to 2.2, and no agent work is left: the frontier is empty. Checks on this clone: `npm test` 327/327 pass, `check-precache` reports 31 files OK, and the full e2e suite passes (exit 0: 104 PASS lines, 0 FAIL). Stop 8 (scrubbing the token) was never answered, and its facts have changed: since pull request #1 was merged (`ee6fbbe`), the leaked value is in neither branch's current tree, so GitHub Pages no longer serves it. It is still in the public history, in one commit, `5c4a716`. Each answer's record below is committed on this branch before any history purge, so it lands inside the rewritten history.
+
+1. **Token rotation receipt (needs you).** Follow the checklist above in this file (revoke, then run the 401 check with the old token in your own shell only), then reply with these four lines and no token value:
+   - `1 method: <authorized-devices | password-change | other>`
+   - `2 date: <YYYY-MM-DD>`
+   - `3 old token rejected (401): <yes | no>`
+   - `4 history purge wanted: <no | yes>`
+   I then write `docs/security/token-rotation.md` from your words and check it.
+2. **Rotation stays a release requirement (stop 8 item 2), applied under D44 as (a), D47.** (a) Keep D11/D14: 2.1.0 needs `Rotated: yes`. Your instructions today put the receipt ahead of the release. (b) Drop it, as stop 8 recommended. Stop 8's option 1(a), scrubbing without rotating, is withdrawn by your instruction today that the purge comes after the 401 (D46).
+3. **`release-bump` may edit README.md and Roadmap.md, applied under D44 as (a), D48.** Its criterion 7 ("nothing else changed") allowed only the five version files. It failed in every state the phase can legitimately reach, because K61 and the wording fix edit README.md and Roadmap.md, and the tracked `.orchestrator/` snapshot always changes. Grid (`release-bump--criterion7-grid-r1.txt`), exits old → new: five files only 0 → 1; plus README and Roadmap 1 → 0; plus a `.orchestrator/` edit 1 → 0; plus an extra app file, a missing Roadmap, an untracked file or `docs/decisions.md` 1 → 1. (a) Amend Output and criterion 7 (done: `3603ed8`, `a08eeab`). (b) Split the README work into its own phase.
+4. **Hands-on validation (needs you, after item 1).** Run `docs/validation/real-server-core.md` against the real Plex server, then `docs/validation/real-server-extended.md` on the real Pi (it includes V1-E24 remote address, V1-E25 relay, D33 episode ratings and C8I1 batched metadata). Each file needs `Overall: PASS` and no `PENDING`. Tell me when each is filled in and I check it.
+
+**Then, without you:** `release-bump` updates the README's "(verify)" tags from your results (K61), fixes the "Daily reload" wording, drops "(K60)" from the Roadmap and sets version 2.1.0. **Only with your explicit go-ahead, after the 401:** the history purge and its force-push (D46). No pull request unless you ask.
+<!-- end stop 15 -->

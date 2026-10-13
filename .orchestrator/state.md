@@ -1,6 +1,6 @@
 # Orchestration State
 
-run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · conductor-1 · started 2026-10-08T22:05Z · goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters · invocation: phases/_invocation.md
+run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · conductor-1 · started 2026-10-08T22:05Z · goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters · invocation: phases/_invocation.md · resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user → /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed · conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) · next action: owner — stop 15 in phases/rotate-plex-token.md (token receipt, then the two real-server checklists)
 
 | Phase | Status | Mode | Blocked by | Claim | Confidence | Re-dispatches | Tags | Note |
 |---|---|---|---|---|---|---|---|---|
@@ -1083,6 +1083,6 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "time_source": "conductor clock"
     }
   ],
-  "header": "run 1 \u00b7 plan docs/integration-plan.md @ 0f1f82e \u00b7 kernel dotclaude@b4a6fb5 \u00b7 conductor-1 \u00b7 started 2026-10-08T22:05Z \u00b7 goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters \u00b7 invocation: phases/_invocation.md"
+  "header": "run 1 \u00b7 plan docs/integration-plan.md @ 0f1f82e \u00b7 kernel dotclaude@b4a6fb5 \u00b7 conductor-1 \u00b7 started 2026-10-08T22:05Z \u00b7 goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters \u00b7 invocation: phases/_invocation.md \u00b7 resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user \u2192 /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed \u00b7 conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) \u00b7 next action: owner \u2014 stop 15 in phases/rotate-plex-token.md (token receipt, then the two real-server checklists)"
 }
 -->
