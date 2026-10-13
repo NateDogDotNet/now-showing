@@ -1,0 +1,10 @@
+Rehearse the history purge locally and record what it found
+
+The plan's filter-repo rewrite was run against a mirror backup, and
+the force-push went to a local stand-in for origin. It removes the
+token from both branches, leaves both tip trees unchanged, and passes
+criteria 1 and 3. Pull request #1's read-only ref still reaches the
+token commit, and criterion 1 cannot see that. It is now an owner
+follow-up due before the purge. Nothing was pushed to GitHub.
+
+Co-Authored-By: Claude <noreply@anthropic.com>

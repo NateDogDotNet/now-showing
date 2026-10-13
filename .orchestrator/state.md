@@ -56,6 +56,8 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 - FOLLOW-UP (owner: conductor): C8I1 (D37) — real-server-validation-extended: confirm Plex accepts the batched GET /library/metadata/<k1>,<k2>,... request the upward re-rate fix uses; add the row to docs/validation/real-server-extended.md (deadline: real-server-validation-extended)
 - FOLLOW-UP (owner: release-bump): K61 — after real-server-validation and -extended pass, update README.md's (verify)/unverified tags from their results (a flag or command proven on the real server or Pi loses its tag; a failed one is corrected or removed), then re-run the docs criteria (deadline: release-bump)
 - FOLLOW-UP (owner: release-bump): docs r3 wording (with the K61 tag update): README 'Daily reload' — the reload waits while ANY dialog is open (PIN, shortcuts, Settings, Diagnostics), and a key, touch or mouse click wake does not trigger the 12-hour reload; also drop the internal id '(K60)' from Roadmap.md's 2.1.x polish line (deadline: release-bump)
+- FOLLOW-UP (owner: Nathan): purge rehearsal r1 — after the force-push, pull request #1 (refs/pull/1/head → 13af5b0) still reaches the token commit on GitHub, and plan criterion 1 cannot see it; decide before the purge: ask GitHub Support to remove PR #1's refs, or delete and re-create the repository, and whether criterion 1 should also check the PR refs (deadline: purge-git-history)
+- FOLLOW-UP (owner: conductor): purge rehearsal r1 — at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped (deadline: purge-git-history)
 
 ## Follow-ups answered
 
@@ -616,6 +618,16 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "text": "docs r3 wording (with the K61 tag update): README 'Daily reload' \u2014 the reload waits while ANY dialog is open (PIN, shortcuts, Settings, Diagnostics), and a key, touch or mouse click wake does not trigger the 12-hour reload; also drop the internal id '(K60)' from Roadmap.md's 2.1.x polish line",
       "owner": "release-bump",
       "deadline": "release-bump"
+    },
+    {
+      "text": "purge rehearsal r1 \u2014 after the force-push, pull request #1 (refs/pull/1/head \u2192 13af5b0) still reaches the token commit on GitHub, and plan criterion 1 cannot see it; decide before the purge: ask GitHub Support to remove PR #1's refs, or delete and re-create the repository, and whether criterion 1 should also check the PR refs",
+      "owner": "Nathan",
+      "deadline": "purge-git-history"
+    },
+    {
+      "text": "purge rehearsal r1 \u2014 at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped",
+      "owner": "conductor",
+      "deadline": "purge-git-history"
     }
   ],
   "follow_ups_answered": [

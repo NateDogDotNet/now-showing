@@ -1,0 +1,23 @@
+$ git clone -q --no-local BACKUP plain && git -C plain branch -a
+* main
+  remotes/origin/HEAD -> origin/main
+  remotes/origin/claude/intelligent-rubin-4vsi63
+  remotes/origin/main
+$ git -C plain filter-repo --invert-paths --path config.js && git -C plain for-each-ref refs/heads refs/remotes
+exit 0
+refs/heads/claude/intelligent-rubin-4vsi63 65e834b
+refs/heads/main 82ef01c
+remotes left: 0
+$ wc -l plain/.git/filter-repo/commit-map; head -3
+60
+old new
+05fb079e25ee 79fb53622aa1
+0914090f17ca 0e72b14e26fc
+$ old landed SHAs cited by the trail, mapped (sample)
+d409ad7 -> 7938fea
+e764aee -> dcad9f1
+78b9f67 -> 2cc8112
+160aca2 -> ac2d32c
+3603ed8 -> 4fdc805
+e411e14 -> 65e834b
+ee6fbbe -> 82ef01c
