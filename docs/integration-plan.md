@@ -588,7 +588,7 @@ One remaining fill feature, the extended real-server validation, the single docs
 - **Goal:** Set `VERSION` to 2.1.0 in `sw.js`, `js/main.js` and `package.json` (and the lockfile) so installed clients update, only after the token is rotated and both real-server validations PASS.
 - **Findings:** — · **Requirements:** R-REL-1 · **Rulings:** D11, D13, D16
 - **Mode:** afk · **Tags:** — · **Blocked by:** `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended`
-- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/release.spec.mjs`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/release.spec.mjs`, `README.md`, `Roadmap.md` (D48: follow-up K61 and the docs r3 wording)
 - **Acceptance criteria:**
   1. `node -e "const fs=require('fs');const g=(f)=>fs.readFileSync(f,'utf8').match(/VERSION = '([^']+)'/)[1];const a=g('sw.js'),b=g('js/main.js'),p=require('./package.json'),l=require('./package-lock.json');if(!(a===b&&b===p.version&&a==='2.1.0'&&l.version==='2.1.0'&&l.packages[''].version==='2.1.0')){console.error(a,b,p.version,l.version);process.exit(1)}"`
   2. `test -f docs/security/token-rotation.md && grep -qx 'Rotated: yes' docs/security/token-rotation.md`  (D11: token rotated)
@@ -596,7 +596,7 @@ One remaining fill feature, the extended real-server validation, the single docs
   4. `npm test`
   5. `npm run test:e2e`  (includes `release.spec.mjs`: with service workers enabled, a stale `shell-2.0.0` cache is created in the page before registration, then after activation `shell-2.1.0` exists and `shell-2.0.0` is gone)
   6. `node scripts/check-precache.mjs`
-  7. `test "$(git status --porcelain --untracked-files=all | awk '{print $2}' | sort | tr '\n' ' ')" = "js/main.js package-lock.json package.json sw.js tests/e2e/release.spec.mjs "`  (nothing else changed)
+  7. `test "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | LC_ALL=C sort | tr '\n' ' ')" = "README.md Roadmap.md js/main.js package-lock.json package.json sw.js tests/e2e/release.spec.mjs "`  (nothing else changed; the tracked `.orchestrator/` snapshot is the conductor's, D48)
   8. narrated: the close-time reviews (full `code-review` of `46257c3..HEAD`, `security-scan` over the repo, `dependency-audit` of the devDependencies, `scrub-pii` on `docs/validation/*` and `docs/security/*`) are the conductor's Step 8 close work; this plan has no `publish` tag (D13).
 - **Notes/hazards:**
   - Decision (D16): one bump here, not per phase, for clean releases (the r1 rationale that per-phase bumps would reload clients was wrong: any `sw.js` edit already triggers an update).
