@@ -606,17 +606,17 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 ### 27. `purge-git-history` — OPTIONAL: purge config.js from git history
 
-- **Goal:** Remove `config.js` (the leaked token) from every commit and force-push, only if the owner says the repository is public or shared.
+- **Goal:** Remove `config.js` (the leaked token) from every commit and from everything GitHub serves, by deleting and re-creating the repository with the rewritten history (D49), only if the owner says the repository is public or shared.
 - **Findings:** S1 · **Requirements:** R-SEC-2 · **Rulings:** D14
 - **Mode:** hitl · **Tags:** irreversible · **Blocked by:** `rotate-plex-token`, `release-bump`
 - **Output:** `docs/security/history-purge.md`
 - **Acceptance criteria:**
-  1. `d=$(mktemp -d) && git clone -q "$(git remote get-url origin)" "$d/fresh" && test -z "$(git -C "$d/fresh" log --all --oneline -- config.js)"`  (run against a fresh clone of `origin`, not the conductor's checkout, which keeps the old objects until re-synced)
+  1. `d=$(mktemp -d) && git clone -q "$(git remote get-url origin)" "$d/fresh" && test -z "$(git -C "$d/fresh" log --all --oneline -- config.js)" && test -z "$(git ls-remote "$(git remote get-url origin)" "refs/pull/*")"`  (run against a fresh clone of `origin`, not the conductor's checkout, which keeps the old objects until re-synced; the `refs/pull/*` check is D49: a plain clone fetches only branches, and pull request #1's read-only ref reached the token commit in the rehearsal)
   2. `test -f docs/security/history-purge.md && grep -qx 'Purged: yes' docs/security/history-purge.md`
   3. `git fsck --no-dangling >/dev/null 2>&1`
   4. narrated: **explicitly skipped unless the owner says the repository is public or shared (D14);** it is outside the release path and nothing depends on it. Before the approval pause the independent precondition review (target commit, clean tree, suite green, exact command) is written; the owner runs the force-push themselves.
 - **Notes/hazards:**
-  - Hand-off checklist: (1) `git clone --mirror` a backup somewhere safe; (2) install `git-filter-repo` **(verify the package name for your OS)**; (3) in a fresh clone: `git filter-repo --invert-paths --path config.js`; (4) re-add `origin`; (5) `git push --force-with-lease --all && git push --force --tags`; (6) tell every collaborator to re-clone and re-sync the conductor's checkout (`git fetch --prune --force`, reset each local branch, drop stale refs); (7) ask GitHub support to drop cached views and check forks if the repo was public; (8) record `Purged: yes` and the date in `docs/security/history-purge.md`.
+  - Hand-off checklist (D49, delete and re-create): (1) `git clone --mirror` a backup somewhere safe; (2) `git-filter-repo` is installed (`/home/nathan/.local/bin/git-filter-repo`); (3) in a plain fresh clone: `git filter-repo --invert-paths --path config.js`, then keep `.git/filter-repo/commit-map` for the audit trail; (4) delete the GitHub repository (Settings > Danger Zone, or `gh repo delete NateDogDotNet/plex-poster-app --yes`): this removes pull request #1 and its `refs/pull/1/head`, and the Pages setting; (5) create an empty public repository with the same name (no README or licence), re-add `origin`, then `git push --all && git push --tags`; (6) re-enable Pages (source `main`, `/`), set the homepage to `https://natedogdotnet.github.io/plex-poster-app/`, and check the site loads; (7) re-sync the conductor's checkout (`git fetch --prune --force`, reset each local branch, drop stale refs); (8) optionally ask GitHub Support to drop cached views of commit `5c4a716`; (9) record `Purged: yes` and the date in `docs/security/history-purge.md`.
   - Irreversible: every SHA changes, so it runs after `release-bump`. Rotation (`rotate-plex-token`) is what actually removes the risk; a purge only removes the evidence. Do not rewrite history on the branch the conductor is committing to while it is running.
 
 ### 28. `display-decode-hang` — Rotation never stalls on a pending image decode (added at stop 9, D30)
