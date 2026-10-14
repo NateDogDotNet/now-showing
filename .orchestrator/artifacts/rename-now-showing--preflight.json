@@ -1,0 +1,8 @@
+{
+ "phase": "rename-now-showing",
+ "failures": [
+  "D55 named by a failing probe is not in docs/decisions.md"
+ ],
+ "ok": false,
+ "checked_at": "2026-10-14T19:47:20.101278Z"
+}

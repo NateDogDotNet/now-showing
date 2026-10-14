@@ -32,10 +32,10 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | release-bump | ⬜ pending | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | — | 0% | 0 | — | D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9) |
 | purge-git-history | ⬜ pending | hitl | rotate-plex-token, release-bump | — | 0% | 0 | irreversible |  |
 | display-decode-hang | ✅ done | afk | rotation-layout-and-shell | — | 100% | 1 | — | landed af55616 |
-| rename-now-showing | ⬜ pending | afk | docs | — | 0% | 0 | ui, docs | D52 (owner 2026-10-14): rename to Now Showing; repo/Pages rename waits for owner |
+| rename-now-showing | ⬜ pending | afk | docs | conductor-2 | 0% | 0 | ui, docs | D52 (owner 2026-10-14): rename to Now Showing; repo/Pages rename waits for owner |
 
 **Progress:** 22/29 phases done
-**Frontier:** rename-now-showing
+**Frontier:** (none)
 
 ## Unknowns
 
@@ -607,7 +607,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
         "docs"
       ],
       "mode": "afk",
-      "claim": ""
+      "claim": "conductor-2"
     }
   ],
   "unknowns": [

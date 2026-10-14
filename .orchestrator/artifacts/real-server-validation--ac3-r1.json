@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f docs/validation/real-server-core.md && ! grep -Eq 'X-Plex-Token[=:] *[A-Za-z0-9_-]{15,}' docs/validation/real-server-core.md",
+  "exit": 0,
+  "seconds": 0.0,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

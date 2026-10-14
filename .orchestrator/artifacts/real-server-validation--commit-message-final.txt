@@ -1,0 +1,8 @@
+Record the core real-server checklist: all 17 rows PASS
+
+V1-C01 to C16 were run on HOME against Castle Anthrax and the real
+plex.tv, with the owner approving the codes and playing a title. V1-C17
+is recorded at hour 15 of the 24 h soak on the owner's call, backed by
+the owner's own 24 h run on a phone. Overall: PASS.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
