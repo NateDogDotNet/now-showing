@@ -609,7 +609,7 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 - **Goal:** Remove `config.js` (the leaked token) from every commit and from everything GitHub serves, by deleting and re-creating the repository with the rewritten history (D49), only if the owner says the repository is public or shared.
 - **Findings:** S1 · **Requirements:** R-SEC-2 · **Rulings:** D14
-- **Mode:** hitl · **Tags:** irreversible · **Blocked by:** `rotate-plex-token`, `release-bump`
+- **Mode:** hitl · **Tags:** irreversible · **Blocked by:** `rotate-plex-token`, `release-bump`, `limit-and-reload-fixes` (D73)
 - **Output:** `docs/security/history-purge.md`
 - **Acceptance criteria:**
   1. `d=$(mktemp -d) && git clone -q "$(git remote get-url origin)" "$d/fresh" && test -z "$(git -C "$d/fresh" log --all --oneline -- config.js)" && test -z "$(git ls-remote "$(git remote get-url origin)" "refs/pull/*")"`  (run against a fresh clone of `origin`, not the conductor's checkout, which keeps the old objects until re-synced; the `refs/pull/*` check is D49: a plain clone fetches only branches, and pull request #1's read-only ref reached the token commit in the rehearsal)
@@ -654,6 +654,29 @@ One remaining fill feature, the extended real-server validation, the single docs
 - **Notes/hazards:**
   - plex.tv lists a device by its `X-Plex-Product`; displays signed in before the update keep their old entry until they sign in again. Say so in the README.
 
+### 30. `limit-and-reload-fixes` — Four close-time review fixes that ship in 2.1.0 (D73)
+
+- **Goal:** The offline household limit never judges a show by one episode's rating; a service-worker update reload honours the same wait rules as the daily reload; a fresh config.json install shows no "What's new" upgrade notice; the empty card blames the limit only when the limit is what emptied it.
+- **Findings:** release-bump code review r1 findings 1, 7, 5, 6 · **Requirements:** R-RATE (fail closed offline), R-DOC-1 (README claim) · **Rulings:** D73, D37, D33
+- **Mode:** afk · **Tags:** risk:high (content limit) · **Blocked by:** `release-bump`
+- **Output:** `js/plex.js`, `js/poster-cache.js`, `js/main.js`, `js/engine.js` (only if the fix needs it), `tests/poster-cache.test.js`, `tests/plex.test.js`, `tests/e2e/content-rating.spec.mjs`, `tests/e2e/pi-stability.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/status.spec.mjs`, `scripts/mock-plex.mjs`
+- **Acceptance criteria:**
+  1. `test -f tests/poster-cache.test.js && node --test tests/poster-cache.test.js`  (new cases: a now-playing episode poster, keyed by its show, never changes the show's stored contentRating through `put` or `refreshRating`; an episode with no rating never stores '' over the show's rating; the show's rating still follows Plex when the SHOW item is seen)
+  2. `test -f tests/plex.test.js && node --test tests/plex.test.js`  (an episode's poster descriptor carries the show's rating when Plex sends `grandparentContentRating`, else marks the rating as the episode's so the cache can ignore it; the chosen mechanism is the builder's, the test pins the behaviour)
+  3. `npm run test:e2e -- content-rating`  (new case: limit PG, a TV-MA show cached from the pool, a TV-PG episode of it plays, Plex becomes unreachable → the show's poster is NOT shown from the cache; and the inverse: an unrated episode does not hide a PG-rated show offline)
+  4. `npm run test:e2e -- pi-stability`  (new case: a new service worker arrives while the PIN prompt is open → no reload until it closes; the reload then happens)
+  5. `npm run test:e2e -- preset`  (new case, K60: a fresh boot provisioned from config.json writes `plexPoster.whatsNew` and shows no "What's new" toast; an upgraded stored install still shows it)
+  6. `npm run test:e2e -- status`  (new case: limit set, empty cache, Plex times out → the empty card shows the timeout message, not the household-limit wording; with cached posters all above the limit → the limit wording)
+  7. `npm test && npm run test:e2e && node scripts/check-precache.mjs`
+  8. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/plex.js|js/poster-cache.js|js/main.js|js/engine.js|tests/poster-cache.test.js|tests/plex.test.js|tests/e2e/content-rating.spec.mjs|tests/e2e/pi-stability.spec.mjs|tests/e2e/preset.spec.mjs|tests/e2e/status.spec.mjs|scripts/mock-plex.mjs)')"`  (nothing else changed; `VERSION` stays 2.1.0)
+  9. narrated: cold and anchored reviews (risk:high); each of the four review findings is quoted in the handback with the test that now pins it.
+- **Notes/hazards:**
+  - Do not change the cache key scheme (posters stay keyed by the show's ratingKey so an episode's poster and the show's poster are one cache entry); fix what rating is stored and when, not the key.
+  - `VERSION` is already 2.1.0 (release-bump); do not bump it. The fixes are part of 2.1.0, which is not yet published (D13).
+  - The Roadmap's 2.1.x polish bullet for the What's new e2e (K60) is delivered by criterion 5; release-bump's Roadmap text may be amended in the close tail, not here.
+
+---
+
 ## Dependency graph
 
 `phase -> blocked by` (real prerequisites only; the first column is the plan number, which implies no order beyond the arrows). Output overlap is not an edge (convention 6).
@@ -686,9 +709,10 @@ One remaining fill feature, the extended real-server validation, the single docs
 | 24 | `real-server-validation-extended` | hitl | `validation-checklists`, `real-server-validation`, `content-rating-filter`, `settings-sheet`, `metadata-and-now-playing`, `device-helper-integration`, `pi-stability` |
 | 25 | `docs` | afk | `recommended-protection-preset`, `touch-and-labels`, `real-server-validation-extended` |
 | 26 | `release-bump` | afk | `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended`, `rename-now-showing` |
-| 27 | `purge-git-history` | hitl | `rotate-plex-token`, `release-bump` |
+| 27 | `purge-git-history` | hitl | `rotate-plex-token`, `release-bump`, `limit-and-reload-fixes` (D73) |
 | 28 | `display-decode-hang` | afk | `rotation-layout-and-shell` |
 | 29 | `rename-now-showing` (D52) | afk | `docs` |
+| 30 | `limit-and-reload-fixes` (D73) | afk | `release-bump` |
 
 ### Waves (longest-path levels)
 
