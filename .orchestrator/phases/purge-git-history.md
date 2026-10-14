@@ -1,6 +1,6 @@
 # purge-git-history
 
-- Mode: hitl        Tags: irreversible        Blocked by: rotate-plex-token, release-bump
+- Mode: hitl        Tags: irreversible        Blocked by: rotate-plex-token, release-bump, limit-and-reload-fixes (D73)
 - Agent type: none (hitl; the owner runs the force-push, plan criterion 4)
 - Claimed: n/a — not claimed; blocked by rotate-plex-token and release-bump (only pre-claim preparation below)
 - Dispatched: n/a        Re-dispatches: 0        Inner revision rounds: 0

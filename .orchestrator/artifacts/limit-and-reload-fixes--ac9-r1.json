@@ -1,0 +1,9 @@
+{
+  "cmd": "test -f .orchestrator/artifacts/limit-and-reload-fixes--handback-builder-r1.md && grep -c 'F[1567]' .orchestrator/artifacts/limit-and-reload-fixes--handback-builder-r1.md | grep -qv '^0$'",
+  "exit": 0,
+  "seconds": 0.03,
+  "parsed": null,
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

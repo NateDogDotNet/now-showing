@@ -1,0 +1,14 @@
+{
+  "cmd": "node tests/e2e/run.mjs first-run",
+  "exit": 1,
+  "seconds": 117.5,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "ok  rotation 270: block angle 270\n  ok  rotation 180: block angle 180\n  ok  an already-expired pin is not a hot loop\n  ok  configured: no pin request\n  ok  config.json provisioned: no pin request\n  ok  first run: code on the card, >= 64 px, one pin, Settings closed\n  ok  Open settings works; the card's flow pauses and resumes\n  ok  junk pin reply backs off\n  ok  network failure: 4 attempts in 121 s, 3 console errors, then recovers\n  ok  approval -> Settings filled in -> Save -> poster\n  ok  SSC3 Open settings variant\n  ok  SSC3 approved during the prompt -> PIN -> Settings filled in\n  ok  SSC3 cancel keeps the token pending; the next open has it\n  ok  K50 falling asleep stops the polling\n  ok  K50 asleep: no requests; awake: a code\n  ok  K50 5 codes and 724 polls in 71 min\nFAIL first-run",
+  "stderr_tail": "case when the pin expires, a new code replaces it and exactly one new pin is created failed:\npage.goto: net::ERR_ABORTED; maybe frame was detached?\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:40165/\", waiting until \"load\"\u001b[22m\n\n    at /home/nathan/wt-limit-and-reload-fixes/tests/e2e/first-run.spec.mjs:130:14\n    at async withApp (/home/nathan/wt-limit-and-reload-fixes/tests/e2e/lib.mjs:242:20)\n    at async file:///home/nathan/wt-limit-and-reload-fixes/tests/e2e/first-run.spec.mjs:568:9\n    at async file:///home/nathan/wt-limit-and-reload-fixes/tests/e2e/first-run.spec.mjs:563:1\ncase at rotation 90 the code block is turned by 90 degrees failed:\npage.goto: net::ERR_ABORTED; maybe frame was detached?\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:38489/\", waiting until \"load\"\u001b[22m\n\n    at /home/nathan/wt-limit-and-reload-fixes/tests/e2e/first-run.spec.mjs:154:16\n    at async withApp (/home/nathan/wt-limit-and-reload-fixes/tests/e2e/lib.mjs:242:20)\n    at async file:///home/nathan/wt-limit-and-reload-fixes/tests/e2e/first-run.spec.mjs:568:9\n    at async file:///home/nathan/wt-limit-and-reload-fixes/tests/e2e/first-run.spec.mjs:563:1\n2 of 18 first-run cases failed"
+}

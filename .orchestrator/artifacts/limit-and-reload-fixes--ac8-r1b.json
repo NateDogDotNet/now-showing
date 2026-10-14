@@ -1,0 +1,9 @@
+{
+  "cmd": "test -z \"$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\\.orchestrator/' | grep -vxE '(js/plex.js|js/poster-cache.js|js/main.js|js/engine.js|tests/poster-cache.test.js|tests/plex.test.js|tests/e2e/content-rating.spec.mjs|tests/e2e/pi-stability.spec.mjs|tests/e2e/preset.spec.mjs|tests/e2e/status.spec.mjs|scripts/mock-plex.mjs)')\"",
+  "exit": 0,
+  "seconds": 0.04,
+  "parsed": null,
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

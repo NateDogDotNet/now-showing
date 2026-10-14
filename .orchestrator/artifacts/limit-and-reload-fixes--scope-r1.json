@@ -1,0 +1,9 @@
+{
+  "cmd": "cd /home/nathan/wt-limit-and-reload-fixes && test \"$(git status --porcelain --untracked-files=all | awk '{print $2}' | LC_ALL=C sort | tr '\\n' ' ')\" = \"js/main.js js/plex.js js/poster-cache.js scripts/mock-plex.mjs tests/e2e/content-rating.spec.mjs tests/e2e/pi-stability.spec.mjs tests/e2e/preset.spec.mjs tests/e2e/status.spec.mjs tests/plex.test.js tests/poster-cache.test.js \"",
+  "exit": 0,
+  "seconds": 0.08,
+  "parsed": null,
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

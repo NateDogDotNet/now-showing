@@ -1,0 +1,14 @@
+{
+  "cmd": "node tests/e2e/run.mjs pixel-shift",
+  "exit": 1,
+  "seconds": 57.9,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "FAIL pixel-shift",
+  "stderr_tail": "node:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\npage.evaluate: Target crashed \n    at settle (/home/nathan/wt-limit-and-reload-fixes/tests/e2e/pixel-shift.spec.mjs:33:31)\n    at /home/nathan/wt-limit-and-reload-fixes/tests/e2e/pixel-shift.spec.mjs:60:15\n    at async withApp (/home/nathan/wt-limit-and-reload-fixes/tests/e2e/lib.mjs:242:20)\n    at async file:///home/nathan/wt-limit-and-reload-fixes/tests/e2e/pixel-shift.spec.mjs:50:1 {\n  name: 'Error'\n}\n\nNode.js v22.23.2"
+}

@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/plex.test.js && node --test tests/plex.test.js",
+  "exit": 0,
+  "seconds": 0.35,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: pinSignIn: a failing poll is not an error, the code stays good\nok 34 - pinSignIn: a failing poll is not an error, the code stays good\n  ---\n  duration_ms: 15.299579\n  type: 'test'\n  ...\n# Subtest: pinSignIn throws when no code can be had, and shows no code\nok 35 - pinSignIn throws when no code can be had, and shows no code\n  ---\n  duration_ms: 0.513858\n  type: 'test'\n  ...\n# Subtest: pinSignIn stops at once when aborted, before or during the wait\nok 36 - pinSignIn stops at once when aborted, before or during the wait\n  ---\n  duration_ms: 21.122267\n  type: 'test'\n  ...\n# Subtest: toPoster: an episode carries the series rating when Plex sends grandparentContentRating\nok 37 - toPoster: an episode carries the series rating when Plex sends grandparentContentRating\n  ---\n  duration_ms: 0.16918\n  type: 'test'\n  ...\n# Subtest: toPoster: an episode without grandparentContentRating marks its rating as the episode's own\nok 38 - toPoster: an episode without grandparentContentRating marks its rating as the episode's own\n  ---\n  duration_ms: 0.09367\n  type: 'test'\n  ...\n1..38\n# tests 38\n# suites 0\n# pass 38\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 312.494992",
+  "stderr_tail": ""
+}

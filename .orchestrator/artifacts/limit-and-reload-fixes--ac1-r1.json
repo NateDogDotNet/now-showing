@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/poster-cache.test.js && node --test tests/poster-cache.test.js",
+  "exit": 0,
+  "seconds": 0.24,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: random() returns null when nothing in the cache is allowed\nok 26 - random() returns null when nothing in the cache is allowed\n  ---\n  duration_ms: 0.340942\n  type: 'test'\n  ...\n# Subtest: random() with a limit still honours excludeKey and returns the blob\nok 27 - random() with a limit still honours excludeKey and returns the blob\n  ---\n  duration_ms: 5.596759\n  type: 'test'\n  ...\n# Subtest: an episode poster never changes the stored rating of its show, through put or refreshRating\nok 28 - an episode poster never changes the stored rating of its show, through put or refreshRating\n  ---\n  duration_ms: 0.388547\n  type: 'test'\n  ...\n# Subtest: an episode without a rating never stores \"\" over the show rating, and a new episode-only entry has no rating (fails closed)\nok 29 - an episode without a rating never stores \"\" over the show rating, and a new episode-only entry has no rating (fails closed)\n  ---\n  duration_ms: 0.452051\n  type: 'test'\n  ...\n# Subtest: the show rating still follows Plex when the show item itself is seen\nok 30 - the show rating still follows Plex when the show item itself is seen\n  ---\n  duration_ms: 0.254238\n  type: 'test'\n  ...\n1..30\n# tests 30\n# suites 0\n# pass 30\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 206.652261",
+  "stderr_tail": ""
+}
