@@ -1,0 +1,43 @@
+03:37:35Z first-run code Q84K on the empty card 0.7 s after load, no click; font 112px, size 356x123, transform none
+
+>>> APPROVE THIS CODE AT plex.tv/link: Q84K  (first-run code, row V1-E01) (03:37:35Z) <<<
+
+03:40:08Z libraries offered: ["— choose a library —","Movies","TV Shows","Home Videos"]
+
+=== V1-E01 PASS (03:40:08Z)
+code shown large (112px) and upright (transform none) on the empty card without any click, 0.7 s after load; owner approved it; Settings opened pre-filled (K44): "✓ Castle Anthrax (v1.43.3.10793) — 5 libraries"; saved with library Movies; signed in: true
+
+=== V1-E09 PASS (03:40:08Z)
+pins create: [201]; pin polls: 30, statuses [200]; resources: [200]; all over https: true; CORS errors [] (the first-run flow made these requests)
+03:40:08Z sections: [{"key":"1","title":"Movies","type":"movie"},{"key":"2","title":"TV Shows","type":"show"},{"key":"8","title":"Music","type":"artist"},{"key":"5","title":"Photos","type":"photo"},{"key":"4","title":"Home Videos","type":"movie"}]
+
+=== V1-E06 FAIL (settings-sheet) (03:40:09Z)
+per library: [{"title":"Movies","status":200,"totalSize":677,"label":"Movies","labelOk":false},{"title":"TV Shows","status":200,"totalSize":86,"label":"TV Shows","labelOk":false},{"title":"Music","status":200,"totalSize":1015,"label":null,"labelOk":false},{"title":"Photos","status":200,"totalSize":27,"label":null,"labelOk":false},{"title":"Home Videos","status":200,"totalSize":145,"label":"Home Videos","labelOk":false}]
+
+=== V1-E07 PASS (03:40:13Z)
+Movies has 677 titles; size 150 → 200, 150 items; size 500 → 200, 500 items
+
+=== V1-E04 PASS (03:40:18Z)
+distinct contentRating values with counts: {"G":36,"R":152,"PG-13":295,"PG":159,"Approved":4,"":156,"Not Rated":21,"TV-Y":3,"Passed":2,"TV-PG":26,"TV-14":28,"TV-MA":14,"TV-G":11,"TV-Y7":1}; country-prefixed: []; outside the Q19 table: []
+
+=== V1-E03 NOT COMPLETED (03:40:26Z)
+error: Cannot read properties of undefined (reading 'path')
+
+=== V1-E05 FAIL (content-rating-filter) (03:52:28Z)
+limit PG-13, 1 distinct posters downloaded: ["The World Is Not Enough [PG-13]"]; not allowed under PG-13: []; library holds R titles: true, gb/18 titles: false; all-R library sub-check: no all-R library on this server (not run)
+
+=== V1-E23 NOT COMPLETED (03:52:35Z)
+error: locator.waitFor: Timeout 5000ms exceeded.
+03:52:36Z Castle Anthrax connections: 2 direct (refused from now on), 1 relay
+
+=== V1-E25 NOT COMPLETED (03:52:41Z)
+error: locator.waitFor: Timeout 5000ms exceeded.
+03:52:41Z E02 uses a second tab whose storage is cleared once, so it shows the first-run card (this signs the profile out; nothing is needed afterwards)
+
+>>> DO NOT APPROVE G74Q: it is the first-run expiry test (V1-E02) (03:52:41Z) <<<
+
+
+=== V1-E02 PASS (04:07:42Z)
+first-run code G74Q was replaced by 8T6T on its own after 15.0 min, with no input
+04:07:42Z all console errors: ["03:37:34Z Failed to load resource: the server responded with a status of 404 (Not Found)","03:52:42Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","03:52:48Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","03:52:58Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","03:53:15Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","03:53:50Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","03:55:24Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","03:57:55Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","04:03:29Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE"]
+ssh exit 0

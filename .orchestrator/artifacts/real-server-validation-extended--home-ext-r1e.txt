@@ -1,0 +1,8 @@
+18:31:39Z Castle Anthrax: 2 direct addresses (refused from now on), 1 relay
+
+>>> APPROVE THIS CODE AT plex.tv/link: ZSD3  (relay test, row V1-E25) (18:31:40Z) <<<
+
+
+=== V1-E25 PASS (18:32:36Z)
+method: every direct address of Castle Anthrax refused inside the browser (6 requests), standing in for Remote Access off, with no change to the server; connection line "✓ Castle Anthrax (v1.43.3.10793) — 5 libraries"; saved address is the relay connection: true; 3 poster downloads over the relay, about 9.5 s each (rotation every 12 s); poster on screen true; Image mode "downloaded + cached"
+18:32:36Z all console errors: ["18:31:35Z Failed to load resource: the server responded with a status of 404 (Not Found)","18:31:39Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","18:31:50Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","18:31:56Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","18:32:04Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","18:32:06Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","18:32:06Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE"]
