@@ -1,4 +1,6 @@
-# Plex Poster Display
+# Now Showing
+
+*Formerly Plex Poster Display.* Displays that were signed in before the rename keep their old entry under plex.tv Authorized Devices until they sign in again; new sign-ins list as "Now Showing". Stored settings and sign-in carry over unchanged.
 
 An installable, offline-capable **progressive web app** that shows a Plex movie poster full-screen inside a decorative frame. It's built for Raspberry Pi kiosks, wall-mounted tablets and any other always-on screen.
 
@@ -161,7 +163,7 @@ Serve the app on boot with a systemd user service:
 mkdir -p ~/.config/systemd/user
 cat > ~/.config/systemd/user/poster-display.service <<'EOF'
 [Unit]
-Description=Plex Poster Display web server
+Description=Now Showing web server
 [Service]
 ExecStart=/usr/bin/node %h/poster-display/scripts/serve.mjs --port 8080
 Restart=always

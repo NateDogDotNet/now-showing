@@ -5,7 +5,7 @@
 
 import { allowedValues } from './ratings.js';
 
-export const PRODUCT = 'Plex Poster Display';
+export const PRODUCT = 'Now Showing';
 const PLEX_TV = 'https://plex.tv';
 
 export class PlexError extends Error {

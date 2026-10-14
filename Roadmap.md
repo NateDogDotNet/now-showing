@@ -1,4 +1,4 @@
-# Project Roadmap – Plex Poster Display
+# Project Roadmap – Now Showing
 
 ## ✅ Done in 2.0 (PWA rewrite)
 
