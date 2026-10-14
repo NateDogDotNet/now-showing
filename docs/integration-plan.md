@@ -54,7 +54,7 @@ Tag decisions: `rotate-plex-token` is hitl with no code to review cold, so it is
 | M1 | P0 fix-first | `e2e-harness`, `settings-and-schedule-core`, `rotate-plex-token`, `serve-config-guard`, `rotation-layout-and-shell`, `cache-first-fetch`, `status-indicator`, `validation-checklists`, `real-server-validation` | `real-server-validation` |
 | M2 | P1 protection | `pixel-shift`, `frame-brightness`, `sleep-mode`, `content-rating-filter`, `kiosk-and-pin`, `device-helper-server`, `device-helper-integration`, `pi-stability`, `recommended-protection-preset` | `recommended-protection-preset` |
 | M3 | P2 polish | `settings-sheet`, `touch-and-labels`, `metadata-and-now-playing` (`position-drag-nudge` deferred, D41) | `touch-and-labels` |
-| M4 | P3 release | `real-server-validation-extended`, `docs`, `release-bump` (`fill-blur-and-info` deferred, D41) | `release-bump` |
+| M4 | P3 release | `real-server-validation-extended`, `docs`, `rename-now-showing`, `release-bump` (`fill-blur-and-info` deferred, D41) | `release-bump` |
 
 Optional, outside the release path and outside every milestone: `purge-git-history`. Milestone order is the default scheduling order; a later milestone's phase may start earlier only when its `Blocked by` is satisfied and its Output is disjoint from every running phase.
 
@@ -587,7 +587,7 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 - **Goal:** Set `VERSION` to 2.1.0 in `sw.js`, `js/main.js` and `package.json` (and the lockfile) so installed clients update, only after the token is rotated and both real-server validations PASS.
 - **Findings:** — · **Requirements:** R-REL-1 · **Rulings:** D11, D13, D16
-- **Mode:** afk · **Tags:** — · **Blocked by:** `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended`
+- **Mode:** afk · **Tags:** — · **Blocked by:** `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended`, `rename-now-showing` (D52)
 - **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/release.spec.mjs`, `README.md`, `Roadmap.md` (D48: follow-up K61 and the docs r3 wording)
 - **Acceptance criteria:**
   1. `node -e "const fs=require('fs');const g=(f)=>fs.readFileSync(f,'utf8').match(/VERSION = '([^']+)'/)[1];const a=g('sw.js'),b=g('js/main.js'),p=require('./package.json'),l=require('./package-lock.json');if(!(a===b&&b===p.version&&a==='2.1.0'&&l.version==='2.1.0'&&l.packages[''].version==='2.1.0')){console.error(a,b,p.version,l.version);process.exit(1)}"`
@@ -597,6 +597,7 @@ One remaining fill feature, the extended real-server validation, the single docs
   5. `npm run test:e2e`  (includes `release.spec.mjs`: with service workers enabled, a stale `shell-2.0.0` cache is created in the page before registration, then after activation `shell-2.1.0` exists and `shell-2.0.0` is gone)
   6. `node scripts/check-precache.mjs`
   7. `test "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | LC_ALL=C sort | tr '\n' ' ')" = "README.md Roadmap.md js/main.js package-lock.json package.json sw.js tests/e2e/release.spec.mjs "`  (nothing else changed; the tracked `.orchestrator/` snapshot is the conductor's, D48)
+  9. `grep -Eqi 'play ?list' Roadmap.md && grep -Eqi 'jellyfin|emby|other media servers' Roadmap.md && grep -qi 'TMDB\|The Movie Database' Roadmap.md && grep -qi '^## .*Suggested order' Roadmap.md && grep -qi 'Now Playing' Roadmap.md && grep -qi 'Coming Soon' Roadmap.md && grep -qi 'marquee' Roadmap.md`  (D51: the playlist, other-media-server and no-server (TMDB) ideas are on the Roadmap; D53: the suggested build order section; D54: the marquee caption entry)
   8. narrated: the close-time reviews (full `code-review` of `46257c3..HEAD`, `security-scan` over the repo, `dependency-audit` of the devDependencies, `scrub-pii` on `docs/validation/*` and `docs/security/*`) are the conductor's Step 8 close work; this plan has no `publish` tag (D13).
 - **Notes/hazards:**
   - Decision (D16): one bump here, not per phase, for clean releases (the r1 rationale that per-phase bumps would reload clients was wrong: any `sw.js` edit already triggers an update).
@@ -637,6 +638,22 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 ---
 
+### 29. `rename-now-showing` — Rename the app "Now Showing" (D52)
+
+- **Goal:** Every name a user sees reads "Now Showing" instead of "Plex Poster Display", while signed-in displays keep their settings and sign-in through the update.
+- **Findings:** — · **Requirements:** — · **Rulings:** D52
+- **Mode:** afk · **Tags:** ui, docs · **Blocked by:** `docs`
+- **Output:** `index.html`, `manifest.webmanifest`, `js/plex.js`, `scripts/serve.mjs`, `package.json`, `package-lock.json`, `README.md`, `Roadmap.md`, any test under `tests/` that asserts the old name, and `tests/e2e/ui-rotation.spec.mjs` (D55: the empty-card race)
+- **Acceptance criteria:**
+  1. `grep -q '<title>Now Showing</title>' index.html && grep -q '<h1>Now Showing</h1>' index.html && node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('manifest.webmanifest','utf8'));const p=require('./package.json'),l=require('./package-lock.json');if(!(m.name==='Now Showing'&&m.short_name==='Now Showing'&&p.name==='now-showing'&&l.name==='now-showing'&&l.packages[''].name==='now-showing')){console.error(m.name,m.short_name,p.name,l.name);process.exit(1)}" && grep -q "PRODUCT = 'Now Showing'" js/plex.js && grep -q '^# Now Showing' README.md`
+  2. `! git grep -n 'Plex Poster Display' -- . ':!docs/' ':!.orchestrator/' ':!README.md'` and `test "$(grep -c 'Plex Poster Display' README.md)" -le 1`  (the old name survives at most once, in a "formerly" line in the README)
+  3. `for k in plexPoster.settings plexPoster.clientId plexPoster.carry plexPoster.lastReload plexPoster.pinLock plexPoster.posterIndex plexPoster.whatsNew; do grep -rqF "$k" js/ || { echo "storage key renamed: $k"; exit 1; }; done && grep -q 'shell-\${VERSION}' sw.js`  (stored settings, the client identifier and the cache names keep their names)
+  4. `npm test && npm run test:e2e && node scripts/check-precache.mjs`
+  5. `for i in 1 2 3; do node tests/e2e/run.mjs ui-rotation || exit 1; done`  (D55: the rotation spec passes three runs in a row)
+  6. narrated: the GitHub repository name and the Pages address are not changed here (D52: public, the owner decides, at the D49 re-creation at the earliest); `docs/` keeps its history as written.
+- **Notes/hazards:**
+  - plex.tv lists a device by its `X-Plex-Product`; displays signed in before the update keep their old entry until they sign in again. Say so in the README.
+
 ## Dependency graph
 
 `phase -> blocked by` (real prerequisites only; the first column is the plan number, which implies no order beyond the arrows). Output overlap is not an edge (convention 6).
@@ -668,9 +685,10 @@ One remaining fill feature, the extended real-server validation, the single docs
 | 23 | `fill-blur-and-info` (deferred, D41) | afk | `metadata-and-now-playing`, `rotation-layout-and-shell`, `pi-stability` |
 | 24 | `real-server-validation-extended` | hitl | `validation-checklists`, `real-server-validation`, `content-rating-filter`, `settings-sheet`, `metadata-and-now-playing`, `device-helper-integration`, `pi-stability` |
 | 25 | `docs` | afk | `recommended-protection-preset`, `touch-and-labels`, `real-server-validation-extended` |
-| 26 | `release-bump` | afk | `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended` |
+| 26 | `release-bump` | afk | `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended`, `rename-now-showing` |
 | 27 | `purge-git-history` | hitl | `rotate-plex-token`, `release-bump` |
 | 28 | `display-decode-hang` | afk | `rotation-layout-and-shell` |
+| 29 | `rename-now-showing` (D52) | afk | `docs` |
 
 ### Waves (longest-path levels)
 

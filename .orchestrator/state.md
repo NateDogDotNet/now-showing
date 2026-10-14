@@ -27,14 +27,15 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | metadata-and-now-playing | ✅ done | afk | content-rating-filter, settings-and-schedule-core | — | 100% | 2 | ui | landed 51d8ff3 |
 | position-drag-nudge | 🚧 blocked | afk | rotation-layout-and-shell, settings-and-schedule-core, settings-sheet, touch-and-labels, metadata-and-now-playing | — | 0% | 0 | ui | deferred to 2.2 (D41, owner agreed 2026-10-11); not in the 2.1 release |
 | fill-blur-and-info | 🚧 blocked | afk | metadata-and-now-playing, rotation-layout-and-shell, pi-stability | — | 0% | 0 | ui | deferred to 2.2 (D41, owner agreed 2026-10-11); not in the 2.1 release |
-| real-server-validation-extended | ⬜ pending | hitl | validation-checklists, real-server-validation, content-rating-filter, settings-sheet, metadata-and-now-playing, device-helper-integration, pi-stability | — | 0% | 0 | — |  |
+| real-server-validation-extended | ⬜ pending | hitl | validation-checklists, real-server-validation, content-rating-filter, settings-sheet, metadata-and-now-playing, device-helper-integration, pi-stability | conductor-2 | 0% | 0 | — |  |
 | docs | ✅ done | afk | recommended-protection-preset, touch-and-labels | — | 100% | 2 | docs | landed 78b9f67; r3 anchored delta APPROVE (A-); gate ok |
-| release-bump | ⬜ pending | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended | — | 0% | 0 | — |  |
+| release-bump | ⬜ pending | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | — | 0% | 0 | — | D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9) |
 | purge-git-history | ⬜ pending | hitl | rotate-plex-token, release-bump | — | 0% | 0 | irreversible |  |
 | display-decode-hang | ✅ done | afk | rotation-layout-and-shell | — | 100% | 1 | — | landed af55616 |
+| rename-now-showing | ⬜ pending | afk | docs | — | 0% | 0 | ui, docs | D52 (owner 2026-10-14): rename to Now Showing; repo/Pages rename waits for owner |
 
-**Progress:** 22/28 phases done
-**Frontier:** (none)
+**Progress:** 22/29 phases done
+**Frontier:** rename-now-showing
 
 ## Unknowns
 
@@ -528,7 +529,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       ],
       "tags": [],
       "mode": "hitl",
-      "claim": ""
+      "claim": "conductor-2"
     },
     {
       "name": "docs",
@@ -551,12 +552,13 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "status": "pending",
       "confidence": 0,
       "redispatch": 0,
-      "note": "",
+      "note": "D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9)",
       "blocked_by": [
         "docs",
         "rotate-plex-token",
         "real-server-validation",
-        "real-server-validation-extended"
+        "real-server-validation-extended",
+        "rename-now-showing"
       ],
       "tags": [],
       "mode": "afk",
@@ -588,6 +590,22 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
         "rotation-layout-and-shell"
       ],
       "tags": [],
+      "mode": "afk",
+      "claim": ""
+    },
+    {
+      "name": "rename-now-showing",
+      "status": "pending",
+      "confidence": 0,
+      "redispatch": 0,
+      "note": "D52 (owner 2026-10-14): rename to Now Showing; repo/Pages rename waits for owner",
+      "blocked_by": [
+        "docs"
+      ],
+      "tags": [
+        "ui",
+        "docs"
+      ],
       "mode": "afk",
       "claim": ""
     }
