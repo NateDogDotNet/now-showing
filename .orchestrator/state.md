@@ -29,13 +29,13 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | fill-blur-and-info | 🚧 blocked | afk | metadata-and-now-playing, rotation-layout-and-shell, pi-stability | — | 0% | 0 | ui | deferred to 2.2 (D41, owner agreed 2026-10-11); not in the 2.1 release |
 | real-server-validation-extended | ✅ done | hitl | validation-checklists, real-server-validation, content-rating-filter, settings-sheet, metadata-and-now-playing, device-helper-integration, pi-stability | — | 100% | 0 | — | 128b62e; 15 PASS, 12 SKIPPED (no Pi), Overall PASS; D33/D37 checks pass; gate-2 ok |
 | docs | ✅ done | afk | recommended-protection-preset, touch-and-labels | — | 100% | 2 | docs | landed 78b9f67; r3 anchored delta APPROVE (A-); gate ok |
-| release-bump | ⬜ pending | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | — | 0% | 0 | — | D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9) |
+| release-bump | ⬜ pending | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | conductor-2 | 0% | 0 | — | D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9) |
 | purge-git-history | ⬜ pending | hitl | rotate-plex-token, release-bump | — | 0% | 0 | irreversible |  |
 | display-decode-hang | ✅ done | afk | rotation-layout-and-shell | — | 100% | 1 | — | landed af55616 |
 | rename-now-showing | ✅ done | afk | docs | — | 100% | 1 | ui, docs | landed 7192007; Step 8 90/90; review r1 APPROVE (Minor fixed r2) |
 
 **Progress:** 25/29 phases done
-**Frontier:** release-bump
+**Frontier:** (none)
 
 ## Unknowns
 
@@ -562,7 +562,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       ],
       "tags": [],
       "mode": "afk",
-      "claim": ""
+      "claim": "conductor-2"
     },
     {
       "name": "purge-git-history",
