@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f docs/security/token-rotation.md && grep -qx 'Rotated: yes' docs/security/token-rotation.md",
+  "exit": 0,
+  "seconds": 0.0,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

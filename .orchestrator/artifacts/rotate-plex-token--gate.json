@@ -1,0 +1,14 @@
+{
+ "phase": "rotate-plex-token",
+ "sha": "debe086",
+ "tag": null,
+ "ok": false,
+ "failures": [
+  "probe line has no verdict (`meets criterion N` or `fails criterion N`): - PROBE: the same request with a made-up 20-character value \u2192 HTTP 401 \u2014 the control. It shows that an invalid token get",
+  "probe line has no verdict (`meets criterion N` or `fails criterion N`): - PROBE: the shape of `5c4a716:config.js`, with every string value replaced by its length \u2192 `PLEX_TOKEN: '<20 chars>'`. "
+ ],
+ "phase_file_sha256": "103bb37b11e9a7b9c4c49e93eb8d87eefbd488b294d7f48f592dcf45d861ac6b",
+ "phase_file_sha256_noretro": "a573e1782b4692671f0fc23c8392f408027a0eefa96afd0e2b36ad870e3241cc",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-14T01:02:41.031982Z"
+}

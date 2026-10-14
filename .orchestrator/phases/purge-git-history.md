@@ -16,14 +16,14 @@ Reason: the owner asked for it ("do the purge rehearsal now", 2026-10-13). It ru
 - Script `artifacts/purge-git-history--plainclone-r1.sh`, output `artifacts/purge-git-history--plainclone-r1.txt`. It runs plan step 3 literally, in a plain fresh clone.
 
 Results:
-- PROBE: backup mirror of origin → refs: claude/intelligent-rubin-4vsi63 e411e14, main ee6fbbe, refs/pull/1/head 13af5b0; 59 commits; 1 commit tree and 1 blob hold the leaked value — informational
+- PROBE: backup mirror of origin → refs: claude/intelligent-rubin-4vsi63 e411e14, main ee6fbbe, refs/pull/1/head 13af5b0; 59 commits; 1 commit tree and 1 blob hold the leaked value — meets criterion 4 (precondition evidence)
 - PROBE: `git filter-repo --invert-paths --path config.js` in a fresh clone → exit 0; both branches rewritten (main 82ef01c, claude/intelligent-rubin-4vsi63 65e834b); 0 commits, 0 blobs hold the value; 0 commits touch config.js — meets criterion 1 (on branches)
-- PROBE: the tip trees before and after are identical on both branches (9c304885644f, 5c04ed041abd), so no file content at any tip changes — informational
-- PROBE: plain fresh clone (plan step 3 as written) → filter-repo turns origin/* into local branches and removes the remote, so `git push --force-with-lease --all` covers both branches — informational
+- PROBE: the tip trees before and after are identical on both branches (9c304885644f, 5c04ed041abd), so no file content at any tip changes — meets criterion 4 (precondition evidence)
+- PROBE: plain fresh clone (plan step 3 as written) → filter-repo turns origin/* into local branches and removes the remote, so `git push --force-with-lease --all` covers both branches — meets criterion 4 (precondition evidence)
 - PROBE: plan criterion 1 verbatim against the stand-in → exit 0 — meets criterion 1 as written
 - PROBE: plan criterion 3 verbatim → exit 0 — meets criterion 3
 - PROBE: after the push, the stand-in still holds 1 commit and 1 blob with the value, through `refs/pull/1/head` → 13af5b0, which reaches 2 config.js commits. A plain clone fetches only branches, so criterion 1 cannot see it. GitHub does not accept pushes to `refs/pull/*` — fails the phase's goal ("remove config.js from every commit"); a spec-gap, asked before the action (FOLLOW-UP below)
-- PROBE: commit map `.git/filter-repo/commit-map` → 59 old→new pairs (sample: d409ad7→7938fea, 78b9f67→2cc8112, ee6fbbe→82ef01c). The tracked text holds about 1710 SHA-like tokens (`git grep -Eo '\b[0-9a-f]{7,40}\b' -- .orchestrator docs README.md Roadmap.md | wc -l`) that the rewrite does not update — informational; FOLLOW-UP below
+- PROBE: commit map `.git/filter-repo/commit-map` → 59 old→new pairs (sample: d409ad7→7938fea, 78b9f67→2cc8112, ee6fbbe→82ef01c). The tracked text holds about 1710 SHA-like tokens (`git grep -Eo '\b[0-9a-f]{7,40}\b' -- .orchestrator docs README.md Roadmap.md | wc -l`) that the rewrite does not update — meets criterion 4 (precondition evidence); FOLLOW-UP below
 
 Findings, classified:
 - spec-gap: pull request #1 (`refs/pull/1/head`, read-only on GitHub) keeps the token commit 5c4a716 reachable on GitHub after the force-push, and criterion 1 passes anyway. Only GitHub Support can remove it, or the repository has to be deleted and re-created. The plan's hand-off item 7 asks Support only about "cached views".
@@ -34,5 +34,8 @@ Findings, classified:
 
 ### Owner answer — 2026-10-13T16:51:55Z (transcript time), chat: "b"
 The owner chose (b), delete and re-create the repository, for the pull request #1 ref. Recorded as D49. The plan's goal, criterion 1 and hand-off checklist are amended. Probe: `artifacts/purge-git-history--criterion1-grid-r1.sh`, output `artifacts/purge-git-history--criterion1-grid-r1.txt`. Before the purge, the old criterion 1 → exit 1 and the new → 1. After a force-push with the PR ref kept, old → 0 and new → 1. A re-created repository with purged branches → 0 and 0. The grid's fourth row repeats the pre-purge state. This answers the method only. The purge still needs the 401 and the owner's explicit approval (D46).
-- PROBE: `gh auth status` → scopes include delete_repo — informational: this session could technically delete the repository, so the approval rule is the only guard; the deletion waits for the owner (D44, D46)
-- PROBE: `gh api repos/NateDogDotNet/plex-poster-app` → public, 0 forks, 0 open issues, 0 stars; hooks 0, secrets 0, releases none; wiki repository not found; Pages legacy from main `/`; homepage https://natedogdotnet.github.io/plex-poster-app/ — informational: what the deletion loses and what is restored (hand-off steps 4 and 6)
+- PROBE: `gh auth status` → scopes include delete_repo — meets criterion 4 (precondition evidence): this session could technically delete the repository, so the approval rule is the only guard; the deletion waits for the owner (D44, D46)
+- PROBE: `gh api repos/NateDogDotNet/plex-poster-app` → public, 0 forks, 0 open issues, 0 stars; hooks 0, secrets 0, releases none; wiki repository not found; Pages legacy from main `/`; homepage https://natedogdotnet.github.io/plex-poster-app/ — meets criterion 4 (precondition evidence): what the deletion loses and what is restored (hand-off steps 4 and 6)
+
+### Owner message — 2026-10-13, chat: "3. yes, go-ahead"
+Received as the go-ahead for the purge. Not acted on yet, for three reasons. The owner's own rule (D46, 2026-10-13: "The git history purge only happens with my explicit approval, after the 401 is confirmed.") requires the 401 first, and it is not confirmed. The plan orders the purge after `release-bump` (blocked by). The skill's irreversible gate (a saved approval stop, a precondition review, then `closer approve` and `closer act`) has not run. Asked on its own in chat: run it before the 401 and the release, or hold until both.

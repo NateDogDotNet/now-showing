@@ -1,0 +1,8 @@
+Record the Plex token rotation receipt
+
+docs/security/token-rotation.md records that the token from
+5c4a716:config.js is rejected by plex.tv with HTTP 401 (checked
+2026-10-14 at the owner's request), method "other", and that the
+history purge is wanted. The receipt holds no token.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
