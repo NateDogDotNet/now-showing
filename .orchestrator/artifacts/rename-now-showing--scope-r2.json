@@ -1,0 +1,9 @@
+{
+  "cmd": "test -z \"$(git diff --name-only 7192007^ 7192007 | grep -vxE '(index.html|manifest.webmanifest|js/plex.js|scripts/serve.mjs|package.json|package-lock.json|README.md|Roadmap.md|tests/e2e/ui-rotation.spec.mjs)')\"",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": null,
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

@@ -1,0 +1,32 @@
+{
+ "phase": "rename-now-showing",
+ "review": "rename-now-showing--review-r1.md",
+ "done_phases": [
+  "cache-first-fetch",
+  "content-rating-filter",
+  "device-helper-integration",
+  "device-helper-server",
+  "display-decode-hang",
+  "docs",
+  "e2e-harness",
+  "frame-brightness",
+  "kiosk-and-pin",
+  "metadata-and-now-playing",
+  "pi-stability",
+  "pixel-shift",
+  "recommended-protection-preset",
+  "rotate-plex-token",
+  "rotation-layout-and-shell",
+  "serve-config-guard",
+  "settings-and-schedule-core",
+  "settings-sheet",
+  "sleep-mode",
+  "status-indicator",
+  "touch-and-labels",
+  "validation-checklists"
+ ],
+ "hits": [],
+ "no_findings": false,
+ "flagged": [],
+ "checked_at": "2026-10-14T21:00:00.474963Z"
+}

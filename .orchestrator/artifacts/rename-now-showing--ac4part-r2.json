@@ -1,0 +1,14 @@
+{
+  "cmd": "npm test && node scripts/check-precache.mjs && node tests/e2e/run.mjs smoke first-run",
+  "exit": 0,
+  "seconds": 93.21,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "# pass 327\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 4933.943305\n31 precached files OK\n  ok  poster layer loads, no console errors\n  ok  serveArgs [] -> dedicated server, stop() ends it\n  ok  serveArgs passed through to the child\n  ok  service workers blocked by default\n  ok  serviceWorkers 'allow' registers and controls after a reload\n  ok  clock install + runFor\n  ok  hasTouch toggles maxTouchPoints\n  ok  localStorage seed + pixelShift false + wake lock stub\n  ok  whatsNew seeded, dailyReload false\n  ok  wake-lock stub counts and sentinel released/release event are faithful\n  ok  viewport sets innerWidth\n  ok  isMobile gives a mobile signal (980px layout without viewport meta)\nPASS smoke\n  ok  rotation 90: block angle 90\n  ok  rotation 180: block angle 180\n  ok  rotation 270: block angle 270\n  ok  an already-expired pin is not a hot loop\n  ok  configured: no pin request\n  ok  first run: code on the card, >= 64 px, one pin, Settings closed\n  ok  config.json provisioned: no pin request\n  ok  expiry: AAAA -> BBBB, two pins\n  ok  junk pin reply backs off\n  ok  Open settings works; the card's flow pauses and resumes\n  ok  network failure: 4 attempts in 121 s, 3 console errors, then recovers\n  ok  approval -> Settings filled in -> Save -> poster\n  ok  SSC3 approved during the prompt -> PIN -> Settings filled in\n  ok  SSC3 Open settings variant\n  ok  SSC3 cancel keeps the token pending; the next open has it\n  ok  K50 falling asleep stops the polling\n  ok  K50 asleep: no requests; awake: a code\n  ok  K50 5 codes and 724 polls in 71 min\nall 18 first-run cases passed\nPASS first-run",
+  "stderr_tail": ""
+}

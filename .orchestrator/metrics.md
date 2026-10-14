@@ -182,3 +182,6 @@
 | 2026-10-11T21:01:49.198051Z | docs | reviewer-anchored | orchestrator-reviewer | opus | low | r2 | -1 | -1 | complete |  |
 | 2026-10-11T21:02:34.043044Z | docs | builder | orchestrator-builder | sonnet | medium | r3 | 31739 | 37397 | complete |  |
 | 2026-10-11T21:04:26.176694Z | docs | reviewer-anchored | orchestrator-reviewer | opus | low | r3 | 65319 | 29780 | complete |  |
+| 2026-10-14T20:59:55.851608Z | rename-now-showing | builder | orchestrator-builder | sonnet | high | r1 | 2993737 | 43737 | complete |  |
+| 2026-10-14T20:59:55.940484Z | rename-now-showing | builder | orchestrator-builder | sonnet | high | r2 | 4106622 | 44729 | complete | resumed (cumulative tokens) |
+| 2026-10-14T21:00:00.558919Z | rename-now-showing | reviewer | orchestrator-reviewer | opus | inherited | r1 | 117145 | 41631 | complete |  |

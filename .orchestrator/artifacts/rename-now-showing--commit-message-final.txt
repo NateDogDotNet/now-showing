@@ -1,0 +1,11 @@
+Rename the app to Now Showing; fix the rotation spec's empty-card race
+
+Every name a user sees now reads "Now Showing": the page title and
+heading, the home-screen names, the name sent to plex.tv, the server's
+start line, the package and the README and Roadmap titles. Storage keys,
+cache names, the client identifier and the settings export format keep
+their names, so signed-in displays carry over (D52). The ui-rotation spec
+now shows, measures and hides the empty card in one step, so a poster
+tick can no longer hide it in between (D55).
+
+Co-Authored-By: Claude <noreply@anthropic.com>

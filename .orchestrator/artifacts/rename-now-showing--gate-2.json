@@ -1,0 +1,14 @@
+{
+ "phase": "rename-now-showing",
+ "sha": "7192007",
+ "tag": null,
+ "ok": false,
+ "failures": [
+  "a review is on disk with no passing `closer predispatch` before it (rule 2: the table precedes any reviewer)",
+  "a Step 7 code review is on disk with no passing `closer predispatch --kind code` before it (the Step 4 tally is COMPLETE before any code reviewer)"
+ ],
+ "phase_file_sha256": "c5a106bc6b6a9b7c6016466520216490dea61a59d2b28e428acbe9c9935ef9bc",
+ "phase_file_sha256_noretro": "e4cab6784d852068e6cb4dee26b707e5652394c4476ecac390ccc0923597194e",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-14T21:00:05.403923Z"
+}

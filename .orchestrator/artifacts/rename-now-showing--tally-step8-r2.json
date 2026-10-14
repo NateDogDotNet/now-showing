@@ -1,0 +1,95 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 29,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "rename-now-showing--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "rename-now-showing--derive-step8-r2-0.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "rename-now-showing--readback-7192007.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 55,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 6,
+  "missing_rows": [
+   "ac6"
+  ],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {
+   "CLAUDE.md conventions": "no precommit-lint or precommit-format record",
+   "tests where implied": "no mutation record",
+   "decision log respected": "no rename-now-showing--dlog-check record",
+   "code reads cleanly": "no rename-now-showing--review-check record"
+  }
+ },
+ "_result": {
+  "total": 49,
+  "max": 55,
+  "percentage": 89,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 29,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "rename-now-showing--ac1-r2.json": "c7bdccc1fc8bc52d2967ccc29a6ccc049f1a767f8745b5fa8317c1f6b46089df",
+  "rename-now-showing--derive-step8-r2-0.json": "abe22e77580626232c99eb7a819213bdb0b1ff1dadc2babeb4eccdb203ef390b",
+  "rename-now-showing--readback-7192007.json": "f156c2bfeb3acbeb29c34dc720fdd83a0358898f960f49097edd4ff0c3b826b1"
+ },
+ "_written": "2026-10-14T20:58:59.044144Z"
+}

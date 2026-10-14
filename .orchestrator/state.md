@@ -32,9 +32,9 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | release-bump | ⬜ pending | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | — | 0% | 0 | — | D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9) |
 | purge-git-history | ⬜ pending | hitl | rotate-plex-token, release-bump | — | 0% | 0 | irreversible |  |
 | display-decode-hang | ✅ done | afk | rotation-layout-and-shell | — | 100% | 1 | — | landed af55616 |
-| rename-now-showing | ⬜ pending | afk | docs | conductor-2 | 0% | 0 | ui, docs | D52 (owner 2026-10-14): rename to Now Showing; repo/Pages rename waits for owner |
+| rename-now-showing | ✅ done | afk | docs | — | 100% | 1 | ui, docs | landed 7192007; Step 8 90/90; review r1 APPROVE (Minor fixed r2) |
 
-**Progress:** 22/29 phases done
+**Progress:** 23/29 phases done
 **Frontier:** (none)
 
 ## Unknowns
@@ -595,10 +595,10 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
     },
     {
       "name": "rename-now-showing",
-      "status": "pending",
-      "confidence": 0,
-      "redispatch": 0,
-      "note": "D52 (owner 2026-10-14): rename to Now Showing; repo/Pages rename waits for owner",
+      "status": "done",
+      "confidence": 100,
+      "redispatch": 1,
+      "note": "landed 7192007; Step 8 90/90; review r1 APPROVE (Minor fixed r2)",
       "blocked_by": [
         "docs"
       ],
@@ -607,7 +607,21 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
         "docs"
       ],
       "mode": "afk",
-      "claim": "conductor-2"
+      "claim": "",
+      "dispatch_overrides": [
+        {
+          "round": 1,
+          "reason": "r1 criteria all exit 0; r2 is a one-line Minor from the anchored review, no band needed"
+        }
+      ],
+      "done_overrides": [
+        {
+          "failures": [
+            "rename-now-showing--gate-2.json is refused and no EXCEPTION: line quotes its failures"
+          ],
+          "reason": "reviewer dispatched before the Step 4 tally and predispatch (rule 2); recorded as EXCEPTION in phases/rename-now-showing.md; all criteria exit 0, tally 90/90"
+        }
+      ]
     }
   ],
   "unknowns": [
