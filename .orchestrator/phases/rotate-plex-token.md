@@ -72,3 +72,10 @@ The run is resumed on this machine at `claude/intelligent-rubin-4vsi63`. 21 of 2
 
 **Then, without you:** `release-bump` updates the README's "(verify)" tags from your results (K61), fixes the "Daily reload" wording, drops "(K60)" from the Roadmap and sets version 2.1.0. **Only with your explicit go-ahead, after the 401:** the history purge and its force-push (D46). No pull request unless you ask.
 <!-- end stop 15 -->
+
+## 401 check — run by conductor-2 at the owner's request, 2026-10-14T00:57:15Z
+Owner, in chat: "1. run the command for me". This overrides, for this one check, the owner's earlier rule "I run the 401 check in my own shell". The token was read from `5c4a716:config.js` into a shell variable, sent only to plex.tv as an `X-Plex-Token` header from a file descriptor, and unset. It was never printed or written anywhere.
+- PROBE: `curl … -H @<(printf 'X-Plex-Token: %s\n' "$T") https://plex.tv/api/v2/user` with the leaked value → HTTP 401 — meets criterion 3 (old token rejected)
+- PROBE: the same request with a made-up 20-character value → HTTP 401 — the control. It shows that an invalid token gets 401. There is no positive control (no valid token may be handled), so the check rests on plex.tv answering 200 for a live token, as the plan's own command assumes
+- PROBE: the shape of `5c4a716:config.js`, with every string value replaced by its length → `PLEX_TOKEN: '<20 chars>'`. It is the file's only 20-character value, so the tested value is the whole token — informational
+Who revoked it, and when, is not on record. This session, the cloud session and Pulse (pulse-a8) all report that they did not. The receipt's method and date are the owner's to give, and they are asked, not filled.
