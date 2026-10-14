@@ -243,6 +243,14 @@ Sleep and wake the frame from home automations ("lights off → frame sleeps") a
 ### Ambient light sync
 Send the poster's dominant colour to Hue or WLED lights through Home Assistant (D64). It runs from the device helper (the Home Assistant / MQTT hooks entry), never from the page; off by default, rate-limited, and dimmed with night dim. Order: after the Home Assistant hooks.
 
+### Ambient light
+Dim, switch off, wake and brighten the display from the light in the room instead of only from a clock (D74).
+
+- **Inputs, most reliable first:** a Home Assistant illuminance sensor through the helper's Home Assistant link; a small I²C light sensor read by the device helper on a Pi (Linux exposes lux as `in_illuminance_input`); and the browser's Ambient Light Sensor API only where it is available. That API is in no browser by default today (the W3C draft itself says it is not expected to advance in its current form; readings are rounded to at least 50 lux, so a page can tell dark, dim and bright apart but not fine steps), so a phone or tablet needs a browser flag, to be verified per device. No camera-based estimate: a camera permission on a wall display is not worth it.
+- **Outputs:** the existing frame brightness and night dim for dimming; the sleep veil as "off" (pure black rests an OLED); on a Pi the helper's TV power or the touch display's backlight (`/sys/class/backlight`, verify).
+- **Constraints:** readings are averaged over 30–60 s with hysteresis (for example dark below 5 lux, wake above 15 lux), the display waits 2–5 minutes before sleeping and wakes fast, filter changes ease over a few seconds, a touch overrides for a while, a sensor that stops reporting is ignored and the schedule stays the fallback. To verify first: whether the tablet's browser reports the sensor and its real step size; whether an installed PWA keeps receiving readings while dimmed; the Pi sensor and backlight nodes; and whether the sensor sees the screen's own light.
+- **Order:** after the Home Assistant / MQTT hooks (which build the helper's link) and with Presence-based sleep, which shares the helper's sensor reading.
+
 ### Presence-based sleep
 Wake on motion and sleep when nobody is around, using a PIR sensor on a Pi GPIO pin read by the device helper. It protects the panel better than a fixed schedule.
 
