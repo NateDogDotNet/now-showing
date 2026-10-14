@@ -97,3 +97,12 @@
 
 ## Notes / reconciliation
 - Re-dispatches: 2. Carried must-fixes fulfilled here: K16 (D24), C8M3 (D28), DHM2 (K38) — dropped from the follow-up index with their evidence. Rulings for the next stop: K38–K43. Unknowns: Chromium service-worker behaviour on the Pi over https vs http LAN (real-server-validation). Invalidated: none.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K43 — pi-stability PSA2: a daily reload skipped at its time (server down, no service worker, clock unset) is not retried that day, as R-PROT-3 says; the 12 h wake trigger catches up at the next real wake; list at the next stop
+- K42 — pi-stability Q-ps4: the more opaque --panel (.98) applies to every panel, and Diagnostics reads 'Service worker: controlling|none'; list at the next stop
+- K41 — pi-stability Q-ps3: the daily reload also waits for the crossfade, the TV wake and any open dialog, not only state.busy; list at the next stop
+- K40 — pi-stability Q-ps2: with no plexPoster.lastReload recorded, the page's own load time counts as the last reload; list at the next stop
+- K39 — pi-stability Q-ps1 (changed by the conductor): a manual wake (key press or tap while asleep) does not trigger the 12 h wake reload, which would drop the 60 s manual wake and let the schedule put the screen straight back to sleep; only a wake that ends sleep (schedule end, playback) may; list at the next stop
+- K38 — pi-stability's Output gains tests/e2e/helper.spec.mjs so it can add the two device-helper wake cases (manual wake, schedule-end wake) routed from device-helper-integration DHM2; test-only; list at the next stop

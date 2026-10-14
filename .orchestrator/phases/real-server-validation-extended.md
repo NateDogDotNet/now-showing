@@ -66,3 +66,8 @@ N/A (dropped from the tally): CLAUDE.md conventions, code reads cleanly, tests w
 
 - Landed: 128b62e — "Record the two checks routed to the extended validation (D33, D37)"
 - Read-back: artifacts/real-server-validation-extended--readback-128b62e.json (ok, --commit-rows 1-4)
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- D33 — real-server-validation-extended: check whether Plex rates TV episodes lower than their show (an episode's poster is the show's); add the row to docs/validation/real-server-extended.md and fix only if it happens
+- C8I1 (D37) — real-server-validation-extended: confirm Plex accepts the batched GET /library/metadata/<k1>,<k2>,... request the upward re-rate fix uses; add the row to docs/validation/real-server-extended.md

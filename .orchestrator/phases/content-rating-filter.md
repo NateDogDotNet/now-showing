@@ -283,3 +283,11 @@ Reply e.g. "1a, 2a" — or "defaults".
 
 ## Notes / reconciliation
 - Unknowns: Plex's real contentRating strings and filter syntax (real-server-validation-extended). Routed must-fixes: C8I1 → metadata-and-now-playing (+ real-server row), C8M1 → settings-sheet. Fulfilled here: K5, A8-d. Invalidated: none.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K24 — content-rating-filter cold r4 Minor 2: with 'apply the limit to what's playing' off, an above-limit now-playing poster can be pinned, and pins are exempt, so it stays shown; refuse that pin? list at the next stop
+- K22 — content-rating-filter: the post-decode re-check (limit tightened during an image decode) has no test — the window is milliseconds and cannot be held open from Playwright; kept as a backstop, no further round; list at the next stop
+- K21 — content-rating-filter R2: js/settings.js turns an unknown stored maxContentRating (e.g. 'PG13' in a hand-written config.json) into '' (no limit) — fails open; fix belongs to settings.js (outside this phase); owner question at the next stop
+- K20 — content-rating-filter: when the limit changes and the poster on screen is not allowed, it is replaced at once even offline — by an allowed cached poster, or by the empty card with the poster hidden if none qualifies; list at the next stop
+- K19 — content-rating-filter: changing the household limit (or limitNowPlaying) forces an immediate rotation so an on-screen poster above the new limit is replaced at once; list at the next stop

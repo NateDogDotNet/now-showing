@@ -116,3 +116,7 @@ Since stop 13, touch-and-labels, recommended-protection-preset and docs have lan
 <!-- end stop 14 -->
 - Stop 14 written 2026-10-11T21:22:20Z (stopcheck ok); answered under the owner's standing instruction D44.
 - Stop 14 recorded under D44 → D45 (K54–K61 kept); rulings retired in the follow-up index with the D44 quote. closer answer needs the stop shown first; it is sent in this turn.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K61 — docs no longer waits on the hands-on real-server validation: README/Roadmap are written now with every unproven command or flag tagged (verify), and release-bump updates the tags from the validation results; list at the next stop (D44 default)

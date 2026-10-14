@@ -39,3 +39,6 @@ The owner chose (b), delete and re-create the repository, for the pull request #
 
 ### Owner message — 2026-10-13, chat: "3. yes, go-ahead"
 Received as the go-ahead for the purge. Not acted on yet, for three reasons. The owner's own rule (D46, 2026-10-13: "The git history purge only happens with my explicit approval, after the 401 is confirmed.") requires the 401 first, and it is not confirmed. The plan orders the purge after `release-bump` (blocked by). The skill's irreversible gate (a saved approval stop, a precondition review, then `closer approve` and `closer act`) has not run. Asked on its own in chat: run it before the 401 and the release, or hold until both.
+
+### Pre-claim preparation — security-review, 2026-10-14T21:26:29Z, conductor-2
+Reason: the skill's irreversible rule (Step 7) runs the phase's `security-review` as pre-claim preparation once the last code phase lands (rename-now-showing, 7192007), before the phase that creates the purge's target commit (release-bump, in progress) commits. The review reads the branch diff `ee6fbbe..HEAD`; the app-code part of it is the rename commit, the rest is docs/ and the `.orchestrator/` trail. Dispatched as a named agent (security-review-r1) writing to `artifacts/purge-git-history--security-review-r1.md`; false-positive filtering per the skill follows if it reports anything.

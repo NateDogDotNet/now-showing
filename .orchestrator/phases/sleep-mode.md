@@ -278,3 +278,17 @@ Reply "1a", "1b" — or "defaults".
 
 ## Gate — exception recorded (conductor omissions)
 - `closer gate` refused: (1) no `closer metric` rows for this phase — the conductor stopped recording metric rows after 2026-10-08T23:38Z (all phases); backfilled for sleep-mode from the task-completion usage (r2 builder: usage unknown, -1). (2) No passing `closer predispatch` before the first review — the conductor did not run it this phase (every earlier phase did). Written now (`sleep-mode--predispatch.json`, 03:25:10Z, ok). The rule's substance held: each review round followed a COMPLETE Step 4 tally (tally-step4-r2 01:11:55Z → reviews 01:20/01:31; r6 02:25:32Z → 02:34/02:38; r8 03:05:49Z → 03:11/03:12). File times are not altered. Closed with `state set --no-gate` naming this; listed at the next stop as a process defect (P1).
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K7 — sleep-mode criterion 3 reads "__wakeLock.held === true"; the harness stub counts (held is a number), so the conductor reads it as held === 1 with releases unchanged; list at the next stop
+- K9 — sleep-mode Q-sm1..3 rulings: playback always restarts the idle clock (wakeOnPlayback:false only keeps the scheduled veil); Pause stops playback-wake polling; open Settings/Diagnostics dialogs show above the veil; list at the next stop
+- K11 — sleep-mode: a failed playback poll leaves the last known playing state unchanged and does not refresh lastPlaybackAt; list at the next stop
+- K12 — sleep-mode: any pointer/key activity during a manual wake, dialogs included, restarts the 60 s; events aimed at an open dialog are never swallowed; list at the next stop
+- K13 — sleep-mode: page load and every settings save restart the idle-sleep clock; list at the next stop
+- K14 — sleep-mode: while asleep the playback poll retries no slower than nowPlayingPollSeconds (ignores the 5 min backoff); list at the next stop
+- K15 — sleep-mode anchored r2 Minor 4: waking is a hard black-to-full-brightness cut; product question (add a short fade?); list at the next stop
+- K16 — sleep-mode anchored r2: the existing service-worker update timer (js/main.js:517) throws under a fake clock at simulated +6 h; pre-existing; route to pi-stability (daily reload / SW timers); list at the next stop
+- K11 amended — sleep-mode: a failed playback poll keeps the last playing state for at most 3 consecutive failed polls (about 1 min), then counts as not playing, so a Plex outage after a movie cannot hold the screen awake all night; list at the next stop
+- K18 — sleep-mode anchored r6 (declined): with showNowPlaying on, a 401/403 on /status/sessions still leaves no poster via engine.decide()'s own now-playing fetch (pre-existing, same before sleep-mode); route to metadata-and-now-playing (edits that path); list at the next stop
+- P1 — process defect: sleep-mode reviews ran without a prior closer predispatch record and metric rows lapsed after 2026-10-08T23:38Z; closed with a recorded gate exception (substance held: COMPLETE Step 4 tallies preceded every review); list at the next stop

@@ -94,3 +94,11 @@
 
 ## Notes / reconciliation
 - Re-dispatches: 2. Routed items fulfilled here: K36 (D40), engine.js hint, K53 (D43), S6C1/S6C2 — dropped with evidence. Routed onward: K59 smoke clock fix and the Control labels wording → recommended-protection-preset. Rulings for the next stop: K54–K59 (D44 defaults). Unknowns: real touch hardware for the long-press and first-tap behaviour (real-server-validation-extended). Invalidated: none.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K58 — touch-and-labels TLI1: the first-tap-only-wakes rule also covers the empty-state screen's backdrop (not its card buttons), so on an unconfigured display a first tap on a hidden control only reveals the bar; list at the next stop (D44: default applied)
+- K57 — touch-and-labels Q-tl2 (changed by the conductor): Diagnostics gets the 'Keyboard shortcuts' button R-CTRL-3 names (the only way to open the list on a touch-only kiosk), hidden with disableShortcuts
+- K56 — touch-and-labels Q-tl3: the seven control buttons drop their native title tooltips so desktop shows one tooltip, generated from the shortcut table; Pin's 'Unpin <title>' text moves to its aria-label
+- K55 — touch-and-labels Q-tl1: in kiosk mode the long-press menu is also allowed on the Settings sheet's own box, not only its text fields (an existing kiosk test asserts it); still prevented on the PIN keypad, Diagnostics and the stage
+- K54 — touch-and-labels' Output gains js/engine.js and tests/engine.test.js (the empty-library hint names 'unwatched only' only when it is on) and tests/e2e/first-run.spec.mjs (settings-sheet's routed test-only fixes S6C1/S6C2); list at the next stop

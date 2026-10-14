@@ -89,3 +89,7 @@
 
 ## Notes / reconciliation
 - Unknowns: none (mock-only feature; real-server-validation covers status on a real server). Rulings for the next stop: K29. Invalidated: none.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K29 — status-indicator SIM3: the 1 s status tick keeps running while controls are hidden (it skips the pill and only updates the dot), so the dot can appear if the app goes offline while idle; R-STAT-1's 'runs only while the pill is visible' is read as 'never touches #status while hidden'; list at the next stop

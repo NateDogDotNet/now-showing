@@ -47,7 +47,8 @@
 - cold M5 "Fake mode's call log grows without bound." → cap at the last 100 calls in r2 (plainly correct, fake mode only).
 - Dismissed (cold): M2 "LAN clients can tell whether the helper is enabled, and whether it is in fake mode." — plan criterion 1 mandates 403 for guarded refusals and 404 without `--helper`; revealing that the helper exists exposes no command or data.
 - Re-dispatch r2: recipient device-helper-server-builder-r2 (fresh), forced by the code-bugs above (Step 7 band computed below). Re-dispatches: 1
-- FOLLOW-UP (owner: Nathan): K2 ruling — helper `status.temperature` names the source ('thermal_zone0' | 'vcgencmd' | null); list at the next stop
+- FOLLOW-UP (owner: Nathan): K2 ruling — helper status.temperature names the source ('thermal_zone0' | 'vcgencmd' | null); list at the next stop
+  <!-- 2026-10-14: the backticks around status.temperature were dropped from the line above so it matches the index text; no other change -->
 - Step 7 tally `device-helper-server--tally-step7-r1.json` 90/95 RE-DISPATCH (row 7 had no exec record yet; `device-helper-server--ac7-r1.json` written after). The re-dispatch is forced by the review code-bugs listed above (Step 7: "A review with any `code-bug` is a re-dispatch").
 - Dispatched r2: 2026-10-08T22:50:49Z (brief artifacts/device-helper-server--brief-r2.md)
 
@@ -264,3 +265,10 @@ Reply e.g. "1a, keep, 3a", or "defaults".
 
 ## Notes / reconciliation
 - Unknowns: hardware command syntax for cec-ctl / cec-client / wlr-randr and the CEC device path (verify in real-server-validation-extended). Out of scope: none. Follow-ups: K10, K17 (next stop). Invalidated: none.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K8 — device-helper-server cold r4 Minor 3: the helper now kills a command's whole process group after every command (success too), so a background child cannot outlive the lock; list at the next stop
+- K2 ruling — helper status.temperature names the source ('thermal_zone0' | 'vcgencmd' | null); list at the next stop
+- K10 — device-helper-server Q24: a helper value option given without a value refuses to start only when --helper is given; without --helper the helper is off and the option is inert; list at the next stop
+- K17 — device-helper-server anchored r7: serve.mjs options never accept the --name=value form, so --helper-power=cec-ctl silently auto-detects; pre-existing; support '=' or refuse it? list at the next stop

@@ -66,3 +66,7 @@
 
 ## Notes / reconciliation
 - M2 closed. Routed items fulfilled: K59, Control labels wording — dropped. Routed onward to docs: R-UPG-1 wording, Roadmap '2.1.x polish' entry (preset row label, K60 marker test). Rulings for the next stop: K60 (D44 default). Invalidated: none.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K60 — recommended-protection-preset: the 'What's new in 2.1' marker is written on the first boot without it even when the display is not yet configured, so a fresh install never shows the toast later; only an upgraded, configured 2.0 install sees it once; list at the next stop (D44 default)

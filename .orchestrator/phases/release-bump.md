@@ -16,3 +16,8 @@
 - git log of the Output paths: version files last touched by landed phases; README/Roadmap by 7192007 (rename); no draft work for this phase.
 - Step 3: orchestrator-builder release-builder-r1, sonnet, high; brief artifacts/release-bump--brief-r1.md; closer preflight ok (release-bump--preflight.json)
 - Dispatched: 2026-10-14T21:24:12Z        Re-dispatches: 0
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+carried into this phase by D48 (K61) and the docs r3 review; release-bump answers them.
+- K61 — after real-server-validation and -extended pass, update README.md's (verify)/unverified tags from their results (a flag or command proven on the real server or Pi loses its tag; a failed one is corrected or removed), then re-run the docs criteria
+- docs r3 wording (with the K61 tag update): README 'Daily reload' — the reload waits while ANY dialog is open (PIN, shortcuts, Settings, Diagnostics), and a key, touch or mouse click wake does not trigger the 12-hour reload; also drop the internal id '(K60)' from Roadmap.md's 2.1.x polish line

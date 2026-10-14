@@ -94,3 +94,8 @@
 
 ## Notes / reconciliation
 - Unknowns: none. Out of scope: K5 (cache.random() corrupt entry → content-rating-filter). Product question: K6. Invalidated: none.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K5 — cache-first-fetch r2 review: offline fallback cache.random() can return a corrupt cached poster; route to content-rating-filter (edits that function); list at the next stop
+- K6 — cache-first-fetch r2 review: a server that always returns undecodable images costs one download per tick (no blacklist); product question; list at the next stop

@@ -190,3 +190,10 @@ Reply e.g. "1a, 5b" — or "defaults".
 
 - Answer to stop message 12: "defaults" — chat; recorded by the conductor at 2026-10-11T02:29:17.092809Z
 - Stop 12 answered "defaults" (2026-10-11T02:28:48Z, `closer answer`) → D40 (K25–K36 kept; K30, K31 → settings-sheet, K36 → touch-and-labels stay as phase follow-ups). Item 13 (token rotation) open.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K35 — kiosk-and-pin Q-kp4: a PIN is 4-8 digits entered twice, applies on Save; every token reveal/export, import and reset asks each time; kiosk reveal lasts 15 s; config.json fetch times out after 2.5 s; list at the next stop
+- K34 — kiosk-and-pin Q-kp3: the 5th consecutive wrong PIN locks 60 s, each further one doubles it up to 15 min; attempts while locked are refused and not counted; list at the next stop
+- K33 — kiosk-and-pin Q-kp2: while config.json serves {resetPin:true} every load clears the PIN and lockout; Settings is not opened automatically but opens without a PIN when asked; list at the next stop
+- K32 — kiosk-and-pin Q-kp1: the every-load config.json fetch logs a console 404 (403 on LAN) when there is no config.json; smoke.spec.mjs joins kiosk-and-pin's Output and ignores only that error; list at the next stop

@@ -63,3 +63,7 @@
 ## Notes / reconciliation
 - Unknowns: Chromium >= 104 translate support on the Pi (follow-up → real-server-validation-extended). Rulings for the next stop: K30 (routed to settings-sheet). Invalidated: none.
 - Follow-up correction (2026-10-10, conductor): the Chromium translate follow-up duplicated extended row V1-E17 and was dropped. A first `--drop 13` (1-based guess) removed K31 by mistake (state.py indexes from 0); K31 was re-added with its original text and owner/deadline, then `--drop 12` removed the duplicate.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K23/Q25 — pixel-shift must fix js/display.js show(): the previous draw's cleanup timer clears the src of a layer whose next decode() is pending, the decode never settles, state.busy sticks and rotation stops until reload; add a regression test; also harden content-rating e2e cases 4 and 10 sampling (wait for the poster to change)

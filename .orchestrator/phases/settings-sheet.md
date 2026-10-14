@@ -201,3 +201,15 @@ Reply e.g. "3b, 14b" — or "defaults".
 
 - Answer to stop message 13: "Defaults" — chat; recorded by the conductor at 2026-10-11T16:32:09.976469Z
 - Stop 13 answered "Defaults" (2026-10-11T16:31:46Z, `closer answer`) → D43 (K37–K53 kept; K53 stays a touch-and-labels follow-up). Item 18 (token rotation) open.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K52 — settings-sheet Q-ss6: while an approved sign-in token waits for the PIN prompt, the empty card's code flow stays stopped so a newer code cannot replace it; list at the next stop
+- K51 — settings-sheet Q-ss5: after the first 5-minute rest, each further unused first-run code is followed by another 5-minute rest (the 3-code count does not restart until the flow restarts); list at the next stop
+- K50 — settings-sheet SSC5 (proposed default): an unconfigured display checks plex.tv for the code's approval every 5 s while the code is fresh; after 3 codes expire unapproved it waits 5 min before asking for the next; no checking while asleep (was every 2 s forever, ~1,800 requests an hour); list at the next stop
+- K49 — settings-sheet: tests/e2e/brightness.spec.mjs and tests/e2e/helper.spec.mjs join the phase's Output for test-only fixes to a Playwright 1.56 fake-clock race (Date.now() can step backwards on a running fake clock) that caused intermittent full-suite failures; list at the next stop
+- K48 — settings-sheet: tests/e2e/lib.mjs joins the phase's Output so the harness stubs plex.tv by default; no e2e spec may reach the real plex.tv; list at the next stop
+- K47 — settings-sheet Q-ss4 (deviation from R-SET-1 wording): on a configured display the collapsed manual token/server fold stays reachable without pressing Change (sign-in and the server picker wait behind Change); the token reveal is PIN-gated; list at the next stop
+- K46 — settings-sheet Q-ss3: the empty card's code flow pauses while Settings is open and restarts with a fresh code when Settings closes unconfigured; 'Sign in again' uses the sheet's own code; list at the next stop
+- K45 — settings-sheet Q-ss2: a refresh the viewer asked for (button or R) that fails while a poster is on screen shows a toast with the fix buttons; list at the next stop
+- K44 — settings-sheet Q-ss1: after the plex.tv code is approved on the empty card, Settings opens pre-filled and the owner presses Save; nothing is saved automatically; list at the next stop

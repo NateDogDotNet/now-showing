@@ -99,3 +99,10 @@
 ## Notes / reconciliation
 - Unknowns: viewOffset, duration, Player.title and the batched /library/metadata/k1,k2 syntax on a real server (real-server-validation-extended; C8I1 row routed). Fulfilled here: C8I1, K18, C8M1 (D24/D28/D37). Rulings for the next stop: K25, K26, K27, K28. Invalidated: none.
 - Carried must-fixes fulfilled here: C8I1 (D37), C8M1 (D28), K18 (D24) — dropped from the follow-up index with their evidence.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K28 — metadata-and-now-playing r3: no test pins that toggling the progress bar/label does not make the bar jump back (the code is correct; cosmetic); no further round; list at the next stop
+- K27 — metadata-and-now-playing cold r2 Minor 4: cached ratings are re-checked on each online pool reload (at most every 30 min, not while now-playing or a pin is up); a title re-rated inside that window keeps its old rating offline until the next reload; list at the next stop
+- K26 — metadata-and-now-playing Q-mnp2: an episode's overlay year is its show's year (grandparentYear) when Plex sends it, else blank; the progress bar uses the episode's own duration; list at the next stop
+- K25 — metadata-and-now-playing Q-mnp1: if the batched rating re-check request fails, every cached title it asked about is treated as unrated (hidden offline under a limit — fails closed) and rotation carries on; list at the next stop

@@ -117,3 +117,7 @@
 
 ## Notes / reconciliation
 - Re-dispatches: 3 of 5 (branch at the 3rd: r4 picked over r5 on a tie). Unknowns: TV_WAKE_MS on hardware (extended row V1-E22). Rulings for the next stop: K37. Follow-up: DHM2 → pi-stability. Invalidated: none. Lesson: pass `--this-round-only` to derive after a branch so a stale earlier-round survivor is not re-scored.
+
+## Index items carried (verbatim from .orchestrator/state.md; added 2026-10-14 by conductor-2 for closer index-check)
+these rulings and deferrals were recorded in this phase's stop messages and in docs/decisions.md in other words; closer index-check requires the index text itself in a phase file, so it is copied here unchanged.
+- K37 — device-helper-integration Q-dhi1: with deviceHelper off the page makes no /__helper/ request at all (not even the boot probe); with it on and no helper served, Chromium logs one 404 line for the probe, which the e2e ignores (only that 404); list at the next stop
