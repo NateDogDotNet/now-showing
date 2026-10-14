@@ -4,7 +4,9 @@
 - Agent type: none (hitl — no agent is dispatched; the owner runs the checklist)
 - Claimed: 2026-10-14T01:03:08Z
 - Handed off: 2026-10-14T01:03:08Z        Re-dispatches: 0        Inner revision rounds: 0
-- Output: docs/validation/real-server-core.md (filled in by the owner)
+- Dispatched: n/a — hitl, no agent dispatched; run by conductor-2 at the owner's request (D50)
+- Commit(s): 5c664af — the filled checklist
+- Output: docs/validation/real-server-core.md (filled in by conductor-2 from runs on HOME, D50)
 
 ## Checklist
 
@@ -36,3 +38,32 @@ The owner chose to run the browser on HOME (Windows 11, 8 GB) over ssh. Setup: t
 - `home-rest-r1`: C07 PASS (method: LAN blocked in the browser, the checklist's alternative); C03 PASS (15.0 min; the printed code label was stale, the timing is from the new code).
 - `home-soak-r1` stopped after its first line (Edge filter matched nothing, 0 MB); `home-soak-r1b` started 03:22:56Z, detached on HOME, 24 h; Edge 460 MB at the start. Its end-of-run result fills V1-C17.
 - `docs/validation/real-server-core.md`: 16 rows PASS, V1-C17 PENDING, Overall PENDING (uncommitted until the phase closes).
+
+## Plan acceptance
+| # | Item | Command | Exit | Evidence |
+|---|---|---|---|---|
+| 1 | plan criterion 1 (no PENDING) | evidence.py exec (plan command) | 0 | `real-server-validation--ac1-r1.json` |
+| 2 | plan criterion 2 (Overall: PASS) | evidence.py exec (plan command) | 0 | `real-server-validation--ac2-r1.json` |
+| 3 | plan criterion 3 (no token) | evidence.py exec (plan command) | 0 | `real-server-validation--ac3-r1.json` |
+| 4 | plan criterion 4 (npm test, e2e, precache) | evidence.py exec (plan command) at 7192007, after D55's spec fix; r1 at 5c664af failed in ui-rotation (D55) | 0 | `real-server-validation--ac4-r2.json` (977 s); r1 kept: `real-server-validation--ac4-r1.json` |
+| 5 | plan criterion 5, narrated: only PASS closes; /phase-gate for M1 | checked by command: every M1 phase is done in state.md and Overall is PASS; the full suite is criterion 4 | 0 | `real-server-validation--ac5-r2.json` |
+
+## Pre-commit
+N/A — the phase output is one Markdown checklist; criterion 3 is its secret scan.
+
+- Notes: V1-C17 recorded at hour 15 of the 24 h soak on the owner's call (verbatim in the row); the soak keeps running on HOME and its final line is not part of this record.
+
+## Step 8 tally — artifacts/real-server-validation--tally-step8-r2-c1.json (first derive r2 was RE-DISPATCH 50/55; correction quoted: "every acceptance row checks the landed checklist, so all five are commit rows; the first derive read the message as stale against them")
+| Category | Score |
+|---|---|
+| acceptance criteria pass fresh _critical_ | 35/35 |
+| diff scope matches phase | 15/15 |
+| commit message accurate | 5/5 |
+| **Total** | **55/55** (100%) |
+**Band:** COMPLETE
+**Caps applied:** none
+
+N/A (dropped from the tally): CLAUDE.md conventions, code reads cleanly, tests where implied, decision log respected — no code and no review in a hitl checklist phase.
+
+- Landed: 5c664af — "Record the core real-server checklist: all 17 rows PASS"
+- Read-back: artifacts/real-server-validation--readback-5c664af*.json (ok, --commit-rows 1-5)

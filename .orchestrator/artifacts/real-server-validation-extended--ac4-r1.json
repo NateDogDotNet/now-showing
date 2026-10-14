@@ -1,0 +1,14 @@
+{
+  "cmd": "! grep -E 'Result: (FAIL|SKIPPED)' docs/validation/real-server-extended.md | grep -vE 'V1-E(1[1-9]|2[0-2]) .*Result: SKIPPED \\(no Pi\\)' | grep -q . && test $(grep -c 'Result: SKIPPED (no Pi)' docs/validation/real-server-extended.md) -eq 12",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

@@ -1,0 +1,93 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "real-server-validation--ac1-r1.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "real-server-validation--derive-step8-r2-0.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 0,
+   "max": 5,
+   "evidence": "real-server-validation--readback-5c664af.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 55,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 5,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {
+   "CLAUDE.md conventions": "no code; one Markdown checklist",
+   "code reads cleanly": "no code, no review",
+   "tests where implied": "no code; the checklist rows are the tests",
+   "decision log respected": "no review artifact to check against D-entries"
+  },
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_result": {
+  "total": 50,
+  "max": 55,
+  "percentage": 91,
+  "band": "RE-DISPATCH",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 0,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "real-server-validation--ac1-r1.json": "956ffa4b5ac0a9981b844605f44ece3d1ebebbc2397d6ffecc41e2d052c87b42",
+  "real-server-validation--derive-step8-r2-0.json": "95c16b6b0ae0d602bbecea04802e404969775b1ba2dfaf40d99616c90f70aad4",
+  "real-server-validation--readback-5c664af.json": "b6574fbe41fce95f63bf103d145b853d0223ce7df7fc958a481c08c77f39049c"
+ },
+ "_written": "2026-10-14T21:17:04.892338Z"
+}

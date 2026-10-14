@@ -1,0 +1,7 @@
+Record the two checks routed to the extended validation (D33, D37)
+
+V1-E26: no TV episode on the real server is rated lower than its show,
+so the content filter needs no change. V1-E27: Plex returns all 100 items
+of the batched metadata request the upward re-rate sends. Both PASS.
+
+Co-Authored-By: Claude <noreply@anthropic.com>

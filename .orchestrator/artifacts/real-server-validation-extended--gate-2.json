@@ -1,0 +1,11 @@
+{
+ "phase": "real-server-validation-extended",
+ "sha": "128b62e",
+ "tag": null,
+ "ok": true,
+ "failures": [],
+ "phase_file_sha256": "d5c20544b3aa4185ee0a2bd2eb727dd027fe89b88340e3973757db1894f0740b",
+ "phase_file_sha256_noretro": "4cbe2ce071ec4175582683a5bcc47010daf88c689c4d60827bf021c61f670424",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-14T21:21:41.848791Z"
+}

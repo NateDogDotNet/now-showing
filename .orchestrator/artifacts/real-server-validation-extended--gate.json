@@ -1,0 +1,15 @@
+{
+ "phase": "real-server-validation-extended",
+ "sha": "8badf7d",
+ "tag": null,
+ "ok": false,
+ "failures": [
+  "open offer with deadline real-server-validation-extended: D33 \u2014 real-server-validation-extended: check whether Plex rates TV episodes lower than their show (an episode's poster is the show's); add the row to docs/validation/real-server-extended.md and fix only if it happens \u2014 ask the user and record the answer before this gate",
+  "open offer with deadline real-server-validation-extended: C8I1 (D37) \u2014 real-server-validation-extended: confirm Plex accepts the batched GET /library/metadata/<k1>,<k2>,... request the upward re-rate fix uses; add the row to docs/validation/real-server-extended.md \u2014 ask the user and record the answer before this gate",
+  "scope: commit touches paths outside Output: ['.orchestrator/artifacts/real-server-validation-extended--home-e08-r1.mjs', '.orchestrator/artifacts/real-server-validation-extended--home-e08-r1.txt', '.orchestrator/phases/real-server-validation-extended.md']"
+ ],
+ "phase_file_sha256": "817325162d56786d71e5de4f5e15e1be7af7701ef8206c0594051a2ddcfb3bac",
+ "phase_file_sha256_noretro": "0958abe5de99879d5f21a323aa8ac53a8576b5fa72a3f5a7c15c4a40a776dc51",
+ "scripts_sha256": {},
+ "gated_at": "2026-10-14T21:18:04.837422Z"
+}

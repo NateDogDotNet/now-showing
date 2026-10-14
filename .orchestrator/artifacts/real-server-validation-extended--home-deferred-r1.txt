@@ -1,0 +1,8 @@
+21:19:43Z DUMP V1-E26 {"open":[],"pinTitle":"Enter PIN"}
+
+=== V1-E26 NOT COMPLETED (21:19:43Z)
+error: page.evaluate: TypeError: Failed to fetch
+
+=== V1-E27 PASS (21:19:57Z)
+100 keys in one GET /library/metadata/k1,...,k100 (commas literal, as js/plex.js items() sends; path length 605 chars) → HTTP 200, 100 items back, 100 distinct, all among the asked keys: true, 99 carry contentRating; 3 keys → HTTP 200, 3 items
+21:19:57Z all console errors: ["21:19:22Z Failed to load resource: the server responded with a status of 404 (Not Found)","21:19:43Z Failed to load resource: net::ERR_CONNECTION_CLOSED","21:19:43Z Failed to load resource: net::ERR_CONNECTION_CLOSED"]

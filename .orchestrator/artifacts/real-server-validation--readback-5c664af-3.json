@@ -1,0 +1,18 @@
+{
+ "cmd": "diff <(git log -1 --format=%B 5c664af) .orchestrator/artifacts/real-server-validation--commit-message-final.txt",
+ "sha": "5c664af",
+ "equal": true,
+ "tokens": [],
+ "missing_tokens": [],
+ "exempt": {},
+ "stale": false,
+ "commit_rows": [
+  1,
+  2,
+  3,
+  4,
+  5
+ ],
+ "ok": true,
+ "checked_at": "2026-10-14T21:17:22.962068Z"
+}

@@ -1,6 +1,6 @@
 # Orchestration State
 
-run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · conductor-1 · started 2026-10-08T22:05Z · goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters · invocation: phases/_invocation.md · resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user → /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed · conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) · rotate-plex-token done 2026-10-14 (debe086) · next action: owner — run docs/validation/real-server-core.md (checklist in phases/real-server-validation.md), then the extended one
+run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · conductor-1 · started 2026-10-08T22:05Z · goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters · invocation: phases/_invocation.md · resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user → /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed · conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) · rotate-plex-token done 2026-10-14 (debe086) · rotate-plex-token done 2026-10-14 (debe086) · both real-server validations done 2026-10-14 (5c664af, 128b62e; agent-run on HOME, D50) · rename-now-showing done (7192007) · next action: conductor — release-bump dispatch (D48, D51–D71 Roadmap entries), then the purge approval stop (D49)
 
 | Phase | Status | Mode | Blocked by | Claim | Confidence | Re-dispatches | Tags | Note |
 |---|---|---|---|---|---|---|---|---|
@@ -12,7 +12,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | cache-first-fetch | ✅ done | afk | e2e-harness, settings-and-schedule-core | — | 100% | 2 | — | landed e764aee |
 | status-indicator | ✅ done | afk | rotation-layout-and-shell, settings-and-schedule-core | — | 100% | 2 | ui | landed 80d1759; r2+r3 anchored APPROVE; gate ok |
 | validation-checklists | ✅ done | afk | — | — | 100% | 2 | docs | 7b49e94; core + extended real-server checklists; 2 re-dispatches |
-| real-server-validation | 🚧 blocked | hitl | validation-checklists, cache-first-fetch, serve-config-guard, rotation-layout-and-shell, status-indicator, rotate-plex-token | conductor-2 | 0% | 0 | — | waiting on owner: core checklist (phases/real-server-validation.md) |
+| real-server-validation | ✅ done | hitl | validation-checklists, cache-first-fetch, serve-config-guard, rotation-layout-and-shell, status-indicator, rotate-plex-token | — | 100% | 0 | — | 5c664af all 17 PASS (C17 at h15, owner's call); suite green at 7192007; gate ok |
 | pixel-shift | ✅ done | afk | rotation-layout-and-shell, settings-and-schedule-core | — | 100% | 0 | ui | landed 1b31344; r1 anchored APPROVE; gate ok |
 | frame-brightness | ✅ done | afk | settings-and-schedule-core | — | 100% | 1 | ui | landed 9263977; r2 anchored APPROVE; gate ok |
 | sleep-mode | ✅ done | afk | settings-and-schedule-core | — | 100% | 6 | ui, risk:high | landed e6f426b |
@@ -27,15 +27,15 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | metadata-and-now-playing | ✅ done | afk | content-rating-filter, settings-and-schedule-core | — | 100% | 2 | ui | landed 51d8ff3 |
 | position-drag-nudge | 🚧 blocked | afk | rotation-layout-and-shell, settings-and-schedule-core, settings-sheet, touch-and-labels, metadata-and-now-playing | — | 0% | 0 | ui | deferred to 2.2 (D41, owner agreed 2026-10-11); not in the 2.1 release |
 | fill-blur-and-info | 🚧 blocked | afk | metadata-and-now-playing, rotation-layout-and-shell, pi-stability | — | 0% | 0 | ui | deferred to 2.2 (D41, owner agreed 2026-10-11); not in the 2.1 release |
-| real-server-validation-extended | ⬜ pending | hitl | validation-checklists, real-server-validation, content-rating-filter, settings-sheet, metadata-and-now-playing, device-helper-integration, pi-stability | conductor-2 | 0% | 0 | — |  |
+| real-server-validation-extended | ✅ done | hitl | validation-checklists, real-server-validation, content-rating-filter, settings-sheet, metadata-and-now-playing, device-helper-integration, pi-stability | — | 100% | 0 | — | 128b62e; 15 PASS, 12 SKIPPED (no Pi), Overall PASS; D33/D37 checks pass; gate-2 ok |
 | docs | ✅ done | afk | recommended-protection-preset, touch-and-labels | — | 100% | 2 | docs | landed 78b9f67; r3 anchored delta APPROVE (A-); gate ok |
 | release-bump | ⬜ pending | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | — | 0% | 0 | — | D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9) |
 | purge-git-history | ⬜ pending | hitl | rotate-plex-token, release-bump | — | 0% | 0 | irreversible |  |
 | display-decode-hang | ✅ done | afk | rotation-layout-and-shell | — | 100% | 1 | — | landed af55616 |
 | rename-now-showing | ✅ done | afk | docs | — | 100% | 1 | ui, docs | landed 7192007; Step 8 90/90; review r1 APPROVE (Minor fixed r2) |
 
-**Progress:** 23/29 phases done
-**Frontier:** (none)
+**Progress:** 25/29 phases done
+**Frontier:** release-bump
 
 ## Unknowns
 
@@ -53,8 +53,6 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 
 <!-- deferred work with an owner; asked at the next stop -->
 
-- FOLLOW-UP (owner: conductor): D33 — real-server-validation-extended: check whether Plex rates TV episodes lower than their show (an episode's poster is the show's); add the row to docs/validation/real-server-extended.md and fix only if it happens (deadline: real-server-validation-extended)
-- FOLLOW-UP (owner: conductor): C8I1 (D37) — real-server-validation-extended: confirm Plex accepts the batched GET /library/metadata/<k1>,<k2>,... request the upward re-rate fix uses; add the row to docs/validation/real-server-extended.md (deadline: real-server-validation-extended)
 - FOLLOW-UP (owner: release-bump): K61 — after real-server-validation and -extended pass, update README.md's (verify)/unverified tags from their results (a flag or command proven on the real server or Pi loses its tag; a failed one is corrected or removed), then re-run the docs criteria (deadline: release-bump)
 - FOLLOW-UP (owner: release-bump): docs r3 wording (with the K61 tag update): README 'Daily reload' — the reload waits while ANY dialog is open (PIN, shortcuts, Settings, Diagnostics), and a key, touch or mouse click wake does not trigger the 12-hour reload; also drop the internal id '(K60)' from Roadmap.md's 2.1.x polish line (deadline: release-bump)
 - FOLLOW-UP (owner: conductor): purge rehearsal r1 — at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped (deadline: purge-git-history)
@@ -128,6 +126,8 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 - FOLLOW-UP ANSWERED (owner: Nathan, "Always auto accept "defaults" for me when you normally want to stop and ask me a question." at 2026-10-11T21:22:44Z): K55 — touch-and-labels Q-tl1: in kiosk mode the long-press menu is also allowed on the Settings sheet's own box, not only its text fields (an existing kiosk test asserts it); still prevented on the PIN keypad, Diagnostics and the stage
 - FOLLOW-UP ANSWERED (owner: Nathan, "Always auto accept "defaults" for me when you normally want to stop and ask me a question." at 2026-10-11T21:22:44Z): K54 — touch-and-labels' Output gains js/engine.js and tests/engine.test.js (the empty-library hint names 'unwatched only' only when it is on) and tests/e2e/first-run.spec.mjs (settings-sheet's routed test-only fixes S6C1/S6C2); list at the next stop
 - FOLLOW-UP ANSWERED (owner: Nathan, "b" at 2026-10-13T16:51:55Z): purge rehearsal r1 — after the force-push, pull request #1 (refs/pull/1/head → 13af5b0) still reaches the token commit on GitHub, and plan criterion 1 cannot see it; decide before the purge: ask GitHub Support to remove PR #1's refs, or delete and re-create the repository, and whether criterion 1 should also check the PR refs
+- FOLLOW-UP ANSWERED (owner: conductor, "V1-E26 PASS (conductor-run on Castle Anthrax, 2026-10-14T21:20:35Z): 40 shows, 2,783 episodes, 0 rated lower than their show; nothing to fix" at 2026-10-14T21:21:41Z): D33 — real-server-validation-extended: check whether Plex rates TV episodes lower than their show (an episode's poster is the show's); add the row to docs/validation/real-server-extended.md and fix only if it happens
+- FOLLOW-UP ANSWERED (owner: conductor, "V1-E27 PASS (conductor-run on Castle Anthrax, 2026-10-14T21:20:38Z): GET /library/metadata with 100 comma-joined keys → HTTP 200, 100 items" at 2026-10-14T21:21:41Z): C8I1 (D37) — real-server-validation-extended: confirm Plex accepts the batched GET /library/metadata/<k1>,<k2>,... request the upward re-rate fix uses; add the row to docs/validation/real-server-extended.md
 
 <!-- cc_utils:state
 {
@@ -243,10 +243,10 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
     },
     {
       "name": "real-server-validation",
-      "status": "blocked",
-      "confidence": 0,
+      "status": "done",
+      "confidence": 100,
       "redispatch": 0,
-      "note": "waiting on owner: core checklist (phases/real-server-validation.md)",
+      "note": "5c664af all 17 PASS (C17 at h15, owner's call); suite green at 7192007; gate ok",
       "blocked_by": [
         "validation-checklists",
         "cache-first-fetch",
@@ -257,7 +257,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       ],
       "tags": [],
       "mode": "hitl",
-      "claim": "conductor-2"
+      "claim": ""
     },
     {
       "name": "pixel-shift",
@@ -514,10 +514,10 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
     },
     {
       "name": "real-server-validation-extended",
-      "status": "pending",
-      "confidence": 0,
+      "status": "done",
+      "confidence": 100,
       "redispatch": 0,
-      "note": "",
+      "note": "128b62e; 15 PASS, 12 SKIPPED (no Pi), Overall PASS; D33/D37 checks pass; gate-2 ok",
       "blocked_by": [
         "validation-checklists",
         "real-server-validation",
@@ -529,7 +529,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       ],
       "tags": [],
       "mode": "hitl",
-      "claim": "conductor-2"
+      "claim": ""
     },
     {
       "name": "docs",
@@ -631,16 +631,6 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
   ],
   "out_of_scope": [],
   "follow_ups": [
-    {
-      "text": "D33 \u2014 real-server-validation-extended: check whether Plex rates TV episodes lower than their show (an episode's poster is the show's); add the row to docs/validation/real-server-extended.md and fix only if it happens",
-      "owner": "conductor",
-      "deadline": "real-server-validation-extended"
-    },
-    {
-      "text": "C8I1 (D37) \u2014 real-server-validation-extended: confirm Plex accepts the batched GET /library/metadata/<k1>,<k2>,... request the upward re-rate fix uses; add the row to docs/validation/real-server-extended.md",
-      "owner": "conductor",
-      "deadline": "real-server-validation-extended"
-    },
     {
       "text": "K61 \u2014 after real-server-validation and -extended pass, update README.md's (verify)/unverified tags from their results (a flag or command proven on the real server or Pi loses its tag; a failed one is corrected or removed), then re-run the docs criteria",
       "owner": "release-bump",
@@ -1128,8 +1118,24 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "quote": "b",
       "at": "2026-10-13T16:51:55Z",
       "time_source": "reply"
+    },
+    {
+      "text": "D33 \u2014 real-server-validation-extended: check whether Plex rates TV episodes lower than their show (an episode's poster is the show's); add the row to docs/validation/real-server-extended.md and fix only if it happens",
+      "owner": "conductor",
+      "deadline": "real-server-validation-extended",
+      "quote": "V1-E26 PASS (conductor-run on Castle Anthrax, 2026-10-14T21:20:35Z): 40 shows, 2,783 episodes, 0 rated lower than their show; nothing to fix",
+      "at": "2026-10-14T21:21:41Z",
+      "time_source": "conductor clock"
+    },
+    {
+      "text": "C8I1 (D37) \u2014 real-server-validation-extended: confirm Plex accepts the batched GET /library/metadata/<k1>,<k2>,... request the upward re-rate fix uses; add the row to docs/validation/real-server-extended.md",
+      "owner": "conductor",
+      "deadline": "real-server-validation-extended",
+      "quote": "V1-E27 PASS (conductor-run on Castle Anthrax, 2026-10-14T21:20:38Z): GET /library/metadata with 100 comma-joined keys \u2192 HTTP 200, 100 items",
+      "at": "2026-10-14T21:21:41Z",
+      "time_source": "conductor clock"
     }
   ],
-  "header": "run 1 \u00b7 plan docs/integration-plan.md @ 0f1f82e \u00b7 kernel dotclaude@b4a6fb5 \u00b7 conductor-1 \u00b7 started 2026-10-08T22:05Z \u00b7 goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters \u00b7 invocation: phases/_invocation.md \u00b7 resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user \u2192 /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed \u00b7 conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 next action: owner \u2014 run docs/validation/real-server-core.md (checklist in phases/real-server-validation.md), then the extended one"
+  "header": "run 1 \u00b7 plan docs/integration-plan.md @ 0f1f82e \u00b7 kernel dotclaude@b4a6fb5 \u00b7 conductor-1 \u00b7 started 2026-10-08T22:05Z \u00b7 goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters \u00b7 invocation: phases/_invocation.md \u00b7 resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user \u2192 /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed \u00b7 conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 both real-server validations done 2026-10-14 (5c664af, 128b62e; agent-run on HOME, D50) \u00b7 rename-now-showing done (7192007) \u00b7 next action: conductor \u2014 release-bump dispatch (D48, D51\u2013D71 Roadmap entries), then the purge approval stop (D49)"
 }
 -->
