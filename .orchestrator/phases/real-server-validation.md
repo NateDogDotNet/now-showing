@@ -67,3 +67,4 @@ N/A (dropped from the tally): CLAUDE.md conventions, code reads cleanly, tests w
 
 - Landed: 5c664af — "Record the core real-server checklist: all 17 rows PASS"
 - Read-back: artifacts/real-server-validation--readback-5c664af*.json (ok, --commit-rows 1-5)
+- Note (2026-10-14, after close): 84cf765 masked four shared-server names in the C05 row of the landed checklist (privacy; from the purge's security review). The row's result and evidence are unchanged; the phase's landed commit stays 5c664af.
