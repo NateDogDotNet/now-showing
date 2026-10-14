@@ -2,7 +2,7 @@
 // Plex traffic is never intercepted — posters are cached by the page itself (poster-cache.js).
 //
 // Bump VERSION whenever any file in SHELL changes so clients pick up the update.
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 const SHELL_CACHE = `shell-${VERSION}`;
 
 const SHELL = [

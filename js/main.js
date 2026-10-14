@@ -17,7 +17,7 @@ import { keyMap, listShortcuts, normalizeKey } from './shortcuts.js';
 import { decideSleep, MANUAL_WAKE_MS } from './sleep.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.0.0';
+export const VERSION = '2.1.0';
 
 // An automatic reload (the daily one, or one for a new service worker) hands the idle-sleep clock to the next page
 // through sessionStorage, so it does not read as fresh playback (C8M3, D28). A normal load never finds it.
