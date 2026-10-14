@@ -33,7 +33,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | purge-git-history | ⬜ pending | hitl | rotate-plex-token, release-bump, limit-and-reload-fixes | — | 0% | 0 | irreversible |  |
 | display-decode-hang | ✅ done | afk | rotation-layout-and-shell | — | 100% | 1 | — | landed af55616 |
 | rename-now-showing | ✅ done | afk | docs | — | 100% | 1 | ui, docs | landed 7192007; Step 8 90/90; review r1 APPROVE (Minor fixed r2) |
-| limit-and-reload-fixes | ⬜ pending | afk | release-bump | conductor-2 | 0% | 0 | risk:high | D73: four close-time review fixes in 2.1.0 before any PR |
+| limit-and-reload-fixes | ⬜ pending | afk | release-bump | conductor-2 | 0% | 1 | risk:high | D73: four close-time review fixes in 2.1.0 before any PR |
 
 **Progress:** 26/30 phases done
 **Frontier:** (none)
@@ -629,7 +629,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "name": "limit-and-reload-fixes",
       "status": "pending",
       "confidence": 0,
-      "redispatch": 0,
+      "redispatch": 1,
       "note": "D73: four close-time review fixes in 2.1.0 before any PR",
       "blocked_by": [
         "release-bump"

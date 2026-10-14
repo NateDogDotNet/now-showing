@@ -189,3 +189,5 @@
 | 2026-10-14T22:07:28.404147Z | release-bump | reviewer | orchestrator-reviewer | opus | inherited | r1 | 177320 | 96242 | complete |  |
 | 2026-10-14T22:07:28.500495Z | purge-git-history | reviewer | orchestrator-reviewer | opus | inherited | r1 | 135581 | 63535 | complete |  |
 | 2026-10-14T22:07:28.604512Z | release-bump | research | orchestrator-research | sonnet | inherited | r1 | 39761 | 14344 | complete |  |
+| 2026-10-14T23:57:01.362901Z | limit-and-reload-fixes | builder | orchestrator-builder | sonnet | high | r1 | 1759910 | 105067 | complete |  |
+| 2026-10-14T23:57:01.466748Z | limit-and-reload-fixes | reviewer | orchestrator-reviewer | opus | inherited | r1 | 172576 | 72271 | complete |  |
