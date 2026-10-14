@@ -1,6 +1,6 @@
 # Orchestration State
 
-run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · conductor-1 · started 2026-10-08T22:05Z · goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters · invocation: phases/_invocation.md · resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user → /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed · conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) · rotate-plex-token done 2026-10-14 (debe086) · rotate-plex-token done 2026-10-14 (debe086) · both real-server validations done 2026-10-14 (5c664af, 128b62e; agent-run on HOME, D50) · rename-now-showing done (7192007) · next action: conductor — release-bump dispatch (D48, D51–D71 Roadmap entries), then the purge approval stop (D49)
+run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · conductor-1 · started 2026-10-08T22:05Z · goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters · invocation: phases/_invocation.md · resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user → /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed · conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) · rotate-plex-token done 2026-10-14 (debe086) · rotate-plex-token done 2026-10-14 (debe086) · both real-server validations done 2026-10-14 (5c664af, 128b62e; agent-run on HOME, D50) · rename-now-showing done (7192007) · release-bump done 2026-10-14 (1450d71, version 2.1.0; M4 closes) · next action: conductor — limit-and-reload-fixes (D73), then the purge approval stop (D49)
 
 | Phase | Status | Mode | Blocked by | Claim | Confidence | Re-dispatches | Tags | Note |
 |---|---|---|---|---|---|---|---|---|
@@ -29,12 +29,13 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | fill-blur-and-info | 🚧 blocked | afk | metadata-and-now-playing, rotation-layout-and-shell, pi-stability | — | 0% | 0 | ui | deferred to 2.2 (D41, owner agreed 2026-10-11); not in the 2.1 release |
 | real-server-validation-extended | ✅ done | hitl | validation-checklists, real-server-validation, content-rating-filter, settings-sheet, metadata-and-now-playing, device-helper-integration, pi-stability | — | 100% | 0 | — | 128b62e; 15 PASS, 12 SKIPPED (no Pi), Overall PASS; D33/D37 checks pass; gate-2 ok |
 | docs | ✅ done | afk | recommended-protection-preset, touch-and-labels | — | 100% | 2 | docs | landed 78b9f67; r3 anchored delta APPROVE (A-); gate ok |
-| release-bump | ⬜ pending | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | conductor-2 | 0% | 1 | — | D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9) |
-| purge-git-history | ⬜ pending | hitl | rotate-plex-token, release-bump | — | 0% | 0 | irreversible |  |
+| release-bump | ✅ done | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | — | 100% | 1 | — | 1450d71 (2.1.0); Step 8 90/90; gate-4 ok; phase-gate PASS; code-review findings routed by D73 |
+| purge-git-history | ⬜ pending | hitl | rotate-plex-token, release-bump, limit-and-reload-fixes | — | 0% | 0 | irreversible |  |
 | display-decode-hang | ✅ done | afk | rotation-layout-and-shell | — | 100% | 1 | — | landed af55616 |
 | rename-now-showing | ✅ done | afk | docs | — | 100% | 1 | ui, docs | landed 7192007; Step 8 90/90; review r1 APPROVE (Minor fixed r2) |
+| limit-and-reload-fixes | ⬜ pending | afk | release-bump | conductor-2 | 0% | 0 | risk:high | D73: four close-time review fixes in 2.1.0 before any PR |
 
-**Progress:** 25/29 phases done
+**Progress:** 26/30 phases done
 **Frontier:** (none)
 
 ## Unknowns
@@ -549,10 +550,10 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
     },
     {
       "name": "release-bump",
-      "status": "pending",
-      "confidence": 0,
+      "status": "done",
+      "confidence": 100,
       "redispatch": 1,
-      "note": "D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9)",
+      "note": "1450d71 (2.1.0); Step 8 90/90; gate-4 ok; phase-gate PASS; code-review findings routed by D73",
       "blocked_by": [
         "docs",
         "rotate-plex-token",
@@ -562,7 +563,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       ],
       "tags": [],
       "mode": "afk",
-      "claim": "conductor-2"
+      "claim": ""
     },
     {
       "name": "purge-git-history",
@@ -572,7 +573,8 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "note": "",
       "blocked_by": [
         "rotate-plex-token",
-        "release-bump"
+        "release-bump",
+        "limit-and-reload-fixes"
       ],
       "tags": [
         "irreversible"
@@ -622,6 +624,21 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
           "reason": "reviewer dispatched before the Step 4 tally and predispatch (rule 2); recorded as EXCEPTION in phases/rename-now-showing.md; all criteria exit 0, tally 90/90"
         }
       ]
+    },
+    {
+      "name": "limit-and-reload-fixes",
+      "status": "pending",
+      "confidence": 0,
+      "redispatch": 0,
+      "note": "D73: four close-time review fixes in 2.1.0 before any PR",
+      "blocked_by": [
+        "release-bump"
+      ],
+      "tags": [
+        "risk:high"
+      ],
+      "mode": "afk",
+      "claim": "conductor-2"
     }
   ],
   "unknowns": [
@@ -1142,6 +1159,6 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "time_source": "conductor clock"
     }
   ],
-  "header": "run 1 \u00b7 plan docs/integration-plan.md @ 0f1f82e \u00b7 kernel dotclaude@b4a6fb5 \u00b7 conductor-1 \u00b7 started 2026-10-08T22:05Z \u00b7 goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters \u00b7 invocation: phases/_invocation.md \u00b7 resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user \u2192 /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed \u00b7 conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 both real-server validations done 2026-10-14 (5c664af, 128b62e; agent-run on HOME, D50) \u00b7 rename-now-showing done (7192007) \u00b7 next action: conductor \u2014 release-bump dispatch (D48, D51\u2013D71 Roadmap entries), then the purge approval stop (D49)"
+  "header": "run 1 \u00b7 plan docs/integration-plan.md @ 0f1f82e \u00b7 kernel dotclaude@b4a6fb5 \u00b7 conductor-1 \u00b7 started 2026-10-08T22:05Z \u00b7 goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters \u00b7 invocation: phases/_invocation.md \u00b7 resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user \u2192 /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed \u00b7 conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 both real-server validations done 2026-10-14 (5c664af, 128b62e; agent-run on HOME, D50) \u00b7 rename-now-showing done (7192007) \u00b7 release-bump done 2026-10-14 (1450d71, version 2.1.0; M4 closes) \u00b7 next action: conductor \u2014 limit-and-reload-fixes (D73), then the purge approval stop (D49)"
 }
 -->
