@@ -1,0 +1,9 @@
+{
+  "cmd": "test -f /home/nathan/plex-poster-app/.orchestrator/artifacts/release-bump--scrub-pii-real-server-core-r1.md && test -f /home/nathan/plex-poster-app/.orchestrator/artifacts/release-bump--scrub-pii-real-server-extended-r1.md && test -f /home/nathan/plex-poster-app/.orchestrator/artifacts/release-bump--scrub-pii-token-rotation-r1.md && test -f /home/nathan/plex-poster-app/.orchestrator/artifacts/release-bump--dependency-audit-r1.md && test -f /home/nathan/plex-poster-app/.orchestrator/artifacts/purge-git-history--security-review-r1.md && grep -q 'Status:\\*\\* CLEAN' /home/nathan/plex-poster-app/.orchestrator/artifacts/release-bump--scrub-pii-token-rotation-r1.md",
+  "exit": 0,
+  "seconds": 0.0,
+  "parsed": null,
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

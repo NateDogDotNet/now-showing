@@ -1,0 +1,84 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "release-bump--ac1-r1.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "release-bump--scope-r1.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 50,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 9,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [],
+  "na": {
+   "commit message accurate": "no commit yet (Step 4)"
+  },
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {
+   "CLAUDE.md conventions": "no precommit-lint or precommit-format record",
+   "tests where implied": "no mutation record"
+  }
+ },
+ "_correction": {
+  "reason": "the first Step 4 derive ran before the scope record (release-bump--scope-r1.json, the staged set equals Output) and the ac8 record (the close-time review artifacts on disk) were written",
+  "supersedes": "release-bump--tally-step4-r1.json"
+ },
+ "_result": {
+  "total": 50,
+  "max": 50,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "release-bump--ac1-r1.json": "b124c0e9871060823d6a7fdec7255b6d2ad72c87b89d4edfea0cc0dfc568476d",
+  "release-bump--scope-r1.json": "05713b937b80d143ea36a360a17e760b07a71323cc3ff446479b1cfd286da1a0"
+ },
+ "_written": "2026-10-14T22:02:42.853794Z"
+}

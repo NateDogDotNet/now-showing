@@ -1,0 +1,12 @@
+Release 2.1.0: bump the version, settle the README's verify tags, extend the Roadmap
+
+VERSION is 2.1.0 in sw.js, js/main.js, package.json and package-lock.json,
+so installed clients replace the shell-2.0.0 cache with shell-2.1.0;
+tests/e2e/release.spec.mjs pins that. README.md states which items the
+real-server validation proved (V1-E03, E24, E25, E27) and keeps the
+Raspberry Pi items and the country-prefixed ratings tagged (verify), and
+carries the daily-reload wording fixes (D48). Roadmap.md gains the owner's
+2026-10-14 requests, D51 to D71, with a suggested build order (D53), and
+drops the internal "(K60)" tag.
+
+Co-Authored-By: Claude <noreply@anthropic.com>

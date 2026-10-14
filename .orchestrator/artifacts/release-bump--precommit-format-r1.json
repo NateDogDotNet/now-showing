@@ -1,0 +1,9 @@
+{
+  "cmd": "git diff --cached --check",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": null,
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

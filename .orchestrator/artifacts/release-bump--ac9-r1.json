@@ -1,0 +1,9 @@
+{
+  "cmd": "grep -Eqi 'play ?list' Roadmap.md && grep -Eqi 'jellyfin|emby|other media servers' Roadmap.md && grep -qi 'TMDB\\|The Movie Database' Roadmap.md && grep -qi '^## .*Suggested order' Roadmap.md && grep -qi 'Now Playing' Roadmap.md && grep -qi 'Coming Soon' Roadmap.md && grep -qi 'marquee' Roadmap.md && grep -qi 'Touch gestures' Roadmap.md && grep -qi 'Favourites\\|Favorites' Roadmap.md && grep -qi 'Watch later' Roadmap.md && grep -qi 'Multiple displays' Roadmap.md && grep -qi 'Mirror' Roadmap.md && grep -qi 'Chain' Roadmap.md && grep -qi 'Controller' Roadmap.md && grep -q 'PIN-locked' Roadmap.md && grep -qi 'Frame and marquee styles' Roadmap.md && grep -qi 'Rating schedule' Roadmap.md && grep -qi 'Poster selection' Roadmap.md && grep -qi 'genre' Roadmap.md && grep -qi 'multi-select' Roadmap.md && grep -qi 'Theme music' Roadmap.md && grep -qi 'Poster transitions' Roadmap.md && grep -qi 'smart collection' Roadmap.md && for k in 'Movie-night countdown' 'Clear-logo marquees' 'Poster artwork sources' 'Viewer profiles' 'Birthday and occasion mode' 'Weighting and no repeats' 'On this day' 'Info captions' 'Ambient light sync' 'QR code to the title' 'Play now' 'Find a poster' 'Recently shown' 'Allowed devices' 'colour matte' 'smart crop' 'Browse first mode' 'Browse button' 'Home controls' 'Picture frame mode' 'screen saver'; do grep -qiF -- \"$k\" Roadmap.md || { echo \"roadmap missing: $k\"; exit 1; }; done",
+  "exit": 0,
+  "seconds": 0.04,
+  "parsed": null,
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

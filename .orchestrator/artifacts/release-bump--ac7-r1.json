@@ -1,0 +1,9 @@
+{
+  "cmd": "test \"$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\\.orchestrator/' | LC_ALL=C sort | tr '\\n' ' ')\" = \"README.md Roadmap.md js/main.js package-lock.json package.json sw.js tests/e2e/release.spec.mjs \"",
+  "exit": 0,
+  "seconds": 0.01,
+  "parsed": null,
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

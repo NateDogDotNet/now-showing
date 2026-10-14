@@ -1,0 +1,13 @@
+{
+ "phase": "release-bump",
+ "sha": "1450d71",
+ "tag": null,
+ "ok": true,
+ "failures": [],
+ "phase_file_sha256": "3df6c32ed366327a42269d63519eeae63df0e5c8c026d7f420535dea29f5a1ce",
+ "phase_file_sha256_noretro": "db12935288210e3f51c96bb3b06ccfc47805c7a060c4d32841079cb8a1a66915",
+ "scripts_sha256": {
+  "release-bump--criterion7-grid-r1.sh": "eb6427a0f59a82a7667a86c89a67557e5cf6483854204e7bbd6bdc4e374f3131"
+ },
+ "gated_at": "2026-10-14T22:10:46.462109Z"
+}

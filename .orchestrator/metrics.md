@@ -185,3 +185,7 @@
 | 2026-10-14T20:59:55.851608Z | rename-now-showing | builder | orchestrator-builder | sonnet | high | r1 | 2993737 | 43737 | complete |  |
 | 2026-10-14T20:59:55.940484Z | rename-now-showing | builder | orchestrator-builder | sonnet | high | r2 | 4106622 | 44729 | complete | resumed (cumulative tokens) |
 | 2026-10-14T21:00:00.558919Z | rename-now-showing | reviewer | orchestrator-reviewer | opus | inherited | r1 | 117145 | 41631 | complete |  |
+| 2026-10-14T22:07:28.319044Z | release-bump | builder | orchestrator-builder | sonnet | high | r1 | 1183722 | 89393 | complete |  |
+| 2026-10-14T22:07:28.404147Z | release-bump | reviewer | orchestrator-reviewer | opus | inherited | r1 | 177320 | 96242 | complete |  |
+| 2026-10-14T22:07:28.500495Z | purge-git-history | reviewer | orchestrator-reviewer | opus | inherited | r1 | 135581 | 63535 | complete |  |
+| 2026-10-14T22:07:28.604512Z | release-bump | research | orchestrator-research | sonnet | inherited | r1 | 39761 | 14344 | complete |  |

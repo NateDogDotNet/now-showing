@@ -1,0 +1,24 @@
+{
+ "phase": "release-bump",
+ "round": 2,
+ "sha": "1450d71",
+ "form": "commit",
+ "handbacks": [
+  "release-bump--handback-builder-r1.md",
+  "release-bump--handback-builder-r2.md"
+ ],
+ "touched": [
+  "README.md",
+  "Roadmap.md",
+  "js/main.js",
+  "package-lock.json",
+  "package.json",
+  "sw.js",
+  "tests/e2e/release.spec.mjs"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-14T22:09:58.729003Z"
+}

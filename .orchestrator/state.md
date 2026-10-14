@@ -29,7 +29,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | fill-blur-and-info | 🚧 blocked | afk | metadata-and-now-playing, rotation-layout-and-shell, pi-stability | — | 0% | 0 | ui | deferred to 2.2 (D41, owner agreed 2026-10-11); not in the 2.1 release |
 | real-server-validation-extended | ✅ done | hitl | validation-checklists, real-server-validation, content-rating-filter, settings-sheet, metadata-and-now-playing, device-helper-integration, pi-stability | — | 100% | 0 | — | 128b62e; 15 PASS, 12 SKIPPED (no Pi), Overall PASS; D33/D37 checks pass; gate-2 ok |
 | docs | ✅ done | afk | recommended-protection-preset, touch-and-labels | — | 100% | 2 | docs | landed 78b9f67; r3 anchored delta APPROVE (A-); gate ok |
-| release-bump | ⬜ pending | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | conductor-2 | 0% | 0 | — | D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9) |
+| release-bump | ⬜ pending | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | conductor-2 | 0% | 1 | — | D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9) |
 | purge-git-history | ⬜ pending | hitl | rotate-plex-token, release-bump | — | 0% | 0 | irreversible |  |
 | display-decode-hang | ✅ done | afk | rotation-layout-and-shell | — | 100% | 1 | — | landed af55616 |
 | rename-now-showing | ✅ done | afk | docs | — | 100% | 1 | ui, docs | landed 7192007; Step 8 90/90; review r1 APPROVE (Minor fixed r2) |
@@ -53,8 +53,6 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 
 <!-- deferred work with an owner; asked at the next stop -->
 
-- FOLLOW-UP (owner: release-bump): K61 — after real-server-validation and -extended pass, update README.md's (verify)/unverified tags from their results (a flag or command proven on the real server or Pi loses its tag; a failed one is corrected or removed), then re-run the docs criteria (deadline: release-bump)
-- FOLLOW-UP (owner: release-bump): docs r3 wording (with the K61 tag update): README 'Daily reload' — the reload waits while ANY dialog is open (PIN, shortcuts, Settings, Diagnostics), and a key, touch or mouse click wake does not trigger the 12-hour reload; also drop the internal id '(K60)' from Roadmap.md's 2.1.x polish line (deadline: release-bump)
 - FOLLOW-UP (owner: conductor): purge rehearsal r1 — at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped (deadline: purge-git-history)
 
 ## Follow-ups answered
@@ -128,6 +126,8 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 - FOLLOW-UP ANSWERED (owner: Nathan, "b" at 2026-10-13T16:51:55Z): purge rehearsal r1 — after the force-push, pull request #1 (refs/pull/1/head → 13af5b0) still reaches the token commit on GitHub, and plan criterion 1 cannot see it; decide before the purge: ask GitHub Support to remove PR #1's refs, or delete and re-create the repository, and whether criterion 1 should also check the PR refs
 - FOLLOW-UP ANSWERED (owner: conductor, "V1-E26 PASS (conductor-run on Castle Anthrax, 2026-10-14T21:20:35Z): 40 shows, 2,783 episodes, 0 rated lower than their show; nothing to fix" at 2026-10-14T21:21:41Z): D33 — real-server-validation-extended: check whether Plex rates TV episodes lower than their show (an episode's poster is the show's); add the row to docs/validation/real-server-extended.md and fix only if it happens
 - FOLLOW-UP ANSWERED (owner: conductor, "V1-E27 PASS (conductor-run on Castle Anthrax, 2026-10-14T21:20:38Z): GET /library/metadata with 100 comma-joined keys → HTTP 200, 100 items" at 2026-10-14T21:21:41Z): C8I1 (D37) — real-server-validation-extended: confirm Plex accepts the batched GET /library/metadata/<k1>,<k2>,... request the upward re-rate fix uses; add the row to docs/validation/real-server-extended.md
+- FOLLOW-UP ANSWERED (owner: release-bump, "landed in 1450d71 (release-bump r1/r2): README (verify) tags updated from the validation results, V1-E03/E24/E25/E27 untagged, Pi rows and V1-E04 kept; docs criteria 1-6 re-run, exit 0 (scratchpad/docs-criteria.sh)" at 2026-10-14T22:10:46Z): K61 — after real-server-validation and -extended pass, update README.md's (verify)/unverified tags from their results (a flag or command proven on the real server or Pi loses its tag; a failed one is corrected or removed), then re-run the docs criteria
+- FOLLOW-UP ANSWERED (owner: release-bump, "landed in 1450d71: the daily-reload sentence names every dialog (Settings, Diagnostics, the PIN pad, the shortcuts list) and says a key, touch or click wake does not trigger the 12-hour reload; '(K60)' dropped from the Roadmap's 2.1.x line" at 2026-10-14T22:10:46Z): docs r3 wording (with the K61 tag update): README 'Daily reload' — the reload waits while ANY dialog is open (PIN, shortcuts, Settings, Diagnostics), and a key, touch or mouse click wake does not trigger the 12-hour reload; also drop the internal id '(K60)' from Roadmap.md's 2.1.x polish line
 
 <!-- cc_utils:state
 {
@@ -551,7 +551,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "name": "release-bump",
       "status": "pending",
       "confidence": 0,
-      "redispatch": 0,
+      "redispatch": 1,
       "note": "D51: + Roadmap ideas: playlist, other media servers, no-server TMDB mode (criterion 9)",
       "blocked_by": [
         "docs",
@@ -631,16 +631,6 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
   ],
   "out_of_scope": [],
   "follow_ups": [
-    {
-      "text": "K61 \u2014 after real-server-validation and -extended pass, update README.md's (verify)/unverified tags from their results (a flag or command proven on the real server or Pi loses its tag; a failed one is corrected or removed), then re-run the docs criteria",
-      "owner": "release-bump",
-      "deadline": "release-bump"
-    },
-    {
-      "text": "docs r3 wording (with the K61 tag update): README 'Daily reload' \u2014 the reload waits while ANY dialog is open (PIN, shortcuts, Settings, Diagnostics), and a key, touch or mouse click wake does not trigger the 12-hour reload; also drop the internal id '(K60)' from Roadmap.md's 2.1.x polish line",
-      "owner": "release-bump",
-      "deadline": "release-bump"
-    },
     {
       "text": "purge rehearsal r1 \u2014 at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped",
       "owner": "conductor",
@@ -1133,6 +1123,22 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "deadline": "real-server-validation-extended",
       "quote": "V1-E27 PASS (conductor-run on Castle Anthrax, 2026-10-14T21:20:38Z): GET /library/metadata with 100 comma-joined keys \u2192 HTTP 200, 100 items",
       "at": "2026-10-14T21:21:41Z",
+      "time_source": "conductor clock"
+    },
+    {
+      "text": "K61 \u2014 after real-server-validation and -extended pass, update README.md's (verify)/unverified tags from their results (a flag or command proven on the real server or Pi loses its tag; a failed one is corrected or removed), then re-run the docs criteria",
+      "owner": "release-bump",
+      "deadline": "release-bump",
+      "quote": "landed in 1450d71 (release-bump r1/r2): README (verify) tags updated from the validation results, V1-E03/E24/E25/E27 untagged, Pi rows and V1-E04 kept; docs criteria 1-6 re-run, exit 0 (scratchpad/docs-criteria.sh)",
+      "at": "2026-10-14T22:10:46Z",
+      "time_source": "conductor clock"
+    },
+    {
+      "text": "docs r3 wording (with the K61 tag update): README 'Daily reload' \u2014 the reload waits while ANY dialog is open (PIN, shortcuts, Settings, Diagnostics), and a key, touch or mouse click wake does not trigger the 12-hour reload; also drop the internal id '(K60)' from Roadmap.md's 2.1.x polish line",
+      "owner": "release-bump",
+      "deadline": "release-bump",
+      "quote": "landed in 1450d71: the daily-reload sentence names every dialog (Settings, Diagnostics, the PIN pad, the shortcuts list) and says a key, touch or click wake does not trigger the 12-hour reload; '(K60)' dropped from the Roadmap's 2.1.x line",
+      "at": "2026-10-14T22:10:46Z",
       "time_source": "conductor clock"
     }
   ],

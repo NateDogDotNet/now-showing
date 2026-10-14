@@ -1,0 +1,135 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "release-bump--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "release-bump--derive-step8-r2-2.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "release-bump--precommit-format-r2.json"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "release-bump--dlog-check-r2.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "release-bump--review-check-r1.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "release-bump--readback-1450d71-2.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 90,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 9,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [
+   7
+  ],
+  "na": {
+   "tests where implied": "the release spec is the test criterion 5 names and it ran red at 2.0.0 and green at 2.1.0 (handback r1); the other changes are a version constant and Markdown, with nothing to mutate"
+  },
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {}
+ },
+ "_correction": {
+  "reason": "the commit message file was written before the r2 wording edits and their evidence; it was re-read against the landed diff (git show --stat 1450d71: the same seven files, the message describes the r2 wording too) and re-saved, and the first Step 8 derive read it as stale",
+  "supersedes": "release-bump--tally-step8-r2.json"
+ },
+ "_result": {
+  "total": 90,
+  "max": 90,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "release-bump--ac1-r2.json": "b124c0e9871060823d6a7fdec7255b6d2ad72c87b89d4edfea0cc0dfc568476d",
+  "release-bump--derive-step8-r2-2.json": "474cec6c46cdbf4166c26208dcc26c69c9b15351c0f8e4f9081bf7dcc302ccaa",
+  "release-bump--precommit-format-r2.json": "35fb78ac75ccbb99e16168bdb4cd627fad923a5658a378145b031209a9da4a2e",
+  "release-bump--dlog-check-r2.json": "0f9982d9bbd49163303111bd7b93cbf803278bc1c523a6f36c25899e507e94e9",
+  "release-bump--review-check-r1.json": "7a26be5deec4ac1ba9637ef9fa2d8a90c106f3543f3ee0a3a69155dd1160a5d7",
+  "release-bump--readback-1450d71-2.json": "0d14c13499d7a9a99193c5cf2b251f0f45b3f217dfe9f2937dfab4fb12123dbc"
+ },
+ "_written": "2026-10-14T22:10:26.553789Z"
+}
