@@ -529,7 +529,7 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 ### 23. `fill-blur-and-info` — Landscape fill: blurred backdrop and info panel
 
-- **Status:** deferred from 2.1 (D41); in progress in run 3 (D83), on branch `2.2`.
+- **Status:** landed in run 3 on branch `2.2` (72e9244, D83, D85); the info panel hides below 8 title-size em (D85).
 - **Goal:** Use the empty sides of a landscape screen for a dimmed poster backdrop or a synopsis panel.
 - **Findings:** U7 · **Requirements:** R-FILL-1 · **Rulings:** D1
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `metadata-and-now-playing`, `rotation-layout-and-shell`, `pi-stability`
