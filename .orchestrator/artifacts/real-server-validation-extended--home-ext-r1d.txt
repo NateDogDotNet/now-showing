@@ -1,9 +1,0 @@
-14:13:29Z Castle Anthrax: 2 direct addresses (refused from now on), 1 relay
-
->>> APPROVE THIS CODE AT plex.tv/link: DD5P  (relay test, row V1-E25) (14:13:30Z) <<<
-
-14:27:30Z DUMP V1-E25 {"open":["settings"],"pinTitle":"Enter PIN"}
-
-=== V1-E25 NOT COMPLETED (14:27:30Z)
-error: locator.waitFor: Timeout 840000ms exceeded.
-14:27:30Z all console errors: ["14:13:25Z Failed to load resource: the server responded with a status of 404 (Not Found)","14:13:29Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","14:13:30Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","14:13:30Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","14:13:36Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","14:13:45Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","14:14:06Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","14:14:52Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","14:16:19Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","14:19:27Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE","14:24:58Z Failed to load resource: net::ERR_ADDRESS_UNREACHABLE"]

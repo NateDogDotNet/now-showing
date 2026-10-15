@@ -1,9 +1,0 @@
-{
-  "cmd": "git fsck --no-dangling >/dev/null 2>&1",
-  "exit": 0,
-  "seconds": 0.29,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}

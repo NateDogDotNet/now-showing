@@ -1,9 +1,0 @@
-{
-  "cmd": "node -e \"const fs=require('fs');const g=(f)=>fs.readFileSync(f,'utf8').match(/VERSION = '([^']+)'/)[1];const a=g('sw.js'),b=g('js/main.js'),p=require('./package.json'),l=require('./package-lock.json');if(!(a===b&&b===p.version&&a==='2.1.0'&&l.version==='2.1.0'&&l.packages[''].version==='2.1.0')){console.error(a,b,p.version,l.version);process.exit(1)}\"",
-  "exit": 0,
-  "seconds": 0.03,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}

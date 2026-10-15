@@ -1,9 +1,0 @@
-{
-  "cmd": "for p in e2e-harness settings-and-schedule-core rotate-plex-token serve-config-guard rotation-layout-and-shell cache-first-fetch status-indicator validation-checklists; do grep -qE \"^\\| $p \\| \u2705 done\" .orchestrator/state.md || { echo \"M1 phase not done: $p\"; exit 1; }; done; grep -qx 'Overall: PASS' docs/validation/real-server-core.md",
-  "exit": 0,
-  "seconds": 0.01,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}

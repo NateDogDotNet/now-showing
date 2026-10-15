@@ -1,9 +1,0 @@
-{
- "phase": "limit-and-reload-fixes",
- "kind": "code",
- "failures": [
-  "no COMPLETE Step 4 tally on disk"
- ],
- "ok": false,
- "checked_at": "2026-10-14T23:17:26.466817Z"
-}

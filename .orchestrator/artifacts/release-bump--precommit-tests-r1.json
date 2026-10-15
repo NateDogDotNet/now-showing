@@ -1,9 +1,0 @@
-{
-  "cmd": "test $(python3 -c \"import json;print(json.load(open('/home/nathan/plex-poster-app/.orchestrator/artifacts/release-bump--ac4-r1.json'))['exit'])\") = 0",
-  "exit": 0,
-  "seconds": 0.04,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}

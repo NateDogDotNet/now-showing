@@ -1,5 +1,0 @@
-23:56:04Z this run uses a direct connection: yes
-
-=== GPCR DONE (23:56:06Z)
-episodes read 355 from 10 rated shows: with grandparentContentRating 0, without 355; rating-ish keys of the first episode: ["ratingKey","parentRatingKey","grandparentRatingKey","grandparentGuid","grandparentSlug","type","grandparentKey","grandparentTitle","contentRating","audienceRating","grandparentThumb","grandparentArt","grandparentTheme","audienceRatingImage"]; /status/sessions → 200, 0 item(s): []
-23:56:06Z all console errors: ["23:56:00Z Failed to load resource: the server responded with a status of 404 (Not Found)"]

@@ -1,7 +1,0 @@
-Close rotate-plex-token and hand off the core validation
-
-rotate-plex-token passes its done-gate (Step 8 tally 55/55 after a
-recorded correction) on the receipt debe086. real-server-validation is
-claimed and its hand-off checklist saved for the owner.
-
-Co-Authored-By: Claude <noreply@anthropic.com>

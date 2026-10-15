@@ -1,9 +1,0 @@
-{
-  "cmd": "! git diff -U0 7192007^ 7192007 | grep -E '^\\+' | grep -nE '(X-Plex-Token[=:] *[A-Za-z0-9_-]{15,}|BEGIN (RSA|OPENSSH) PRIVATE KEY|password *= *[\"\\x27][^\"\\x27]{4,})'",
-  "exit": 0,
-  "seconds": 0.01,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}

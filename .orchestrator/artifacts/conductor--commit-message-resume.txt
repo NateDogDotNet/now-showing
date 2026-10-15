@@ -1,8 +1,0 @@
-Resume the 2.1 run locally: repoint helper scripts, save stop 15
-
-The seven round--* helper scripts now point at /home/nathan instead of
-the container's /home/user. The run header records the local resume.
-Stop 15 is saved in phases/rotate-plex-token.md with its stopcheck
-records, along with the criterion 7 probe for release-bump.
-
-Co-Authored-By: Claude <noreply@anthropic.com>

@@ -1,9 +1,0 @@
-{
- "phase": "serve-config-guard",
- "review": "serve-config-guard--review-r2.md",
- "done_phases": [],
- "hits": [],
- "no_findings": false,
- "flagged": [],
- "checked_at": "2026-10-08T22:27:07.760603Z"
-}

@@ -1,9 +1,0 @@
-{
-  "cmd": "awk '/^## Issues/{s=1;next} /^## /{s=0} s' .orchestrator/artifacts/rename-now-showing--review-r1.md | grep -qE '^[0-9]+\\. \\*\\*(Critical|Major)' && exit 1; exit 0",
-  "exit": 0,
-  "seconds": 0.01,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}

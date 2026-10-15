@@ -1,9 +1,0 @@
-{
-  "cmd": "d=$(mktemp -d) && git clone -q \"$(git remote get-url origin)\" \"$d/fresh\" && test -z \"$(git -C \"$d/fresh\" log --all --oneline -- config.js)\" && test -z \"$(git ls-remote \"$(git remote get-url origin)\" \"refs/pull/*\")\" && while IFS= read -r line; do lit=${line%%==>*}; test -n \"$lit\" && test -z \"$(git -C \"$d/fresh\" log --all -F -S\"$lit\" --oneline)\" || exit 1; done < \"$REPLACE_LIST\"",
-  "exit": 0,
-  "seconds": 5.36,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}

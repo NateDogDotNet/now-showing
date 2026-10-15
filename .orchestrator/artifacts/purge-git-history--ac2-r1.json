@@ -1,9 +1,0 @@
-{
-  "cmd": "test -f docs/security/history-purge.md && grep -qx 'Purged: yes' docs/security/history-purge.md",
-  "exit": 0,
-  "seconds": 0.0,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}

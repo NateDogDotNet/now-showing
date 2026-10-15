@@ -1,9 +1,0 @@
-{
-  "cmd": "test -f tests/poster-cache.test.js && node --test tests/poster-cache.test.js",
-  "exit": 0,
-  "seconds": 0.44,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "  ...\n# Subtest: random() skips entries without a stored rating (cached before 2.1) while a limit is set\nok 23 - random() skips entries without a stored rating (cached before 2.1) while a limit is set\n  ---\n  duration_ms: 33.4867\n  type: 'test'\n  ...\n# Subtest: random() skips unmapped and non-string ratings while a limit is set\nok 24 - random() skips unmapped and non-string ratings while a limit is set\n  ---\n  duration_ms: 7.290353\n  type: 'test'\n  ...\n# Subtest: random() with no limit (or none given) draws from every entry\nok 25 - random() with no limit (or none given) draws from every entry\n  ---\n  duration_ms: 22.849878\n  type: 'test'\n  ...\n# Subtest: random() returns null when nothing in the cache is allowed\nok 26 - random() returns null when nothing in the cache is allowed\n  ---\n  duration_ms: 0.399614\n  type: 'test'\n  ...\n# Subtest: random() with a limit still honours excludeKey and returns the blob\nok 27 - random() with a limit still honours excludeKey and returns the blob\n  ---\n  duration_ms: 20.167066\n  type: 'test'\n  ...\n1..27\n# tests 27\n# suites 0\n# pass 27\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 374.086571",
-  "stderr_tail": ""
-}

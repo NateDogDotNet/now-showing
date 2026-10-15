@@ -1,9 +1,0 @@
-{
-  "cmd": "for f in docs/validation/real-server-core.md docs/validation/real-server-extended.md; do test -f \"$f\" && grep -qx 'Overall: PASS' \"$f\" && ! grep -q 'PENDING' \"$f\" || { echo \"validation not PASS: $f\"; exit 1; }; done",
-  "exit": 0,
-  "seconds": 0.01,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}

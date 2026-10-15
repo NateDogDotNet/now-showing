@@ -1,8 +1,0 @@
-| # | kind | exit | criterion (serve-config-guard, r2) |
-|---|---|---|---|
-| 1 | cmd | 0 | `test -f tests/serve.test.js && node --test tests/serve.test.js` |
-| 2 | cmd | 0 | `npm test` |
-| 3 | cmd | 0 | `grep -q 'isLoopback' scripts/serve.mjs && grep -q 'export function isLoopback' scripts/net` |
-| 4 | cmd | 0 | `test -f scripts/serve.mjs && test -f scripts/net.mjs && ! grep -qiE 'x-forwarded\|forwarded` |
-| 5 | cmd | 0 | `test -z "$(git status --porcelain -- js css index.html sw.js scripts/mock-plex.mjs)"` |
-| 6 | narrated | — | `narrated: run `node --test tests/serve.test.js 2>&1 \| grep -E '^# (pass\|fail\|skipped)'` on` |

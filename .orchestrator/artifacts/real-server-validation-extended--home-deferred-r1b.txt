@@ -1,9 +1,0 @@
-21:20:26Z this run uses a direct connection: yes
-21:20:27Z TV Shows: 86 shows, 82 with a contentRating
-
-=== V1-E26 PASS (21:20:35Z)
-shows checked 40 of 82 rated (of 86); episodes 2783: same rating as the show 2737, lower 0, higher or other 46, unrated 0; distinct show/episode pairs rated lower: []
-
-=== V1-E27 PASS (21:20:38Z)
-100 keys in one GET /library/metadata/k1,...,k100 (commas literal, as js/plex.js items() sends; path length 605 chars) → HTTP 200, 100 items back, 100 distinct, all among the asked keys: true, 99 carry contentRating; 3 keys → HTTP 200, 3 items
-21:20:38Z all console errors: ["21:20:23Z Failed to load resource: the server responded with a status of 404 (Not Found)"]

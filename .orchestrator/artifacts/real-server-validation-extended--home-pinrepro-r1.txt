@@ -1,9 +1,0 @@
-04:19:00 loaded (fresh, no sign-in)                   {"pin":false,"dialogs":[],"pinTitle":"Enter PIN","formError":"","pinStatus":"not set"}
-04:19:01 settings opened from the empty card          {"pin":false,"dialogs":["settings"],"pinTitle":"Enter PIN","formError":"","pinStatus":"not set"}
-04:19:02 household on, PG-13 selected (not saved)     {"pin":false,"dialogs":["settings"],"pinTitle":"Enter PIN","formError":"","pinStatus":"not set"}
-04:19:03 after Save (household PG-13)                 {"pin":false,"dialogs":[],"pinTitle":"Enter PIN","formError":"","pinStatus":"not set"}
-04:19:04 pressed s                                    {"pin":false,"dialogs":["settings"],"pinTitle":"Enter PIN","formError":"","pinStatus":"not set"}
-04:19:04 custom 0.2 min typed, Tab pressed            {"pin":false,"dialogs":["settings"],"pinTitle":"Enter PIN","formError":"","pinStatus":"not set"}
-04:19:06 after Save (custom interval)                 {"pin":false,"dialogs":[],"pinTitle":"Enter PIN","formError":"","pinStatus":"not set"}
-04:19:36 30 s later                                   {"pin":false,"dialogs":[],"pinTitle":"Enter PIN","formError":"","pinStatus":"not set"}
-04:19:37 pressed s again                              {"pin":false,"dialogs":["settings"],"pinTitle":"Enter PIN","formError":"","pinStatus":"not set"}

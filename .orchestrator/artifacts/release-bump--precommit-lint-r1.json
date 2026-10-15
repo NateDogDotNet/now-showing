@@ -1,9 +1,0 @@
-{
-  "cmd": "for f in $(git diff --cached --name-only -- '*.js' '*.mjs'); do node --check \"$f\" || exit 1; done",
-  "exit": 0,
-  "seconds": 0.13,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}

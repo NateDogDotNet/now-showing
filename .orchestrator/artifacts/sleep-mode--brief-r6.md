@@ -1,7 +1,0 @@
-# Brief — sleep-mode r6 (re-dispatch 5 of 5 — the last; test only)
-
-Agent name: sleep-mode-builder-r6 · effort: high · worktree `/home/user/wt-sleep-mode` (staged tree f895f3f = r3 + the r4 candidate). Earlier briefs bind. E2E_PORT=18840 E2E_MOCK_PORT=18841. Stage, do not commit. Touch ONLY tests/e2e/sleep.spec.mjs.
-
-The conductor mutant `artifacts/sleep-mode--mutation-dialog-input-swallowed-r4.txt` (removing `&& !inOpenDialog(e)` in js/main.js manualWake) survives: e2e case 12 presses Escape only after a click has already woken the display. In case 12 (or a new case next to it): with Settings open and the veil back (asleep), the FIRST input is a key press aimed at the dialog (focus inside the dialog, e.g. Escape) → it acts (the dialog closes, or the focused control reacts) and is not swallowed; separately, the first pointer press on a focusable control inside the dialog while asleep gives it focus. Paste the new assertions failing with the mutant applied (temp copy) and passing without it. Keep the sleep spec's runtime well under E2E_SPEC_TIMEOUT. Criteria 1–5 must still pass; paste them. Lint with `/home/user/plex-poster-app/.orchestrator/artifacts/round--eslint-r1e.config.mjs`. Do not write into .orchestrator/artifacts except the handback.
-
-Handback `/home/user/plex-poster-app/.orchestrator/artifacts/sleep-mode--handback-builder-r6.md` — FIRST line `produced_by: orchestrator-builder · model: <model> · effort: <level> · phase: sleep-mode · round: r6`, header fields, blank line, `Agent: sleep-mode-builder-r6 · dispatched: <stamp>`.

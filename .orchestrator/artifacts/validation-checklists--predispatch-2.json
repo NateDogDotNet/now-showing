@@ -1,9 +1,0 @@
-{
- "phase": "validation-checklists",
- "kind": "evidence",
- "failures": [
-  "no plan-acceptance table in the phase file"
- ],
- "ok": false,
- "checked_at": "2026-10-08T22:13:23.156431Z"
-}

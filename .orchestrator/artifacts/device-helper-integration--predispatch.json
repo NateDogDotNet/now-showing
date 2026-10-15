@@ -1,9 +1,0 @@
-{
- "phase": "device-helper-integration",
- "kind": "code",
- "failures": [
-  "no COMPLETE Step 4 tally on disk"
- ],
- "ok": false,
- "checked_at": "2026-10-11T03:55:43.312005Z"
-}

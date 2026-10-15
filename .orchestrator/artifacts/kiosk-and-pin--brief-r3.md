@@ -1,7 +1,0 @@
-# Brief — kiosk-and-pin r3 (re-dispatch 2)
-
-Agent name: kiosk-and-pin-builder-r3 · effort: medium · worktree `/home/user/wt-kiosk-and-pin` (r2 staged). The r1 and r2 briefs bind. E2E_PORT=22420 E2E_MOCK_PORT=22421. Stage, do not commit. Edit ONLY tests/kiosk.test.js unless the test exposes a real bug (then say so).
-
-One item: a conductor mutant that removes the `Math.min(…, LOCK_MAX_MS)` cap in js/kiosk.js's lock-advancing function (so `lockedUntil` grows as 60 s × 2^(n−5) without limit) survives. `lockRemainingMs()` caps only the displayed wait, so with the mutant 20 wrong PINs lock for ~22 days while showing 15 min. Add unit cases that pin the real behaviour: after many wrong PINs (e.g. 10 and 20) `lockedUntil − now` ≤ 15 min, and once 15 min have passed since the last wrong PIN the lock is over (`lockRemainingMs` is 0 and a PIN is accepted again) — including after a reload (the stored `plexPoster.pinLock` read back through the same parser). Prove it: apply the mutant, watch the new case fail, restore (leave js/kiosk.js exactly as staged). Run criteria 1–6 and lint (`npx eslint -c /home/user/plex-poster-app/.orchestrator/artifacts/round--eslint-r1e.config.mjs tests/kiosk.test.js`) and paste outputs.
-
-Handback `/home/user/plex-poster-app/.orchestrator/artifacts/kiosk-and-pin--handback-builder-r3.md` — FIRST line `produced_by: orchestrator-builder · model: <model> · effort: <level> · phase: kiosk-and-pin · round: r3`, header fields, blank line, `Agent: kiosk-and-pin-builder-r3 · dispatched: <stamp>`.

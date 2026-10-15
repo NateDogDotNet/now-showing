@@ -1,5 +1,0 @@
-{
- "exit": 1,
- "note": "git show --name-only 8badf7d: extra=['.orchestrator/artifacts/real-server-validation-extended--home-e08-r1.mjs', '.orchestrator/artifacts/real-server-validation-extended--home-e08-r1.txt', '.orchestrator/phases/real-server-validation-extended.md']",
- "written": "2026-10-14T21:17:46.650467Z"
-}

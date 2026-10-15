@@ -1,9 +1,0 @@
-{
-  "cmd": "grep -Eqi 'play ?list' Roadmap.md && grep -Eqi 'jellyfin|emby|other media servers' Roadmap.md && grep -qi 'TMDB\\|The Movie Database' Roadmap.md && grep -qi '^## .*Suggested order' Roadmap.md",
-  "exit": 1,
-  "seconds": 0.0,
-  "parsed": null,
-  "launched": true,
-  "stdout_tail": "",
-  "stderr_tail": ""
-}
