@@ -38,7 +38,10 @@ test('a carried playback time is read once and only while it is fresh', (t) => {
   session.setItem('plexPoster.carry', 'not json');
   assert.equal(takeCarriedPlayback(), null);
   session.setItem('plexPoster.carry', JSON.stringify({ lastPlaybackAt: now + 99_000, at: now - 10 }));
-  assert.equal(takeCarriedPlayback(), now, 'never from the future');
+  const before = Date.now();
+  const clamped = takeCarriedPlayback();
+  const after = Date.now();
+  assert.ok(clamped >= before && clamped <= after, 'never from the future');
 });
 
 test('without sessionStorage a load is a fresh clock', (t) => {

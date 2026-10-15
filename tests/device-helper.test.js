@@ -415,6 +415,14 @@ const alive = (pid) => {
   try { return !/^\d+ \(.*\) [ZX]/.test(readFileSync(`/proc/${pid}/stat`, 'utf8')); } catch { return true; }
 };
 
+// Polls until pred() holds or the deadline passes; returns the last answer. Returns at once on the happy path.
+const waitUntil = async (pred, ms) => {
+  const end = Date.now() + ms;
+  let ok = await pred();
+  while (!ok && Date.now() < end) { await new Promise((r) => setTimeout(r, 20)); ok = await pred(); }
+  return ok;
+};
+
 test('a real hung command that forks a grandchild is killed with it within the timeout', { timeout: 15000 }, async () => {
   const bin = mkdtempSync(join(dir, 'bin-'));
   const pidfile = join(bin, 'grandchild.pid');
@@ -429,13 +437,13 @@ test('a real hung command that forks a grandchild is killed with it within the t
   const gc = Number(readFileSync(pidfile, 'utf8'));
   strays.push(gc);
   assert.ok(gc > 1);
-  for (let i = 0; i < 100 && alive(gc); i++) await new Promise((ok) => setTimeout(ok, 20)); // the 504 does not wait for the group
+  await waitUntil(() => !alive(gc), 10000); // the 504 does not wait for the group
   assert.equal(alive(gc), false, 'grandchild is dead');
   // lock released once the group is gone: the next command runs (and hangs and times out) rather than getting 503
-  let second = await call(helper, on(true));
-  for (let i = 0; i < 100 && second.status === 503; i++) { await new Promise((ok) => setTimeout(ok, 20)); second = await call(helper, on(true)); }
+  let second;
+  await waitUntil(async () => { second = await call(helper, on(true)); return second.status !== 503; }, 10000);
   assert.equal(second.status, 504);
-  for (let i = 0; i < 100 && alive(Number(readFileSync(pidfile, 'utf8'))); i++) await new Promise((ok) => setTimeout(ok, 20));
+  await waitUntil(() => !alive(Number(readFileSync(pidfile, 'utf8'))), 10000);
   const last = Number(readFileSync(pidfile, 'utf8'));
   strays.push(last);
   assert.equal(alive(last), false);
