@@ -1,6 +1,6 @@
 # Orchestration State
 
-run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · conductor-1 · started 2026-10-08T22:05Z · goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters · invocation: phases/_invocation.md · resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user → /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed · conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) · rotate-plex-token done 2026-10-14 (debe086) · rotate-plex-token done 2026-10-14 (debe086) · both real-server validations done 2026-10-14 (5c664af, 128b62e; agent-run on HOME, D50) · rename-now-showing done (7192007) · release-bump done 2026-10-14 (1450d71, version 2.1.0; M4 closes) · limit-and-reload-fixes done (090d231) · next action: owner — stop 16 in phases/purge-git-history.md (the purge approval; precondition review first)
+run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · conductor-1 · started 2026-10-08T22:05Z · goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters · invocation: phases/_invocation.md · resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user → /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed · conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) · rotate-plex-token done 2026-10-14 (debe086) · rotate-plex-token done 2026-10-14 (debe086) · both real-server validations done 2026-10-14 (5c664af, 128b62e; agent-run on HOME, D50) · rename-now-showing done (7192007) · release-bump done 2026-10-14 (1450d71, version 2.1.0; M4 closes) · limit-and-reload-fixes done (090d231) · purge-git-history done 2026-10-15 (3efea7c; repository now NateDogDotNet/now-showing) · next action: conductor — pull request (owner 4a), close tail (decision-checkpoint, milestone round, out-of-scope sweep), HOME clean-up, then move the checkout to /home/nathan/now-showing (D76)
 
 | Phase | Status | Mode | Blocked by | Claim | Confidence | Re-dispatches | Tags | Note |
 |---|---|---|---|---|---|---|---|---|
@@ -30,12 +30,12 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | real-server-validation-extended | ✅ done | hitl | validation-checklists, real-server-validation, content-rating-filter, settings-sheet, metadata-and-now-playing, device-helper-integration, pi-stability | — | 100% | 0 | — | 128b62e; 15 PASS, 12 SKIPPED (no Pi), Overall PASS; D33/D37 checks pass; gate-2 ok |
 | docs | ✅ done | afk | recommended-protection-preset, touch-and-labels | — | 100% | 2 | docs | landed 78b9f67; r3 anchored delta APPROVE (A-); gate ok |
 | release-bump | ✅ done | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | — | 100% | 1 | — | 1450d71 (2.1.0); Step 8 90/90; gate-4 ok; phase-gate PASS; code-review findings routed by D73 |
-| purge-git-history | 🚧 blocked | hitl | rotate-plex-token, release-bump, limit-and-reload-fixes | conductor-2 | 0% | 0 | irreversible | stop 16 saved: waiting on the owner's approval (D46, D49, D76, D77) |
+| purge-git-history | ✅ done | hitl | rotate-plex-token, release-bump, limit-and-reload-fixes | — | 100% | 0 | irreversible | 3efea7c receipt; repo re-created as now-showing; criteria 1-4 exit 0; tally 55/55 |
 | display-decode-hang | ✅ done | afk | rotation-layout-and-shell | — | 100% | 1 | — | landed af55616 |
 | rename-now-showing | ✅ done | afk | docs | — | 100% | 1 | ui, docs | landed 7192007; Step 8 90/90; review r1 APPROVE (Minor fixed r2) |
 | limit-and-reload-fixes | ✅ done | afk | release-bump | — | 100% | 1 | risk:high | 090d231; Step 8 90/90; both r2 lenses APPROVE; gate ok |
 
-**Progress:** 27/30 phases done
+**Progress:** 28/30 phases done
 **Frontier:** (none)
 
 ## Unknowns
@@ -54,7 +54,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 
 <!-- deferred work with an owner; asked at the next stop -->
 
-- FOLLOW-UP (owner: conductor): purge rehearsal r1 — at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped (deadline: purge-git-history)
+(none)
 
 ## Follow-ups answered
 
@@ -129,6 +129,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 - FOLLOW-UP ANSWERED (owner: conductor, "V1-E27 PASS (conductor-run on Castle Anthrax, 2026-10-14T21:20:38Z): GET /library/metadata with 100 comma-joined keys → HTTP 200, 100 items" at 2026-10-14T21:21:41Z): C8I1 (D37) — real-server-validation-extended: confirm Plex accepts the batched GET /library/metadata/<k1>,<k2>,... request the upward re-rate fix uses; add the row to docs/validation/real-server-extended.md
 - FOLLOW-UP ANSWERED (owner: release-bump, "landed in 1450d71 (release-bump r1/r2): README (verify) tags updated from the validation results, V1-E03/E24/E25/E27 untagged, Pi rows and V1-E04 kept; docs criteria 1-6 re-run, exit 0 (scratchpad/docs-criteria.sh)" at 2026-10-14T22:10:46Z): K61 — after real-server-validation and -extended pass, update README.md's (verify)/unverified tags from their results (a flag or command proven on the real server or Pi loses its tag; a failed one is corrected or removed), then re-run the docs criteria
 - FOLLOW-UP ANSWERED (owner: release-bump, "landed in 1450d71: the daily-reload sentence names every dialog (Settings, Diagnostics, the PIN pad, the shortcuts list) and says a key, touch or click wake does not trigger the 12-hour reload; '(K60)' dropped from the Roadmap's 2.1.x line" at 2026-10-14T22:10:46Z): docs r3 wording (with the K61 tag update): README 'Daily reload' — the reload waits while ANY dialog is open (PIN, shortcuts, Settings, Diagnostics), and a key, touch or mouse click wake does not trigger the 12-hour reload; also drop the internal id '(K60)' from Roadmap.md's 2.1.x polish line
+- FOLLOW-UP ANSWERED (owner: conductor, "commit-map saved as artifacts/purge-git-history--commit-map.txt (128 lines, old SHA to new SHA) at the purge, 2026-10-15; the original stays with the backup outside the repository" at 2026-10-15T01:57:21Z): purge rehearsal r1 — at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped
 
 <!-- cc_utils:state
 {
@@ -567,10 +568,10 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
     },
     {
       "name": "purge-git-history",
-      "status": "blocked",
-      "confidence": 0,
+      "status": "done",
+      "confidence": 100,
       "redispatch": 0,
-      "note": "stop 16 saved: waiting on the owner's approval (D46, D49, D76, D77)",
+      "note": "3efea7c receipt; repo re-created as now-showing; criteria 1-4 exit 0; tally 55/55",
       "blocked_by": [
         "rotate-plex-token",
         "release-bump",
@@ -580,7 +581,15 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
         "irreversible"
       ],
       "mode": "hitl",
-      "claim": "conductor-2"
+      "claim": "",
+      "done_overrides": [
+        {
+          "failures": [
+            "purge-git-history--gate-3.json is refused and no EXCEPTION: line quotes its failures"
+          ],
+          "reason": "the security and precondition reviews preceded any tally by design for an irreversible phase (skill Step 7); recorded as EXCEPTION in phases/purge-git-history.md; every other gate check passes (gate-3)"
+        }
+      ]
     },
     {
       "name": "display-decode-hang",
@@ -647,13 +656,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
     }
   ],
   "out_of_scope": [],
-  "follow_ups": [
-    {
-      "text": "purge rehearsal r1 \u2014 at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped",
-      "owner": "conductor",
-      "deadline": "purge-git-history"
-    }
-  ],
+  "follow_ups": [],
   "follow_ups_answered": [
     {
       "text": "conductor-alone rulings on serve-config-guard (symlink escape and dotfile 404 under D9; cross-site 127.0.0.1 response dismissed) to list at the next stop",
@@ -1157,8 +1160,16 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
       "quote": "landed in 1450d71: the daily-reload sentence names every dialog (Settings, Diagnostics, the PIN pad, the shortcuts list) and says a key, touch or click wake does not trigger the 12-hour reload; '(K60)' dropped from the Roadmap's 2.1.x line",
       "at": "2026-10-14T22:10:46Z",
       "time_source": "conductor clock"
+    },
+    {
+      "text": "purge rehearsal r1 \u2014 at the purge, save .git/filter-repo/commit-map as an artifact beside docs/security/history-purge.md so the trail's 59 rewritten SHAs can be mapped",
+      "owner": "conductor",
+      "deadline": "purge-git-history",
+      "quote": "commit-map saved as artifacts/purge-git-history--commit-map.txt (128 lines, old SHA to new SHA) at the purge, 2026-10-15; the original stays with the backup outside the repository",
+      "at": "2026-10-15T01:57:21Z",
+      "time_source": "conductor clock"
     }
   ],
-  "header": "run 1 \u00b7 plan docs/integration-plan.md @ 0f1f82e \u00b7 kernel dotclaude@b4a6fb5 \u00b7 conductor-1 \u00b7 started 2026-10-08T22:05Z \u00b7 goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters \u00b7 invocation: phases/_invocation.md \u00b7 resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user \u2192 /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed \u00b7 conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 both real-server validations done 2026-10-14 (5c664af, 128b62e; agent-run on HOME, D50) \u00b7 rename-now-showing done (7192007) \u00b7 release-bump done 2026-10-14 (1450d71, version 2.1.0; M4 closes) \u00b7 limit-and-reload-fixes done (090d231) \u00b7 next action: owner \u2014 stop 16 in phases/purge-git-history.md (the purge approval; precondition review first)"
+  "header": "run 1 \u00b7 plan docs/integration-plan.md @ 0f1f82e \u00b7 kernel dotclaude@b4a6fb5 \u00b7 conductor-1 \u00b7 started 2026-10-08T22:05Z \u00b7 goal: owners of always-on Plex poster displays can set one up without a keyboard and leave it running for years without burn-in, needless hardware wear, exposed credentials or unsuitable posters \u00b7 invocation: phases/_invocation.md \u00b7 resumed locally 2026-10-13 at 160aca2 (handoff) by conductor-2 on /home/nathan/plex-poster-app; kernel still b4a6fb5 (no cc_utils change since; ~/.claude HEAD 2f1d434e); round--* helper scripts repointed /home/user \u2192 /home/nathan (worktrees /home/nathan/wt-<phase>), not phase-hashed \u00b7 conductor commits 3603ed8 (D46-D48, msg artifacts/conductor--commit-message-d46-d48.txt), a08eeab (plan: release-bump Output + criterion 7, msg artifacts/conductor--commit-message-plan-d48.txt) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 rotate-plex-token done 2026-10-14 (debe086) \u00b7 both real-server validations done 2026-10-14 (5c664af, 128b62e; agent-run on HOME, D50) \u00b7 rename-now-showing done (7192007) \u00b7 release-bump done 2026-10-14 (1450d71, version 2.1.0; M4 closes) \u00b7 limit-and-reload-fixes done (090d231) \u00b7 purge-git-history done 2026-10-15 (3efea7c; repository now NateDogDotNet/now-showing) \u00b7 next action: conductor \u2014 pull request (owner 4a), close tail (decision-checkpoint, milestone round, out-of-scope sweep), HOME clean-up, then move the checkout to /home/nathan/now-showing (D76)"
 }
 -->

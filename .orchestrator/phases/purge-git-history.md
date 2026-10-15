@@ -5,7 +5,7 @@
 - Claimed: 2026-10-15T00:28:43Z (every blocker done: rotate-plex-token debe086, release-bump 1450d71, limit-and-reload-fixes 090d231)
 - Dispatched: n/a        Re-dispatches: 0        Inner revision rounds: 0
 - Last verification: 2026-10-13T16:45:10Z (rehearsal)
-- Commit(s): n/a — no phase commit yet
+- Commit(s): 3efea7c — the receipt (on the rewritten history)
 
 ## Pre-claim preparation
 
@@ -22,7 +22,7 @@ Results:
 - PROBE: plain fresh clone (plan step 3 as written) → filter-repo turns origin/* into local branches and removes the remote, so `git push --force-with-lease --all` covers both branches — meets criterion 4 (precondition evidence)
 - PROBE: plan criterion 1 verbatim against the stand-in → exit 0 — meets criterion 1 as written
 - PROBE: plan criterion 3 verbatim → exit 0 — meets criterion 3
-- PROBE: after the push, the stand-in still holds 1 commit and 1 blob with the value, through `refs/pull/1/head` → 13af5b0, which reaches 2 config.js commits. A plain clone fetches only branches, so criterion 1 cannot see it. GitHub does not accept pushes to `refs/pull/*` — fails the phase's goal ("remove config.js from every commit"); a spec-gap, asked before the action (FOLLOW-UP below)
+- PROBE: after the push, the stand-in still holds 1 commit and 1 blob with the value, through `refs/pull/1/head` → 13af5b0, which reaches 2 config.js commits. A plain clone fetches only branches, so criterion 1 cannot see it. GitHub does not accept pushes to `refs/pull/*` — fails the phase's goal ("remove config.js from every commit"); a spec-gap, asked before the action (FOLLOW-UP below) — fails criterion 1 as then written (the PR ref keeps the token commit reachable) — D49
 - PROBE: commit map `.git/filter-repo/commit-map` → 59 old→new pairs (sample: d409ad7→7938fea, 78b9f67→2cc8112, ee6fbbe→82ef01c). The tracked text holds about 1710 SHA-like tokens (`git grep -Eo '\b[0-9a-f]{7,40}\b' -- .orchestrator docs README.md Roadmap.md | wc -l`) that the rewrite does not update — meets criterion 4 (precondition evidence); FOLLOW-UP below
 
 Findings, classified:
@@ -82,3 +82,37 @@ Reply with one letter per open item, in the shape `1 <a|b|c> 3 <a|b> 4 <a|b>`. I
 <!-- end stop 16 -->
 
 - Answer to stop message 16: "1 a 3 a 4 a" — chat; recorded by the conductor at 2026-10-15T01:53:44.275338Z
+
+## Owner approval — chat, 2026-10-15T01:52:37.920Z (transcript time): "1 a 3 a 4 a"
+`closer approve` recorded it against the transcript (artifacts/purge-git-history--approve record, transcript_checked true). Item 2 was answered in advance (D76). 1a: run the purge; 3a: the conductor runs it; 4a: open the pull request afterwards.
+
+## The run — 2026-10-15T01:54:17Z, `closer act` (artifacts/purge-git-history--act.json, exit 0, ok true)
+- Rehearsal on the live mirror first, without --confirm-delete (`purge-git-history--run-rehearsal-r1.txt`): 128 commits, 20 list entries, rewrite verified, stopped before the delete. Then the real run (`--run-r1.txt`, tails in the act record): backup mirror and commit-map kept in `/home/nathan/.now-showing-purge-20261015` (private, 700; holds the token: the owner says when to delete it); `gh repo delete NateDogDotNet/plex-poster-app`; `gh repo create NateDogDotNet/now-showing --public`; push --all/--tags; default branch main; Pages main `/`; homepage set; step 5b criterion 1 against a fresh clone of the new repository: exit 0; re-sync: checkout tip 837f624 (rewritten), config.js in 0 commits, object 5c4a716 gone, orch/* branches deleted.
+- After the run: now-showing exists (default main, homepage https://natedogdotnet.github.io/now-showing/), Pages built, site 200; the old repository name resolves to nothing; origin refs: main 82ef01c, the working branch, no refs/pull/*.
+- Incident, none. The rehearsal directory `/home/nathan/.now-showing-purge-rehearsal-20261015T015310` also holds a mirror with the token; the safety hook refused the conductor's `rm -rf` outside the checkout, so the owner deletes it.
+
+## Plan acceptance
+| # | Item | Command | Exit | Evidence |
+|---|---|---|---|---|
+| 1 | plan criterion 1 (fresh clone of origin: no config.js, no refs/pull/*, every replace-list entry absent per line) | evidence.py exec (plan command, REPLACE_LIST rebuilt from the backup outside the repository and removed after) | 0 | `purge-git-history--ac1-r1.json`; also step 5b of the run |
+| 2 | plan criterion 2 (receipt, Purged: yes) | evidence.py exec (plan command) | 0 | `purge-git-history--ac2-r1.json` |
+| 3 | plan criterion 3 (git fsck) | evidence.py exec (plan command) | 0 | `purge-git-history--ac3-r1.json` |
+| 4 | plan criterion 4, narrated: owner says public → not skipped; precondition review before the pause; the owner approved and the conductor ran it (3a) | the receipt holds no token-like string (checked by command); precondition review MET (r1e); approval and act records | 0 | `purge-git-history--ac4-r1.json`, `--precondition-r1.md`, `--act.json` |
+
+## Pre-commit
+N/A — the phase output is one Markdown receipt; criterion 4's check is its secret scan.
+
+## Step 8 tally — purge-git-history--tally-step8-r1.md
+| Category | Score |
+|---|---|
+| acceptance criteria pass fresh _critical_ | 35/35 |
+| diff scope matches phase | 15/15 |
+| commit message accurate | 5/5 |
+| **Total** | **55/55** (100%) |
+**Band:** COMPLETE
+**Caps applied:** none
+
+- Landed: 3efea7c — "Record the history purge: config.js and the private strings are gone from every commit"
+
+- Follow-up (rehearsal r1, owner conductor) answered: the filter-repo commit-map is saved as `artifacts/purge-git-history--commit-map.txt` (old SHA → new SHA, 128 lines; it holds no secret) beside the receipt's evidence; the original stays with the backup.
+- EXCEPTION (rule 2 as the gate reads it): the security review (`--security-review-r1.md`) and the precondition review (`--precondition-r1.md`) ran before any Step 4 tally and without a `closer predispatch` record. The skill says that is by design for an irreversible phase ("an irreversible phase's precondition and security reviews — runs before the Step 4 tally by design; its verdict is a Step 4 row"); they are rows 4's evidence above. Closed with --no-gate quoting this.

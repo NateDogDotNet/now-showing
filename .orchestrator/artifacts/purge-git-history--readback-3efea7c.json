@@ -1,0 +1,19 @@
+{
+ "cmd": "diff <(git log -1 --format=%B 3efea7c) .orchestrator/artifacts/purge-git-history--commit-message-final.txt",
+ "sha": "3efea7c",
+ "equal": true,
+ "tokens": [
+  "docs/security/history-purge.md"
+ ],
+ "missing_tokens": [],
+ "exempt": {},
+ "stale": false,
+ "commit_rows": [
+  1,
+  2,
+  3,
+  4
+ ],
+ "ok": true,
+ "checked_at": "2026-10-15T01:56:26.255244Z"
+}

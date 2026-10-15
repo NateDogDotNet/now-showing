@@ -1,0 +1,8 @@
+Record the history purge: config.js and the private strings are gone from every commit
+
+docs/security/history-purge.md records the rewrite of 128 commits, the
+deletion of NateDogDotNet/plex-poster-app and the creation of
+NateDogDotNet/now-showing with the rewritten history, and the checks run
+against a fresh clone afterwards (D49, D76, D77).
+
+Co-Authored-By: Claude <noreply@anthropic.com>

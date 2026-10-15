@@ -1,0 +1,20 @@
+{
+ "phase": "purge-git-history",
+ "sha": "3efea7c",
+ "tag": null,
+ "ok": false,
+ "failures": [
+  "a review is on disk with no passing `closer predispatch` before it (rule 2: the table precedes any reviewer)",
+  "D49 named by a failing probe is not in docs/decisions.md"
+ ],
+ "phase_file_sha256": "ee1d4a4554a3882ff30362c508b26401a60cbdb3b84f5e8208e808ec441713dd",
+ "phase_file_sha256_noretro": "c35f1bf326bed9d95b170c6dd5fc317fa4dbbeb837752bc3ddb4e2a7efefbb0b",
+ "scripts_sha256": {
+  "purge-git-history--criterion1-grid-r1.sh": "762e24ca30890a6b5288bcf3fae930c3beb5982445db98b3815ed0167f2abd88",
+  "purge-git-history--plainclone-r1.sh": "e699e16d7c49b370906ce3125a9f17b483d42f647b87d17f9b42d4624560d395",
+  "purge-git-history--rehearsal-r1.sh": "302b5fa039e1fc792ccadb28fe7e22e91ffea7c0935898bd20fa4f52d5c2dfbf",
+  "purge-git-history--rehearsal-r2.sh": "ca4aefb4f384570a526cf56a7ed8b0ec5bbea6dfa82684ae53b58d264d45c043",
+  "purge-git-history--run.sh": "1f41f7979f95b469d656fa9bd9c5ac8e22dc5dc73fd6572cce4cce67fd7eb963"
+ },
+ "gated_at": "2026-10-15T01:57:21.537747Z"
+}
