@@ -258,3 +258,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 
 - **D78 Pull request #1 on `NateDogDotNet/now-showing` opened after the purge, at the owner's choice (stop 16 item 4a).** The `.orchestrator/` snapshot was dropped from the tree first (5f4d824; the trail stays in history and on the conductor's host). Merging is the owner's (D13); until then GitHub Pages serves the old `main`. Reversibility: high (a pull request can be closed). Every other decision of this session was logged as it was made (D51–D77).
 
+
+## Owner decision — 2026-10-15, D79 (verbatim: "go ahead and completly close-out/finish 2.1; I have done all of the verfication I am going to do for it and I have doe the pjurg. I do not need to do a new tag at this time.")
+
+- **D79 Version 2.1 is closed without the Raspberry Pi validation and without a git tag.** The 12 Pi rows of the extended checklist (V1-E11 to V1-E22) stay SKIPPED, the README keeps its "(verify)" tags, and "Validate on a Raspberry Pi" becomes an optional backlog item rather than a 2.1 blocker. No tag or GitHub release is made for 2.1.0; `main` (pull request #1, 36d47c0) is the release. The history purge and its clean-up are done (`docs/security/history-purge.md`). The Roadmap drops the done items (the pull request, the worktree tidy-up, the "What's new" e2e that `limit-and-reload-fixes` shipped) and corrects "two polish items" to six. Reversibility: high (a tag can be added later; the Pi rows can be run any time).

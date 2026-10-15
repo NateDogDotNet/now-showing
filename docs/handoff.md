@@ -1,5 +1,7 @@
 # Handoff: continuing the 2.1 integration run in a local session
 
+> **Historical (2026-10-15).** The run finished, pull request #1 merged to `main`, and the owner closed 2.1 (D79). Nothing below is still to do; it is kept as the record of how the run was resumed.
+
 Written 2026-10-11 when the cloud session handed off. Everything below is on branch
 `claude/intelligent-rubin-4vsi63`.
 

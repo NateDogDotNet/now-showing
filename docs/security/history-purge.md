@@ -20,7 +20,8 @@ every replace-list entry absent from the whole history (per line), `git fsck --n
 `.orchestrator/artifacts/purge-git-history--run-r1.txt`, `--ac1-r1.json`, `--ac3-r1.json`; the precondition review
 `purge-git-history--precondition-r1.md` and the two local rehearsals `--rehearsal-r1.txt`, `--rehearsal-r2.txt`.
 
-Kept outside the repository, by the owner: a mirror backup of the old repository and the filter-repo commit map
-(old SHA → new SHA), in a private directory on the conductor's host, until the owner says delete. Anyone who cloned the
+The mirror backup of the old repository and its private directory were deleted by the owner in their own shell on
+2026-10-15, so the old token exists nowhere on the conductor's host; the filter-repo commit map (old SHA → new SHA)
+is kept only in the untracked `.orchestrator/artifacts/` trail. Anyone who cloned the
 public repository before 2026-10-15 keeps the old history; the token itself was rotated and rejected on 2026-10-14
 (`docs/security/token-rotation.md`), which is what removed the risk.

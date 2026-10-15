@@ -16,7 +16,7 @@
 
 ## ✅ Done in 2.1 (display protection and kiosk)
 
-2.1 is built and covered by unit and browser tests against a mock Plex server. The real-server validation is done (2026-10-14, against a real Plex Media Server: the core checklist 17 of 17 and the extended checklist 15 of 15 rows that need no Raspberry Pi). The Raspberry Pi validation is still pending, because no Pi was available (rows V1-E11 to V1-E22 were skipped), so the README keeps "(verify)" on every flag, command and path that only a Pi can prove. The version number in the files is 2.1.0 (the release bump).
+2.1.0 is closed (D79). It is built and covered by unit and browser tests against a mock Plex server, and the real-server validation is done (2026-10-14, against a real Plex Media Server: the core checklist 17 of 17 and the extended checklist 15 of 15 rows that need no Raspberry Pi). The 12 Raspberry Pi rows (V1-E11 to V1-E22) were skipped because no Pi was available, and the owner closed the release without them, so the README keeps "(verify)" on every flag, command and path that only a Pi can prove until someone runs those rows (see the engineering backlog). The leaked Plex token was rotated and the git history purged (`docs/security/`). Version 2.1.0 is on `main` (pull request #1, merged 2026-10-15) and is what GitHub Pages serves; no git tag or GitHub release was made for it, by the owner's choice.
 
 - **Sleep schedule and idle sleep**: a black screen on a schedule or after N hours without playback; the wake lock stays held so playback can wake it
 - **Pixel shift**: the picture glides a few pixels every few minutes, on by default
@@ -40,7 +40,7 @@
 
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
 
-1. **2.1.x:** the two polish items, then split `js/main.js` (the backlog says to do it before the source-adapter work).
+1. **2.1.x:** the six polish items, then split `js/main.js` (the backlog says to do it before the source-adapter work).
 2. **2.2:** drag-and-nudge positioning and landscape fill with gap fill (already specified), then, roughly in this order: the rating schedule, poster selection (libraries, genres, ratings) with weighting and no repeats, viewer profiles (a profile bundles a selection and a limit), "On this day", the playlist and Find a poster (they share the list storage), frame and marquee styles with the marquee captions and info captions, poster transitions, touch gestures (which reuse the transitions' slide and the styles), and theme music. The playlist stores each entry as source plus item ID, never a Plex-only key, so it keeps working once other sources exist.
 3. **2.3:** the source-adapter refactor with Plex as the first adapter and no change in behaviour, then Jellyfin, then Emby (close to Jellyfin's API); multiple servers in poster selection; Play now; the movie-night countdown; birthday and occasion mode; and the Picture frame sources (Plex Photos first, then a folder and Immich, then museum art). Every adapter maps its own ratings for the household limit and fails closed, with its own adversarial review.
 4. **2.4:** the no-server mode as a TMDB adapter. It needs the adapter layer, a TMDB key the user supplies (stored like the Plex token), TMDB's attribution, a certification mapping for the household limit, and it has no now-playing. Clear-logo marquees, poster artwork sources and the filter on any production house come with it; Coming Soon for titles not in the library comes after 2.4.
@@ -261,19 +261,12 @@ Track how many hours a day the frame art stays lit and suggest stronger protecti
 It is about 1,440 lines and every feature phase added wiring to it. After 2.1, move sleep and display power, the PIN gate and display protection into their own modules. Do it before the source-adapter work, and not during the 2.1 run, when every remaining phase edits the file.
 
 ### Validate on a Raspberry Pi
-The real-server validation is done (2026-10-14; `docs/validation/real-server-core.md` and `docs/validation/real-server-extended.md`). What remains is the 12 extended rows that need a Pi (V1-E11 to V1-E22: Chromium package names and flags, the DevTools policy, autostart, the RAM disk cache, the wake lock under labwc, HDMI-CEC and the helper's screen commands). Run them on a real Pi, then take the matching "(verify)" tags off the README. Also still open: the country-prefixed rating values (V1-E04: the test server stores none) and a managed user's token. Also to check on a real screen, where headless screenshots cannot: whether native `<select>` popups and tooltips render unrotated on a rotated UI (an open unknown from the touch-and-labels phase).
-
-### Pull request and merge for 2.1
-The 2.1 work lives on its own branch. When it is ready, open a pull request so CI (`.github/workflows/ci.yml`) runs on it, and merge once validation passes. Merging is the owner's call (D13).
-
-### Tidy the build workspace
-Delete leftover per-phase git worktrees once their phases have landed.
+Optional, whenever a Pi is at hand; 2.1 was closed without it (D79). The real-server validation is done (2026-10-14; `docs/validation/real-server-core.md` and `docs/validation/real-server-extended.md`). Unrun are the 12 extended rows that need a Pi (V1-E11 to V1-E22: Chromium package names and flags, the DevTools policy, autostart, the RAM disk cache, the wake lock under labwc, HDMI-CEC and the helper's screen commands). Run them on a real Pi, then take the matching "(verify)" tags off the README. Also unverified: the country-prefixed rating values (V1-E04: the test server stores none), a managed user's token, and which plex.tv route revoked the old token (V1-E10). Also to check on a real screen, where headless screenshots cannot: whether native `<select>` popups and tooltips render unrotated on a rotated UI (an open unknown from the touch-and-labels phase).
 
 ### 2.1.x polish
 Small follow-ups found while writing the 2.1 docs and the release.
 
 - **Recommended protection list shows an internal value.** The night-dim row reads "Dim the whole picture: stage". It should read "The whole picture", the label the Dim select uses. The list prints the stored value (`stage`) instead of the option's label.
-- **Pin the "What's new" marker with an e2e.** Add an end-to-end case that an unconfigured boot writes `plexPoster.whatsNew` without showing the notice, so a fresh install never sees it later.
 - **TV power-on after a failed helper read.** One failed helper status or probe read clears `helper.available`, and the wake path then takes the "helper off" branch: it resets `tvOff` without sending power-on, so the TV can stay off while the display is awake (`js/main.js` wake path; close-time review of 2.1, D73). Fix: on wake, attempt power-on whenever `tvOff` is set, and do not let a single failed read clear `available`. Needs a Pi with HDMI-CEC to verify.
 - **`tick()` during a TV wake.** While `tvWaking` is set, `tick()` returns without rescheduling or queuing, so a schedule change inside the 4 s wake window can leave no timer until the next touch (D73). Fix: set `forceAfter` or reschedule instead of returning silently. Same hardware to verify.
 - **Rating re-check cost.** `refreshRating` is called once per cached key and each call re-reads and rewrites the whole cache index, so a 300-poster cache costs hundreds of index writes per pool load under a limit, and the re-check runs before the pool instead of alongside it (D73). Fix: one batched `refreshRatings()` with a single read and write, run concurrently with `pool()`.
