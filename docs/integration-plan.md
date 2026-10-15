@@ -6,7 +6,7 @@ Revision r3: lean scope (D1), 27 phases (26 on the release path plus one optiona
 
 ## Preamble
 
-- **Every command runs from the repository root** (`/home/user/plex-poster-app`).
+- **Every command runs from the repository root** (`/home/user/plex-poster-app` in the cloud session; `/home/nathan/plex-poster-app` locally, `/home/nathan/now-showing` after the purge, D76).
 - **Starting commit:** `46257c3` ("docs(decisions): record stop-1 rulings D1-D16 for the integration plan"), branch `claude/intelligent-rubin-4vsi63`, `VERSION` 2.0.0. Every `<start>..HEAD` range in this plan means `46257c3..HEAD`.
 - **Run the mock:** `npm run demo` serves the app on `http://localhost:8080` and a fake Plex server on `http://localhost:32401` (token `demo-token`, library key `1`; control endpoints under `/__mock/`).
 - **Unit tests:** `npm test` (`node --test tests/*.test.js`; 29 tests pass at the starting commit).

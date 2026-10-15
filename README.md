@@ -154,7 +154,7 @@ Install the packages. On Raspberry Pi OS Bookworm the browser package is `chromi
 ```bash
 sudo apt install -y chromium-browser nodejs git      # Bookworm (verify)
 # sudo apt install -y chromium nodejs git            # Trixie (verify)
-git clone https://github.com/NateDogDotNet/plex-poster-app.git ~/poster-display
+git clone https://github.com/NateDogDotNet/now-showing.git ~/poster-display
 ```
 
 Serve the app on boot with a systemd user service:

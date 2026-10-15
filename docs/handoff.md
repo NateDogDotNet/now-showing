@@ -93,3 +93,5 @@ From `.orchestrator/state.md`:
 
 The container also held leftover git worktrees with uncommitted code: the losing candidate of each branched phase, and
 superseded early rounds. Every winning version is committed on the branch, so nothing that landed depends on them.
+
+> 2026-10-14 (D76): after the history purge the repository is `NateDogDotNet/now-showing` and the local checkout `/home/nathan/now-showing`; the paths above are historical.
