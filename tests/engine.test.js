@@ -555,3 +555,122 @@ test('D37: a failed batched request stores unrated for every key it asked about,
   assert.equal(d.poster.ratingKey, 'g');
   assert.deepEqual(applied[0].map((p) => [p.ratingKey, p.contentRating]), [['1', ''], ['2', ''], ['3', '']]);
 });
+
+// ---- rating-recheck-batch (D80): the re-check runs alongside the pool, not after it ----
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => ((resolve = res), (reject = rej)));
+  return { promise, resolve, reject };
+}
+
+// A client whose pool() and items() park until the test releases them, logging when each is called and settled.
+function gatedSetup(overrides, { cached = ['1', '2', '3'] } = {}) {
+  const events = [];
+  const poolGate = deferred();
+  const itemGates = [];
+  const applied = [];
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', ...overrides };
+  const client = {
+    calls: { items: 0 },
+    sessions: async () => [],
+    pool: () => (events.push('pool:start'), poolGate.promise.then((v) => (events.push('pool:end'), v))),
+    items: (keys) => {
+      client.calls.items++;
+      events.push(`items:start:${keys.length}`);
+      const gate = deferred();
+      itemGates.push(gate);
+      return gate.promise.then((v) => (events.push('items:end'), v));
+    },
+  };
+  const engine = createEngine({ client, getSettings: () => settings, now: () => 1_000_000, random: () => 0, cachedKeys: () => cached, onRatings: (list) => (events.push('onRatings'), applied.push(list)) });
+  return { engine, client, events, poolGate, itemGates, applied };
+}
+const tick = () => new Promise((r) => setImmediate(r));
+
+test('D80: with a limit set, client.pool and the first client.items batch are both in flight before either resolves', async () => {
+  const { engine, events, poolGate, itemGates, applied } = gatedSetup({ maxContentRating: 'PG-13' });
+  const deciding = engine.decide();
+  await tick();
+  assert.deepEqual(events, ['pool:start', 'items:start:3'], 'both requests are out, neither has settled');
+  assert.equal(applied.length, 0);
+  itemGates[0].resolve([{ ratingKey: '1', contentRating: 'G' }]);
+  await tick();
+  poolGate.resolve([rated('g', 'G')]);
+  const d = await deciding;
+  assert.equal(d.poster.ratingKey, 'g');
+  assert.equal(applied.length, 1, 'onRatings is called once per pool load');
+});
+
+test('D80: the pool resolving first still waits for the re-check, and onRatings is called once with every cached key', async () => {
+  const cached = keysOf(250);
+  const { engine, events, poolGate, itemGates, applied } = gatedSetup({ maxContentRating: 'PG-13' }, { cached });
+  const deciding = engine.decide();
+  await tick();
+  assert.deepEqual(events, ['pool:start', 'items:start:100']);
+  poolGate.resolve([rated('g', 'G')]);
+  await tick();
+  assert.equal(applied.length, 0, 'the pool is not handed back before the re-check has finished');
+  for (const n of [0, 1, 2]) {
+    itemGates[n].resolve(n === 1 ? Promise.reject(Object.assign(new Error('boom'), { kind: 'http' })) : []);
+    await tick();
+  }
+  await deciding;
+  assert.equal(applied.length, 1);
+  assert.deepEqual(applied[0].map((p) => p.ratingKey), cached, 'all 250 cached keys reported');
+  assert.ok(applied[0].every((p) => p.contentRating === ''), 'a failed batch and keys the response left out report ""');
+});
+
+test('D80: with no limit set client.items is not called, and the pool is not delayed', async () => {
+  const { engine, client, events, poolGate, applied } = gatedSetup({ maxContentRating: '' });
+  const deciding = engine.decide();
+  await tick();
+  poolGate.resolve([poster('a')]);
+  await deciding;
+  assert.equal(client.calls.items, 0);
+  assert.equal(applied.length, 0);
+  assert.deepEqual(events, ['pool:start', 'pool:end']);
+});
+
+test('D80: a pool failure still rejects the load, even when the re-check succeeded, and applies nothing', async () => {
+  const { engine, poolGate, itemGates, applied } = gatedSetup({ maxContentRating: 'PG-13' });
+  const deciding = engine.decide();
+  const outcome = deciding.then(() => 'resolved', (err) => err);
+  await tick();
+  itemGates[0].resolve([{ ratingKey: '1', contentRating: 'G' }]);
+  await tick();
+  poolGate.reject(Object.assign(new Error('pool down'), { kind: 'network' }));
+  const err = await outcome;
+  assert.equal(err.message, 'pool down');
+  assert.equal(applied.length, 0, 'no ratings applied when the load failed');
+});
+
+test('D80: with the server down (pool and every batch fail) nothing is reported, so the offline cache keeps its ratings', async () => {
+  const { engine, poolGate, itemGates, applied } = gatedSetup({ maxContentRating: 'PG-13' });
+  const outcome = engine.decide().then(() => 'resolved', (err) => err);
+  await tick();
+  itemGates[0].reject(Object.assign(new Error('down'), { kind: 'network' }));
+  poolGate.reject(Object.assign(new Error('down'), { kind: 'network' }));
+  assert.equal((await outcome).message, 'down');
+  assert.deepEqual(applied, [], 'no "" for any key');
+});
+
+test('D80: a pool failure while the re-check is still running rejects without an unhandled rejection', async () => {
+  const { engine, poolGate, itemGates } = gatedSetup({ maxContentRating: 'PG-13' });
+  const unhandled = [];
+  const onUnhandled = (e) => unhandled.push(e);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const outcome = engine.decide().then(() => 'resolved', (err) => err);
+    await tick();
+    poolGate.reject(Object.assign(new Error('pool down'), { kind: 'network' }));
+    assert.equal((await outcome).message, 'pool down');
+    itemGates[0].reject(Object.assign(new Error('late'), { kind: 'http' }));
+    await tick();
+    await tick();
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
+});

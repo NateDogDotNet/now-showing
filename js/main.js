@@ -90,7 +90,7 @@ function rebuildClient() {
         getSettings: () => state.settings,
         // D37: while a limit is set, each online pool load re-confirms the cached titles' ratings.
         cachedKeys: () => cache.entries().map((e) => e.ratingKey),
-        onRatings: (posters) => posters.forEach((p) => cache.refreshRating(p)),
+        onRatings: (posters) => cache.refreshRatings(posters),
       })
     : null;
   state.directImages = false;
@@ -241,7 +241,7 @@ async function tick({ force = false, notify = false } = {}) {
     const decision = state.asleep || state.tvWaking ? null : await engine.decide({ force: force || document.body.classList.contains('poster-blocked'), sessions, sessionsError });
     let refused = false; // a poster was fetched but the limit no longer allows it
     if (decision) {
-      cache.refreshRating(decision.poster); // seen online: its stored rating follows Plex (C7M2)
+      cache.refreshRatings([decision.poster]); // seen online: its stored rating follows Plex (C7M2)
       let image = await fetchImage(decision.poster);
       // (Asleep by now: the download began before sleep did; it is not drawn under the veil.)
       let drawn = false;

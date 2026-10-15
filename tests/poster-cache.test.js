@@ -197,30 +197,30 @@ test('put records the poster contentRating in the index entry ("" when it has no
 });
 
 // C7M2 (D35): a poster seen online refreshes its stored rating, so a re-rated title does not keep its old rating offline.
-test('refreshRating rewrites the stored rating from the poster, keeping the order and the other fields', async () => {
+test('refreshRatings rewrites the stored rating from the poster, keeping the order and the other fields', async () => {
   const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
   await pc.put(poster(1, '/t/1', 'PG'), blob(), size(600, 900));
   await pc.put(poster(2, '/t/2', 'G'), blob(), size(600, 900));
   const before = pc.entries();
-  await pc.refreshRating(poster(1, '/t/1', 'R'));
+  await pc.refreshRatings([poster(1, '/t/1', 'R')]);
   const after = pc.entries();
   assert.deepEqual(after.map((e) => e.ratingKey), before.map((e) => e.ratingKey), 'order unchanged');
   assert.equal(after.find((e) => e.ratingKey === '1').contentRating, 'R');
   assert.equal(after.find((e) => e.ratingKey === '2').contentRating, 'G', 'other entries untouched');
   assert.deepEqual({ ...after.find((e) => e.ratingKey === '1'), contentRating: 'PG' }, before.find((e) => e.ratingKey === '1'), 'every other field kept');
-  await pc.refreshRating(poster(2, '/t/2')); // now unrated
+  await pc.refreshRatings([poster(2, '/t/2')]); // now unrated
   assert.equal(pc.entries().find((e) => e.ratingKey === '2').contentRating, '', 'a poster with no rating stores ""');
 });
 
-test('refreshRating makes a re-rated title drop out of the offline draw under the limit', async () => {
+test('refreshRatings makes a re-rated title drop out of the offline draw under the limit', async () => {
   const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
   await pc.put(poster(1, '/t/1', 'PG'), blob(), size(600));
   assert.equal((await pc.random(undefined, 'PG-13'))?.poster.ratingKey, '1');
-  await pc.refreshRating(poster(1, '/t/1', 'R'));
+  await pc.refreshRatings([poster(1, '/t/1', 'R')]);
   assert.equal(await pc.random(undefined, 'PG-13'), null);
 });
 
-test('refreshRating ignores a poster that is not cached and writes nothing when the rating is unchanged', async () => {
+test('refreshRatings ignores a poster that is not cached and writes nothing when the rating is unchanged', async () => {
   const f = fakeCaches();
   const storage = memoryStorage();
   let writes = 0;
@@ -229,8 +229,8 @@ test('refreshRating ignores a poster that is not cached and writes nothing when 
   await pc.put(poster(1, '/t/1', 'PG'), blob(), size(600));
   const writesBefore = writes;
   const putsBefore = f.calls.put;
-  await pc.refreshRating(poster(9, '/t/9', 'R'));
-  await pc.refreshRating(poster(1, '/t/1', 'PG'));
+  await pc.refreshRatings([poster(9, '/t/9', 'R')]);
+  await pc.refreshRatings([poster(1, '/t/1', 'PG')]);
   assert.equal(writes, writesBefore, 'no index write');
   assert.equal(f.calls.put, putsBefore, 'no cache write');
   assert.deepEqual(pc.entries().map((e) => e.ratingKey), ['1'], 'no entry was added');
@@ -302,13 +302,13 @@ test('random() with a limit still honours excludeKey and returns the blob', asyn
 // D73 (review finding 1): a now-playing episode is keyed by its show, but its own rating is not the show's.
 const episodePoster = (n, contentRating) => ({ ...poster(n, `/t/${n}`, contentRating), episodeRating: true });
 
-test('an episode poster never changes the stored rating of its show, through put or refreshRating', async () => {
+test('an episode poster never changes the stored rating of its show, through put or refreshRatings', async () => {
   const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
   await pc.put(poster(1, '/t/1', 'TV-MA'), blob(), size(600, 900)); // the show, from the pool
   await pc.put(episodePoster(1, 'TV-PG'), blob(), size(600, 900));
   assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-MA', 'put keeps the show rating');
-  pc.refreshRating(episodePoster(1, 'TV-PG'));
-  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-MA', 'refreshRating keeps the show rating');
+  pc.refreshRatings([episodePoster(1, 'TV-PG')]);
+  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-MA', 'refreshRatings keeps the show rating');
   assert.equal(await pc.random(undefined, 'PG'), null, 'the TV-MA show stays hidden under PG offline');
 });
 
@@ -316,7 +316,7 @@ test('an episode without a rating never stores "" over the show rating, and a ne
   const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
   await pc.put(poster(1, '/t/1', 'PG'), blob(), size(600, 900));
   await pc.put(episodePoster(1, undefined), blob(), size(600, 900));
-  pc.refreshRating(episodePoster(1, undefined));
+  pc.refreshRatings([episodePoster(1, undefined)]);
   assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'PG');
   assert.equal((await pc.random(undefined, 'PG'))?.poster.ratingKey, '1');
   await pc.put(episodePoster(2, 'G'), blob(), size(600, 900));
@@ -326,18 +326,18 @@ test('an episode without a rating never stores "" over the show rating, and a ne
 test('the show rating still follows Plex when the show item itself is seen', async () => {
   const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
   await pc.put(poster(1, '/t/1', 'TV-MA'), blob(), size(600, 900));
-  pc.refreshRating(poster(1, '/t/1', 'TV-PG'));
+  pc.refreshRatings([poster(1, '/t/1', 'TV-PG')]);
   assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-PG');
   await pc.put({ ...poster(1, '/t/1', 'TV-14'), episodeRating: false }, blob(), size(600, 900));
   assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-14');
 });
 
 // D75: a series rating (non-empty) is stored under the show's key; an empty one never overwrites.
-test('seriesRating is stored under the show key by put and refreshRating, even beside a different own rating', async () => {
+test('seriesRating is stored under the show key by put and refreshRatings, even beside a different own rating', async () => {
   const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
   await pc.put({ ...episodePoster(1, 'TV-MA'), episodeRating: undefined, seriesRating: 'TV-PG' }, blob(), size(600, 900));
   assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-PG', 'a show first seen through an episode');
-  pc.refreshRating({ ...episodePoster(1, 'TV-MA'), episodeRating: undefined, seriesRating: 'PG-13' });
+  pc.refreshRatings([{ ...episodePoster(1, 'TV-MA'), episodeRating: undefined, seriesRating: 'PG-13' }]);
   assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'PG-13', 'follows the series rating');
 });
 
@@ -346,6 +346,95 @@ test('an empty seriesRating never overwrites the stored show rating', async () =
   await pc.put(poster(1, '/t/1', 'PG'), blob(), size(600, 900));
   const empty = { ...episodePoster(1, 'TV-MA'), seriesRating: '' };
   await pc.put(empty, blob(), size(600, 900));
-  pc.refreshRating(empty);
+  pc.refreshRatings([empty]);
   assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'PG');
+});
+
+// rating-recheck-batch (D80): one index read and at most one index write for a whole list of posters.
+function countingStorage() {
+  const inner = memoryStorage();
+  const counts = { reads: 0, writes: 0 };
+  return {
+    counts,
+    getItem: (k) => (counts.reads++, inner.getItem(k)),
+    setItem: (k, v) => (counts.writes++, inner.setItem(k, v)),
+    removeItem: (k) => inner.removeItem(k),
+  };
+}
+
+test('refreshRatings reads the index once and writes it at most once for N cached entries and N posters', async () => {
+  const storage = countingStorage();
+  const pc = createPosterCache({ storage, caches: fakeCaches().caches });
+  const n = 40;
+  for (let i = 1; i <= n; i++) await pc.put(poster(i, `/t/${i}`, 'PG'), blob(), size(600, 900));
+  storage.counts.reads = 0;
+  storage.counts.writes = 0;
+  pc.refreshRatings(Array.from({ length: n }, (_, i) => poster(i + 1, `/t/${i + 1}`, 'R')));
+  assert.equal(storage.counts.reads, 1, 'one index read');
+  assert.equal(storage.counts.writes, 1, 'one index write');
+  assert.ok(pc.entries().every((e) => e.contentRating === 'R'), 'every changed rating applied');
+});
+
+test('refreshRatings writes nothing when no rating changed, and reads once', async () => {
+  const storage = countingStorage();
+  const pc = createPosterCache({ storage, caches: fakeCaches().caches });
+  for (let i = 1; i <= 5; i++) await pc.put(poster(i, `/t/${i}`, 'PG'), blob(), size(600, 900));
+  storage.counts.reads = 0;
+  storage.counts.writes = 0;
+  pc.refreshRatings([1, 2, 3, 4, 5, 99].map((i) => poster(i, `/t/${i}`, 'PG'))); // 99 is not cached
+  assert.equal(storage.counts.reads, 1);
+  assert.equal(storage.counts.writes, 0);
+  pc.refreshRatings([]);
+  assert.equal(storage.counts.writes, 0, 'an empty list writes nothing');
+});
+
+test('refreshRatings applies the episode and series rules per poster inside one batch', async () => {
+  const storage = countingStorage();
+  const pc = createPosterCache({ storage, caches: fakeCaches().caches });
+  for (let i = 1; i <= 5; i++) await pc.put(poster(i, `/t/${i}`, 'TV-MA'), blob(), size(600, 900));
+  storage.counts.writes = 0;
+  pc.refreshRatings([
+    episodePoster(1, 'TV-PG'), // episode, no series rating: the show keeps TV-MA (D73)
+    { ...episodePoster(2, 'TV-MA'), episodeRating: undefined, seriesRating: 'PG' }, // series rating wins (D75)
+    { ...episodePoster(3, 'TV-MA'), seriesRating: '' }, // empty series rating: the stored one is kept
+    poster(4, '/t/4', 'G'), // a show seen itself follows Plex
+    poster(5, '/t/5'), // no rating: stored as ''
+  ]);
+  const byKey = new Map(pc.entries().map((e) => [e.ratingKey, e.contentRating]));
+  assert.equal(byKey.get('1'), 'TV-MA');
+  assert.equal(byKey.get('2'), 'PG');
+  assert.equal(byKey.get('3'), 'TV-MA');
+  assert.equal(byKey.get('4'), 'G');
+  assert.equal(byKey.get('5'), '');
+  assert.equal(storage.counts.writes, 1, 'the three changes share one write');
+});
+
+test('refreshRatings keeps the order and the other fields, and adds no entry', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(poster(1, '/t/1', 'PG'), blob(), size(600, 900));
+  await pc.put(poster(2, '/t/2', 'G'), blob(), size(600, 900));
+  const before = pc.entries();
+  pc.refreshRatings([poster(1, '/t/1', 'R'), poster(9, '/t/9', 'R')]);
+  const after = pc.entries();
+  assert.deepEqual(after.map((e) => e.ratingKey), before.map((e) => e.ratingKey));
+  assert.deepEqual({ ...after.find((e) => e.ratingKey === '1'), contentRating: 'PG' }, before.find((e) => e.ratingKey === '1'));
+  assert.equal(after.length, 2, 'the uncached poster was not added');
+});
+
+test('there is no per-poster refreshRating: callers use the batch', () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  assert.equal(typeof pc.refreshRatings, 'function');
+  assert.equal(pc.refreshRating, undefined);
+});
+
+test('refreshRatings keeps going past an unchanged poster and an uncached one, and applies a later change with one write', async () => {
+  const storage = countingStorage();
+  const pc = createPosterCache({ storage, caches: fakeCaches().caches });
+  await pc.put(poster(1, '/t/1', 'PG'), blob(), size(600, 900));
+  await pc.put(poster(2, '/t/2', 'PG'), blob(), size(600, 900));
+  storage.counts.writes = 0;
+  pc.refreshRatings([poster(1, '/t/1', 'PG'), poster(9, '/t/9', 'R'), poster(2, '/t/2', 'R')]); // unchanged, not cached, changed
+  assert.equal(pc.entries().find((e) => e.ratingKey === '2').contentRating, 'R', 'the later poster was applied');
+  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'PG');
+  assert.equal(storage.counts.writes, 1, 'exactly one index write');
 });
