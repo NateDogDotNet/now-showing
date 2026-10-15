@@ -677,6 +677,113 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 ---
 
+## Run 2 — 2.1.1: the 2.1.x polish items and the `js/main.js` split (D79, D80)
+
+Added at the invocation of run 2 (2026-10-15, conductor-3). Starting commit `9d15063` on `main`; working branch `2.1.x`; every `<start>..HEAD` range in this section means `9d15063..HEAD`. The conventions above apply unchanged, with `release-2.1.1` in place of `release-bump` in convention 5 and the branch `2.1.x` in convention 13. Phases 31 to 33 all edit `js/main.js`, so they run one at a time (convention 6) in the order 31, 32, 33; `split-main` moves the code they fix and so comes after all three; `release-2.1.1` bumps `VERSION` once because `split-main` changes `SHELL`.
+
+### 31. `polish-small-fixes` — The preset label, one HH:MM parser, and a release e2e that reads the version
+
+- **Goal:** The Recommended protection list shows the Dim option's label instead of its stored value; the daily reload parses its time with the one `parseHHMM`; the release e2e reads `VERSION` from `sw.js` so the next bump does not break it.
+- **Findings:** Roadmap "2.1.x polish" bullets 1, 5, 6 (the parser bullet is D73's) · **Rulings:** D73, D80
+- **Mode:** afk · **Tags:** — · **Blocked by:** none
+- **Output:** `js/settings-ui.js`, `js/main.js`, `js/settings.js`, `tests/settings.test.js`, `tests/e2e/preset.spec.mjs`, `tests/e2e/release.spec.mjs`
+- **Acceptance criteria:**
+  1. `npm run test:e2e -- preset`  (new case: in the Recommended protection list the night-dim row's text is `Dim the whole picture: The whole picture`, the label of the Dim select's `stage` option, and no row's text contains the raw value `stage`; the "already set" / "now …" hint shows labels the same way)
+  2. `test -f tests/settings.test.js && node --test tests/settings.test.js`  (the HH:MM sanitiser still coerces `24:00`, `9:00`, `09:60`, `''` and a non-string to the default and keeps `00:00` and `23:59`; a case pins each)
+  3. `test -f js/main.js && grep -q 'parseHHMM' js/main.js && ! grep -q "dailyReloadTime.split" js/main.js`  (the daily reload uses `parseHHMM` from `js/schedule.js`)
+  4. `test "$(grep -c '2\[0-3\]' js/settings.js js/schedule.js | awk -F: '{s+=$2} END{print s}')" = 1 && grep -q 'parseHHMM' js/settings.js`  (the HH:MM pattern lives once, in `js/schedule.js`; the sanitiser uses `parseHHMM`)
+  5. `test -f tests/e2e/release.spec.mjs && ! grep -qE '2\.1\.0|2\.0\.0' tests/e2e/release.spec.mjs && npm run test:e2e -- release`  (the spec reads `VERSION` from `sw.js` and names the stale cache without a version literal; it passes at 2.1.0 and, unchanged, after the bump)
+  6. `npm test && npm run test:e2e -- pi-stability && node scripts/check-precache.mjs`  (the daily-reload cases still pass)
+  7. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/settings-ui.js|js/main.js|js/settings.js|tests/settings.test.js|tests/e2e/preset.spec.mjs|tests/e2e/release.spec.mjs)')"`  (nothing else changed; `VERSION` stays 2.1.0)
+  8. narrated: one anchored review (D42: low risk, no cold lens).
+- **Notes/hazards:**
+  - `js/settings.js` may import `parseHHMM` from `js/schedule.js` (`schedule.js` imports nothing from the app, so no cycle); the sanitiser's behaviour does not change (criterion 2 pins it).
+  - `showValue` in `js/settings-ui.js` prints the raw value for a `select`; the label is the option's text in `index.html`, which is not Output: read it from the form, do not duplicate it.
+  - The release spec may read `sw.js` with `fs` and a regex (it is not a module); `tests/e2e/lib.mjs` is not Output.
+
+### 32. `tv-wake-fixes` — The TV is switched on at every wake, and a tick during the TV wake window is never lost
+
+- **Goal:** After the display sleeps with the TV switched off through the helper, the wake sends power-on even when one helper read failed in between; a settings or schedule change inside the 4 s TV wake window leaves a timer behind, so the display shows a poster without a touch.
+- **Findings:** Roadmap "2.1.x polish" bullets 3, 4 (D73 findings) · **Requirements:** R-HELP-2 · **Rulings:** D73, D8, D80
+- **Mode:** afk · **Tags:** risk:high (an always-on display can be left dark) · **Blocked by:** none
+- **Output:** `js/main.js`, `tests/e2e/helper.spec.mjs`, `tests/e2e/sleep.spec.mjs` (only if the tick case fits there)
+- **Acceptance criteria:**
+  1. `npm run test:e2e -- helper`  (new cases, fake helper: (a) the display sleeps and `display off` is recorded; one `__helper/status` read is made to fail while asleep (a `page.route` abort of that one request; the fake cannot fail); the display wakes → the recorded calls end with `display on`; (b) after the failed read a later successful read reports the helper available again and nothing extra is sent; (c) the display wakes with the helper on and, inside the TV wake window, a setting that calls `tick()` changes (the trigger is the builder's) → a poster is shown within one rotation after the window with no pointer, touch or key input, and the sleep spec's wake cases still pass)
+  2. `npm run test:e2e -- sleep`  (unchanged cases still pass; the new cases may live here instead of `helper`)
+  3. `npm test && npm run test:e2e && node scripts/check-precache.mjs`
+  4. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/main.js|tests/e2e/helper.spec.mjs|tests/e2e/sleep.spec.mjs)')"`  (nothing else changed; `VERSION` stays 2.1.0)
+  5. narrated: anchored and cold reviews (risk:high); the handback quotes both Roadmap bullets with the case that now pins each.
+- **Notes/hazards:**
+  - A helper that has really gone (every read fails) is still reported unavailable in Diagnostics; the fix does not make `helper.available` permanent, and `releaseTv()` (the setting switched off while the TV is off) keeps sending exactly one power-on.
+  - Power requests stay serialised through `powerChain`; a failed power call never blocks the wake or the poster fetch (helper spec case 3).
+  - `js/helper.js` is not Output: the fix lives in `js/main.js`'s wake path and `tick()`. The existing wake-path contract holds: power on first, then `TV_WAKE_MS`, then the fetch.
+
+### 33. `rating-recheck-batch` — One batched rating re-check, run alongside the pool
+
+- **Goal:** Under a household limit an online pool load re-checks the cached titles' ratings with one index read and at most one index write, and the re-check runs concurrently with the pool request instead of after it.
+- **Findings:** Roadmap "2.1.x polish" bullet "Rating re-check cost" (D73) · **Requirements:** R-RATE (fail closed offline) · **Rulings:** D37, D73, D75, D80
+- **Mode:** afk · **Tags:** risk:high (content limit) · **Blocked by:** none
+- **Output:** `js/poster-cache.js`, `js/engine.js`, `js/main.js`, `tests/poster-cache.test.js`, `tests/engine.test.js`
+- **Acceptance criteria:**
+  1. `test -f tests/poster-cache.test.js && node --test tests/poster-cache.test.js`  (new cases: `refreshRatings(posters)` exists; with N cached entries and N posters it reads the index once and writes it at most once, counted through the injected storage; it writes nothing when no rating changed; it applies the episode and series rules of D73/D75 exactly as `refreshRating` did (the existing cases, re-pointed or kept); no caller of a per-poster loop remains)
+  2. `test -f tests/engine.test.js && node --test tests/engine.test.js`  (new cases: with a limit set, `client.pool` and the first `client.items` batch are both in flight before either resolves, recorded by an injected client; `onRatings` is called once per pool load with every cached key; a failed batch and keys never asked about still report `''`; with no limit set `client.items` is not called; a pool failure still rejects `loadPool`)
+  3. `test -f js/main.js && grep -q 'refreshRatings' js/main.js && ! grep -q 'forEach((p) => cache.refreshRating' js/main.js`
+  4. `npm run test:e2e -- content-rating cache-first`  (existing cases still pass)
+  5. `npm test && npm run test:e2e && node scripts/check-precache.mjs`
+  6. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/poster-cache.js|js/engine.js|js/main.js|tests/poster-cache.test.js|tests/engine.test.js)')"`  (nothing else changed; `VERSION` stays 2.1.0)
+  7. narrated: anchored and cold reviews (risk:high).
+- **Notes/hazards:**
+  - Fail closed is untouched: no path stores a rating for a key the server did not confirm other than `''`, and the live now-playing check keeps the playing item's own rating (D75).
+  - The cache key scheme does not change (one entry per show, D73). `tick()`'s single `refreshRating(decision.poster)` call for the poster being shown may stay as the one-poster form or use the batch form with one poster; the plan does not prescribe which.
+  - Concurrency must not reorder the pool's own fail-closed filter: the pool is still filtered by the limit before it is stored.
+
+### 34. `split-main` — Sleep and display power, the reload, the PIN gate and display protection leave `js/main.js`
+
+- **Goal:** `js/main.js` sheds its sleep and display-power section, the daily and update reload, the PIN gate and the brightness and night-dim protection into their own ES modules under `js/`, with no change in behaviour, so 2.2's feature phases stop editing one file.
+- **Findings:** Roadmap engineering backlog "Split `js/main.js`" · **Rulings:** D80
+- **Mode:** afk · **Tags:** risk:high (large refactor of the boot file) · **Blocked by:** `polish-small-fixes`, `tv-wake-fixes`, `rating-recheck-batch`
+- **Output:** `js/main.js`, new modules under `js/` (their names and boundaries are the builder's; the plan fixes what leaves `js/main.js`), `sw.js` (SHELL entries only; `VERSION` stays 2.1.0), `README.md` (the Project layout table: one line per new module, nothing else), `tests/*.test.js` (new unit tests for pure parts of the new modules; existing tests unchanged)
+- **Acceptance criteria:**
+  1. `test "$(wc -l < js/main.js)" -le 1100`  (1454 at the start; the four sections hold about 420 lines, see the pre-flight probe)
+  2. `for f in evaluateSleep wakeTv powerOffAfterVeil releaseTv probeHelper refreshTemperature dailyReloadTick runDailyReload reloadMustWait skipReload reloadAutomatically evaluateBrightness requestPin togglePin; do grep -qE "^(async )?function $f\b|^const $f =" js/main.js && { echo "still defined in main.js: $f"; exit 1; }; done; exit 0`  (each named implementation now lives in a module)
+  3. `node scripts/check-precache.mjs`  (every new module is in `SHELL`)
+  4. `for f in js/*.js; do grep -q "$(basename "$f")" README.md || { echo "README lacks $f"; exit 1; }; done`  (the Project layout lists every module)
+  5. `grep -q "VERSION = '2.1.0'" sw.js && grep -q "VERSION = '2.1.0'" js/main.js`  (no bump here)
+  6. `test -z "$(grep -l "from './main.js'" js/*.js)" && for f in js/*.js; do node --check "$f" || exit 1; done`  (no module imports the boot file; every file parses)
+  7. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (behaviour unchanged: the whole suite)
+  8. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vE '^(js/[a-z-]+\.js|sw\.js|README\.md|tests/[a-z-]+\.test\.js)$')"`  (nothing outside the Output shape changed; `index.html`, `css/`, `tests/e2e/`, `scripts/` untouched)
+  9. narrated: anchored and cold reviews (risk:high); the cold lens reads the diff for any moved line whose behaviour changed (a timer that starts at a different moment, a closure that now reads a copy instead of the live value).
+- **Notes/hazards:**
+  - `tests/shortcuts.test.js` reads `js/main.js` as text and asserts it imports `./shortcuts.js` and builds `KEYS` from the table: the key handler and `KEYS` stay in `js/main.js`.
+  - `export const VERSION` stays in `js/main.js` (Diagnostics reads it; `release-2.1.1` bumps it there).
+  - Match the repo's idiom for modules that need the page: a factory that takes its dependencies (`createHelper({ log })`, `createEngine({ client, getSettings, … })`), no module-level DOM reads at import time, and `main.js` starts every timer it started before, in the same order.
+  - The README gains one table line per module and no other text; the modules' own header comments say what they hold.
+
+### 35. `release-2.1.1` — Bump the version once; Roadmap and README say what shipped
+
+- **Goal:** `VERSION` is 2.1.1 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`; the Roadmap moves the shipped polish items and the split into a "Done in 2.1.1" section; the README's status line names 2.1.1. No tag and no pull request (D13, D79).
+- **Findings:** — · **Requirements:** R-REL-1 (one bump), R-DOC-7 · **Rulings:** D16, D79, D80
+- **Mode:** afk · **Tags:** docs · **Blocked by:** `split-main`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`
+- **Acceptance criteria:**
+  1. `grep -q "VERSION = '2.1.1'" sw.js && grep -q "VERSION = '2.1.1'" js/main.js && test "$(grep -c '"version": "2.1.1"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`  (one bump, all four files; the lockfile holds the version twice)
+  2. `npm run test:e2e -- release`  (the spec, which now reads the version, passes at 2.1.1)
+  3. `test -f Roadmap.md && ! grep -q '^### 2.1.x polish' Roadmap.md && ! grep -q '^### Split `js/main.js`' Roadmap.md && grep -q '^## ✅ Done in 2.1.1' Roadmap.md && ! grep -q '2.1.x:\*\* the six polish items' Roadmap.md`  (the shipped items are a Done section, one line per fix and one for the split; the Suggested order starts at 2.2)
+  4. `grep -q '2.1.1' README.md`  (the status callout names the version on `main`)
+  5. `npm test && npm run test:e2e && node scripts/check-precache.mjs`
+  6. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|Roadmap.md|README.md)')"`
+  7. narrated: `/doc-review` of the Roadmap and README diff; `keep-docs-current` over `9d15063..HEAD` inside the phase before its commit; `/phase-gate` at Step 7 (this phase closes the plan).
+- **Notes/hazards:**
+  - No tag, no GitHub release, no pull request: the owner closed 2.1 without a tag (D79) and a pull request or merge happens only when the owner asks (D13).
+  - The Roadmap's "Validate on a Raspberry Pi" backlog item stays as it is (optional, owner-only).
+  - The "What's new in 2.1" toast and its marker are not changed by a point release.
+
+### Run 2 dependency graph
+
+- `polish-small-fixes`, `tv-wake-fixes`, `rating-recheck-batch`: no blockers; all three edit `js/main.js`, so they run one at a time (order 31, 32, 33).
+- `split-main` ← `polish-small-fixes`, `tv-wake-fixes`, `rating-recheck-batch`.
+- `release-2.1.1` ← `split-main`. Critical path: 31 → 32 → 33 → 34 → 35.
+
 ## Dependency graph
 
 `phase -> blocked by` (real prerequisites only; the first column is the plan number, which implies no order beyond the arrows). Output overlap is not an edge (convention 6).
