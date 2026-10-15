@@ -505,3 +505,188 @@ await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sle
   assert.deepEqual(seen.errors, []);
   check(`schedule-end wake (07:00): power on, then the poster fetch ${posterAt - onAt} ms later`);
 });
+
+// 14-17. tv-wake-fixes (D73, D80). One failed helper status read clears helper.available (js/helper.js read()); the TV was
+// still switched off by us, so the wake must send power on all the same. The fake helper cannot fail, so one request to
+// __helper/status is aborted with a Playwright route (times: 1). The read is made by opening Settings while asleep (it
+// probes), through a script click: a pointer press while asleep would be a manual wake.
+const openSettings = async (page) => {
+  await page.evaluate(() => document.querySelector('[data-action="settings"]').click());
+  await page.waitForFunction(() => document.getElementById('settings').open);
+};
+const cancelSettings = async (page) => {
+  await page.evaluate(() => document.getElementById('settings-cancel').click());
+  await page.waitForFunction(() => !document.getElementById('settings').open);
+};
+const shapeOf = async (context, app) => (await helperCalls(context, app)).map((c) => [c.action, c.on]);
+const cpuRowShown = async (page) => {
+  await openDiag(page);
+  const row = await diagRow(page, 'CPU temperature');
+  await closeDiag(page);
+  return row !== undefined;
+};
+
+/** Asleep with the TV switched off (one `display off` recorded), then one status read fails; resolves how many were aborted. */
+async function failOneStatusRead(page, context, app, { keepSettingsOpen = false } = {}) {
+  await page.goto(app.url);
+  await waitAsleep(page);
+  await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 1, 10000, 500);
+  assert.deepEqual(await shapeOf(context, app), [['display', false]], 'the TV was switched off');
+  const aborted = { count: 0 };
+  await page.route('**/__helper/status', (route) => (aborted.count++, route.abort()), { times: 1 });
+  await openSettings(page); // opening Settings probes the helper
+  await advanceUntil(page, async () => aborted.count === 1, 5000, 250);
+  await advance(page, 500, 250);
+  if (!keepSettingsOpen) await cancelSettings(page);
+  return aborted;
+}
+
+// 14. (a) A failed read while asleep does not strand the TV: the wake still sends power on, once.
+await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true }), clock: { time: INSIDE } }, async ({ page, context, app, mock }) => {
+  await mock.stop();
+  const seen = await watch(page);
+  await failOneStatusRead(page, context, app);
+  assert.equal(await cpuRowShown(page), false, 'after the failed read the helper is reported unavailable (Diagnostics)');
+  assert.deepEqual(await shapeOf(context, app), [['display', false]], 'a failed read sends nothing');
+  await mock.play('3');
+  await advanceUntil(page, async () => !(await isAsleep(page)), (POLL + 2) * 1000);
+  await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 2, 3000, 250);
+  await advanceUntil(page, async () => seen.order.includes('poster'), 15000, 500);
+  assert.deepEqual(await shapeOf(context, app), [['display', false], ['display', true]], 'the calls end with display on, sent once');
+  const onAt = seen.order.findIndex((o) => o.startsWith('helper:display:') && o.includes('true'));
+  assert.ok(onAt >= 0 && seen.order.indexOf('poster') > onAt, `power on came before the poster fetch: ${seen.order.join(' | ')}`);
+  await advance(page, 8000, 500);
+  assert.equal((await helperCalls(context, app)).length, 2, 'no further power call');
+  check('failed status read while asleep: the wake still powers the TV on (once), then fetches the poster');
+});
+
+// 15. (b) The failed read is not permanent: a later successful read reports the helper available again and sends nothing.
+await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true }), clock: { time: INSIDE } }, async ({ page, context, app, mock }) => {
+  await mock.stop();
+  await failOneStatusRead(page, context, app);
+  assert.equal(await cpuRowShown(page), false, 'unavailable after the failed read');
+  await openSettings(page); // the next probe succeeds
+  await advance(page, 1000, 250);
+  await cancelSettings(page);
+  assert.equal(await cpuRowShown(page), true, 'available again after a successful read');
+  await advance(page, 6000, 500);
+  assert.deepEqual(await shapeOf(context, app), [['display', false]], 'nothing extra was sent: no second power off, no power on while asleep');
+  await mock.play('3');
+  await advanceUntil(page, async () => !(await isAsleep(page)), (POLL + 2) * 1000);
+  await advance(page, TV_WAKE_MS + 2000, 500);
+  assert.deepEqual(await shapeOf(context, app), [['display', false], ['display', true]], 'then exactly one power on at the wake');
+  check('failed read, then a successful one: helper available again, nothing extra sent');
+});
+
+// 16. The setting switched off after a failed read, with the TV still off: the release still sends its one power on.
+await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true }), clock: { time: INSIDE } }, async ({ page, context, app, mock }) => {
+  await mock.stop();
+  await failOneStatusRead(page, context, app, { keepSettingsOpen: true }); // the failed read was the last one: the Save finds the helper unavailable
+  await untickAndSave(page);
+  await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 2, 10000, 500);
+  await advance(page, 6000, 500);
+  assert.deepEqual(await shapeOf(context, app), [['display', false], ['display', true]], 'exactly one power on at the Save');
+  check('failed status read, then the setting switched off with the TV off: one power on');
+});
+
+// 17. (c) A tick() inside the TV wake window is honoured after it. The display wakes on playback with a poster still on
+// screen (rotation an hour away, now playing off); inside the window a Save changes a limit setting (limitNowPlaying), which asks for a
+// forced tick. That tick used to be dropped: the display kept the old poster for the whole rotation. No pointer, touch or
+// key input is used after the wake (script clicks and a form submit only).
+await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true, showNowPlaying: false }), clock: { time: '2026-01-05T00:59:40' } }, async ({ page, context, app, mock }) => {
+  await watch(page);
+  await page.goto(app.url);
+  await page.waitForFunction(() => document.querySelectorAll('.poster-layer.active').length > 0, null, { timeout: 15000 });
+  await waitAsleepFake(page);
+  await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 1, 10000, 500);
+  await freezeClock(page);
+  await mock.play('3');
+  await advanceUntil(page, async () => !(await isAsleep(page)), (POLL + 2) * 1000, 250);
+  const onAt = await page.evaluate(() => window.__helperFetch.find((f) => f.body.includes('"on":true'))?.at ?? null);
+  const nowAt = await page.evaluate(() => Date.now());
+  assert.notEqual(onAt, null, 'power on was requested');
+  assert.ok(nowAt - onAt < TV_WAKE_MS - 1000, `still inside the TV wake window (${nowAt - onAt} ms after power on)`);
+  const reason = async () => {
+    await openDiag(page);
+    const text = await diagRow(page, 'Reason');
+    await closeDiag(page);
+    return text;
+  };
+  assert.notEqual(await reason(), 'manual refresh', 'the poster on screen came from the rotation, not a forced tick');
+  await openSettings(page);
+  await page.evaluate(() => {
+    document.querySelector('#settings-form [name="limitNowPlaying"]').checked = false; // a limit setting: applySettings asks for a forced tick, nothing else changes
+    document.getElementById('settings-form').requestSubmit();
+  });
+  await page.waitForFunction(() => !document.getElementById('settings').open);
+  assert.ok((await page.evaluate(() => Date.now())) - onAt < TV_WAKE_MS, 'the Save landed inside the window');
+  assert.notEqual(await reason(), 'manual refresh', 'no poster is chosen inside the window');
+  await advanceUntil(page, async () => (await reason()) === 'manual refresh', TV_WAKE_MS + 8000, 250);
+  await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer.active')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
+  check('a Save inside the TV wake window: its forced tick runs after the window, a new poster appears without input');
+});
+
+// 18. Pause inside the TV wake window drops the tick the window queued: after the window nothing is chosen, and the
+// display still says paused. Same set-up as case 17 (a forced tick queued by a Save), then a script click on Pause.
+await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true, showNowPlaying: false }), clock: { time: '2026-01-05T00:59:40' } }, async ({ page, context, app, mock }) => {
+  await watch(page);
+  await page.goto(app.url);
+  await page.waitForFunction(() => document.querySelectorAll('.poster-layer.active').length > 0, null, { timeout: 15000 });
+  await waitAsleepFake(page);
+  await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 1, 10000, 500);
+  await freezeClock(page);
+  await mock.play('3');
+  await advanceUntil(page, async () => !(await isAsleep(page)), (POLL + 2) * 1000, 250);
+  const onAt = await page.evaluate(() => window.__helperFetch.find((f) => f.body.includes('"on":true'))?.at ?? null);
+  assert.notEqual(onAt, null, 'power on was requested');
+  assert.ok((await page.evaluate(() => Date.now())) - onAt < TV_WAKE_MS - 1000, 'still inside the TV wake window');
+  await openSettings(page);
+  await page.evaluate(() => {
+    document.querySelector('#settings-form [name="limitNowPlaying"]').checked = false; // a forced tick is queued
+    document.getElementById('settings-form').requestSubmit();
+  });
+  await page.waitForFunction(() => !document.getElementById('settings').open);
+  await page.evaluate(() => document.querySelector('[data-action="pause"]').click()); // no pointer input
+  assert.ok((await page.evaluate(() => Date.now())) - onAt < TV_WAKE_MS, 'the Pause landed inside the window');
+  await advance(page, TV_WAKE_MS + 8000, 250);
+  await openDiag(page);
+  assert.equal(await diagRow(page, 'Reason'), 'rotation', 'the queued tick did not run after Pause: no new poster was chosen');
+  assert.equal(await diagRow(page, 'Next check'), 'paused', 'Diagnostics still shows the pause');
+  await closeDiag(page);
+  assert.equal(await page.evaluate(() => document.querySelector('[data-action="pause"]').getAttribute('aria-pressed')), 'true');
+  check('Pause inside the TV wake window: the queued tick does not run after the window, the display stays paused');
+});
+
+// 19. The display goes back to sleep inside the TV wake window, with a tick queued: the end of the window still runs it, so
+// the playback poll goes on and a later playback wakes the display again with no input. The set-up leaves the queued tick as the
+// ONLY thing that can restart the poll: Pause inside the window clears the poll timer, Resume and the Save queue ticks, and the
+// Save (sleep end 07:00 -> 08:00) puts the display back to sleep.
+await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true, showNowPlaying: false }), clock: { time: '2026-01-05T06:59:40' } }, async ({ page, context, app, mock }) => {
+  await mock.stop();
+  await watch(page);
+  await page.goto(app.url);
+  await waitAsleep(page);
+  await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 1, 10000, 500);
+  await freezeClock(page);
+  await advanceUntil(page, async () => !(await isAsleep(page)), 30000, 250); // 07:00: the schedule ends, the TV window starts
+  const onAt = await page.evaluate(() => window.__helperFetch.find((f) => f.body.includes('"on":true'))?.at ?? null);
+  assert.notEqual(onAt, null, 'power on was requested');
+  const inWindow = async (what) => assert.ok((await page.evaluate(() => Date.now())) - onAt < TV_WAKE_MS - 250, `${what}: still inside the TV wake window`);
+  await inWindow('awake');
+  const click = (action) => page.evaluate((a) => document.querySelector(`[data-action="${a}"]`).click(), action); // no pointer input
+  await click('pause'); // clears the poll timer
+  await click('pause'); // Resume: its tick is queued, not run
+  await openSettings(page);
+  await page.evaluate(() => {
+    document.querySelector('#settings-form [name="sleepEnd"]').value = '08:00'; // 07:00 is inside the window again
+    document.getElementById('settings-form').requestSubmit();
+  });
+  await page.waitForFunction(() => !document.getElementById('settings').open);
+  await inWindow('after the Save');
+  await waitAsleep(page); // asleep again, still inside the window
+  await advance(page, TV_WAKE_MS + 2000, 250); // the window ends
+  assert.equal(await isAsleep(page), true, 'still asleep after the window');
+  await mock.play('3');
+  await advanceUntil(page, async () => !(await isAsleep(page)), (POLL + 3) * 1000, 250);
+  check('asleep again inside the TV wake window: the queued tick still runs after it, so a later playback wakes the display');
+});

@@ -69,6 +69,7 @@ const state = {
   swallowUntil: 0, // performance.now() until which clicks are swallowed (after a press that only woke the display)
   pollFailing: false,
   tvWaking: false, // between the power-on request at wake and the end of TV_WAKE_MS: no poster is fetched yet
+  tickAfterWake: null, // a tick() that arrived while tvWaking, { force, notify }: it runs when the window ends
   pollError: null, // the error of this tick's failed playback poll, handed to decide() so it does not ask again
   pollFailures: 0, // consecutive failed playback polls
   sleepClock: { wall: Date.now(), mono: performance.now() },
@@ -225,7 +226,12 @@ function imageLoads(url) {
 }
 
 async function tick({ force = false, notify = false } = {}) {
-  if (!engine || state.busy || state.tvWaking) return;
+  if (!engine || state.busy) return;
+  if (state.tvWaking) {
+    // No poster is fetched until the TV is awake, but the call is not lost: the end of the window runs it.
+    state.tickAfterWake = { force: force || Boolean(state.tickAfterWake?.force), notify: notify || Boolean(state.tickAfterWake?.notify) };
+    return;
+  }
   state.busy = true;
   try {
     const sessions = await pollPlayback(); // fetched once; decide() reuses it
@@ -560,11 +566,20 @@ async function wakeTv() {
   }
 }
 
+/** The TV wake window ended: run the tick that arrived during it (asleep too: the playback poll must not stop), else the wake's own. */
+function afterTvWake() {
+  const queued = state.tickAfterWake;
+  state.tickAfterWake = null;
+  if (!queued) return !state.asleep && !state.busy && !state.paused && tick();
+  if (queued.force && state.busy) state.forceAfter = true; // the tick in flight began before the call that wanted it forced
+  return tick(queued);
+}
+
 /** The setting was switched off while we had the TV powered off: one power on so the screen is not stranded, then silence. */
 function releaseTv() {
   if (!tvOff) return;
   tvOff = false;
-  if (helper.available) queuePower(true); // a failure is logged once by the helper; either way nothing more is sent
+  queuePower(true); // we switched the TV off, whatever the last read said; a failure is logged once by the helper, nothing more is sent
 }
 
 async function refreshTemperature() {
@@ -599,8 +614,10 @@ function evaluateSleep() {
   if (asleep) {
     powerOffAfterVeil();
     next();
-  } else if (tvOff && helperActive()) {
-    wakeTv().then(() => !state.asleep && next());
+  } else if (tvOff && state.settings.deviceHelper) {
+    // The TV is off because we switched it off: power it on even if a helper read has failed since (helper.available only
+    // says whether the last read worked; a helper that is really gone just fails the call, and the wake goes on).
+    wakeTv().then(afterTvWake);
   } else {
     tvOff = false; // the setting was switched off since the power off: no helper call at all
     next();
@@ -761,6 +778,7 @@ function setPaused(paused) {
   btn.querySelector('use').setAttribute('href', paused ? '#i-play' : '#i-pause');
   if (paused) {
     clearTimeout(state.timer);
+    state.tickAfterWake = null; // a tick queued by the TV wake window does not run after Pause
     state.nextAt = 0;
     log.info('Auto-refresh paused');
   } else {
