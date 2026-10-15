@@ -504,7 +504,7 @@ Settings and input ergonomics for a keyboardless, remote-or-touch-only device. E
 
 ### 22. `position-drag-nudge` — Drag and nudge poster positioning
 
-- **Status:** deferred to 2.2 (D41); not part of the 2.1 release.
+- **Status:** deferred from 2.1 (D41); in progress in run 3 (D83), on branch `2.2`.
 - **Goal:** Place the poster by dragging it or with arrow keys while Settings is open, instead of tiny sliders.
 - **Findings:** U5 · **Requirements:** R-SET-5
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `rotation-layout-and-shell`, `settings-and-schedule-core`, `settings-sheet`, `touch-and-labels`, `metadata-and-now-playing`
@@ -529,7 +529,7 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 ### 23. `fill-blur-and-info` — Landscape fill: blurred backdrop and info panel
 
-- **Status:** deferred to 2.2 (D41); not part of the 2.1 release.
+- **Status:** deferred from 2.1 (D41); in progress in run 3 (D83), on branch `2.2`.
 - **Goal:** Use the empty sides of a landscape screen for a dimmed poster backdrop or a synopsis panel.
 - **Findings:** U7 · **Requirements:** R-FILL-1 · **Rulings:** D1
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `metadata-and-now-playing`, `rotation-layout-and-shell`, `pi-stability`
@@ -546,7 +546,7 @@ One remaining fill feature, the extended real-server validation, the single docs
   - Blur technique: draw the poster into a tiny canvas (48 px wide) once per poster and scale it up with CSS; smooth upscaling is the blur. `filter: blur()`/`backdrop-filter` on a full-screen layer is exactly the Pi GPU cost `pi-stability` removed.
   - OLED: backdrop opacity capped at 25%; default `none`; mention in the setting's help text that large lit areas shorten OLED life.
   - `summary` can be long: trim before it enters any stored descriptor (localStorage budget).
-  - Mock: add `summary` to the existing 8 `MOVIES`. Multi-poster layout is deferred (D1); this phase delivers U7 for single-poster landscape screens.
+  - Mock: add `summary` to every `MOVIES` row (nine today; the count was eight when this was written). Multi-poster layout is deferred (D1); this phase delivers U7 for single-poster landscape screens.
 
 ### 24. `real-server-validation-extended` — Validate the (verify) items on real hardware and a real server
 
@@ -918,3 +918,21 @@ Every finding ID is delivered by at least one phase, or is `deferred (D1)` with 
 | E16 | `kiosk-and-pin` |
 | E17 | `docs` |
 | D1 | `docs` (Roadmap entries for every deferral) |
+
+## Run 3 — 2.2 begins: the two deferred phases and a docs note (D41, D83)
+
+Added at the invocation of run 3 (2026-10-15, conductor-4). Starting commit `06150e6` on `main`; working branch `2.2`; every `<start>..HEAD` range in this section means `06150e6..HEAD`. The conventions above apply unchanged, except that this run has no release phase: `VERSION` stays 2.1.1 (convention 5's one bump happens in the 2.2 release phase, later), and a FOLLOW-UP in the run index says `VERSION` is bumped before `2.2` merges to `main`. `fill-blur-and-info` (23) and `position-drag-nudge` (22) share `index.html`, `css/app.css` and `sw.js`, so they run one at a time (convention 6), fill first; `position-drag-nudge`'s criterion 4 is the full suite and closes the code work. D67's gap fill inside the frame is not in this run (D83).
+
+### 36. `docs-2.2-progress` — Roadmap and README say what 2.2 has so far
+
+- **Goal:** The Roadmap and README describe the two shipped 2.2 features as done-but-unreleased on branch `2.2`, so the docs match the code before the 2.2 release phase exists.
+- **Findings:** — · **Requirements:** — · **Rulings:** D41, D67, D83
+- **Mode:** afk · **Tags:** docs · **Blocked by:** `fill-blur-and-info`, `position-drag-nudge`
+- **Output:** `Roadmap.md`, `README.md`
+- **Acceptance criteria:**
+  1. `test -f Roadmap.md && grep -qE '^## .*Done in 2\.2' Roadmap.md && grep -q 'Drag and nudge' Roadmap.md && grep -q 'Landscape fill' Roadmap.md`  (the two "Planned for 2.2" entries move under a "Done in 2.2 so far (unreleased, on branch `2.2`)" heading, one bullet each saying what shipped and what was not in scope; the gap fill inside the frame (D67) stays a planned 2.2 item)
+  2. `test -f README.md && grep -q 'js/fill.js' README.md && grep -q 'js/position.js' README.md`  (the layout table gains one line per new module; the status callout says 2.2 work is on branch `2.2`, unreleased)
+  3. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(Roadmap.md|README.md)')"`  (nothing else changed; `VERSION` stays 2.1.1)
+  4. narrated: keep-docs-current run inside the phase over `06150e6..HEAD`; the anchored documentation review (the `/doc-review` substitute, D83) APPROVE on disk.
+- **Notes/hazards:**
+  - Facts the text must not misstate: the blur is a tiny canvas upscaled by CSS, never a CSS blur filter; the backdrop brightness is capped at 0.25; `fillMode` default stays `none`; position mode is active only while Settings is in position mode, so the arrow keys and `+`/`-` are not global shortcuts; nothing has been run on a Raspberry Pi (D79); `VERSION` is 2.1.1.
