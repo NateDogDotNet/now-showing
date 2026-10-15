@@ -1,0 +1,14 @@
+
+### 0 preconditions
+
+### 1 backup: mirror of origin (kept until the owner says delete)
+refs: 3; commits: 128
+
+### 2 replace list (outside the repository; shredded at the end)
+list lines: 20
+
+### 3 fresh clone and the rewrite
+Repacking your repo and cleaning out old unneeded objects
+Completely finished after 0.91 seconds.
+rewrite verified: config.js 0 commits, every entry 0 commits, tip trees unchanged, fsck clean
+STOP: rehearsal complete; re-run with --confirm-delete to delete NateDogDotNet/plex-poster-app and create NateDogDotNet/now-showing
