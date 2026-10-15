@@ -217,3 +217,71 @@ Not blockers, but the conductor should act on them:
 - **GitHub Support cache purge for 5c4a716** (step 8): optional and outside the commands.
 
 Verdict: PRECONDITIONS NOT MET
+
+## Re-check r1b
+
+Resumed 2026-10-15T00:38:26Z. Same rules as before: read-only on the repository and GitHub. The only clone was a fresh `--mirror` of origin in `/tmp/tmp.CILOZElzOk`, deleted afterwards. The replace list was rebuilt there with the rehearsal-r2 recipe; the profile path came from `f6e1dc1` instead of `ssh home`. The list was deleted after the run. Values were never printed: counts only. `git status --porcelain` was empty before and after.
+
+```
+$ git rev-parse --short HEAD ; git ls-remote origin
+2857153
+2857153fc2440d7971846ec3b0b5ae5849af77a8  refs/heads/claude/intelligent-rubin-4vsi63
+ee6fbbe3fbcc9e1527decf4fa6f0ace31ea0fc14  refs/heads/main      (unchanged)
+13af5b02811af0dabc39ba4114fb4e754f44277b  refs/pull/1/head     (unchanged)
+$ git log --oneline 86fc4d8..HEAD     -> 2608e28 (mask), 9ab722e (D77 plan), 2857153 (rehearsal r2)
+```
+
+### Blocker 1 (two spellings at HEAD): resolved
+
+```
+$ git grep -l -i <surname> HEAD | wc -l                            -> 0
+$ git grep -l -i <surname> HEAD -- .orchestrator | wc -l           -> 0
+$ grep -rli <surname> .orchestrator | wc -l   (incl. untracked)    -> 0
+$ grep -rli --exclude-dir=.git --exclude-dir=node_modules <surname> . | wc -l   -> 0
+$ git grep -c -i -E 'Users(\\|/)[A-Za-z]+(%20| )' HEAD | wc -l    -> 0
+$ git log --all --format=%B | grep -ci <surname>                   -> 0
+$ git show 2608e28 (+ lines, masked): play-r1.txt:22 now 'file:///%USERPROFILE%/plex-poster-validation/…';
+  security-review-r1.md:14 no longer carries the name pair
+```
+
+The tip (2857153) holds no spelling of the owner's surname in any tracked file. The one case-insensitive `<first>` followed by a word hit is `conductor--commit-message-resume.txt:3`, "<first> instead": the first name followed by an ordinary word, with no surname. On the full rewrite, independently re-run at 2857153 on a fresh mirror of origin with the D77 list:
+
+```
+config.js commits: 0
+surname, case-insensitive, in any commit tree: 0 ; in any blob object: 0 ; in commit messages: 0
+blobs holding the leaked value: 0
+claude/intelligent-rubin-4vsi63 tree before 4b41465a6d63 after 4b41465a6d63 (same) ; main 5c04ed041abd / 5c04ed041abd (same)
+git fsck --no-dangling -> 0
+refs/heads after the rewrite: claude/intelligent-rubin-4vsi63 2284a41, main 82ef01c   (refs/pull/1/head not carried, as intended)
+```
+
+### Blocker 2 (the per-line check): NOT resolved as written in the plan
+
+The list definition in §27 step (3) and D77 now covers what is needed: the leaked value, every path spelling, `<first> <last>`, `<first>%20<last>` and `<first>|<last>`, the bare surname, and the four shared-server names. The rewrite run with it leaves zero hits, as shown above. **But criterion 1's loop is still vacuous.** It runs `git log --all -S"$line"` on the raw list line. Step (3) defines each line as `<literal>==><replacement>`, and no blob contains the `==>…` suffix, so every `-S` returns nothing whether or not the rewrite ran. Proof, on the UNREWRITTEN mirror of origin:
+
+```
+leaked value:  -S"<value>"                 -> 2 commits    -S"<value>==><leaked-token>" (criterion 1 as written) -> 0
+surname:       -S"<surname>"               -> 4 commits    -S"<surname>==><owner-surname>"                       -> 0
+all 20 lines, raw form as in criterion 1, on the unrewritten mirror: 0 / 0 / … / 0
+```
+
+The rehearsal script does it correctly (`lit=${line%%==>*}`). But its step-3 header prints the raw form, and that raw form is what went into the plan. Step (3)'s "verify the rewrite before any push (criterion 1's per-line check)" uses the same gate, so as written the last check before the irreversible push cannot fail. Class: spec-gap, the same finding as r1 Blocker 2, now one token from fixed. Severity: Important. The data is correct today (both rehearsals), but the gate is what would catch a run-time list built wrong, for example `ssh home` returning a different `%USERPROFILE%`. Fix, in criterion 1 and wherever step (3) cites it:
+
+```
+while IFS= read -r line; do lit=${line%%==>*}; test -n "$lit" && test -z "$(git -C "$d/fresh" log --all -F -S"$lit" --oneline)" || exit 1; done < "$REPLACE_LIST"
+```
+
+Smaller points on the D77 text (Minor, spec-gap):
+- "the owner's surname on its own (any case)". `--replace-text` literals are case-sensitive, and the list carries only three casings (as-is, Capitalized, UPPER). History holds only the as-is casing (0 other hits case-insensitively), so nothing is missed today. "Any case" needs a `regex:(?i)…` line, or the wording should change.
+- Step (3)'s "`git diff --stat <old tip> <new tip>` empty" cannot run in the rewritten clone: filter-repo drops the old objects. Rehearsal r2 prints "(old tip object not in the rewritten clone)", and with `2>/dev/null` the empty result would look like a pass. Compare `^{tree}` ids against the backup mirror instead, as rehearsal r2 step 4 and I both did.
+
+### Rehearsal r2: shows what the plan needs; three differences for the real run
+
+`purge-git-history--rehearsal-r2.txt` (at 9ab722e) shows: config.js in 2 commits before and 0 after; all 20 entries at 0 commits after (with the `==>` suffix stripped); 0 blobs with the leaked value; both tip trees unchanged; fsck 0; the list removed. Before the rewrite, entries 2–4, 6–8, 13 and 16 already counted 0. Those are path spellings that never occurred, plus the duplicate and absent surname casings. That is expected, not a gap. The token extraction (`grep -oE '[A-Za-z0-9_-]{20}' | head -1`) yields exactly the `PLEX_TOKEN` value (compared in-shell: equal). My independent re-run at 2857153 (above) agrees.
+
+What would behave differently in the real run:
+1. The script has `set -uo pipefail` without `-e`, and its checks only print. In the real run every verification has to stop the run before `gh repo delete`. Use `set -euo pipefail` and the fixed criterion-1 loop as hard gates, as in item 7.
+2. It never adds a remote. filter-repo strips `origin`, so the real run must `git remote add origin https://github.com/NateDogDotNet/now-showing.git` before `push --all` and `push --tags`. Both heads exist as local branches after the rewrite (verified), so `--all` sends `main` and the working branch. Then `gh repo edit --default-branch main`, per D77.
+3. `U` comes from `ssh home 'echo %USERPROFILE%'`. If that returns a different or empty string on the day, the script exits on empty, but a *different* path would only show up through a criterion-1 loop that works. That is one more reason to fix Blocker 2.
+
+Verdict: PRECONDITIONS NOT MET
