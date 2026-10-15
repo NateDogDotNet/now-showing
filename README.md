@@ -453,7 +453,7 @@ sw.js                   service worker (precache + offline shell)
 config.example.json     a starting point for config.json
 css/app.css             styles
 js/
-  main.js               bootstrap and glue: scheduling, offline fallback, sleep, daily reload, controls, Diagnostics, kiosk, first run
+  main.js               bootstrap and glue: scheduling, offline fallback, controls, Settings, Diagnostics, kiosk, first run
   engine.js             decides which poster to show; applies the content limit (pure, unit-tested)
   plex.js               Plex server + plex.tv client (sign-in, discovery, sessions, ratings, runtime format)
   display.js            frame/poster rendering, rotation, pixel shift, cross-fade, progress bar
@@ -465,6 +465,12 @@ js/
   schedule.js           local-time helpers: windows across midnight, DST, plausible clock (pure)
   sleep.js              the sleep decision: schedule, idle, playback wake, manual wake (pure)
   brightness.js         frame brightness and the stepped night dim (pure)
+  brightness-timer.js   applies the brightness to the display once a minute
+  sleep-control.js      sleep on the page: playback poll, the veil, the sleep clock, manual wake
+  tv-power.js           TV power off at sleep, power on at wake, CPU temperature (uses helper.js)
+  reload.js             the daily, after-wake and update reloads, and what they wait for
+  pin-gate.js           the one settings-PIN check (builds the prompt from kiosk.js)
+  poster-pin.js         the Pin/Unpin button: pins the poster on screen
   kiosk.js              PIN hashing and lockout, the corner hold, the resetPin flag, the PIN prompt
   helper.js             page-side client of the device helper (screen power, CPU temperature)
   shortcuts.js          the one keyboard-shortcut table, used by the keys and the `?` overlay
