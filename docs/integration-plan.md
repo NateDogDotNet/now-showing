@@ -546,7 +546,7 @@ One remaining fill feature, the extended real-server validation, the single docs
   - Blur technique: draw the poster into a tiny canvas (48 px wide) once per poster and scale it up with CSS; smooth upscaling is the blur. `filter: blur()`/`backdrop-filter` on a full-screen layer is exactly the Pi GPU cost `pi-stability` removed.
   - OLED: backdrop opacity capped at 25%; default `none`; mention in the setting's help text that large lit areas shorten OLED life.
   - `summary` can be long: trim before it enters any stored descriptor (localStorage budget).
-  - Mock: add `summary` to every `MOVIES` row (nine today; the count was eight when this was written). Multi-poster layout is deferred (D1); this phase delivers U7 for single-poster landscape screens.
+  - Mock: add `summary` to every `MOVIES` row (eight). Multi-poster layout is deferred (D1); this phase delivers U7 for single-poster landscape screens.
 
 ### 24. `real-server-validation-extended` — Validate the (verify) items on real hardware and a real server
 
