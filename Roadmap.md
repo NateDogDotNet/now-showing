@@ -36,16 +36,28 @@
 - **Local server hardening**: only app files are served, and `config.json` only to the device itself
 - **Browser tests**: `npm run test:e2e` runs Playwright specs against the mock server
 
+## ✅ Done in 2.1.1 (the 2.1.x polish items and the `js/main.js` split)
+
+2.1.1 is a point release of the 2.1.x polish items and the split of `js/main.js`. It is on the `2.1.x` branch, not merged to `main`, with no git tag and no GitHub release (D79, D13). The TV power behaviour below is covered by tests with a fake helper and has not been run on a Raspberry Pi with HDMI-CEC.
+
+- **Recommended protection list shows the Dim label**: the night-dim row reads "The whole picture", the label the Dim select uses, not the stored value `stage`
+- **TV power-on after a failed helper read (partial fix)**: the wake no longer depends on `helper.available`; power-on is sent whenever the display switched the TV off, also when the setting is switched off while the TV is off. "Do not let a single failed read clear `available`" is not done, because it lives in `js/helper.js` (see "Carried from 2.1.1"): until the next probe (boot, Settings opening, the setting switched on), a sleep right after a failed read may skip the power-off
+- **`tick()` during a TV wake**: a tick inside the 4 s wake window is queued and runs after it; Pause inside the window drops it
+- **One batched rating re-check**: `refreshRatings(posters)` reads the cache index once and writes it at most once, and the re-check is fetched alongside the pool and applied after it
+- **One HH:MM parser**: the daily reload and `js/settings.js` use `parseHHMM` from `js/schedule.js`
+- **The release e2e reads the version**: `tests/e2e/release.spec.mjs` reads `VERSION` from `sw.js`, so a version bump no longer breaks it
+- **`js/main.js` split**: sleep, TV power, the reloads, brightness and the PIN gate moved to `js/sleep-control.js`, `js/tv-power.js`, `js/reload.js`, `js/brightness-timer.js`, `js/pin-gate.js` and `js/poster-pin.js` (1,472 lines became 1,098), with no change in behaviour; each module is a factory that main.js constructs, with unit tests
+
 ## 🧭 Suggested order
 
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
 
-1. **2.1.x:** the six polish items, then split `js/main.js` (the backlog says to do it before the source-adapter work).
+1. **2.1.x:** done (2.1.1), including the `js/main.js` split that the source-adapter work needed first.
 2. **2.2:** drag-and-nudge positioning and landscape fill with gap fill (already specified), then, roughly in this order: the rating schedule, poster selection (libraries, genres, ratings) with weighting and no repeats, viewer profiles (a profile bundles a selection and a limit), "On this day", the playlist and Find a poster (they share the list storage), frame and marquee styles with the marquee captions and info captions, poster transitions, touch gestures (which reuse the transitions' slide and the styles), and theme music. The playlist stores each entry as source plus item ID, never a Plex-only key, so it keeps working once other sources exist.
 3. **2.3:** the source-adapter refactor with Plex as the first adapter and no change in behaviour, then Jellyfin, then Emby (close to Jellyfin's API); multiple servers in poster selection; Play now; the movie-night countdown; birthday and occasion mode; and the Picture frame sources (Plex Photos first, then a folder and Immich, then museum art). Every adapter maps its own ratings for the household limit and fails closed, with its own adversarial review.
 4. **2.4:** the no-server mode as a TMDB adapter. It needs the adapter layer, a TMDB key the user supplies (stored like the Plex token), TMDB's attribution, a certification mapping for the household limit, and it has no now-playing. Clear-logo marquees, poster artwork sources and the filter on any production house come with it; Coming Soon for titles not in the library comes after 2.4.
 5. **3.0:** Browse first mode (with the Browse button in poster mode), the main-screen choice (Posters, Browse first, Picture frame, Home controls) and Home controls. It is built from Find a poster, the gestures and Play now, so it comes after them.
-6. **Later:** the rest of the Ideas. Multiple displays comes last among the large features, lowest risk first (Change together and Mirror, then Chain, then Controller), because Controller opens the largest attack surface. It needs the `js/main.js` split and the source adapters' item IDs first.
+6. **Later:** the rest of the Ideas. Multiple displays comes last among the large features, lowest risk first (Change together and Mirror, then Chain, then Controller), because Controller opens the largest attack surface. It needs the source adapters' item IDs first (the `js/main.js` split is done in 2.1.1).
 
 ## ⏭ Planned for 2.2
 
@@ -216,7 +228,7 @@ Displays that know about each other, in four modes (D57). This merges the earlie
 - **How it can work:** browsers cannot find each other, so one coordinator on the LAN does it, an opt-in mode of `serve.mjs` (like `--helper`, and the earlier `serve.mjs --remote` design), and displays join a named group with a pairing code (a rotating one; a QR code would carry the pairing code and never the Plex token). Displays agree on time through the coordinator so a change lands within a frame or two. A display that loses the coordinator keeps rotating on its own. Controller uses an allowlist of non-secret settings.
 - **Why Controller waits:** it is the largest new attack surface for the smallest gain. It opens a listener on the home network, which conflicts with the settings PIN, with a display shared with children, and with putting the display on an isolated VLAN. It also cannot solve first-run setup, which the code on the empty screen already solves.
 - **Constraints (D7):** the pairing code and QR code appear only inside PIN-locked settings, and no protective setting (sleep, dimming, the content limit, kiosk mode, the PIN) can be changed from another device. Every display applies its own household content limit to any poster it is sent and skips one above it. Nothing ever sends a Plex token between devices.
-- **Order:** last among the large features, and inside it lowest risk first: Change together and Mirror (displays only exchange "show item X at time T"), then Chain, then Controller, which opens the largest attack surface. It needs the `js/main.js` split and the source adapters' item IDs (source plus item ID) first.
+- **Order:** last among the large features, and inside it lowest risk first: Change together and Mirror (displays only exchange "show item X at time T"), then Chain, then Controller, which opens the largest attack surface. It needs the source adapters' item IDs (source plus item ID) first (the `js/main.js` split is done in 2.1.1).
 
 ### Multi-poster landscape layout
 Show two or three posters side by side on a landscape screen.
@@ -257,18 +269,17 @@ Track how many hours a day the frame art stays lit and suggest stronger protecti
 
 ## 🛠 Engineering backlog
 
-### Split `js/main.js`
-It is about 1,440 lines and every feature phase added wiring to it. After 2.1, move sleep and display power, the PIN gate and display protection into their own modules. Do it before the source-adapter work, and not during the 2.1 run, when every remaining phase edits the file.
-
 ### Validate on a Raspberry Pi
 Optional, whenever a Pi is at hand; 2.1 was closed without it (D79). The real-server validation is done (2026-10-14; `docs/validation/real-server-core.md` and `docs/validation/real-server-extended.md`). Unrun are the 12 extended rows that need a Pi (V1-E11 to V1-E22: Chromium package names and flags, the DevTools policy, autostart, the RAM disk cache, the wake lock under labwc, HDMI-CEC and the helper's screen commands). Run them on a real Pi, then take the matching "(verify)" tags off the README. Also unverified: the country-prefixed rating values (V1-E04: the test server stores none), a managed user's token, and which plex.tv route revoked the old token (V1-E10). Also to check on a real screen, where headless screenshots cannot: whether native `<select>` popups and tooltips render unrotated on a rotated UI (an open unknown from the touch-and-labels phase).
 
-### 2.1.x polish
-Small follow-ups found while writing the 2.1 docs and the release.
+### Carried from 2.1.1
+Left over when 2.1.1 closed.
 
-- **Recommended protection list shows an internal value.** The night-dim row reads "Dim the whole picture: stage". It should read "The whole picture", the label the Dim select uses. The list prints the stored value (`stage`) instead of the option's label.
-- **TV power-on after a failed helper read.** One failed helper status or probe read clears `helper.available`, and the wake path then takes the "helper off" branch: it resets `tvOff` without sending power-on, so the TV can stay off while the display is awake (`js/main.js` wake path; close-time review of 2.1, D73). Fix: on wake, attempt power-on whenever `tvOff` is set, and do not let a single failed read clear `available`. Needs a Pi with HDMI-CEC to verify.
-- **`tick()` during a TV wake.** While `tvWaking` is set, `tick()` returns without rescheduling or queuing, so a schedule change inside the 4 s wake window can leave no timer until the next touch (D73). Fix: set `forceAfter` or reschedule instead of returning silently. Same hardware to verify.
-- **Rating re-check cost.** `refreshRating` is called once per cached key and each call re-reads and rewrites the whole cache index, so a 300-poster cache costs hundreds of index writes per pool load under a limit, and the re-check runs before the pool instead of alongside it (D73). Fix: one batched `refreshRatings()` with a single read and write, run concurrently with `pool()`.
-- **One HH:MM parser.** `dailyReloadTick` parses the reload time with `split(':')` instead of `parseHHMM()` from `js/schedule.js`, and `js/settings.js` duplicates the same regex (D73). Use `parseHHMM` in both places.
-- **Make `tests/e2e/release.spec.mjs` read the version.** It hard-codes 2.0.0 and 2.1.0; it should read the current version from `sw.js`, so the next version bump does not break the e2e suite.
+- **A single failed helper read still clears `helper.available`.** The fix lives in `js/helper.js`; see the TV power-on bullet under "Done in 2.1.1".
+- **Overlapping TV wake windows.** A sleep and a wake again within 4 s let the first window's end clear `tvWaking` early. This was already so before 2.1.1 and is unlikely.
+- **A flaky helper test.** `tests/device-helper.test.js` "a real hung command that forks a grandchild…" is flaky under host load (100 polls of 20 ms). Make the waits deadline-based.
+- **Stale names in comments.** Two comments in `tests/e2e/content-rating.spec.mjs` (lines 961, 974) still say `refreshRating`.
+- **Rating re-check after a pool failure.** The re-check still sends its remaining batches and discards them; there is no effect on correctness.
+- **Comments that still place moved code in `js/main.js`.** `js/sleep.js:1` and `tests/e2e/helper.spec.mjs:254` (which copies `TV_WAKE_MS`, now exported by `js/tv-power.js`).
+- **`tests/tv-power.test.js` replaces `requestAnimationFrame` globally without restoring it.** Harmless while node:test runs each file in its own process; a test tidy-up.
+- **On merge of `2.1.x` into `main`:** update the README status callout (README.md line 11) and the lead paragraph of "Done in 2.1.1" (Roadmap.md line 41), which both say 2.1.1 is on the `2.1.x` branch and not merged.
