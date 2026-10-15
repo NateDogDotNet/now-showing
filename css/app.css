@@ -70,9 +70,11 @@ body.idle.hide-cursor, body.idle.hide-cursor * { cursor: none !important; }
 }
 .poster-layer.active { opacity: 1; }
 /* A poster that is above the household limit is taken off the screen at once, without the fade (K20). */
-body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-blocked .player-label, body.poster-blocked .progress { opacity: 0; transition: none; visibility: hidden; }
+body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-blocked .player-label, body.poster-blocked .progress, body.poster-blocked .fill-canvas, body.poster-blocked .info-panel { opacity: 0; transition: none; visibility: hidden; }
 /* A poster still fading out when the limit is tightened is hidden at once, not faded (C7M1). */
 .poster-layer.cut:not(.active) { opacity: 0; transition: none; }
+/* Its backdrop goes with it (display.js mirrors .cut onto the paired canvas), or a blurred copy of a disallowed title would fade on. */
+.fill-canvas.cut:not(.active) { opacity: 0; transition: none; }
 
 .frame {
   position: absolute;
@@ -81,6 +83,71 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
   height: 100%;
   pointer-events: none;
   user-select: none;
+}
+
+/* ---------- Landscape fill (R-FILL-1) ---------- */
+
+/* The empty sides of a landscape screen. Inside the stage, so it rotates, glides and dims with it; behind the frame.
+   The blur is the canvas itself: 48 px wide, drawn once per poster, upscaled smoothly here. No CSS filters on it at all. */
+.fill-backdrop {
+  position: absolute;
+  overflow: hidden;
+  opacity: 0.25; /* OLED: never brighter than this, at any frame brightness */
+  pointer-events: none;
+}
+.fill-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--fade-ms) ease; /* the same length as .poster-layer, started in the same task */
+}
+.fill-canvas.active { opacity: 1; }
+
+/* Beside the frame, type sized from the short side of the screen for reading across a room. The body is centred while it fits;
+   when it does not it starts at the top (auto margins never go negative), so the title is never pushed off the screen. */
+.info-panel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  text-align: left;
+  pointer-events: none;
+}
+.info-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2vmin;
+  margin: auto 0;
+}
+.info-title {
+  margin: 0;
+  font-weight: 600; /* as #title-card */
+  font-size: var(--info-title-size, clamp(22px, 4.4vmin, 72px)); /* display.js sets it from fill.js, which also sizes the minimum width from it */
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.info-meta {
+  margin: 0;
+  padding-bottom: 2vmin;
+  border-bottom: 1px solid var(--panel-line); /* facts above the line, the story below it */
+  color: var(--muted);
+  font-size: clamp(14px, 2.6vmin, 40px);
+  font-variant-numeric: tabular-nums;
+}
+.info-summary {
+  margin: 0;
+  color: #c9c9ce; /* a little under full white: a large lit text block is OLED wear too */
+  font-size: clamp(14px, 2.8vmin, 44px);
+  line-height: 1.5;
+  /* display.js sets --info-lines to the lines that fit under the title, so a long synopsis ends in an ellipsis inside the box. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--info-lines, none);
+  overflow: hidden;
 }
 
 .title-card {

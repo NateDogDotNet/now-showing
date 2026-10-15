@@ -19,7 +19,7 @@
 //
 // The 8 titles carry contentRating G, PG, PG-13, R, TV-MA, gb/12, gb/15 and none (title 8, as an unrated
 // Plex item has no attribute), and a runtime (`duration`, ms): item 3 is PG-13, 8,040,000 ms, 1972; the unrated item 8 has no
-// runtime either. /library/sections/1/all honours `contentRating=a,b,c` strictly: a title whose
+// runtime either. Every title carries a `summary` (title 3's is over 300 characters). /library/sections/1/all honours `contentRating=a,b,c` strictly: a title whose
 // rating is not in the list, or that has none, is dropped before paging. Other unknown parameters are ignored.
 // With X-Plex-Container-Size=0 it answers { MediaContainer: { size: 0, totalSize: 8 } }, as Plex does for a count.
 
@@ -28,21 +28,23 @@ import { createServer } from 'node:http';
 export const TOKEN = 'demo-token';
 
 const MOVIES = [
-  ['The Grand Marquee', 1954, '#8b1e3f', 'G', 5_400_000],
-  ['Midnight Projector', 1961, '#1e4f8b', 'PG', 6_300_000],
-  ['Velvet Curtain', 1972, '#5b2a86', 'PG-13', 8_040_000],
-  ['Popcorn Skies', 1985, '#b5651d', 'R', 6_900_000],
-  ['Neon Matinee', 1993, '#127a6b', 'TV-MA', 7_200_000],
-  ['Last Reel', 2004, '#6b6b12', 'gb/12', 5_880_000],
-  ['Silver Screen Serenade', 2016, '#3a3a3a', 'gb/15', 9_000_000],
-  ['Encore', 2023, '#a12828', undefined, undefined], // unrated, no runtime: no contentRating or duration attribute
-].map(([title, year, color, contentRating, duration], i) => ({
+  ['The Grand Marquee', 1954, '#8b1e3f', 'G', 5_400_000, 'On the last night of the season, the owner of a failing picture palace stages one grand show to save it.'],
+  ['Midnight Projector', 1961, '#1e4f8b', 'PG', 6_300_000, 'A projectionist finds a reel that was never catalogued and starts to screen it after closing time.'],
+  // Long on purpose (over 300 characters): the app trims a summary before it is stored or shown.
+  ['Velvet Curtain', 1972, '#5b2a86', 'PG-13', 8_040_000, 'When the curtain rises on opening night, the lead actress is missing and the understudy has never seen the script. Over one long evening the cast, the stagehands and a critic who came to be unkind discover that the theatre keeps its own secrets, and that every one of them is written into the third act. Nobody leaves before the final bow.'],
+  ['Popcorn Skies', 1985, '#b5651d', 'R', 6_900_000, 'Two drive-in owners race a rival chain across three states to land the last print of a banned film.'],
+  ['Neon Matinee', 1993, '#127a6b', 'TV-MA', 7_200_000, 'A city of glass and neon, a detective with one free afternoon, and a double feature that may predict the crime.'],
+  ['Last Reel', 2004, '#6b6b12', 'gb/12', 5_880_000, 'The final film of a retiring director is lost in the post, and his editor sets out to find it.'],
+  ['Silver Screen Serenade', 2016, '#3a3a3a', 'gb/15', 9_000_000, 'A silent-film pianist keeps a dying cinema open by playing a score no one has heard before.'],
+  ['Encore', 2023, '#a12828', undefined, undefined, 'One more night, one more show.'], // unrated, no runtime: no contentRating or duration attribute
+].map(([title, year, color, contentRating, duration, summary], i) => ({
   ratingKey: String(i + 1),
   key: `/library/metadata/${i + 1}`,
   type: 'movie',
   title,
   year,
   color,
+  summary,
   ...(contentRating ? { contentRating } : {}),
   ...(duration ? { duration } : {}),
   rating: 9 - i * 0.4,

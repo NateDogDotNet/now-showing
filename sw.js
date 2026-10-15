@@ -17,6 +17,7 @@ const SHELL = [
   'js/display.js',
   'js/duration.js',
   'js/engine.js',
+  'js/fill.js',
   'js/frames.js',
   'js/helper.js',
   'js/kiosk.js',

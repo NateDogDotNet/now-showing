@@ -4,6 +4,7 @@
 // the query string) so browsers don't send a preflight that some Plex servers reject.
 
 import { allowedValues } from './ratings.js';
+import { SUMMARY_MAX, trimSummary } from './fill.js';
 
 export const PRODUCT = 'Now Showing';
 const PLEX_TV = 'https://plex.tv';
@@ -145,6 +146,7 @@ export function toPoster(m, source) {
     contentRating: ownRating, // '' = unrated or missing
     ...(seriesRating ? { seriesRating } : isEpisode ? { episodeRating: true } : {}), // seriesRating: the show's; episodeRating: contentRating is the episode's only
     duration: toMs(m.duration), // ms; the playing item's own length for an episode; 0 = unknown
+    summary: trimSummary(m.summary, SUMMARY_MAX), // trimmed here, before it reaches any stored descriptor; '' = none sent (the offline cache never keeps it)
   };
 }
 

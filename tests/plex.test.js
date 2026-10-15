@@ -40,7 +40,7 @@ test('client sends token in the query and only an Accept header (no CORS preflig
   };
   const client = createPlexClient({ serverUrl: 'http://h:32400/', token: 'tok', clientId: 'cid', fetchImpl });
   const pool = await client.pool({ libraryKey: '1', unwatchedOnly: true, size: 50 });
-  assert.deepEqual(pool, [{ ratingKey: '7', title: 'A', year: '1999', thumb: '/thumb/7', source: 'random', user: '', contentRating: '', duration: 0 }]);
+  assert.deepEqual(pool, [{ ratingKey: '7', title: 'A', year: '1999', thumb: '/thumb/7', source: 'random', user: '', contentRating: '', duration: 0, summary: '' }]);
   assert.equal(calls[0].url.searchParams.get('contentRating'), null, 'no limit: no rating filter is sent');
   const { url, opts } = calls[0];
   assert.equal(url.pathname, '/library/sections/1/all');
@@ -473,4 +473,38 @@ test('a TV-MA episode of a TV-PG show is refused live under PG and cached as TV-
   const { allows } = await import('../js/ratings.js');
   assert.equal(allows('PG', p.contentRating), false, 'refused live: the episode is TV-MA');
   assert.equal(allows('PG', p.seriesRating), true, 'the show itself is TV-PG');
+});
+
+// ---- landscape fill: the synopsis (R-FILL-1) ----
+
+test('toPoster carries a summary, trimmed to 300 characters on a word boundary before it is stored anywhere', () => {
+  const base = { type: 'movie', ratingKey: '3', title: 'Velvet Curtain', thumb: '/t/3' };
+  assert.equal(toPoster({ ...base, summary: 'A short plot.' }, 'random').summary, 'A short plot.');
+  const long = toPoster({ ...base, summary: 'Curtains rise on a quiet town. '.repeat(30) }, 'random').summary;
+  assert.ok(long.length <= 301, `length ${long.length}`);
+  assert.ok(long.endsWith('…'));
+  assert.ok(!/ …$/.test(long), 'cut on a word boundary');
+  assert.equal(toPoster(base, 'random').summary, '', 'no summary sent: empty');
+  assert.equal(toPoster({ ...base, summary: 7 }, 'random').summary, '', 'junk is empty');
+});
+
+test('toPoster: an episode carries its own summary', () => {
+  const ep = { type: 'episode', ratingKey: '2', grandparentRatingKey: '9', grandparentTitle: 'Show', title: 'E', thumb: '/t', summary: 'The pilot.' };
+  assert.equal(toPoster(ep, 'now-playing').summary, 'The pilot.');
+});
+
+test('every poster the client lists carries the trimmed summary (pool, item, items, sessions)', async () => {
+  const long = 'Lorem ipsum dolor sit amet. '.repeat(40);
+  const meta = (k) => ({ type: 'movie', ratingKey: k, title: `T${k}`, thumb: `/t/${k}`, summary: long });
+  const fetchImpl = async (url) => {
+    const path = new URL(url).pathname;
+    if (path === '/status/sessions') return jsonResponse({ MediaContainer: { Metadata: [{ ...meta('3'), User: { title: 'Nate' }, Player: { state: 'playing' } }] } });
+    return jsonResponse({ MediaContainer: { Metadata: [meta('1'), meta('2')] } });
+  };
+  const client = createPlexClient({ serverUrl: 'http://h:32400', token: 't', clientId: 'c', fetchImpl });
+  const playing = pickNowPlaying(await client.sessions());
+  assert.ok(playing, 'the session is picked');
+  assert.equal(playing.source, 'now-playing');
+  const lists = [await client.pool({ libraryKey: '1' }), [await client.item('1')], await client.items(['1', '2']), [playing]];
+  for (const p of lists.flat()) assert.ok(p.summary.length > 0 && p.summary.length <= 301, `summary ${p.summary.length}`);
 });

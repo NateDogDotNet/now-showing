@@ -32,6 +32,10 @@
 
   <main id="app" class="app" aria-live="polite">
     <div id="stage" class="stage">
+      <div id="fill-backdrop" class="fill-backdrop" aria-hidden="true" hidden>
+        <canvas id="fill-a" class="fill-canvas" width="48" height="72"></canvas>
+        <canvas id="fill-b" class="fill-canvas" width="48" height="72"></canvas>
+      </div>
       <div id="poster-box" class="poster-box">
         <img id="poster-a" class="poster-layer" alt="" decoding="async" />
         <img id="poster-b" class="poster-layer" alt="" decoding="async" />
@@ -40,6 +44,13 @@
         <div id="progress" class="progress" aria-hidden="true" hidden></div>
       </div>
       <img id="frame" class="frame" alt="" />
+      <aside id="info-panel" class="info-panel" hidden>
+        <div class="info-body">
+          <h2 id="info-title" class="info-title"></h2>
+          <p id="info-meta" class="info-meta"></p>
+          <p id="info-summary" class="info-summary"></p>
+        </div>
+      </aside>
     </div>
     <div id="empty" class="empty" hidden>
       <div class="empty-card">
@@ -222,6 +233,14 @@
               <option value="270">270°</option>
             </select>
           </label>
+          <label>Landscape fill
+            <select name="fillMode">
+              <option value="none">Off</option>
+              <option value="blur">Dimmed poster backdrop</option>
+              <option value="info">Title and synopsis</option>
+            </select>
+          </label>
+          <p id="fill-help" class="muted small">Fills the empty sides of a landscape screen. The backdrop is kept dim, but any large lit area shortens the life of an OLED screen, so it is off by default. A portrait screen shows nothing extra.</p>
           <label>Control labels
             <select name="controlLabels">
               <option value="auto">Auto</option>

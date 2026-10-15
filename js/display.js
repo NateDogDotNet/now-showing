@@ -3,6 +3,7 @@
 import { detectWindow, findFrame, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { formatRuntime } from './plex.js';
 import { posterBox, shiftOffset, stageSize } from './layout.js';
+import { backdropBox, fillState, infoBox, infoParts, infoTitleSize, swapBackdrop, visibleRight } from './fill.js';
 
 const POSTER_ASPECT = 2 / 3;
 // Empty border per side while pixel shift is on; the stage moves inside it.
@@ -26,6 +27,12 @@ export function createDisplay(root = document) {
     layers: [root.getElementById('poster-a'), root.getElementById('poster-b')],
     frame: root.getElementById('frame'),
     title: root.getElementById('title-card'),
+    backdrop: root.getElementById('fill-backdrop'),
+    canvases: [root.getElementById('fill-a'), root.getElementById('fill-b')], // one per poster layer: they cross-fade together
+    info: root.getElementById('info-panel'),
+    infoTitle: root.getElementById('info-title'),
+    infoMeta: root.getElementById('info-meta'),
+    infoSummary: root.getElementById('info-summary'),
     progress: root.getElementById('progress'),
     playerLabel: root.getElementById('player-label'),
   };
@@ -41,6 +48,9 @@ export function createDisplay(root = document) {
   let shiftStep = 0;
   let shiftTimer = null;
   let shiftEveryMs = 0;
+  let fill = 'none'; // the landscape fill in force: 'none' | 'blur' | 'info' (fillMode on a landscape screen)
+  let infoRoom = false; // the empty side is wide enough for the info panel
+  let infoText = false; // the poster on screen has a title for the panel to show
 
   /** Runs the pixel-shift step timer while `pixelShift` is on, restarting it only when the interval changes. */
   function syncShiftTimer() {
@@ -97,6 +107,71 @@ export function createDisplay(root = document) {
     }
   }
 
+  /** The backdrop of the poster on screen, drawn from its (already decoded) layer; nothing shows when there is none to draw. */
+  function drawFrontBackdrop() {
+    const img = el.layers[front];
+    swapBackdrop(el.canvases, front, img, img.classList.contains('active'));
+  }
+
+  /**
+   * Cuts a backdrop canvas with its poster layer. main.js hides a poster that is fading out and no longer allowed with
+   * `.cut` (K20, C7M1); the canvas of the same index gets `.cut` in the same task (a mutation observer's microtask), so
+   * a blurred copy of the title the limit just disallowed does not finish its fade.
+   */
+  function mirrorCut() {
+    el.layers.forEach((layer, i) => el.canvases[i].classList.toggle('cut', layer.classList.contains('cut')));
+  }
+  if (typeof MutationObserver === 'function') {
+    const watcher = new MutationObserver(mirrorCut);
+    el.layers.forEach((layer) => watcher.observe(layer, { attributes: true, attributeFilter: ['class'] }));
+  }
+
+  function syncInfoVisibility() {
+    el.info.hidden = !(fill === 'info' && infoRoom && infoText);
+  }
+
+  /**
+   * Lets the synopsis take the lines left under the title and the facts, so a long one ends in an ellipsis inside the box
+   * instead of running off its bottom. Measured, so it runs only while the panel shows (on a change of box or text).
+   */
+  function fitInfoSummary() {
+    const summary = el.infoSummary;
+    summary.style.removeProperty('--info-lines');
+    if (el.info.hidden || summary.hidden) return;
+    const lineHeight = parseFloat(getComputedStyle(summary).lineHeight);
+    if (!(lineHeight > 0)) return;
+    const parts = [el.infoTitle, el.infoMeta].filter((part) => !part.hidden);
+    const gap = parseFloat(getComputedStyle(el.infoTitle.parentElement).rowGap) || 0;
+    const used = parts.reduce((sum, part) => sum + part.offsetHeight, 0) + parts.length * gap;
+    summary.style.setProperty('--info-lines', String(Math.max(1, Math.floor((el.info.clientHeight - used) / lineHeight))));
+  }
+
+  /**
+   * Places the landscape fill (stage pixels; the stage's rotation and pixel shift carry it) and shows the one that applies.
+   * `posterRight` is where the visible poster ends, in stage pixels: the info panel starts after it.
+   */
+  function layoutFill(stageW, stageH, screenW, screenH, posterRight) {
+    const mode = fillState({ mode: settings.fillMode, w: window.innerWidth, h: window.innerHeight, rotation: settings.rotation });
+    const was = fill;
+    fill = mode;
+    el.backdrop.hidden = mode !== 'blur';
+    // Room for the pixel-shift glide, so an edge of the screen is never bare and the panel never slides off it.
+    const margin = settings.pixelShift ? Math.ceil(SHIFT_MARGIN * Math.max(screenW, screenH)) + 2 : 0;
+    if (mode === 'blur') {
+      const b = backdropBox({ stageW, stageH, screenW, screenH, margin });
+      Object.assign(el.backdrop.style, { left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px` });
+      if (was !== 'blur') drawFrontBackdrop();
+    }
+    if (mode === 'info') {
+      const b = infoBox({ stageW, stageH, screenW, screenH, posterRight, margin });
+      Object.assign(el.info.style, { left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px` });
+      el.info.style.setProperty('--info-title-size', `${infoTitleSize(screenW, screenH)}px`);
+      infoRoom = b.width > 0;
+    }
+    syncInfoVisibility();
+    fitInfoSummary();
+  }
+
   function layout() {
     if (!settings) return null;
     const { width, height } = stageSize({
@@ -108,9 +183,9 @@ export function createDisplay(root = document) {
     });
     el.stage.style.width = `${width}px`;
     el.stage.style.height = `${height}px`;
+    const sideways = settings.rotation === 90 || settings.rotation === 270;
     if (settings.pixelShift) {
       // Room left on the tighter axis, in screen pixels (the stage is rotated into place by CSS).
-      const sideways = settings.rotation === 90 || settings.rotation === 270;
       const room = Math.min(
         (window.innerWidth - (sideways ? height : width)) / 2,
         (window.innerHeight - (sideways ? width : height)) / 2,
@@ -147,6 +222,7 @@ export function createDisplay(root = document) {
     });
     el.box.style.setProperty('--poster-fit', settings.posterFit);
     rootStyle.setProperty('--fade-ms', `${settings.crossfadeMs}ms`);
+    layoutFill(width, height, sideways ? window.innerHeight : window.innerWidth, sideways ? window.innerWidth : window.innerHeight, visibleRight({ stageW: width, box }));
     return box;
   }
 
@@ -230,6 +306,8 @@ export function createDisplay(root = document) {
       if (image instanceof Blob) objectUrls.set(next, url);
       next.classList.add('active');
       prev.classList.remove('active');
+      // The backdrop changes in the same task as the poster, through the same transition, so the two stay in step.
+      swapBackdrop(el.canvases, 1 - front, next, fill === 'blur');
       front = 1 - front;
       this.currentPoster = poster;
       this.setTitle(poster);
@@ -247,8 +325,20 @@ export function createDisplay(root = document) {
       }
     },
 
-    /** The overlay slot: the 2.0.0 title line when `showTitle`, and "rating · runtime · year" when `showMeta`. */
+    /**
+     * The overlay slot: the 2.0.0 title line when `showTitle`, and "rating · runtime · year" when `showMeta`.
+     * It also fills the landscape info panel (title, the same meta line, the trimmed summary) from the same poster.
+     */
     setTitle(poster) {
+      const info = infoParts(poster, formatRuntime);
+      el.infoTitle.textContent = info.title;
+      el.infoMeta.textContent = info.meta;
+      el.infoMeta.hidden = !info.meta;
+      el.infoSummary.textContent = info.summary;
+      el.infoSummary.hidden = !info.summary;
+      infoText = Boolean(info.title);
+      syncInfoVisibility();
+      fitInfoSummary();
       const lines = [];
       if (settings?.showTitle && poster?.title) lines.push([poster.title, poster.year && `(${poster.year})`].filter(Boolean).join(' '));
       if (settings?.showMeta && poster) {
