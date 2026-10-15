@@ -128,6 +128,14 @@ test('hhmm sanitiser accepts HH:MM and falls back otherwise', () => {
   }
 });
 
+test('hhmm sanitiser pins each boundary case for every HH:MM key', () => {
+  for (const [bad, name] of [['24:00', '24:00'], ['9:00', '9:00'], ['09:60', '09:60'], ['', 'empty'], [null, 'null'], [900, 'number']]) {
+    assert.equal(sanitize({ dailyReloadTime: bad }).dailyReloadTime, '04:00', name);
+  }
+  assert.equal(sanitize({ dailyReloadTime: '00:00' }).dailyReloadTime, '00:00');
+  assert.equal(sanitize({ dailyReloadTime: '23:59' }).dailyReloadTime, '23:59');
+});
+
 test('numeric ranges clamp finite numbers; junk falls back to the default; counts round', () => {
   assert.equal(sanitize({ posterCacheLimit: 1 }).posterCacheLimit, 10);
   assert.equal(sanitize({ posterCacheLimit: 9999 }).posterCacheLimit, 300);

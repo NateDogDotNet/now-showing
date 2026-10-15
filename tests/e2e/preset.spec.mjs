@@ -73,6 +73,26 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   check('list of the keys, stage row untickable, Cancel changes nothing');
 });
 
+// ---- the list shows a select's label, not its stored value (hint too) ----
+for (const target of ['frame', 'stage']) {
+  await withApp({ settings: seed({ nightDimTarget: target }) }, async ({ page, app }) => {
+    await openSettings(page, app);
+    await page.click('#preset-btn');
+    const label = await page.evaluate(() => document.querySelector('#settings-form [name="nightDimTarget"] option[value="stage"]').textContent.trim());
+    assert.equal(label, 'The whole picture');
+    const rows = await page.$$eval('#preset-list [data-preset-key]', (rs) => rs.map((r) => ({ key: r.dataset.presetKey, text: r.textContent })));
+    const dim = rows.find((r) => r.key === 'nightDimTarget');
+    assert.ok(dim.text.startsWith(`Dim the whole picture: ${label}`), `row text: ${dim.text}`);
+    for (const r of rows) assert.ok(!/\bstage\b/.test(r.text), `${r.key} row shows the raw value: ${r.text}`);
+    if (target === 'stage') assert.ok(dim.text.endsWith('already set'), dim.text);
+    else {
+      const frameLabel = await page.evaluate(() => document.querySelector('#settings-form [name="nightDimTarget"] option[value="frame"]').textContent.trim());
+      assert.ok(dim.text.endsWith(`now ${frameLabel}`), `hint shows the label: ${dim.text}`);
+    }
+    check(`preset list shows the Dim option label (form value ${target})`);
+  });
+}
+
 // ---- Apply then Save ----
 for (const rating of ['R', '']) {
   await withApp({ settings: seed({ maxContentRating: rating, limitNowPlaying: true, idleSleepHours: 0, sleepStart: '22:00', sleepEnd: '06:00' }) }, async ({ page, app }) => {

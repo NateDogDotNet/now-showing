@@ -10,7 +10,7 @@ import { createPlexClient } from './plex.js';
 import { createPosterCache } from './poster-cache.js';
 import { allows } from './ratings.js';
 import { requestSize } from './layout.js';
-import { isPlausibleClock } from './schedule.js';
+import { isPlausibleClock, parseHHMM } from './schedule.js';
 import { createSettingsUI, pinSignIn } from './settings-ui.js';
 import { fromImport, isConfigured, load, save, STORAGE_KEY } from './settings.js';
 import { keyMap, listShortcuts, normalizeKey } from './shortcuts.js';
@@ -497,8 +497,8 @@ function dailyReloadTick() {
   if (!isPlausibleClock(now)) {
     reloadArmed = false; // when the clock is set, start from there: the time it jumps past is not "04:00 passing"
   } else {
-    const [h, m] = state.settings.dailyReloadTime.split(':').map(Number);
-    const due = now.getHours() * 60 + now.getMinutes() >= h * 60 + m;
+    const at = parseHHMM(state.settings.dailyReloadTime);
+    const due = at !== null && now.getHours() * 60 + now.getMinutes() >= at;
     const day = now.toDateString();
     if (!reloadArmed) {
       reloadArmed = true;
