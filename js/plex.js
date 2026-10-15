@@ -130,6 +130,11 @@ export function formatRuntime(ms) {
 export function toPoster(m, source) {
   const isEpisode = m.type === 'episode';
   const thumb = m._poster || m.thumb;
+  // contentRating is always the item's own: the live limit reads it (D75). An episode's rating is not its series' (D73): a
+  // non-empty grandparentContentRating travels apart as seriesRating, for the offline cache only; without one the poster
+  // says its rating is the episode's, so the cache never stores it under the series' key.
+  const seriesRating = isEpisode && typeof m.grandparentContentRating === 'string' ? m.grandparentContentRating : '';
+  const ownRating = typeof m.contentRating === 'string' ? m.contentRating : '';
   return {
     ratingKey: String(isEpisode ? m.grandparentRatingKey || m.ratingKey : m.ratingKey),
     title: isEpisode ? m.grandparentTitle || m.title : m.title,
@@ -137,7 +142,8 @@ export function toPoster(m, source) {
     thumb,
     source, // 'now-playing' | 'random' | 'static' | 'cache'
     user: m.User?.title || '',
-    contentRating: typeof m.contentRating === 'string' ? m.contentRating : '', // '' = unrated or missing
+    contentRating: ownRating, // '' = unrated or missing
+    ...(seriesRating ? { seriesRating } : isEpisode ? { episodeRating: true } : {}), // seriesRating: the show's; episodeRating: contentRating is the episode's only
     duration: toMs(m.duration), // ms; the playing item's own length for an episode; 0 = unknown
   };
 }

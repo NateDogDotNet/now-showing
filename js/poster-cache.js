@@ -48,7 +48,10 @@ export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = glo
       if (!available) return;
       const cache = await caches.open(CACHE_NAME);
       await cache.put(keyUrl(poster.ratingKey), new Response(blob, { headers: { 'Content-Type': blob.type || 'image/jpeg' } }));
-      const meta = { ratingKey: poster.ratingKey, title: poster.title, year: poster.year, thumb: poster.thumb, contentRating: poster.contentRating || '', ...(poster.duration ? { duration: poster.duration } : {}), width: size.width, height: size.height, savedAt: Date.now() };
+      // An episode's own rating is not its show's (D73): keep the show's stored rating; a show never seen stays unrated (hidden under a limit).
+      const stored = readIndex().find((e) => e.ratingKey === poster.ratingKey)?.contentRating;
+      const contentRating = poster.seriesRating || (poster.episodeRating ? stored || '' : poster.contentRating || '');
+      const meta = { ratingKey: poster.ratingKey, title: poster.title, year: poster.year, thumb: poster.thumb, contentRating, ...(poster.duration ? { duration: poster.duration } : {}), width: size.width, height: size.height, savedAt: Date.now() };
       const list = [meta, ...readIndex().filter((e) => e.ratingKey !== poster.ratingKey)];
       const evicted = list.splice(maxEntries());
       writeIndex(list);
@@ -61,9 +64,10 @@ export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = glo
      * is written when it already matches or the poster is not cached.
      */
     refreshRating(poster) {
+      if (poster.episodeRating && !poster.seriesRating) return; // its rating is the episode's, not the show's (D73)
       const list = readIndex();
       const entry = list.find((e) => e.ratingKey === poster.ratingKey);
-      const contentRating = poster.contentRating || '';
+      const contentRating = poster.seriesRating || poster.contentRating || '';
       if (!entry || entry.contentRating === contentRating) return;
       entry.contentRating = contentRating;
       writeIndex(list);

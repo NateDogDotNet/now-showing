@@ -444,3 +444,33 @@ test('pinSignIn stops at once when aborted, before or during the wait', async ()
   done.abort();
   assert.equal(await pinSignIn('cid', { fetchImpl, signal: done.signal, onCode: () => assert.fail('no code after abort') }), null);
 });
+
+// D73/D75 (review finding 1): contentRating is always the item's own (the live limit reads it); a series rating, when Plex sends a non-empty one, is carried apart for the cache.
+test('toPoster: an episode keeps its own contentRating and carries a non-empty grandparentContentRating as seriesRating', () => {
+  const ep = { type: 'episode', ratingKey: '2', grandparentRatingKey: '9', grandparentTitle: 'Show', title: 'E', thumb: '/t', contentRating: 'TV-MA', grandparentContentRating: 'TV-PG' };
+  const p = toPoster(ep, 'now-playing');
+  assert.equal(p.contentRating, 'TV-MA', "the episode's own rating: the live limit check reads it");
+  assert.equal(p.seriesRating, 'TV-PG');
+  assert.notEqual(p.episodeRating, true, 'the show\'s rating is known: the cache may store it');
+});
+
+test('toPoster: an episode without a non-empty grandparentContentRating marks its rating as the episode\'s own', () => {
+  const ep = { type: 'episode', ratingKey: '2', grandparentRatingKey: '9', grandparentTitle: 'Show', title: 'E', thumb: '/t', contentRating: 'TV-PG' };
+  for (const extra of [{}, { grandparentContentRating: '' }, { grandparentContentRating: 7 }]) {
+    const p = toPoster({ ...ep, ...extra }, 'now-playing');
+    assert.equal(p.episodeRating, true);
+    assert.equal(p.seriesRating, undefined);
+    assert.equal(p.contentRating, 'TV-PG', 'the live limit check still sees what Plex sent');
+  }
+  assert.equal(toPoster({ ...ep, contentRating: undefined }, 'now-playing').episodeRating, true);
+  const movie = toPoster({ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t', contentRating: 'PG', grandparentContentRating: 'R' }, 'random');
+  assert.notEqual(movie.episodeRating, true, 'a movie\'s rating is its own');
+  assert.equal(movie.seriesRating, undefined);
+});
+
+test('a TV-MA episode of a TV-PG show is refused live under PG and cached as TV-PG', async () => {
+  const p = toPoster({ type: 'episode', ratingKey: '2', grandparentRatingKey: '9', grandparentTitle: 'Show', title: 'E', thumb: '/t', contentRating: 'TV-MA', grandparentContentRating: 'TV-PG' }, 'now-playing');
+  const { allows } = await import('../js/ratings.js');
+  assert.equal(allows('PG', p.contentRating), false, 'refused live: the episode is TV-MA');
+  assert.equal(allows('PG', p.seriesRating), true, 'the show itself is TV-PG');
+});

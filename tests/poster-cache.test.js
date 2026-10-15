@@ -298,3 +298,54 @@ test('random() with a limit still honours excludeKey and returns the blob', asyn
   // only one allowed entry and it is the excluded one: it is still the only choice (the same rule as without a limit)
   assert.equal((await pc.random('2', 'G'))?.poster.ratingKey, '1');
 });
+
+// D73 (review finding 1): a now-playing episode is keyed by its show, but its own rating is not the show's.
+const episodePoster = (n, contentRating) => ({ ...poster(n, `/t/${n}`, contentRating), episodeRating: true });
+
+test('an episode poster never changes the stored rating of its show, through put or refreshRating', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(poster(1, '/t/1', 'TV-MA'), blob(), size(600, 900)); // the show, from the pool
+  await pc.put(episodePoster(1, 'TV-PG'), blob(), size(600, 900));
+  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-MA', 'put keeps the show rating');
+  pc.refreshRating(episodePoster(1, 'TV-PG'));
+  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-MA', 'refreshRating keeps the show rating');
+  assert.equal(await pc.random(undefined, 'PG'), null, 'the TV-MA show stays hidden under PG offline');
+});
+
+test('an episode without a rating never stores "" over the show rating, and a new episode-only entry has no rating (fails closed)', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(poster(1, '/t/1', 'PG'), blob(), size(600, 900));
+  await pc.put(episodePoster(1, undefined), blob(), size(600, 900));
+  pc.refreshRating(episodePoster(1, undefined));
+  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'PG');
+  assert.equal((await pc.random(undefined, 'PG'))?.poster.ratingKey, '1');
+  await pc.put(episodePoster(2, 'G'), blob(), size(600, 900));
+  assert.equal(pc.entries().find((e) => e.ratingKey === '2').contentRating, '', 'show never seen: unknown, so hidden under a limit');
+});
+
+test('the show rating still follows Plex when the show item itself is seen', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(poster(1, '/t/1', 'TV-MA'), blob(), size(600, 900));
+  pc.refreshRating(poster(1, '/t/1', 'TV-PG'));
+  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-PG');
+  await pc.put({ ...poster(1, '/t/1', 'TV-14'), episodeRating: false }, blob(), size(600, 900));
+  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-14');
+});
+
+// D75: a series rating (non-empty) is stored under the show's key; an empty one never overwrites.
+test('seriesRating is stored under the show key by put and refreshRating, even beside a different own rating', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put({ ...episodePoster(1, 'TV-MA'), episodeRating: undefined, seriesRating: 'TV-PG' }, blob(), size(600, 900));
+  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'TV-PG', 'a show first seen through an episode');
+  pc.refreshRating({ ...episodePoster(1, 'TV-MA'), episodeRating: undefined, seriesRating: 'PG-13' });
+  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'PG-13', 'follows the series rating');
+});
+
+test('an empty seriesRating never overwrites the stored show rating', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(poster(1, '/t/1', 'PG'), blob(), size(600, 900));
+  const empty = { ...episodePoster(1, 'TV-MA'), seriesRating: '' };
+  await pc.put(empty, blob(), size(600, 900));
+  pc.refreshRating(empty);
+  assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'PG');
+});

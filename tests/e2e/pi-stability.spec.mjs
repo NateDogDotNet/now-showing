@@ -9,7 +9,10 @@
 
 import assert from 'node:assert/strict';
 import { createServer, request as httpRequest } from 'node:http';
+import { createPinAuth } from '../../js/kiosk.js';
 import { withApp, freePort } from './lib.mjs';
+
+const pinAuth = await createPinAuth('2468');
 
 const cases = [];
 const piCase = (name, opts, fn) => cases.push({ name, opts: { serveArgs: [], serviceWorkers: 'allow', clock: { time: T0 }, ...opts }, fn });
@@ -672,6 +675,24 @@ piCase('14c a normal fresh load still starts a fresh idle clock', { clock: { tim
   await jumpTo(page, '2026-01-05T05:15:00');
   await expectAsleep(page, true, 'asleep an hour after the fresh load');
   check('a normal reload restarts the idle clock (K13)');
+});
+
+// D73 (review finding 7): a service-worker update reload waits for the same quiet moment as the daily reload.
+piCase('15 a service-worker update waits for the PIN prompt to close, then reloads', { settings: seed({ dailyReload: false, settingsPinHash: pinAuth.hash, settingsPinSalt: pinAuth.salt }) }, async ({ page, app }) => {
+  await countNavigations(page);
+  await page.goto(app.url);
+  await controlled(page);
+  await page.reload(); // a page that booted under the worker's control is the one a worker update reloads
+  await controlled(page);
+  await posterShown(page);
+  await page.keyboard.press('s'); // Settings is behind a PIN: the prompt opens
+  await page.waitForFunction(() => document.getElementById('pin-dialog').open, null, { timeout: 5000 });
+  await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new Event('controllerchange'))); // a new version took over
+  await staysPut(page, 2, 8000, 'the PIN prompt is open');
+  assert.equal(await page.evaluate(() => document.getElementById('pin-dialog').open), true, 'the prompt was not closed under the owner');
+  await page.click('#pin-cancel');
+  await untilNavigations(page, 3, 30_000);
+  check('a worker update with the PIN prompt open: no reload until it closes, then the reload');
 });
 
 // ---------- run ----------

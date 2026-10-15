@@ -919,6 +919,83 @@ contentCase('22 C7M2 a poster seen online refreshes its cached rating', { settin
   check('stale stored rating PG for title 4 -> shown online again -> the index says R');
 });
 
+// 23-24. D73 (review finding 1): a now-playing episode keeps the show's key in the cache but not its rating.
+const episodeOpts = { settings: seed({ rotateSeconds: 10, showNowPlaying: true, nowPlayingPollSeconds: 5 }), clock: { time: '2026-01-05T12:00:00' } };
+
+async function cacheAllNoLimit(page, url) {
+  await page.goto(url);
+  await posterShown(page);
+  for (let i = 0; i < 200 && (await index(page)).length < 8; i++) await showNext(page);
+  assert.equal((await index(page)).length, 8, 'all 8 posters are cached');
+}
+
+/** Polls (real time) until the index entry for `key` stores `rating`; returns whether it did within `ms`. */
+async function indexRatingIs(page, key, rating, ms = 10000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    if ((await index(page)).find((e) => e.ratingKey === key)?.contentRating === rating) return true;
+    await page.waitForTimeout(50);
+  }
+  return false;
+}
+
+async function offlineTitles(page, mock, rounds) {
+  await mock.down();
+  await page.reload();
+  await posterShown(page);
+  const seen = new Set([titleNo(await activeAlt(page))]);
+  for (let i = 0; i < rounds; i++) {
+    await page.clock.runFor(361_000);
+    await page.waitForTimeout(300);
+    seen.add(titleNo(await activeAlt(page)));
+  }
+  return seen;
+}
+
+contentCase('23 D73 a TV-PG episode of a cached TV-MA show does not unlock the show offline', episodeOpts, async ({ page, app, mock }) => {
+  await cacheAllNoLimit(page, app.url);
+  assert.equal((await index(page)).find((e) => e.ratingKey === '5').contentRating, 'TV-MA');
+  await patchSettings(page, { maxContentRating: 'PG' });
+  await mock.play('5', { episode: '1', episodeRating: 'TV-PG' }); // title 5 as a series, this episode rated TV-PG
+  await page.reload();
+  await waitForTitle(page, 5); // shown, so the tick's refreshRating for this poster has already run
+  assert.equal((await index(page)).find((e) => e.ratingKey === '5').contentRating, 'TV-MA', "the episode's TV-PG did not overwrite the show's rating");
+  const seen = await offlineTitles(page, mock, 8);
+  assert.ok(!seen.has(5), `the TV-MA show is not shown from the cache under PG: ${asSorted(seen)}`);
+  for (const t of seen) assert.ok([0, 1, 2].includes(t), `offline under PG showed title ${t}`);
+  check(`limit PG, TV-PG episode of the cached TV-MA show playing, Plex down: the show is never shown offline (${asSorted(seen)})`);
+});
+
+contentCase('24 D73 an unrated episode does not hide a PG-rated show offline', { ...episodeOpts, settings: seed({ rotateSeconds: 10, showNowPlaying: true, nowPlayingPollSeconds: 5, limitNowPlaying: false }) }, async ({ page, app, mock }) => {
+  await cacheAllNoLimit(page, app.url);
+  await patchSettings(page, { maxContentRating: 'PG' });
+  await mock.play('2', { episode: '1' }); // title 2 (PG) as a series; this episode carries no rating
+  await page.reload();
+  await waitForTitle(page, 2); // shown, so the tick's refreshRating for this poster has already run
+  assert.equal((await index(page)).find((e) => e.ratingKey === '2').contentRating, 'PG', 'an unrated episode did not blank the show\'s rating');
+  const seen = await offlineTitles(page, mock, 6);
+  assert.ok(seen.has(2), `the PG show is still shown from the cache offline: ${asSorted(seen)}`);
+  check(`limit PG, unrated episode of the cached PG show playing, Plex down: the show is still shown offline (${asSorted(seen)})`);
+});
+
+// 25. D75: the series rating Plex sends feeds the cache; the live check keeps using the episode's own rating.
+contentCase('25 D75 grandparentContentRating feeds the cache, the live check uses the episode\'s own rating', episodeOpts, async ({ page, app, mock }) => {
+  await cacheAllNoLimit(page, app.url);
+  assert.equal((await index(page)).find((e) => e.ratingKey === '5').contentRating, 'TV-MA');
+  await patchSettings(page, { maxContentRating: 'PG' });
+  await mock.play('5', { episode: '1', episodeRating: 'TV-PG', grandparentRating: 'TV-PG' });
+  await page.reload();
+  await waitForTitle(page, 5);
+  assert.ok(await indexRatingIs(page, '5', 'TV-PG'), "the show's cached rating follows grandparentContentRating");
+  // A TV-MA episode of the TV-PG show: refused live under PG, because the live check uses the episode's own rating.
+  await mock.play('5', { episode: '1', episodeRating: 'TV-MA', grandparentRating: 'TV-PG' });
+  await page.reload();
+  await posterShown(page);
+  const seen = await sample(page, 10);
+  assert.ok(!seen.has(5), `the TV-MA episode is not displayed live under PG: ${asSorted(seen)}`);
+  check('series rating TV-PG feeds the cache; a TV-MA episode of it is refused live under PG');
+});
+
 // ---------- run ----------
 
 const WORKERS = Number(process.env.E2E_CONTENT_WORKERS || 4);

@@ -312,7 +312,9 @@ async function handleFailure(err, { notify = false } = {}) {
     }
   }
   if (!display.currentPoster) {
-    const limited = state.settings.maxContentRating && !fatal;
+    // The limit is the reason only when it emptied the cache: posters are cached, and none of them passes it (D73).
+    const stored = cache.entries();
+    const limited = state.settings.maxContentRating && !fatal && stored.length > 0 && !stored.some((e) => allows(state.settings.maxContentRating, e.contentRating));
     showEmpty(true, limited ? 'No posters within the household limit are available while Plex is unreachable.' : err.message, err.kind);
   }
   // A refresh somebody asked for that fails with a poster still on screen has nothing else to say so: the toast carries the fixes.
@@ -397,7 +399,7 @@ const RELOAD_GAP_MS = 10 * 60_000; // never two reloads closer than this
 const RELOAD_PROBE_MS = 5000;
 let bootAt = Date.now(); // moved with the clock when it is set after boot (syncSleepClock)
 
-let reloadPending = ''; // 'scheduled' | 'wake' | '': a reload is wanted and waits for a quiet moment
+let reloadPending = ''; // 'scheduled' | 'wake' | 'update' | '': a reload is wanted and waits for a quiet moment
 let reloadChecking = false; // the probe is in flight
 let reloading = false; // location.reload() was called
 let reloadSkip = ''; // why the last attempt was skipped (Diagnostics)
@@ -428,7 +430,7 @@ function reloadMustWait() {
 }
 
 function skipReload(why) {
-  reloadPending = '';
+  if (reloadPending !== 'update') reloadPending = ''; // a wanted update reload is not the daily reload's to cancel
   reloadSkip = why;
   log.info(`Daily reload skipped: ${why}`);
 }
@@ -454,6 +456,13 @@ function requestReloadAfterWake() {
 /** Runs a wanted reload once nothing is in the way. Anything unsafe skips it; a busy moment only delays it. */
 async function runDailyReload() {
   if (reloading || reloadChecking) return;
+  if (reloadPending === 'update') {
+    // A new version took over (D73). Kiosks are unattended, so it reloads into it, but only at the same quiet moments
+    // as the daily reload. It is not the daily reload: the setting, the 10 minute gap and the probe do not apply.
+    if (reloadMustWait()) return; // stays pending: looked at again in a second
+    log.info('Reloading into the new version');
+    return reloadAutomatically();
+  }
   const blocker = dailyReloadBlocker();
   if (blocker) return skipReload(blocker);
   if (reloadMustWait()) return; // stays pending: looked at again in a second
@@ -1237,8 +1246,8 @@ function registerServiceWorker() {
   }
   const hadController = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    // A new version took over. Kiosks are unattended, so reload into it automatically.
-    if (hadController && !settingsUI.isOpen) reloadAutomatically();
+    // A new version took over: reload into it once nothing is in the way (the daily reload's waits).
+    if (hadController) reloadPending = 'update';
   });
   navigator.serviceWorker
     .register('sw.js')
@@ -1394,7 +1403,10 @@ async function boot() {
   const config = await readConfigJson();
   if (source === 'defaults' && config !== null) {
     const provisioned = provisionedSettings(config);
-    if (provisioned) state.settings = save(storage, provisioned);
+    if (provisioned) {
+      state.settings = save(storage, provisioned);
+      storage.setItem(WHATS_NEW_KEY, '2.1'); // provisioned from nothing: a fresh install, so there is no upgrade to announce (D73)
+    }
   }
   // The PIN reset (D10, Q21): while config.json serves {"resetPin": true} the PIN is cleared on every load.
   pinResetFlag = config !== null && shouldResetPin(parseJson(config));

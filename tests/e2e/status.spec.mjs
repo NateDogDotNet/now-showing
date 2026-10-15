@@ -175,6 +175,33 @@ statusCase('waking brings the pill text current at once (no wait for the 1 s tic
   check('wake: pill current immediately');
 });
 
+// D73 (review finding 6): the empty card blames the household limit only when the limit is what emptied it.
+const stallPlex = (page, mockPort) => page.route(new RegExp(`127\\.0\\.0\\.1:${mockPort}/`), () => {}); // never answered: the 10 s request timeout fires
+const emptyMessage = async (page) => {
+  await page.waitForFunction(() => !document.getElementById('empty').hidden && /respond in time|household limit/.test(document.getElementById('empty-message').textContent), null, { timeout: 30000 });
+  return page.textContent('#empty-message');
+};
+
+statusCase('limit set, nothing cached, Plex times out: the card gives the timeout, not the limit', { settings: seed({ maxContentRating: 'PG' }) }, async ({ page, app }) => {
+  await stallPlex(page, app.mockPort);
+  await page.goto(app.url);
+  const message = await emptyMessage(page);
+  assert.match(message, /did not respond in time/);
+  assert.doesNotMatch(message, /household limit/);
+  check('limit PG, empty cache, Plex timeout: the empty card shows the timeout message');
+});
+
+const aboveLimit = JSON.stringify([
+  { ratingKey: '4', title: 'Popcorn Skies', year: 1985, thumb: '/library/metadata/4/thumb/1700000000', contentRating: 'R', width: 600, height: 900, savedAt: 1 },
+  { ratingKey: '5', title: 'Neon Matinee', year: 1993, thumb: '/library/metadata/5/thumb/1700000000', contentRating: 'TV-MA', width: 600, height: 900, savedAt: 2 },
+]);
+statusCase('limit set, every cached poster above it, Plex times out: the card gives the limit wording', { settings: seed({ maxContentRating: 'PG' }), localStorage: { 'plexPoster.posterIndex': aboveLimit } }, async ({ page, app }) => {
+  await stallPlex(page, app.mockPort);
+  await page.goto(app.url);
+  assert.match(await emptyMessage(page), /household limit/);
+  check('limit PG, cached posters all above it, Plex timeout: the empty card shows the household-limit wording');
+});
+
 let failed = 0;
 for (const c of cases) {
   try {
