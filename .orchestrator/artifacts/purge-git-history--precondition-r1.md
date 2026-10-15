@@ -322,3 +322,46 @@ Resumed 2026-10-15T00:42:10Z. Read-only. I read `docs/integration-plan.md` §27 
 The safety gates are correct. Nothing reaches `gh repo delete` unless config.js is gone, every list literal is gone, the tip trees are unchanged and fsck is clean, and nothing reaches it at all without `--confirm-delete`. The remote order, the re-sync and the Pages call are right. One item remains before approval: the script destroys the inputs that criterion 1 needs, so the phase could not show its own acceptance criterion after an irreversible act (gap 1). Adding criterion 1 to the script before the shred closes it; that is a three-line delta check. The casing fix (line 33 plus the plan wording) and gaps 4–6 are Minor and do not block.
 
 Verdict: PRECONDITIONS NOT MET
+
+## Re-check r1d
+
+Resumed 2026-10-15T00:45:43Z. Read-only; the script was not run. I read `purge-git-history--run.sh` at ce1332d in full (73 lines; `bash -n` → ok) and the ce1332d diff of `docs/`. One demonstration ran in a `bash -c` with `false`/`true` standing in for the clone and the tests (no network, no repository). The leaked value and the owner's name are not printed.
+
+### The r1c points
+
+| Point | Status | Evidence |
+|---|---|---|
+| Criterion 1 runs against a fresh clone of the new repository while the list is on disk | **Present, but not a hard stop (see Blocker)** | `:63`–`:64` step 5b; the shred moved to `:73`, the last line |
+| Surname casings lower / capitalised / upper | **Confirmed** | `:34` `(last.lower(), last.capitalize(), last.upper())` |
+| Fresh, private output directory; refuses an existing `backup.git`; "never /tmp" | **Confirmed, one Minor** | `:3`–`:4` usage comment; `:8` `test ! -e "$OUT/backup.git" \|\| exit 1; mkdir -p; chmod 700`. Minor: `chmod 700` applies to whatever directory is passed. If that is an existing directory such as `$HOME`, it changes `$HOME`'s mode. For `/tmp` the chmod fails and `set -e` stops, which is safe. Requiring a non-existent path (`test ! -e "$OUT" && mkdir -m 700 "$OUT"`) would be tighter. |
+| `gh api` fields quoted | **Confirmed** | `:59` `-f "source[branch]=main" -f "source[path]=/"` on both POST and PUT |
+| Step 6 refuses a moved checkout | **Confirmed** | `:67` HEAD must equal `backup.git`'s `refs/heads/claude/intelligent-rubin-4vsi63`, else `exit 1` before set-url/reset |
+| Step 6 proves 5c4a716 is gone | **Confirmed** | `:72` `! git cat-file -e 5c4a716 && echo gone \|\| { echo still present; exit 1; }`. A present object → exit 1, an absent one → message. `!` exempts the test from `set -e` as intended. |
+| Plan wording | **Confirmed** | §27 step (3): "three casings (lower, capitalised, upper; history holds the capitalised form, in 58 commit trees)", which matches r1c's count. The D77 note in decisions.md records the same. |
+| r1 Blocker 1, r1b Blocker 2 | still resolved | No change to the masked lines or to criterion 1's text |
+
+### Blocker (Important, code-bug): step 5b can print "criterion 1 exit 0" when criterion 1 failed
+
+`:64` is one `&&` chain, `d=$(mktemp -d) && git clone … && test -z <config.js> && test -z <refs/pull> && while …; done < "$LIST"`, followed by `; echo "criterion 1 exit 0 …"`. Under `set -e`, a failure in any command of an `&&` list other than the last does **not** exit the shell. Only the loop's own `exit 1` stops it. So a failed clone, a `config.js` hit or a `refs/pull/*` ref falls through to the success message and on into step 6. Demonstration, with the same structure as `:64`:
+
+```
+$ bash -c 'set -euo pipefail; LIST=/dev/null; d=$(mktemp -d) && false && test -z "" && while IFS= read -r line; do exit 1; done < "$LIST"; echo "criterion 1 exit 0 printed although the clone step failed"; …; d=$(mktemp -d) && true && test -z "x" && while …; done < "$LIST"; echo "criterion 1 exit 0 printed although the config.js test failed"; …; echo "reached step 6"'; echo "exit=$?"
+criterion 1 exit 0 printed although the clone step failed
+criterion 1 exit 0 printed although the config.js test failed
+reached step 6
+exit=0
+```
+
+What this means in practice: the content pushed is the work clone already gated hard at `:45`–`:48`, and `:61` checks `refs/pull/*` hard. So the data is not at risk. The risk is the record: the line the conductor will quote as criterion 1's evidence for an irreversible phase can be false, most plausibly when the clone fails (network, or GitHub creating the repository asynchronously). Fix, one line: end the chain with `… done < "$LIST" || { echo "criterion 1 FAILED"; exit 1; }`, or wrap it as `if ! ( set -e; … ); then echo "criterion 1 FAILED"; exit 1; fi`. Everything else in the script I have re-confirmed as hard stops.
+
+### Anything else blocking the approval pause
+
+No. The remaining items are Minor and do not block:
+- the `chmod` scope above;
+- no scripted resume path after `:53` (r1c gap 4; the hand-off should carry the manual continuation lines);
+- the site-load check is left to the conductor or owner;
+- the moderate-confidence note on the Pages POST defaults (r1c).
+
+Before the run, the checkout must be clean. `:12` will refuse the current ` M .orchestrator/phases/purge-git-history.md` and this append until they are committed and pushed (and `:13` needs local HEAD equal to origin).
+
+Verdict: PRECONDITIONS NOT MET (one line at :64; with the `|| { …; exit 1; }` guard added and seen in a delta, MET)

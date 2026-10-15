@@ -5,7 +5,7 @@
 # Every check before the delete is a hard stop (set -e). No value from the replace list is ever printed.
 set -euo pipefail
 REPO=/home/nathan/plex-poster-app; OLD=NateDogDotNet/plex-poster-app; NEW=NateDogDotNet/now-showing
-OUT=${1:?fresh private dir}; CONFIRM=${2:-}; test ! -e "$OUT/backup.git" || { echo "$OUT is not fresh"; exit 1; }; mkdir -p "$OUT"; chmod 700 "$OUT"; cd "$OUT"
+OUT=${1:?fresh private dir}; CONFIRM=${2:-}; test ! -e "$OUT" || { echo "$OUT already exists; give a path that does not exist yet"; exit 1; }; mkdir -p "$OUT"; chmod 700 "$OUT"; cd "$OUT"
 step() { printf '\n### %s\n' "$1"; }
 
 step "0 preconditions"
@@ -61,7 +61,7 @@ gh repo edit "$NEW" --homepage "https://natedogdotnet.github.io/now-showing/"
 echo "origin refs after push:"; git ls-remote "https://github.com/$NEW.git" | cut -c1-12,41- ; test -z "$(git ls-remote "https://github.com/$NEW.git" 'refs/pull/*')"
 
 step "5b plan criterion 1, verbatim, against a fresh clone of $NEW (the list is still on disk)"
-d=$(mktemp -d) && git clone -q "https://github.com/$NEW.git" "$d/fresh" && test -z "$(git -C "$d/fresh" log --all --oneline -- config.js)" && test -z "$(git ls-remote "https://github.com/$NEW.git" "refs/pull/*")" && while IFS= read -r line; do lit=${line%%==>*}; test -n "$lit" && test -z "$(git -C "$d/fresh" log --all -F -S"$lit" --oneline)" || exit 1; done < "$LIST"; echo "criterion 1 exit 0 (fresh clone of $NEW)"; rm -rf "$d"
+d=$(mktemp -d) && git clone -q "https://github.com/$NEW.git" "$d/fresh" && test -z "$(git -C "$d/fresh" log --all --oneline -- config.js)" && test -z "$(git ls-remote "https://github.com/$NEW.git" "refs/pull/*")" && while IFS= read -r line; do lit=${line%%==>*}; test -n "$lit" && test -z "$(git -C "$d/fresh" log --all -F -S"$lit" --oneline)" || exit 1; done < "$LIST" || { echo "criterion 1 FAILED against the fresh clone of $NEW"; exit 1; }; echo "criterion 1 exit 0 (fresh clone of $NEW)"; rm -rf "$d"
 
 step "6 re-sync the conductor's checkout"
 test "$(git -C "$REPO" rev-parse HEAD)" = "$(git -C backup.git rev-parse refs/heads/claude/intelligent-rubin-4vsi63)" || { echo "the checkout moved during the run; not resetting"; exit 1; }
@@ -71,3 +71,9 @@ for b in $(git -C "$REPO" for-each-ref --format='%(refname:short)' refs/heads/);
 git -C "$REPO" reset -q --hard "origin/claude/intelligent-rubin-4vsi63"; git -C "$REPO" reflog expire --expire=now --all; git -C "$REPO" gc -q --prune=now
 echo "checkout tip: $(git -C "$REPO" rev-parse --short HEAD); config.js in history: $(git -C "$REPO" log --all --oneline -- config.js | wc -l)"; ! git -C "$REPO" cat-file -e 5c4a716 2>/dev/null && echo "old object 5c4a716 gone from the checkout" || { echo "5c4a716 still present"; exit 1; }
 shred -u "$LIST" 2>/dev/null || rm -f "$LIST"; echo "list removed; backup.git and commit-map kept in $OUT"
+
+# Manual continuation if the script dies after the delete (step 4) — nothing is lost: backup.git and work/ are in $OUT.
+#   cd $OUT/work && git remote add origin https://github.com/NateDogDotNet/now-showing.git   (gh repo create first if step 5 had not run)
+#   git push --all origin && git push --tags origin && gh repo edit NateDogDotNet/now-showing --default-branch main
+#   gh api -X POST repos/NateDogDotNet/now-showing/pages -f "source[branch]=main" -f "source[path]=/"
+#   then step 5b (criterion 1 with $OUT/replace.list), step 6 (re-sync), and shred the list.
