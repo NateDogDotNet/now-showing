@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # purge-git-history: the real run (D49, D76, D77). Irreversible from the first point of no return.
-# Usage: run.sh <scratch dir outside the repository> [--confirm-delete]   (without --confirm-delete it stops before the delete)
+# Usage: run.sh <fresh private dir outside the repository> [--confirm-delete]   (without --confirm-delete it stops before the delete)
+# The dir holds the mirror backup (it contains the token and the owner's name): a private path under $HOME, never /tmp.
 # Every check before the delete is a hard stop (set -e). No value from the replace list is ever printed.
 set -euo pipefail
 REPO=/home/nathan/plex-poster-app; OLD=NateDogDotNet/plex-poster-app; NEW=NateDogDotNet/now-showing
-OUT=${1:?scratch dir}; CONFIRM=${2:-}; mkdir -p "$OUT"; cd "$OUT"
+OUT=${1:?fresh private dir}; CONFIRM=${2:-}; test ! -e "$OUT/backup.git" || { echo "$OUT is not fresh"; exit 1; }; mkdir -p "$OUT"; chmod 700 "$OUT"; cd "$OUT"
 step() { printf '\n### %s\n' "$1"; }
 
 step "0 preconditions"
@@ -30,7 +31,7 @@ entries = [(L, '<leaked-token>')]
 for v in {u, u.replace('\\','/'), u.replace('\\','\\\\'), u.replace(' ','%20'), u.replace('\\','/').replace(' ','%20'), u.replace('\\','\\\\').replace(' ','%20'), urllib.parse.quote(u), urllib.parse.quote(u, safe=':/')}:
     entries.append((v, '%USERPROFILE%'))
 for v in [f'{first} {last}', f'{first}%20{last}', f'{first}|{last}', f'{first}\\|{last}']: entries.append((v, '<owner>'))
-for v in (last, last.capitalize(), last.upper()): entries.append((v, '<owner-surname>'))
+for v in (last.lower(), last.capitalize(), last.upper()): entries.append((v, '<owner-surname>'))
 open(out, 'w').write(''.join(f'{a}==>{b}\n' for a, b in entries))
 PY
 git -C "$REPO" show 11ed786:.orchestrator/artifacts/real-server-validation--home-core-r1b.txt | grep -o '"[^"]* (shared)"' | sed 's/^"//; s/ (shared)"$//' | awk '{printf "%s==><shared server %d>\n", $0, NR}' >> "$LIST"
@@ -55,14 +56,18 @@ step "5 create $NEW, push everything (POINT OF NO RETURN 2), default branch main
 gh repo create "$NEW" --public
 (cd work && git remote add origin "https://github.com/$NEW.git" && git push -q --all origin && git push -q --tags origin)
 gh repo edit "$NEW" --default-branch main
-gh api -X POST "repos/$NEW/pages" -f source[branch]=main -f source[path]=/ >/dev/null || gh api -X PUT "repos/$NEW/pages" -f source[branch]=main -f source[path]=/ >/dev/null
+gh api -X POST "repos/$NEW/pages" -f "source[branch]=main" -f "source[path]=/" >/dev/null || gh api -X PUT "repos/$NEW/pages" -f "source[branch]=main" -f "source[path]=/" >/dev/null
 gh repo edit "$NEW" --homepage "https://natedogdotnet.github.io/now-showing/"
 echo "origin refs after push:"; git ls-remote "https://github.com/$NEW.git" | cut -c1-12,41- ; test -z "$(git ls-remote "https://github.com/$NEW.git" 'refs/pull/*')"
 
+step "5b plan criterion 1, verbatim, against a fresh clone of $NEW (the list is still on disk)"
+d=$(mktemp -d) && git clone -q "https://github.com/$NEW.git" "$d/fresh" && test -z "$(git -C "$d/fresh" log --all --oneline -- config.js)" && test -z "$(git ls-remote "https://github.com/$NEW.git" "refs/pull/*")" && while IFS= read -r line; do lit=${line%%==>*}; test -n "$lit" && test -z "$(git -C "$d/fresh" log --all -F -S"$lit" --oneline)" || exit 1; done < "$LIST"; echo "criterion 1 exit 0 (fresh clone of $NEW)"; rm -rf "$d"
+
 step "6 re-sync the conductor's checkout"
+test "$(git -C "$REPO" rev-parse HEAD)" = "$(git -C backup.git rev-parse refs/heads/claude/intelligent-rubin-4vsi63)" || { echo "the checkout moved during the run; not resetting"; exit 1; }
 git -C "$REPO" remote set-url origin "https://github.com/$NEW.git"
 git -C "$REPO" fetch -q --prune --force origin
 for b in $(git -C "$REPO" for-each-ref --format='%(refname:short)' refs/heads/); do case "$b" in orch/*) git -C "$REPO" branch -q -D "$b";; main|claude/intelligent-rubin-4vsi63) git -C "$REPO" update-ref "refs/heads/$b" "refs/remotes/origin/$b";; esac; done
 git -C "$REPO" reset -q --hard "origin/claude/intelligent-rubin-4vsi63"; git -C "$REPO" reflog expire --expire=now --all; git -C "$REPO" gc -q --prune=now
-echo "checkout tip: $(git -C "$REPO" rev-parse --short HEAD); config.js in history: $(git -C "$REPO" log --all --oneline -- config.js | wc -l)"
+echo "checkout tip: $(git -C "$REPO" rev-parse --short HEAD); config.js in history: $(git -C "$REPO" log --all --oneline -- config.js | wc -l)"; ! git -C "$REPO" cat-file -e 5c4a716 2>/dev/null && echo "old object 5c4a716 gone from the checkout" || { echo "5c4a716 still present"; exit 1; }
 shred -u "$LIST" 2>/dev/null || rm -f "$LIST"; echo "list removed; backup.git and commit-map kept in $OUT"
