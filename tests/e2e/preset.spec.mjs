@@ -191,3 +191,32 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   assert.ok(!(await toastState(page)).text.includes("What's new"));
   check('marker present: no toast');
 });
+
+// ---- K60 (D73, review finding 5): a config.json-provisioned first boot is a fresh install, not an upgrade ----
+const provisionedBody = (app) => JSON.stringify({ plexToken: 'demo-token', serverUrl: `http://127.0.0.1:${app.mockPort}`, libraryKey: '1', showNowPlaying: false, pixelShift: false, dailyReload: false });
+const marker = (page) => page.evaluate(() => localStorage.getItem('plexPoster.whatsNew'));
+
+// Opts out of the harness seed: no stored settings and no marker, so config.json is what configures the display.
+await withApp({ settings: {} }, async ({ page, context, app }) => {
+  await context.addInitScript(() => {
+    localStorage.removeItem('plexPoster.settings');
+    localStorage.removeItem('plexPoster.whatsNew');
+  });
+  await context.route('**/config.json', (route) => route.fulfill({ contentType: 'application/json', body: provisionedBody(app) }));
+  await page.goto(app.url);
+  await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
+  await page.waitForTimeout(1500);
+  assert.ok(!(await toastState(page)).text.includes("What's new"), 'a fresh config.json install shows no upgrade toast');
+  assert.equal(await marker(page), '2.1', 'the marker is written');
+  check('K60: a config.json-provisioned first boot writes the marker and shows no toast');
+});
+
+// An upgraded install: settings stored by 2.0, no marker, and a config.json present on the server (which must not matter).
+await withApp({ settings: seed() }, async ({ page, context, app }) => {
+  await context.route('**/config.json', (route) => route.fulfill({ contentType: 'application/json', body: provisionedBody(app) }));
+  await clearMarkerOnce(page);
+  await page.goto(app.url);
+  await waitToast(page);
+  assert.equal(await marker(page), '2.1');
+  check('K60: an upgraded stored install (config.json beside it) still shows the toast');
+});

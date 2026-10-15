@@ -1,6 +1,6 @@
 {
-  "name": "Plex Poster Display",
-  "short_name": "Posters",
+  "name": "Now Showing",
+  "short_name": "Now Showing",
   "description": "Full-screen Plex movie poster display with a decorative frame, for always-on screens.",
   "id": "./",
   "start_url": "./",

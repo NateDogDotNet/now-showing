@@ -6,7 +6,7 @@ Revision r3: lean scope (D1), 27 phases (26 on the release path plus one optiona
 
 ## Preamble
 
-- **Every command runs from the repository root** (`/home/user/plex-poster-app`).
+- **Every command runs from the repository root** (`/home/user/plex-poster-app` in the cloud session; `/home/nathan/plex-poster-app` locally, `/home/nathan/now-showing` after the purge, D76).
 - **Starting commit:** `46257c3` ("docs(decisions): record stop-1 rulings D1-D16 for the integration plan"), branch `claude/intelligent-rubin-4vsi63`, `VERSION` 2.0.0. Every `<start>..HEAD` range in this plan means `46257c3..HEAD`.
 - **Run the mock:** `npm run demo` serves the app on `http://localhost:8080` and a fake Plex server on `http://localhost:32401` (token `demo-token`, library key `1`; control endpoints under `/__mock/`).
 - **Unit tests:** `npm test` (`node --test tests/*.test.js`; 29 tests pass at the starting commit).
@@ -54,7 +54,7 @@ Tag decisions: `rotate-plex-token` is hitl with no code to review cold, so it is
 | M1 | P0 fix-first | `e2e-harness`, `settings-and-schedule-core`, `rotate-plex-token`, `serve-config-guard`, `rotation-layout-and-shell`, `cache-first-fetch`, `status-indicator`, `validation-checklists`, `real-server-validation` | `real-server-validation` |
 | M2 | P1 protection | `pixel-shift`, `frame-brightness`, `sleep-mode`, `content-rating-filter`, `kiosk-and-pin`, `device-helper-server`, `device-helper-integration`, `pi-stability`, `recommended-protection-preset` | `recommended-protection-preset` |
 | M3 | P2 polish | `settings-sheet`, `touch-and-labels`, `metadata-and-now-playing` (`position-drag-nudge` deferred, D41) | `touch-and-labels` |
-| M4 | P3 release | `real-server-validation-extended`, `docs`, `release-bump` (`fill-blur-and-info` deferred, D41) | `release-bump` |
+| M4 | P3 release | `real-server-validation-extended`, `docs`, `rename-now-showing`, `release-bump` (`fill-blur-and-info` deferred, D41) | `release-bump` |
 
 Optional, outside the release path and outside every milestone: `purge-git-history`. Milestone order is the default scheduling order; a later milestone's phase may start earlier only when its `Blocked by` is satisfied and its Output is disjoint from every running phase.
 
@@ -587,8 +587,8 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 - **Goal:** Set `VERSION` to 2.1.0 in `sw.js`, `js/main.js` and `package.json` (and the lockfile) so installed clients update, only after the token is rotated and both real-server validations PASS.
 - **Findings:** — · **Requirements:** R-REL-1 · **Rulings:** D11, D13, D16
-- **Mode:** afk · **Tags:** — · **Blocked by:** `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended`
-- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/release.spec.mjs`
+- **Mode:** afk · **Tags:** — · **Blocked by:** `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended`, `rename-now-showing` (D52)
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/release.spec.mjs`, `README.md`, `Roadmap.md` (D48: follow-up K61 and the docs r3 wording)
 - **Acceptance criteria:**
   1. `node -e "const fs=require('fs');const g=(f)=>fs.readFileSync(f,'utf8').match(/VERSION = '([^']+)'/)[1];const a=g('sw.js'),b=g('js/main.js'),p=require('./package.json'),l=require('./package-lock.json');if(!(a===b&&b===p.version&&a==='2.1.0'&&l.version==='2.1.0'&&l.packages[''].version==='2.1.0')){console.error(a,b,p.version,l.version);process.exit(1)}"`
   2. `test -f docs/security/token-rotation.md && grep -qx 'Rotated: yes' docs/security/token-rotation.md`  (D11: token rotated)
@@ -596,7 +596,8 @@ One remaining fill feature, the extended real-server validation, the single docs
   4. `npm test`
   5. `npm run test:e2e`  (includes `release.spec.mjs`: with service workers enabled, a stale `shell-2.0.0` cache is created in the page before registration, then after activation `shell-2.1.0` exists and `shell-2.0.0` is gone)
   6. `node scripts/check-precache.mjs`
-  7. `test "$(git status --porcelain --untracked-files=all | awk '{print $2}' | sort | tr '\n' ' ')" = "js/main.js package-lock.json package.json sw.js tests/e2e/release.spec.mjs "`  (nothing else changed)
+  7. `test "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | LC_ALL=C sort | tr '\n' ' ')" = "README.md Roadmap.md js/main.js package-lock.json package.json sw.js tests/e2e/release.spec.mjs "`  (nothing else changed; the tracked `.orchestrator/` snapshot is the conductor's, D48)
+  9. `grep -Eqi 'play ?list' Roadmap.md && grep -Eqi 'jellyfin|emby|other media servers' Roadmap.md && grep -qi 'TMDB\|The Movie Database' Roadmap.md && grep -qi '^## .*Suggested order' Roadmap.md && grep -qi 'Now Playing' Roadmap.md && grep -qi 'Coming Soon' Roadmap.md && grep -qi 'marquee' Roadmap.md && grep -qi 'Touch gestures' Roadmap.md && grep -qi 'Favourites\|Favorites' Roadmap.md && grep -qi 'Watch later' Roadmap.md && grep -qi 'Multiple displays' Roadmap.md && grep -qi 'Mirror' Roadmap.md && grep -qi 'Chain' Roadmap.md && grep -qi 'Controller' Roadmap.md && grep -q 'PIN-locked' Roadmap.md && grep -qi 'Frame and marquee styles' Roadmap.md && grep -qi 'Rating schedule' Roadmap.md && grep -qi 'Poster selection' Roadmap.md && grep -qi 'genre' Roadmap.md && grep -qi 'multi-select' Roadmap.md && grep -qi 'Theme music' Roadmap.md && grep -qi 'Poster transitions' Roadmap.md && grep -qi 'smart collection' Roadmap.md && for k in 'Movie-night countdown' 'Clear-logo marquees' 'Poster artwork sources' 'Viewer profiles' 'Birthday and occasion mode' 'Weighting and no repeats' 'On this day' 'Info captions' 'Ambient light sync' 'QR code to the title' 'Play now' 'Find a poster' 'Recently shown' 'Allowed devices' 'colour matte' 'smart crop' 'Browse first mode' 'Browse button' 'Home controls' 'Picture frame mode' 'screen saver'; do grep -qiF -- "$k" Roadmap.md || { echo "roadmap missing: $k"; exit 1; }; done`  (D51: the playlist, other-media-server and no-server (TMDB) ideas are on the Roadmap; D53: the suggested build order section; D54: the marquee caption entry; D56: the touch gestures entry; D57: the multiple-displays entry, which keeps D7's PIN-locked constraint; D58: the built-in style pack entry; D59: the rating schedule entry; D60: the poster selection entry; D61: the theme music entry; D62: the poster transitions entry; D63: metadata rules in the poster selection entry; D64: the ten suggested entries; D65: the play now entry; D66: the find a poster entry; D67: gap fill inside the frame; D68: the browse first mode entry; D69: the home controls entry; D70: the picture frame mode entry; D71: home controls as a main screen)
   8. narrated: the close-time reviews (full `code-review` of `46257c3..HEAD`, `security-scan` over the repo, `dependency-audit` of the devDependencies, `scrub-pii` on `docs/validation/*` and `docs/security/*`) are the conductor's Step 8 close work; this plan has no `publish` tag (D13).
 - **Notes/hazards:**
   - Decision (D16): one bump here, not per phase, for clean releases (the r1 rationale that per-phase bumps would reload clients was wrong: any `sw.js` edit already triggers an update).
@@ -606,17 +607,17 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 ### 27. `purge-git-history` — OPTIONAL: purge config.js from git history
 
-- **Goal:** Remove `config.js` (the leaked token) from every commit and force-push, only if the owner says the repository is public or shared.
+- **Goal:** Remove `config.js` (the leaked token) from every commit and from everything GitHub serves, by deleting and re-creating the repository with the rewritten history (D49), only if the owner says the repository is public or shared; the re-created repository is `now-showing` (D76).
 - **Findings:** S1 · **Requirements:** R-SEC-2 · **Rulings:** D14
-- **Mode:** hitl · **Tags:** irreversible · **Blocked by:** `rotate-plex-token`, `release-bump`
+- **Mode:** hitl · **Tags:** irreversible · **Blocked by:** `rotate-plex-token`, `release-bump`, `limit-and-reload-fixes` (D73)
 - **Output:** `docs/security/history-purge.md`
 - **Acceptance criteria:**
-  1. `d=$(mktemp -d) && git clone -q "$(git remote get-url origin)" "$d/fresh" && test -z "$(git -C "$d/fresh" log --all --oneline -- config.js)"`  (run against a fresh clone of `origin`, not the conductor's checkout, which keeps the old objects until re-synced)
+  1. `d=$(mktemp -d) && git clone -q "$(git remote get-url origin)" "$d/fresh" && test -z "$(git -C "$d/fresh" log --all --oneline -- config.js)" && test -z "$(git ls-remote "$(git remote get-url origin)" "refs/pull/*")" && while IFS= read -r line; do lit=${line%%==>*}; test -n "$lit" && test -z "$(git -C "$d/fresh" log --all -F -S"$lit" --oneline)" || exit 1; done < "$REPLACE_LIST"`  (D77: `REPLACE_LIST` is the run-time file outside the repository that step (3) used; each line is `<literal>==><replacement>` and the search uses the literal part only, once per line, with `-F`; never the whole line and never the whole file)  (run against a fresh clone of `origin`, not the conductor's checkout, which keeps the old objects until re-synced; the `refs/pull/*` check is D49: a plain clone fetches only branches, and pull request #1's read-only ref reached the token commit in the rehearsal)
   2. `test -f docs/security/history-purge.md && grep -qx 'Purged: yes' docs/security/history-purge.md`
   3. `git fsck --no-dangling >/dev/null 2>&1`
   4. narrated: **explicitly skipped unless the owner says the repository is public or shared (D14);** it is outside the release path and nothing depends on it. Before the approval pause the independent precondition review (target commit, clean tree, suite green, exact command) is written; the owner runs the force-push themselves.
 - **Notes/hazards:**
-  - Hand-off checklist: (1) `git clone --mirror` a backup somewhere safe; (2) install `git-filter-repo` **(verify the package name for your OS)**; (3) in a fresh clone: `git filter-repo --invert-paths --path config.js`; (4) re-add `origin`; (5) `git push --force-with-lease --all && git push --force --tags`; (6) tell every collaborator to re-clone and re-sync the conductor's checkout (`git fetch --prune --force`, reset each local branch, drop stale refs); (7) ask GitHub support to drop cached views and check forks if the repo was public; (8) record `Purged: yes` and the date in `docs/security/history-purge.md`.
+  - Hand-off checklist (D49, delete and re-create): (1) `git clone --mirror` a backup somewhere safe; (2) `git-filter-repo` is installed (`/home/nathan/.local/bin/git-filter-repo`); (3) in a plain fresh clone: `git filter-repo --invert-paths --path config.js --replace-text "$REPLACE_LIST"`, where the list (a file outside the repository, written at run time, deleted afterwards, never committed or printed; D49 note, D77) holds one entry per line, each `<literal>==>%USERPROFILE%` or `==><owner>` or `==><shared server N>`: the leaked token value; the validation host's user-profile path in every spelling that occurred (backslashes, forward slashes, `%20` for the space, and the `<first> <last>`, `<first>%20<last>` and `<first>|<last>` forms); the owner's surname on its own in the three casings (lower, capitalised, upper; history holds the capitalised form, in 58 commit trees); and the four shared-server names from the C05 row; then keep `.git/filter-repo/commit-map` for the audit trail, keep the list on disk until criterion 1 has run against a fresh clone of the new repository (its recipe reads commits the re-sync removes), and verify the rewrite before any push (criterion 1's per-line check against the rewritten clone, and the tree id of each rewritten branch tip equal to the same branch's tree id in the mirror backup; the old tip objects are gone from the rewritten clone, so a diff against them cannot run); (4) delete the GitHub repository (Settings > Danger Zone, or `gh repo delete NateDogDotNet/plex-poster-app --yes`): this removes pull request #1 and its `refs/pull/1/head`, and the Pages setting; (5) create an empty public repository named `now-showing` and set its default branch to `main` explicitly after the push (D77: `gh repo edit --default-branch main`); filter-repo removes `origin`, so the run adds the new repository as `origin` before the push; the run script stops on any failed check before `gh repo delete` (`set -e`), the first point of no return (D76; no README or licence), set `origin` to it, then `git push --all && git push --tags`; (6) re-enable Pages (source `main`, `/`), set the homepage to `https://natedogdotnet.github.io/now-showing/`, and check the site loads (the old `…/plex-poster-app/` address stops working: GitHub does not redirect a deleted repository, so displays are re-pointed by the owner); (7) re-sync the conductor's checkout (`git fetch --prune --force`, reset each local branch, drop stale refs) and, as the session's last act, move it to `/home/nathan/now-showing` and run `git worktree repair` (D76); (8) optionally ask GitHub Support to drop cached views of commit `5c4a716`; (9) record `Purged: yes` and the date in `docs/security/history-purge.md`.
   - Irreversible: every SHA changes, so it runs after `release-bump`. Rotation (`rotate-plex-token`) is what actually removes the risk; a purge only removes the evidence. Do not rewrite history on the branch the conductor is committing to while it is running.
 
 ### 28. `display-decode-hang` — Rotation never stalls on a pending image decode (added at stop 9, D30)
@@ -634,6 +635,45 @@ One remaining fill feature, the extended real-server validation, the single docs
 - **Notes/hazards:**
   - Root cause (Chromium): removing `src` from an `<img>` before its load finishes leaves `decode()` pending forever; the cleanup timer for the previous draw (crossfadeMs + 200 ms) removes the `src` of the layer the next draw is decoding on. The fix must make the cleanup never touch a layer that a newer draw owns (e.g. a draw generation counter checked by the timer), and/or bound `decode()` so a stuck decode rejects instead of hanging.
   - `content-rating-filter` case 18 flaked on this race; once this lands that spec should be stable.
+
+---
+
+### 29. `rename-now-showing` — Rename the app "Now Showing" (D52)
+
+- **Goal:** Every name a user sees reads "Now Showing" instead of "Plex Poster Display", while signed-in displays keep their settings and sign-in through the update.
+- **Findings:** — · **Requirements:** — · **Rulings:** D52
+- **Mode:** afk · **Tags:** ui, docs · **Blocked by:** `docs`
+- **Output:** `index.html`, `manifest.webmanifest`, `js/plex.js`, `scripts/serve.mjs`, `package.json`, `package-lock.json`, `README.md`, `Roadmap.md`, any test under `tests/` that asserts the old name, and `tests/e2e/ui-rotation.spec.mjs` (D55: the empty-card race)
+- **Acceptance criteria:**
+  1. `grep -q '<title>Now Showing</title>' index.html && grep -q '<h1>Now Showing</h1>' index.html && node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('manifest.webmanifest','utf8'));const p=require('./package.json'),l=require('./package-lock.json');if(!(m.name==='Now Showing'&&m.short_name==='Now Showing'&&p.name==='now-showing'&&l.name==='now-showing'&&l.packages[''].name==='now-showing')){console.error(m.name,m.short_name,p.name,l.name);process.exit(1)}" && grep -q "PRODUCT = 'Now Showing'" js/plex.js && grep -q '^# Now Showing' README.md`
+  2. `! git grep -n 'Plex Poster Display' -- . ':!docs/' ':!.orchestrator/' ':!README.md'` and `test "$(grep -c 'Plex Poster Display' README.md)" -le 1`  (the old name survives at most once, in a "formerly" line in the README)
+  3. `for k in plexPoster.settings plexPoster.clientId plexPoster.carry plexPoster.lastReload plexPoster.pinLock plexPoster.posterIndex plexPoster.whatsNew; do grep -rqF "$k" js/ || { echo "storage key renamed: $k"; exit 1; }; done && grep -q 'shell-\${VERSION}' sw.js`  (stored settings, the client identifier and the cache names keep their names)
+  4. `npm test && npm run test:e2e && node scripts/check-precache.mjs`
+  5. `for i in 1 2 3; do node tests/e2e/run.mjs ui-rotation || exit 1; done`  (D55: the rotation spec passes three runs in a row)
+  6. narrated: the GitHub repository name and the Pages address are not changed here (D52: public, the owner decides, at the D49 re-creation at the earliest); `docs/` keeps its history as written.
+- **Notes/hazards:**
+  - plex.tv lists a device by its `X-Plex-Product`; displays signed in before the update keep their old entry until they sign in again. Say so in the README.
+
+### 30. `limit-and-reload-fixes` — Four close-time review fixes that ship in 2.1.0 (D73)
+
+- **Goal:** The offline household limit never judges a show by one episode's rating; a service-worker update reload honours the same wait rules as the daily reload; a fresh config.json install shows no "What's new" upgrade notice; the empty card blames the limit only when the limit is what emptied it.
+- **Findings:** release-bump code review r1 findings 1, 7, 5, 6 · **Requirements:** R-RATE (fail closed offline), R-DOC-1 (README claim) · **Rulings:** D73, D37, D33
+- **Mode:** afk · **Tags:** risk:high (content limit) · **Blocked by:** `release-bump`
+- **Output:** `js/plex.js`, `js/poster-cache.js`, `js/main.js`, `js/engine.js` (only if the fix needs it), `tests/poster-cache.test.js`, `tests/plex.test.js`, `tests/e2e/content-rating.spec.mjs`, `tests/e2e/pi-stability.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/status.spec.mjs`, `scripts/mock-plex.mjs`
+- **Acceptance criteria:**
+  1. `test -f tests/poster-cache.test.js && node --test tests/poster-cache.test.js`  (new cases: a now-playing episode poster, keyed by its show, never changes the show's stored contentRating through `put` or `refreshRating`; an episode with no rating never stores '' over the show's rating; the show's rating still follows Plex when the SHOW item is seen)
+  2. `test -f tests/plex.test.js && node --test tests/plex.test.js`  (an episode's poster descriptor carries the show's rating when Plex sends `grandparentContentRating`, else marks the rating as the episode's so the cache can ignore it; the chosen mechanism is the builder's, the test pins the behaviour)
+  3. `npm run test:e2e -- content-rating`  (new case: limit PG, a TV-MA show cached from the pool, a TV-PG episode of it plays, Plex becomes unreachable → the show's poster is NOT shown from the cache; and the inverse: an unrated episode does not hide a PG-rated show offline)
+  4. `npm run test:e2e -- pi-stability`  (new case: a new service worker arrives while the PIN prompt is open → no reload until it closes; the reload then happens)
+  5. `npm run test:e2e -- preset`  (new case, K60: a fresh boot provisioned from config.json writes `plexPoster.whatsNew` and shows no "What's new" toast; an upgraded stored install still shows it)
+  6. `npm run test:e2e -- status`  (new case: limit set, empty cache, Plex times out → the empty card shows the timeout message, not the household-limit wording; with cached posters all above the limit → the limit wording)
+  7. `npm test && npm run test:e2e && node scripts/check-precache.mjs`
+  8. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/plex.js|js/poster-cache.js|js/main.js|js/engine.js|tests/poster-cache.test.js|tests/plex.test.js|tests/e2e/content-rating.spec.mjs|tests/e2e/pi-stability.spec.mjs|tests/e2e/preset.spec.mjs|tests/e2e/status.spec.mjs|scripts/mock-plex.mjs)')"`  (nothing else changed; `VERSION` stays 2.1.0)
+  9. narrated: cold and anchored reviews (risk:high); each of the four review findings is quoted in the handback with the test that now pins it.
+- **Notes/hazards:**
+  - Do not change the cache key scheme (posters stay keyed by the show's ratingKey so an episode's poster and the show's poster are one cache entry); fix what rating is stored and when, not the key.
+  - `VERSION` is already 2.1.0 (release-bump); do not bump it. The fixes are part of 2.1.0, which is not yet published (D13).
+  - The Roadmap's 2.1.x polish bullet for the What's new e2e (K60) is delivered by criterion 5; release-bump's Roadmap text may be amended in the close tail, not here.
 
 ---
 
@@ -668,9 +708,11 @@ One remaining fill feature, the extended real-server validation, the single docs
 | 23 | `fill-blur-and-info` (deferred, D41) | afk | `metadata-and-now-playing`, `rotation-layout-and-shell`, `pi-stability` |
 | 24 | `real-server-validation-extended` | hitl | `validation-checklists`, `real-server-validation`, `content-rating-filter`, `settings-sheet`, `metadata-and-now-playing`, `device-helper-integration`, `pi-stability` |
 | 25 | `docs` | afk | `recommended-protection-preset`, `touch-and-labels`, `real-server-validation-extended` |
-| 26 | `release-bump` | afk | `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended` |
-| 27 | `purge-git-history` | hitl | `rotate-plex-token`, `release-bump` |
+| 26 | `release-bump` | afk | `docs`, `rotate-plex-token`, `real-server-validation`, `real-server-validation-extended`, `rename-now-showing` |
+| 27 | `purge-git-history` | hitl | `rotate-plex-token`, `release-bump`, `limit-and-reload-fixes` (D73) |
 | 28 | `display-decode-hang` | afk | `rotation-layout-and-shell` |
+| 29 | `rename-now-showing` (D52) | afk | `docs` |
+| 30 | `limit-and-reload-fixes` (D73) | afk | `release-bump` |
 
 ### Waves (longest-path levels)
 

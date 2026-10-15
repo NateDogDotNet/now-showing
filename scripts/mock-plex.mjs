@@ -86,6 +86,25 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
           User: { title: url.searchParams.get('user') || 'demo' },
           Player: { title: url.searchParams.get('player') || 'Mock Player', state: url.searchParams.get('state') || 'playing' },
         };
+        // episode=1: the session is an episode of that title taken as a series (D73). episodeRating is the episode's own
+        // contentRating ("none" or absent = none sent); grandparentRating, when given, is the series' (grandparentContentRating).
+        if (url.searchParams.get('episode') === '1' && movie) {
+          const own = url.searchParams.get('episodeRating');
+          const series = url.searchParams.get('grandparentRating');
+          const { contentRating: _own, ...rest } = state.session;
+          state.session = {
+            ...rest,
+            type: 'episode',
+            ratingKey: `e${movie.ratingKey}`,
+            title: 'Pilot',
+            grandparentRatingKey: movie.ratingKey,
+            grandparentTitle: movie.title,
+            grandparentYear: movie.year,
+            grandparentThumb: movie.thumb,
+            ...(own && own !== 'none' ? { contentRating: own } : {}),
+            ...(series ? { grandparentContentRating: series } : {}),
+          };
+        }
       }
       if (action === 'rate') {
         const rating = url.searchParams.get('contentRating') || '';

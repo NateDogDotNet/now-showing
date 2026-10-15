@@ -1,4 +1,6 @@
-# Plex Poster Display
+# Now Showing
+
+*Formerly Plex Poster Display.* Displays that were signed in before the rename keep their old entry under plex.tv Authorized Devices until they sign in again; new sign-ins list as "Now Showing". Stored settings and sign-in carry over unchanged.
 
 An installable, offline-capable **progressive web app** that shows a Plex movie poster full-screen inside a decorative frame. It's built for Raspberry Pi kiosks, wall-mounted tablets and any other always-on screen.
 
@@ -6,7 +8,7 @@ There's no build step, no backend and no dependencies: just static files that ta
 
 ![Poster inside the marquee frame](assets/screenshots/portrait.png)
 
-> **Status of version 2.1: real-server and Raspberry Pi validation is pending.** The code and its tests (`npm test`, `npm run test:e2e`) run against a mock Plex server only. Nothing in 2.1 has yet been run against a real Plex server or on a real Raspberry Pi. Anything below that nobody has checked on real hardware is tagged **(verify)**. That covers every Chromium flag, policy and package name. It also covers every OS command, helper command and real-server behaviour. Read **(verify)** as "not yet verified". The checklists that will settle them are in [`docs/validation/real-server-core.md`](docs/validation/real-server-core.md) and [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md). Once a row passes, its tag comes off here.
+> **Status of version 2.1: the real-server validation is done; the Raspberry Pi validation is still pending.** The code and its tests (`npm test`, `npm run test:e2e`) run against a mock Plex server, and on 2026-10-14 the app was also checked against a real Plex Media Server: all 17 core rows and the 15 extended rows that need no Pi passed. The 12 Raspberry Pi rows (V1-E11 to V1-E22) were skipped because no Pi was available, so nothing in 2.1 has yet been run on a real Raspberry Pi. Anything below that nobody has checked on a Pi is tagged **(verify)**, which from here on means "not yet verified": on a Raspberry Pi or, for one item, with data the test server lacks (the country-prefixed ratings, V1-E04). That covers every Chromium flag, policy and package name, and every OS and helper command. The checklists are in [`docs/validation/real-server-core.md`](docs/validation/real-server-core.md) and [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md). Once a Pi row passes, its tag comes off here.
 
 ---
 
@@ -139,7 +141,7 @@ A page's abilities depend on how it is loaded. Browsers treat **https** and **lo
 - **On the device itself** (recommended for a Pi): serve the app on `localhost` and open it there. Chrome or Edge will offer *Install*.
 - **From other devices**: host the folder on https.
 
-> **https and your Plex server.** A page served over https can't call an `http://` Plex address, because the browser blocks it as mixed content. **Sign in with Plex** handles this by picking your server's secure `*.plex.direct` address automatically. If you enter a URL by hand on an https page, use that `https://…plex.direct:32400` address. Over `http://localhost`, a plain LAN address is fine. Whether `*.plex.direct` addresses work from outside your home, and the relay fallback, are not yet verified (rows V1-E24 and V1-E25 of the extended checklist).
+> **https and your Plex server.** A page served over https can't call an `http://` Plex address, because the browser blocks it as mixed content. **Sign in with Plex** handles this by picking your server's secure `*.plex.direct` address automatically. If you enter a URL by hand on an https page, use that `https://…plex.direct:32400` address. Over `http://localhost`, a plain LAN address is fine. Both were checked against a real server: `*.plex.direct` addresses work from outside your home (row V1-E24 of the extended checklist), and the relay fallback works when no direct address is reachable (row V1-E25).
 
 ---
 
@@ -152,7 +154,7 @@ Install the packages. On Raspberry Pi OS Bookworm the browser package is `chromi
 ```bash
 sudo apt install -y chromium-browser nodejs git      # Bookworm (verify)
 # sudo apt install -y chromium nodejs git            # Trixie (verify)
-git clone https://github.com/NateDogDotNet/plex-poster-app.git ~/poster-display
+git clone https://github.com/NateDogDotNet/now-showing.git ~/poster-display
 ```
 
 Serve the app on boot with a systemd user service:
@@ -161,7 +163,7 @@ Serve the app on boot with a systemd user service:
 mkdir -p ~/.config/systemd/user
 cat > ~/.config/systemd/user/poster-display.service <<'EOF'
 [Unit]
-Description=Plex Poster Display web server
+Description=Now Showing web server
 [Service]
 ExecStart=/usr/bin/node %h/poster-display/scripts/serve.mjs --port 8080
 Restart=always
@@ -189,7 +191,7 @@ A web page can't switch a screen off, can't stop an SD card wearing out and can'
 - **Cache-first posters.** A poster that is already cached (same artwork, big enough) is not downloaded again, so a rotating display stops writing to the SD card all day. The cache holds 100 posters by default (`posterCacheLimit`, 10 to 300, set in `config.json` or an imported file; Settings has a **Clear poster cache** button).
 - **Pixel shift.** Every 3 minutes (Settings > Display protection) the picture glides about 1.5 seconds to a new spot inside a thin margin. The picture is about 3 % smaller to make room. Untick it to fill the screen edge to edge.
 - **A quiet status dot.** With the controls hidden, nothing is drawn while all is well. When the display is paused or offline, a dim dot of at most 8 pixels appears and changes corner every 5 minutes. `statusIndicator` set to `off` (in `config.json` or an imported file) hides it.
-- **A guarded daily reload** at 04:00. It also runs on the first wake from sleep if the last reload was over 12 hours ago. Waking the screen by a key or a touch does not trigger that 12-hour reload. The reload needs a service worker to control the page (https or localhost). The app server must also answer a fresh request just before reloading. Otherwise the reload is skipped and Diagnostics says why. An `http://` LAN page never reloads. The reload waits while Settings or Diagnostics is open. It also waits mid-fade, while a poster loads, while the TV is waking, and during a manual wake. A reload that was skipped is not retried the same day. Two reloads are never closer than 10 minutes.
+- **A guarded daily reload** at 04:00. It also runs on the first wake from sleep if the last reload was over 12 hours ago. Waking the screen by a key, touch or click does not trigger that 12-hour reload. The reload needs a service worker to control the page (https or localhost). The app server must also answer a fresh request just before reloading. Otherwise the reload is skipped and Diagnostics says why. An `http://` LAN page never reloads. The reload waits while any window of the app is open (Settings, Diagnostics, the PIN pad or the shortcuts list). It also waits mid-fade, while a poster loads, while the TV is waking, and during a manual wake. A reload that was skipped is not retried the same day. Two reloads are never closer than 10 minutes.
 
 ### What you turn on
 
@@ -353,7 +355,7 @@ Plex's local network discovery does not cross VLANs and this app doesn't use it.
   - While a limit is set the app re-checks the cached titles' ratings against Plex whenever it reloads the pool online (at most every 30 minutes), so a title Plex has since rated higher can't come back from the cache. A title Plex does not confirm is treated as unrated.
   - An unknown value in `maxContentRating` (a typo in `config.json`) becomes PG-13, never "no limit".
 
-  The app filters by itself, which is the guarantee. It also asks Plex to filter the pool; the parameter name and syntax, the real country-prefixed values and the batched rating re-check are **(verify)** against a real server. Recommended protection does not turn the limit on. Set a [PIN](#the-pin) so a child can't turn it off.
+  The app filters by itself, which is the guarantee. It also asks Plex to filter the pool; the parameter name and its comma-separated syntax (V1-E03) and the batched rating re-check (V1-E27) were checked against a real server. The country-prefixed values could not be: the test server stores none (V1-E04), so how Plex writes them is still **(verify)**. Recommended protection does not turn the limit on. Set a [PIN](#the-pin) so a child can't turn it off.
 
 ---
 

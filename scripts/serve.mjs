@@ -117,7 +117,7 @@ createServer(async (req, res) => {
     send(res, 404, 'Not found');
   }
 }).listen(PORT, HOST, () => {
-  console.log(`Plex Poster Display → http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/`);
+  console.log(`Now Showing → http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/`);
 });
 
 function send(res, status, text) {

@@ -37,8 +37,13 @@ async function measure(page, app, label) {
   );
   await settled(page);
 
-  const read = (selector) =>
-    page.evaluate((sel) => {
+  // `reveal` names a hidden element to show for the measurement. Showing, measuring and hiding
+  // happen in one synchronous evaluate, so the app's poster tick (which calls showEmpty(false))
+  // cannot hide the element between the steps (D55).
+  const read = (selector, reveal) =>
+    page.evaluate(({ sel, reveal: id }) => {
+      const holder = id ? document.getElementById(id) : null;
+      if (holder) holder.hidden = false;
       const el = document.querySelector(sel);
       const r = el.getBoundingClientRect();
       const t = getComputedStyle(el).transform;
@@ -48,8 +53,9 @@ async function measure(page, app, label) {
         angle = Math.round((Math.atan2(b, a) * 180) / Math.PI);
         angle = ((angle % 360) + 360) % 360;
       }
+      if (holder) holder.hidden = true;
       return { angle, box: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }, shown: r.width > 0 && r.height > 0 };
-    }, selector);
+    }, { sel: selector, reveal });
 
   const out = {};
 
@@ -66,10 +72,8 @@ async function measure(page, app, label) {
   await settled(page);
   out.toast = await read(ELEMENTS.toast);
 
-  // Empty state: the app only shows it on a fatal error, so unhide it directly.
-  await page.evaluate(() => (document.getElementById('empty').hidden = false));
-  out.emptyCard = await read(ELEMENTS.emptyCard);
-  await page.evaluate(() => (document.getElementById('empty').hidden = true));
+  // Empty state: the app only shows it on a fatal error, so unhide it for the one measurement.
+  out.emptyCard = await read(ELEMENTS.emptyCard, 'empty');
 
   for (const [key, shortcut, id] of [['settings', 's', 'settings'], ['diagnostics', 'd', 'diagnostics']]) {
     await page.evaluate(() => document.activeElement?.blur());
