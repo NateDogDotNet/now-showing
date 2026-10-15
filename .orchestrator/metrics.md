@@ -191,3 +191,5 @@
 | 2026-10-14T22:07:28.604512Z | release-bump | research | orchestrator-research | sonnet | inherited | r1 | 39761 | 14344 | complete |  |
 | 2026-10-14T23:57:01.362901Z | limit-and-reload-fixes | builder | orchestrator-builder | sonnet | high | r1 | 1759910 | 105067 | complete |  |
 | 2026-10-14T23:57:01.466748Z | limit-and-reload-fixes | reviewer | orchestrator-reviewer | opus | inherited | r1 | 172576 | 72271 | complete |  |
+| 2026-10-15T00:27:56.573380Z | limit-and-reload-fixes | builder | orchestrator-builder | sonnet | high | r2 | 294300 | 118816 | complete | resumed (cumulative tokens) |
+| 2026-10-15T00:27:56.658340Z | limit-and-reload-fixes | reviewer | orchestrator-reviewer | opus | inherited | r2 | 145934 | 56262 | complete |  |

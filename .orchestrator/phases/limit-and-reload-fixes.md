@@ -2,6 +2,7 @@
 
 - Mode: afk        Tags: risk:high        Blocked by: release-bump (done 1450d71)
 - Agent type: orchestrator-builder; model sonnet, effort high
+- Commit(s): 090d231
 - Claimed: 2026-10-14T22:18:26Z
 - Worktree: ../wt-limit-and-reload-fixes on branch orch/limit-and-reload-fixes from 6363763 (D12).
 - Plan: added by D73 (release-bump's close-time code review, findings 1, 7, 5, 6).
@@ -49,3 +50,21 @@
 | 9 | plan criterion 9, narrated | handback r2 quotes the D75 fix and its tests (checked by command); reviews r2 below | 0 | `limit-and-reload-fixes--ac9-r2.json` |
 - Conductor read of the r2 js diff: `contentRating` is the item's own rating for every poster; `seriesRating` only for a non-empty `grandparentContentRating`; `put()` stores `seriesRating` when present, else the stored show rating ('' when never seen); `refreshRating()` returns early for an episode without a series rating and otherwise writes `seriesRating || contentRating`. js/main.js unchanged since r1.
 - Step 7 r2: full re-reviews, both lenses (risk:high): fixes-review-anchored-r2 and fixes-review-cold-r2, orchestrator-reviewer, opus; briefs --brief-review-r2.md, --brief-review-cold-r2.md; dispatched 2026-10-15T00:23:19Z
+- Step 7 r2 verdicts: anchored `limit-and-reload-fixes--review-anchored-r2.md` APPROVE (r1 issues closed; one Minor test-quality: case 25 part 1 rates episode and show alike, unit test 70 pins the value); cold `limit-and-reload-fixes--review-cold-r2.md` APPROVE (one Minor test-quality: case 23 lacks a `seen.size >= 2` check; the case still fails on revert through its stored-rating assertion). Both reviewers reverted the two poster-cache changes in their own temp worktrees: 3 unit tests fail each time (28, 29, 32), the killed mutants.
+- Dismissed (anchored, Minor): case 25 part 1 cannot tell the show's rating from the episode's — unit test 70 pins the stored value, and the mock keeps one rating per title (the reviewer's own finding), so the e2e case is a regression guard; not re-dispatched. Dismissed (cold, Minor): case 23 has no `seen.size >= 2` guard — the case fails on revert via its stored-rating assertion (both reviewers), and cases 10 and 20 already prove offline rotation; noted for the 2.1.x test tidy-up, not re-dispatched.
+- Landed: 090d231 — "Fix the offline limit for episodes, the update reload's timing and two notices" (cherry-pick of the worktree commit 87cd9bf86ffd237c0ef59602505f0186cfaac756)
+
+## Pre-commit — lint (node --check), format (git diff --check), tests (ac7-r2 full suite), security, scope: all exit 0 (precommit-lint-r2, precommit-format-r2, precommit-security-r2, precommit-tests-r2, scope-r2); review-check-r2 (no Critical/Major/Important in either r2 review), dlog-check-r2, attribution-r2
+
+## Step 8 tally — limit-and-reload-fixes--tally-step8-r2.md
+| Category | Score |
+|---|---|
+| acceptance criteria pass fresh _critical_ | 35/35 |
+| diff scope matches phase | 15/15 |
+| CLAUDE.md conventions | 15/15 |
+| decision log respected | 10/10 |
+| code reads cleanly | 10/10 |
+| commit message accurate | 5/5 |
+| **Total** | **90/90** (100%) |
+**Band:** COMPLETE
+**Caps applied:** none

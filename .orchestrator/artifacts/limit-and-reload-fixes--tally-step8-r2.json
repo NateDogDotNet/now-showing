@@ -1,0 +1,131 @@
+{
+ "categories": [
+  {
+   "name": "acceptance criteria pass fresh",
+   "score": 35,
+   "max": 35,
+   "tags": [
+    "critical"
+   ],
+   "evidence": "limit-and-reload-fixes--ac1-r2.json"
+  },
+  {
+   "name": "diff scope matches phase",
+   "score": 15,
+   "max": 15,
+   "evidence": "limit-and-reload-fixes--derive-step8-r2-0.json"
+  },
+  {
+   "name": "CLAUDE.md conventions",
+   "score": 15,
+   "max": 15,
+   "evidence": "limit-and-reload-fixes--precommit-format-r2.json"
+  },
+  {
+   "name": "decision log respected",
+   "score": 10,
+   "max": 10,
+   "evidence": "limit-and-reload-fixes--dlog-check-r2.json"
+  },
+  {
+   "name": "code reads cleanly",
+   "score": 10,
+   "max": 10,
+   "evidence": "limit-and-reload-fixes--review-check-r2.json"
+  },
+  {
+   "name": "commit message accurate",
+   "score": 5,
+   "max": 5,
+   "evidence": "limit-and-reload-fixes--readback-090d231.json"
+  }
+ ],
+ "bands": [
+  {
+   "min": 90,
+   "band": "COMPLETE"
+  },
+  {
+   "min": 0,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "caps": [
+  {
+   "tag": "critical",
+   "below": 35,
+   "band": "RE-DISPATCH"
+  }
+ ],
+ "_derivation": {
+  "derived_by": "closer derive",
+  "rows": 9,
+  "missing_rows": [],
+  "review_rows": [],
+  "commit_rows": [
+   8
+  ],
+  "na": {},
+  "no_commit": null,
+  "this_round_only": false,
+  "dropped": {
+   "tests where implied": "no mutation record"
+  }
+ },
+ "_result": {
+  "total": 90,
+  "max": 90,
+  "percentage": 100,
+  "band": "COMPLETE",
+  "caps_applied": [],
+  "categories": [
+   {
+    "name": "acceptance criteria pass fresh",
+    "score": 35,
+    "max": 35,
+    "tags": [
+     "critical"
+    ]
+   },
+   {
+    "name": "diff scope matches phase",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "CLAUDE.md conventions",
+    "score": 15,
+    "max": 15,
+    "tags": []
+   },
+   {
+    "name": "decision log respected",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "code reads cleanly",
+    "score": 10,
+    "max": 10,
+    "tags": []
+   },
+   {
+    "name": "commit message accurate",
+    "score": 5,
+    "max": 5,
+    "tags": []
+   }
+  ]
+ },
+ "_evidence_sha256": {
+  "limit-and-reload-fixes--ac1-r2.json": "69b8df1aa34ba58414ebd5037ee6bd38e0e6068f5f5f82b9f22e2d42d0c9f795",
+  "limit-and-reload-fixes--derive-step8-r2-0.json": "747f15cf97a7f1e794f1b51ebad0eb03c6ca68da2ef185c5a2bbf136d9aefe4b",
+  "limit-and-reload-fixes--precommit-format-r2.json": "4730b5c6afc18079edbd41f34e96316698bb808ecb0332fdadf5e2dc6ba81874",
+  "limit-and-reload-fixes--dlog-check-r2.json": "2b9f8bc8ac6527b0feb9a1863260d0d25d22470293531ed50318650d97257072",
+  "limit-and-reload-fixes--review-check-r2.json": "8c15e245dd81ad9f6d4229bb59bbde06b9d6997f0bccd0069562a4c317bea77f",
+  "limit-and-reload-fixes--readback-090d231.json": "d5101687254a06eccf5fc901690dffeed9a3b20539ab7bcab189425409f0503e"
+ },
+ "_written": "2026-10-15T00:27:57.004864Z"
+}

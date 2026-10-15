@@ -1,0 +1,9 @@
+{
+  "cmd": "for f in .orchestrator/artifacts/limit-and-reload-fixes--review-anchored-r2.md .orchestrator/artifacts/limit-and-reload-fixes--review-cold-r2.md; do awk '/^## Issues/{s=1;next} /^## /{s=0} s' $f | grep -qE '^[0-9]+\\. \\*\\*(Critical|Major|Important)' && exit 1; done; exit 0",
+  "exit": 0,
+  "seconds": 0.03,
+  "parsed": null,
+  "launched": true,
+  "stdout_tail": "",
+  "stderr_tail": ""
+}

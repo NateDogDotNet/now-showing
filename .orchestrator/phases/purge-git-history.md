@@ -2,7 +2,7 @@
 
 - Mode: hitl        Tags: irreversible        Blocked by: rotate-plex-token, release-bump, limit-and-reload-fixes (D73)
 - Agent type: none (hitl; the owner runs the force-push, plan criterion 4)
-- Claimed: n/a — not claimed; blocked by rotate-plex-token and release-bump (only pre-claim preparation below)
+- Claimed: 2026-10-15T00:28:43Z (every blocker done: rotate-plex-token debe086, release-bump 1450d71, limit-and-reload-fixes 090d231)
 - Dispatched: n/a        Re-dispatches: 0        Inner revision rounds: 0
 - Last verification: 2026-10-13T16:45:10Z (rehearsal)
 - Commit(s): n/a — no phase commit yet
@@ -45,3 +45,6 @@ Reason: the skill's irreversible rule (Step 7) runs the phase's `security-review
 - Result (security-review-r1, `artifacts/purge-git-history--security-review-r1.md`): verdict FINDINGS, one Medium. F1: the validation host's Windows user-profile path (the owner's full name) in three run outputs (`real-server-validation--home-core-r1.txt:1`, `-core-r1b.txt:1`, `-play-r1.txt:20-22`). Fixed at HEAD in 9507326 (masked to `%USERPROFILE%`); the pushed history keeps it until the purge, so D49 gains a `--replace-text` rule (D49 note). Clean: the leaked token (0 hits at HEAD and in added lines), machine id, public IP, emails, phone name, SSH details; the rename commit is name-only; the committed drivers talk only to localhost, plex.tv and the saved server. Lower-risk, recorded: a private LAN address in two artifacts (kept: private range); the four shared-server names in a core-r1b row (masked to `<shared server N>` in the next commit; they stay in pushed history until the purge, so the D49 replace list carries them too).
 - DEVIATION (conductor): the skill's false-positive filter sub-task was not dispatched for F1; the conductor verified the finding directly (`grep -rl` of the path → exactly the three files) before masking. Recorded here instead of pretending a filter ran.
 
+
+## Step 7 — precondition review (before the approval pause, plan criterion 4)
+- Target: the branch tip `090d231` on `claude/intelligent-rubin-4vsi63` (2.1.0 = release 1450d71 + fix 090d231 + docs/trail commits). Reviewer purge-precondition-r1 (orchestrator-reviewer, cold on the repository state), brief `artifacts/purge-git-history--brief-precondition-r1.md`, dispatched 2026-10-15T00:28:43Z.

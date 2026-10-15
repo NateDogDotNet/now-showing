@@ -1,0 +1,27 @@
+{
+ "phase": "limit-and-reload-fixes",
+ "round": 2,
+ "sha": "090d231",
+ "form": "commit",
+ "handbacks": [
+  "limit-and-reload-fixes--handback-builder-r1.md",
+  "limit-and-reload-fixes--handback-builder-r2.md"
+ ],
+ "touched": [
+  "js/main.js",
+  "js/plex.js",
+  "js/poster-cache.js",
+  "scripts/mock-plex.mjs",
+  "tests/e2e/content-rating.spec.mjs",
+  "tests/e2e/pi-stability.spec.mjs",
+  "tests/e2e/preset.spec.mjs",
+  "tests/e2e/status.spec.mjs",
+  "tests/plex.test.js",
+  "tests/poster-cache.test.js"
+ ],
+ "attributed_elsewhere": {},
+ "unattributed": [],
+ "malformed": {},
+ "ok": true,
+ "checked_at": "2026-10-15T00:27:56.105832Z"
+}
