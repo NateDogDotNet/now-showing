@@ -1,0 +1,13 @@
+{
+ "phase": "purge-git-history",
+ "stop": 16,
+ "kind": "decision",
+ "carried_not_listed": [],
+ "carried_not_in_index": [],
+ "promised_not_listed": [],
+ "dismissed_minors_not_listed": [],
+ "items_without_placement": [],
+ "grids_failing_check": [],
+ "checked_at": "2026-10-15T00:48:25.874599Z",
+ "ok": true
+}

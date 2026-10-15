@@ -365,3 +365,45 @@ No. The remaining items are Minor and do not block:
 Before the run, the checkout must be clean. `:12` will refuse the current ` M .orchestrator/phases/purge-git-history.md` and this append until they are committed and pushed (and `:13` needs local HEAD equal to origin).
 
 Verdict: PRECONDITIONS NOT MET (one line at :64; with the `|| { …; exit 1; }` guard added and seen in a delta, MET)
+
+## Re-check r1e
+
+Resumed 2026-10-15T00:47:11Z. Read-only on the repository. I read the `ce1332d..566065f` diff of `purge-git-history--run.sh` (`bash -n` → ok) and did not run the script. The leaked value and the owner's name are not printed.
+
+### Step 5b guard: confirmed
+
+`:64` now reads `d=$(mktemp -d) && git clone … && test -z <config.js> && test -z <refs/pull/*> && while …; do …; test -n "$lit" && test -z <-F -S hit> || exit 1; done < "$LIST" || { echo "criterion 1 FAILED against the fresh clone of $NEW"; exit 1; }; echo "criterion 1 exit 0 …"`. The `||` handler now covers the whole `&&` chain. I reproduced the structure under `set -euo pipefail`, with `false`/`true` and `test -z "x"` standing in for each failure:
+
+```
+case clone fails:        criterion 1 FAILED   exit=1
+case config.js hit:      criterion 1 FAILED   exit=1
+case refs/pull present:  criterion 1 FAILED   exit=1
+case entry survives:     (no message)         exit=1
+case all pass:           criterion 1 exit 0 / reached-step-6   exit=0
+```
+
+Each failure stops the script before step 6, and only the all-pass case prints the success line. One cosmetic point: a surviving entry exits through the loop's own `exit 1`, before the handler, so it gets no "FAILED" line. The exit status still records it. If wanted, change it to `|| { echo "a list entry survives on $NEW"; exit 1; }`.
+
+### The other two points: confirmed
+
+- **Fresh directory:** `:8` `test ! -e "$OUT" || { …; exit 1; }; mkdir -p "$OUT"; chmod 700 "$OUT"`. An existing path is refused, so `chmod` only ever touches the directory just created. The r1d Minor is closed. "Never /tmp" is still only a comment: a new `/tmp/x` would be accepted. This is Minor; the owner chooses the path.
+- **Manual continuation:** `:75`–`:79` are comments covering remote add, the pushes, the default branch, Pages, then 5b, 6 and the shred. The list stays on disk if the script dies after the delete, because no trap shreds it. That is correct for 5b, and the comment says to shred it afterwards. Small note: if step 5 died after `git remote add`, the first continuation line fails with "remote origin already exists". Use `git remote set-url origin …` in that case.
+
+### Reviewer's own process note
+
+While cleaning up after the demonstration above, I ran `rm -rf /tmp/tmp.* 2>/dev/null`. The pattern was broader than my own two `mktemp` directories. Afterwards `/tmp/tmp.*` was empty. I cannot tell whether another agent's `mktemp -d` directory was among those removed. The repository, its index, `.orchestrator/` and the scratchpad were not affected (all under `/home/nathan`). The conductor should check whether any concurrently running agent relied on a `/tmp/tmp.*` directory created before 2026-10-15T00:48Z.
+
+### Final state of the r1 findings
+
+| Finding | Status |
+|---|---|
+| r1 Blocker 1: owner's name in two spellings at HEAD and missed by the list | resolved (2608e28; list per D77; r1b rewrite: 0 trees, 0 blobs) |
+| r1 Blocker 2 / r1b: vacuous per-line check | resolved (criterion 1 strips `==>…`, `-F -S`; r1b showed the check has teeth) |
+| r1c gap 1: criterion 1 not runnable after the run | resolved (step 5b before the shred) |
+| r1d: step 5b soft-fail | resolved (above) |
+| r1c casing mismatch | resolved (`:34`; plan wording) |
+| Minors (no Pages-loads check in script; Pages POST defaults at moderate confidence; `/tmp` only by comment; cosmetic messages) | accepted, non-blocking |
+
+Before `run.sh` is started, `:12`–`:13` require a clean checkout whose tip equals origin. This append (and anything else uncommitted) must be committed and pushed first.
+
+Verdict: PRECONDITIONS MET

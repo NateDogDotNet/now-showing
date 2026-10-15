@@ -30,7 +30,7 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
 | real-server-validation-extended | ✅ done | hitl | validation-checklists, real-server-validation, content-rating-filter, settings-sheet, metadata-and-now-playing, device-helper-integration, pi-stability | — | 100% | 0 | — | 128b62e; 15 PASS, 12 SKIPPED (no Pi), Overall PASS; D33/D37 checks pass; gate-2 ok |
 | docs | ✅ done | afk | recommended-protection-preset, touch-and-labels | — | 100% | 2 | docs | landed 78b9f67; r3 anchored delta APPROVE (A-); gate ok |
 | release-bump | ✅ done | afk | docs, rotate-plex-token, real-server-validation, real-server-validation-extended, rename-now-showing | — | 100% | 1 | — | 1450d71 (2.1.0); Step 8 90/90; gate-4 ok; phase-gate PASS; code-review findings routed by D73 |
-| purge-git-history | ⬜ pending | hitl | rotate-plex-token, release-bump, limit-and-reload-fixes | conductor-2 | 0% | 0 | irreversible |  |
+| purge-git-history | 🚧 blocked | hitl | rotate-plex-token, release-bump, limit-and-reload-fixes | conductor-2 | 0% | 0 | irreversible | stop 16 saved: waiting on the owner's approval (D46, D49, D76, D77) |
 | display-decode-hang | ✅ done | afk | rotation-layout-and-shell | — | 100% | 1 | — | landed af55616 |
 | rename-now-showing | ✅ done | afk | docs | — | 100% | 1 | ui, docs | landed 7192007; Step 8 90/90; review r1 APPROVE (Minor fixed r2) |
 | limit-and-reload-fixes | ✅ done | afk | release-bump | — | 100% | 1 | risk:high | 090d231; Step 8 90/90; both r2 lenses APPROVE; gate ok |
@@ -567,10 +567,10 @@ run 1 · plan docs/integration-plan.md @ 0f1f82e · kernel dotclaude@b4a6fb5 · 
     },
     {
       "name": "purge-git-history",
-      "status": "pending",
+      "status": "blocked",
       "confidence": 0,
       "redispatch": 0,
-      "note": "",
+      "note": "stop 16 saved: waiting on the owner's approval (D46, D49, D76, D77)",
       "blocked_by": [
         "rotate-plex-token",
         "release-bump",
