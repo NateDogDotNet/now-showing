@@ -24,6 +24,11 @@ export const PROTECTION_PRESET = [
   { key: 'dailyReload', value: true, label: 'Reload the page once a day' },
 ];
 const showValue = (v) => (v === true ? 'on' : v === false ? 'off' : String(v));
+/** How the preset list prints a value: a select shows the label of its option, as the form does; the rest as showValue. */
+function showFormValue(el, v) {
+  const option = el.tagName === 'SELECT' ? [...el.options].find((o) => o.value === String(v)) : null;
+  return option ? option.textContent.trim() : showValue(v);
+}
 
 // ---- the plex.tv code (shared by the Settings sheet and the empty card's first run) ----
 
@@ -192,8 +197,8 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       const now = currentFormValue(row.key);
       const hint = document.createElement('span');
       hint.className = 'muted small';
-      hint.textContent = String(now) === String(row.value) ? 'already set' : `now ${showValue(now)}`;
-      label.append(box, document.createTextNode(`${row.label}: ${showValue(row.value)}`), hint);
+      hint.textContent = String(now) === String(row.value) ? 'already set' : `now ${showFormValue(field(row.key), now)}`;
+      label.append(box, document.createTextNode(`${row.label}: ${showFormValue(field(row.key), row.value)}`), hint);
       li.append(label);
       return li;
     });

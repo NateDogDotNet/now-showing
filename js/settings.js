@@ -1,6 +1,8 @@
 // Settings schema, persistence, legacy migration and import/export.
 // Everything is stored as one JSON blob so it can be exported and validated as a unit.
 
+import { parseHHMM } from './schedule.js';
+
 export const STORAGE_KEY = 'plexPoster.settings';
 export const EXPORT_FORMAT = 'plex-poster-display/settings';
 export const EXPORT_VERSION = 1;
@@ -19,7 +21,7 @@ const strictNum = (min, max, { int = false } = {}) => (v, d) => {
 const bool = (v, d) => (typeof v === 'boolean' ? v : v === 'true' ? true : v === 'false' ? false : d);
 const str = (v, d) => (typeof v === 'string' ? v.trim() : d);
 const oneOf = (...allowed) => (v, d) => (allowed.includes(v) ? v : d);
-const hhmm = (v, d) => (typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : d);
+const hhmm = (v, d) => (parseHHMM(v) !== null ? v : d);
 const hex = (v, d) => (typeof v === 'string' && /^[0-9a-f]*$/i.test(v) ? v : d);
 const rotation = (v, d) => {
   const n = Number(v);

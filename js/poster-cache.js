@@ -59,18 +59,23 @@ export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = glo
     },
 
     /**
-     * A poster seen online carries its current rating: store it, so a re-rated title does not keep its old rating
-     * for the offline fallback. Only the rating of an existing entry changes (no re-order, no blob write); nothing
-     * is written when it already matches or the poster is not cached.
+     * Posters seen online carry their current ratings: store them, so a re-rated title does not keep its old rating
+     * for the offline fallback. One index read and at most one index write for the whole list. Only the rating of an
+     * existing entry changes (no re-order, no blob write); nothing is written when every rating already matches or
+     * no poster is cached. An episode's own rating is not its show's (D73): without a series rating it changes nothing (D75).
      */
-    refreshRating(poster) {
-      if (poster.episodeRating && !poster.seriesRating) return; // its rating is the episode's, not the show's (D73)
+    refreshRatings(posters) {
       const list = readIndex();
-      const entry = list.find((e) => e.ratingKey === poster.ratingKey);
-      const contentRating = poster.seriesRating || poster.contentRating || '';
-      if (!entry || entry.contentRating === contentRating) return;
-      entry.contentRating = contentRating;
-      writeIndex(list);
+      let changed = false;
+      for (const poster of posters) {
+        if (poster.episodeRating && !poster.seriesRating) continue; // its rating is the episode's, not the show's (D73)
+        const entry = list.find((e) => e.ratingKey === poster.ratingKey);
+        const contentRating = poster.seriesRating || poster.contentRating || '';
+        if (!entry || entry.contentRating === contentRating) continue;
+        entry.contentRating = contentRating;
+        changed = true;
+      }
+      if (changed) writeIndex(list);
     },
 
     /** Drops one poster (blob and index entry), e.g. when its stored blob proves undecodable. */

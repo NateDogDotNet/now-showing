@@ -8,7 +8,7 @@ There's no build step, no backend and no dependencies: just static files that ta
 
 ![Poster inside the marquee frame](assets/screenshots/portrait.png)
 
-> **Status of version 2.1: released on `main`, validated against a real Plex server, not yet run on a Raspberry Pi.** The code and its tests (`npm test`, `npm run test:e2e`) run against a mock Plex server, and on 2026-10-14 the app was also checked against a real Plex Media Server: all 17 core rows and the 15 extended rows that need no Pi passed. The 12 Raspberry Pi rows (V1-E11 to V1-E22) were skipped because no Pi was available, and the release was closed without them, so nothing in 2.1 has been run on a real Raspberry Pi. Anything below that nobody has checked on a Pi is tagged **(verify)**, which means "not yet verified": on a Raspberry Pi or, for one item, with data the test server lacks (the country-prefixed ratings, V1-E04). That covers every Chromium flag, policy and package name, and every OS and helper command. The checklists are in [`docs/validation/real-server-core.md`](docs/validation/real-server-core.md) and [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md). If a Pi row is ever run and passes, its tag comes off here.
+> **Status of version 2.1: 2.1.0 is released on `main`; 2.1.1, the current version, is on the `2.1.x` branch and not yet merged to `main`. Validated against a real Plex server, not yet run on a Raspberry Pi.** The code and its tests (`npm test`, `npm run test:e2e`) run against a mock Plex server, and on 2026-10-14 the app was also checked against a real Plex Media Server: all 17 core rows and the 15 extended rows that need no Pi passed. The 12 Raspberry Pi rows (V1-E11 to V1-E22) were skipped because no Pi was available, and the release was closed without them, so nothing in 2.1 has been run on a real Raspberry Pi. Version 2.1.1 adds the 2.1.x fixes and splits `js/main.js` into modules; the validation above was done on 2.1.0. Anything below that nobody has checked on a Pi is tagged **(verify)**, which means "not yet verified": on a Raspberry Pi or, for one item, with data the test server lacks (the country-prefixed ratings, V1-E04). That covers every Chromium flag, policy and package name, and every OS and helper command. The checklists are in [`docs/validation/real-server-core.md`](docs/validation/real-server-core.md) and [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md). If a Pi row is ever run and passes, its tag comes off here.
 
 ---
 
@@ -453,7 +453,7 @@ sw.js                   service worker (precache + offline shell)
 config.example.json     a starting point for config.json
 css/app.css             styles
 js/
-  main.js               bootstrap and glue: scheduling, offline fallback, sleep, daily reload, controls, Diagnostics, kiosk, first run
+  main.js               bootstrap and glue: scheduling, offline fallback, controls, Settings, Diagnostics, kiosk, first run
   engine.js             decides which poster to show; applies the content limit (pure, unit-tested)
   plex.js               Plex server + plex.tv client (sign-in, discovery, sessions, ratings, runtime format)
   display.js            frame/poster rendering, rotation, pixel shift, cross-fade, progress bar
@@ -465,6 +465,12 @@ js/
   schedule.js           local-time helpers: windows across midnight, DST, plausible clock (pure)
   sleep.js              the sleep decision: schedule, idle, playback wake, manual wake (pure)
   brightness.js         frame brightness and the stepped night dim (pure)
+  brightness-timer.js   applies the brightness to the display once a minute
+  sleep-control.js      sleep on the page: playback poll, the veil, the sleep clock, manual wake
+  tv-power.js           TV power off at sleep, power on at wake, CPU temperature (uses helper.js)
+  reload.js             the daily, after-wake and update reloads, and what they wait for
+  pin-gate.js           the one settings-PIN check (builds the prompt from kiosk.js)
+  poster-pin.js         the Pin/Unpin button: pins the poster on screen
   kiosk.js              PIN hashing and lockout, the corner hold, the resetPin flag, the PIN prompt
   helper.js             page-side client of the device helper (screen power, CPU temperature)
   shortcuts.js          the one keyboard-shortcut table, used by the keys and the `?` overlay
@@ -502,7 +508,7 @@ npm run test:e2e               # browser tests against the mock server
 
 `npm run test:e2e` starts one `serve.mjs --mock` and runs each spec in `tests/e2e/` in its own process. Playwright is a dev dependency only; the app has none. It uses ports 18080 (app) and 18401 (mock) by default. Set `E2E_PORT` and `E2E_MOCK_PORT` to other free ports when you run two copies at once, and `E2E_SPEC_TIMEOUT` (seconds, default 180) to change a spec's time limit. Pass spec names to run only those: `npm run test:e2e -- smoke`. Specs that start their own server pick a free port at run time.
 
-When you change any precached file, bump `VERSION` in `sw.js` (and in `js/main.js` and `package.json`). Installed clients pick up the new version and reload automatically. Any new file under `js/` also goes into `SHELL` in `sw.js`.
+When you change any precached file, bump `VERSION` in `sw.js` (and in `js/main.js`, `package.json` and `package-lock.json`, which holds it twice). Installed clients pick up the new version and reload automatically. Any new file under `js/` also goes into `SHELL` in `sw.js`.
 
 The design is in [`docs/spec.md`](docs/spec.md) and the decisions that bind it are in [`docs/decisions.md`](docs/decisions.md). What is planned or only an idea is in [`Roadmap.md`](Roadmap.md).
 

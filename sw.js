@@ -2,7 +2,7 @@
 // Plex traffic is never intercepted — posters are cached by the page itself (poster-cache.js).
 //
 // Bump VERSION whenever any file in SHELL changes so clients pick up the update.
-const VERSION = '2.1.0';
+const VERSION = '2.1.1';
 const SHELL_CACHE = `shell-${VERSION}`;
 
 const SHELL = [
@@ -13,6 +13,7 @@ const SHELL = [
   'js/main.js',
   'js/backoff.js',
   'js/brightness.js',
+  'js/brightness-timer.js',
   'js/display.js',
   'js/duration.js',
   'js/engine.js',
@@ -20,14 +21,19 @@ const SHELL = [
   'js/helper.js',
   'js/kiosk.js',
   'js/layout.js',
+  'js/pin-gate.js',
   'js/plex.js',
   'js/poster-cache.js',
+  'js/poster-pin.js',
   'js/ratings.js',
+  'js/reload.js',
   'js/schedule.js',
   'js/settings.js',
   'js/settings-ui.js',
   'js/shortcuts.js',
   'js/sleep.js',
+  'js/sleep-control.js',
+  'js/tv-power.js',
   'js/util.js',
   'assets/frames/marquee.png',
   'assets/frames/marquee-narrow.png',

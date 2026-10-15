@@ -1,43 +1,28 @@
 // App bootstrap: wires settings, Plex, the poster engine, display and controls together.
 
 import { createBackoff } from './backoff.js';
-import { effectiveBrightness } from './brightness.js';
+import { createBrightnessTimer } from './brightness-timer.js';
 import { createDisplay } from './display.js';
 import { createEngine } from './engine.js';
 import { createHelper } from './helper.js';
-import { cornerZone, createHold, createPinPrompt, HOLD_MS, inZone, REVEAL_MS, shouldResetPin } from './kiosk.js';
+import { cornerZone, createHold, HOLD_MS, inZone, REVEAL_MS, shouldResetPin } from './kiosk.js';
+import { createPinGate } from './pin-gate.js';
 import { createPlexClient } from './plex.js';
 import { createPosterCache } from './poster-cache.js';
+import { createPosterPin } from './poster-pin.js';
 import { allows } from './ratings.js';
+import { createReload, takeCarriedPlayback } from './reload.js';
 import { requestSize } from './layout.js';
 import { isPlausibleClock } from './schedule.js';
 import { createSettingsUI, pinSignIn } from './settings-ui.js';
 import { fromImport, isConfigured, load, save, STORAGE_KEY } from './settings.js';
 import { keyMap, listShortcuts, normalizeKey } from './shortcuts.js';
-import { decideSleep, MANUAL_WAKE_MS } from './sleep.js';
+import { createSleepControl, playbackMatters } from './sleep-control.js';
+import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.1.0';
+export const VERSION = '2.1.1';
 
-// An automatic reload (the daily one, or one for a new service worker) hands the idle-sleep clock to the next page
-// through sessionStorage, so it does not read as fresh playback (C8M3, D28). A normal load never finds it.
-const CARRY_KEY = 'plexPoster.carry';
-const CARRY_MAX_AGE_MS = 2 * 60_000;
-
-/** `lastPlaybackAt` left by an automatic reload that just happened, read once; null on any other load. */
-function takeCarriedPlayback() {
-  try {
-    const carried = JSON.parse(sessionStorage.getItem(CARRY_KEY));
-    sessionStorage.removeItem(CARRY_KEY);
-    const now = Date.now();
-    if (Number.isFinite(carried?.lastPlaybackAt) && Number.isFinite(carried?.at) && now - carried.at >= 0 && now - carried.at < CARRY_MAX_AGE_MS) {
-      return Math.min(carried.lastPlaybackAt, now);
-    }
-  } catch {
-    // no sessionStorage, or junk in it: a fresh clock
-  }
-  return null;
-}
 const carriedPlayback = takeCarriedPlayback();
 
 const storage = safeStorage();
@@ -69,6 +54,7 @@ const state = {
   swallowUntil: 0, // performance.now() until which clicks are swallowed (after a press that only woke the display)
   pollFailing: false,
   tvWaking: false, // between the power-on request at wake and the end of TV_WAKE_MS: no poster is fetched yet
+  tickAfterWake: null, // a tick() that arrived while tvWaking, { force, notify }: it runs when the window ends
   pollError: null, // the error of this tick's failed playback poll, handed to decide() so it does not ask again
   pollFailures: 0, // consecutive failed playback polls
   sleepClock: { wall: Date.now(), mono: performance.now() },
@@ -89,7 +75,7 @@ function rebuildClient() {
         getSettings: () => state.settings,
         // D37: while a limit is set, each online pool load re-confirms the cached titles' ratings.
         cachedKeys: () => cache.entries().map((e) => e.ratingKey),
-        onRatings: (posters) => posters.forEach((p) => cache.refreshRating(p)),
+        onRatings: (posters) => cache.refreshRatings(posters),
       })
     : null;
   state.directImages = false;
@@ -225,17 +211,22 @@ function imageLoads(url) {
 }
 
 async function tick({ force = false, notify = false } = {}) {
-  if (!engine || state.busy || state.tvWaking) return;
+  if (!engine || state.busy) return;
+  if (state.tvWaking) {
+    // No poster is fetched until the TV is awake, but the call is not lost: the end of the window runs it.
+    state.tickAfterWake = { force: force || Boolean(state.tickAfterWake?.force), notify: notify || Boolean(state.tickAfterWake?.notify) };
+    return;
+  }
   state.busy = true;
   try {
-    const sessions = await pollPlayback(); // fetched once; decide() reuses it
+    const sessions = await sleepControl.pollPlayback(); // fetched once; decide() reuses it
     const sessionsError = state.pollError; // a failed poll is not repeated by decide() (C8M1)
     // Asleep (or the TV still waking, the wake having begun during the poll above): Plex is polled, but no poster
     // is chosen, fetched or shown; the end of the TV wake ticks again.
     const decision = state.asleep || state.tvWaking ? null : await engine.decide({ force: force || document.body.classList.contains('poster-blocked'), sessions, sessionsError });
     let refused = false; // a poster was fetched but the limit no longer allows it
     if (decision) {
-      cache.refreshRating(decision.poster); // seen online: its stored rating follows Plex (C7M2)
+      cache.refreshRatings([decision.poster]); // seen online: its stored rating follows Plex (C7M2)
       let image = await fetchImage(decision.poster);
       // (Asleep by now: the download began before sleep did; it is not drawn under the veil.)
       let drawn = false;
@@ -326,345 +317,16 @@ async function handleFailure(err, { notify = false } = {}) {
   schedule(state.asleep ? Math.min(retryMs, state.settings.nowPlayingPollSeconds * 1000) : retryMs);
 }
 
-// ---------- Sleep ----------
+// ---------- Sleep, display power, reload, brightness ----------
 
-const MAX_POLL_FAILURES = 3;
-// Playback can change the sleep decision only if it wakes a schedule sleep or restarts the idle clock.
-const playbackMatters = (s) => (s.sleepEnabled && s.wakeOnPlayback) || s.idleSleepHours > 0;
-
-/**
- * Asks Plex whether anything is playing, when sleep needs to know, and returns the sessions it saw
- * (undefined when it did not ask or could not). May wake the display. A failed poll never refreshes
- * `lastPlaybackAt` and keeps the last `playing` for at most MAX_POLL_FAILURES failures in a row (a blip
- * must not black a movie out; an outage must not hold the display awake all night). Awake, the failure is
- * only logged and rotation carries on (a shared or managed token is often refused /status/sessions);
- * asleep, it goes to handleFailure, which retries at the poll rate.
- */
-async function pollPlayback() {
-  state.pollError = null;
-  if (!playbackMatters(state.settings)) {
-    state.playing = false;
-    state.pollFailures = 0;
-    return undefined;
-  }
-  let sessions;
-  try {
-    sessions = await client.sessions();
-  } catch (err) {
-    state.pollError = err;
-    if (++state.pollFailures >= MAX_POLL_FAILURES) state.playing = false; // the 1 s evaluateSleep() timer acts on it
-    if (state.asleep) throw err;
-    if (!state.pollFailing) log.warn(`Playback check failed: ${err.message}`);
-    state.pollFailing = true;
-    return undefined;
-  }
-  state.pollFailing = false;
-  state.pollFailures = 0;
-  state.playing = Boolean(await engine.playing(sessions));
-  if (state.playing) {
-    syncSleepClock();
-    state.lastPlaybackAt = Date.now();
-  }
-  evaluateSleep();
-  return sessions;
-}
-
-/**
- * A clock step (NTP arriving, a manual change) must not read as hours of idleness or a stuck manual wake:
- * compare the wall clock with the monotonic one and shift the stored timestamps by the gap. Call it before
- * every write of a wall-clock timestamp (so the step is absorbed first and the new stamp is not shifted
- * again) and at the top of evaluateSleep().
- */
-function syncSleepClock() {
-  const wall = Date.now();
-  const mono = performance.now();
-  const jump = wall - state.sleepClock.wall - (mono - state.sleepClock.mono);
-  state.sleepClock = { wall, mono };
-  if (Math.abs(jump) > 5000) {
-    state.lastPlaybackAt += jump;
-    bootAt += jump;
-    if (state.manualWakeUntil) state.manualWakeUntil += jump;
-  }
-  if (Math.abs(jump) > BRIGHTNESS_JUMP_MS) evaluateBrightness(); // the clock moved: the night dim may be wrong now
-}
-
-// ---------- Daily reload (R-PROT-3, D6) ----------
-
-// A display that runs for weeks sheds Chromium's memory growth with a reload each day, but only where a reload cannot
-// strand it: a service worker controls the page (so the reload is answered from the shell cache even if the host is
-// down) AND an uncached probe of index.html just succeeded (so the host is up now). Anything else is skipped and logged.
-const LAST_RELOAD_KEY = 'plexPoster.lastReload'; // a plain key, not a setting: it is the loop guard
-const RELOAD_STALE_MS = 12 * 60 * 60_000; // the first wake from sleep reloads if the last reload is older than this
-const RELOAD_GAP_MS = 10 * 60_000; // never two reloads closer than this
-const RELOAD_PROBE_MS = 5000;
-let bootAt = Date.now(); // moved with the clock when it is set after boot (syncSleepClock)
-
-let reloadPending = ''; // 'scheduled' | 'wake' | 'update' | '': a reload is wanted and waits for a quiet moment
-let reloadChecking = false; // the probe is in flight
-let reloading = false; // location.reload() was called
-let reloadSkip = ''; // why the last attempt was skipped (Diagnostics)
-let reloadDay = ''; // the local day whose reload time has been handled
-let reloadArmed = false; // reloadDay has been taken from a plausible clock
-
-/** Why a reload cannot happen now, or ''. */
-function dailyReloadBlocker() {
-  if (!state.settings.dailyReload) return 'turned off in Settings';
-  if (!isPlausibleClock(new Date())) return 'the clock is not set';
-  if (!storage.persistent) return 'storage is unavailable, so a reload loop could not be prevented';
-  if (!navigator.serviceWorker?.controller) return 'no service worker controls this page (it needs https or localhost)';
-  return '';
-}
-
-const dailyReloadRow = () => {
-  const why = dailyReloadBlocker() || reloadSkip;
-  return why ? `skipped (${why})` : 'active';
-};
-
-/** Not now, but soon: a dialog is open, a poster is loading, or the last poster is still fading in. */
-function reloadMustWait() {
-  if (document.querySelector('dialog[open]')) return 'a dialog is open';
-  if (state.busy || state.tvWaking) return 'a poster is loading';
-  if (Date.now() < state.manualWakeUntil) return 'a manual wake is running'; // it would lose its 60 s to the reload
-  if (performance.now() - lastDrawAt < (state.settings.crossfadeMs ?? 0) + 250) return 'a poster is fading in';
-  return '';
-}
-
-function skipReload(why) {
-  if (reloadPending !== 'update') reloadPending = ''; // a wanted update reload is not the daily reload's to cancel
-  reloadSkip = why;
-  log.info(`Daily reload skipped: ${why}`);
-}
-
-/** Reloads the page on the page's own account (not the user's): the idle-sleep clock carries over. */
-function reloadAutomatically() {
-  reloading = true;
-  try {
-    sessionStorage.setItem(CARRY_KEY, JSON.stringify({ lastPlaybackAt: state.lastPlaybackAt, at: Date.now() }));
-  } catch {
-    // no sessionStorage: the idle clock starts afresh
-  }
-  location.reload();
-}
-
-/** A wake that ends sleep (K39: not a manual wake) reloads when the last reload (or, with none recorded, this page load) is over 12 h old. */
-function requestReloadAfterWake() {
-  if (!state.settings.dailyReload || !isPlausibleClock(new Date())) return;
-  const last = Number(storage.getItem(LAST_RELOAD_KEY)) || bootAt;
-  if (Date.now() - last > RELOAD_STALE_MS) reloadPending ||= 'wake';
-}
-
-/** Runs a wanted reload once nothing is in the way. Anything unsafe skips it; a busy moment only delays it. */
-async function runDailyReload() {
-  if (reloading || reloadChecking) return;
-  if (reloadPending === 'update') {
-    // A new version took over (D73). Kiosks are unattended, so it reloads into it, but only at the same quiet moments
-    // as the daily reload. It is not the daily reload: the setting, the 10 minute gap and the probe do not apply.
-    if (reloadMustWait()) return; // stays pending: looked at again in a second
-    log.info('Reloading into the new version');
-    return reloadAutomatically();
-  }
-  const blocker = dailyReloadBlocker();
-  if (blocker) return skipReload(blocker);
-  if (reloadMustWait()) return; // stays pending: looked at again in a second
-  const last = Number(storage.getItem(LAST_RELOAD_KEY)) || 0;
-  const age = Date.now() - last;
-  if (last && age >= 0 && age < RELOAD_GAP_MS) return skipReload('the last reload was less than 10 minutes ago');
-
-  reloadSkip = '';
-  reloadChecking = true;
-  let why = '';
-  try {
-    const res = await fetch('index.html', { cache: 'no-store', signal: AbortSignal.timeout?.(RELOAD_PROBE_MS) });
-    if (!res.ok) why = `the server answered HTTP ${res.status}`;
-  } catch {
-    why = 'the server did not answer';
-  } finally {
-    reloadChecking = false;
-  }
-  if (why) return skipReload(why);
-  if (dailyReloadBlocker() || reloadMustWait()) return; // the probe took a moment and things changed: decide again next second
-  const stamp = String(Date.now());
-  storage.setItem(LAST_RELOAD_KEY, stamp); // BEFORE reloading, so a failing reload cannot loop
-  if (storage.getItem(LAST_RELOAD_KEY) !== stamp) return skipReload('the reload could not be recorded');
-  log.info('Daily reload');
-  reloadAutomatically();
-}
-
-/** Once a second: notices dailyReloadTime passing (never one that had passed before this page loaded) and runs a wanted reload. */
-function dailyReloadTick() {
-  if (reloading) return;
-  const now = new Date();
-  if (!isPlausibleClock(now)) {
-    reloadArmed = false; // when the clock is set, start from there: the time it jumps past is not "04:00 passing"
-  } else {
-    const [h, m] = state.settings.dailyReloadTime.split(':').map(Number);
-    const due = now.getHours() * 60 + now.getMinutes() >= h * 60 + m;
-    const day = now.toDateString();
-    if (!reloadArmed) {
-      reloadArmed = true;
-      reloadDay = due ? day : '';
-    } else if (due && day !== reloadDay) {
-      reloadDay = day;
-      if (state.settings.dailyReload) reloadPending ||= 'scheduled';
-    }
-  }
-  if (reloadPending) runDailyReload().catch((err) => skipReload(err.message));
-}
-setInterval(dailyReloadTick, 1000);
-
-// ---------- Device helper (R-HELP-2, D8) ----------
-
-// How long the TV gets to wake after the power-on request before the first poster is fetched. (verify) on hardware:
-// the V1-E22 checklist row measures it.
-const TV_WAKE_MS = 4000;
-const DIAG_TEMP_MS = 5000; // CPU temperature refresh, only while Diagnostics is open
-
-let tvOff = false; // we asked the TV to switch off and have not switched it on again
-let powerChain = Promise.resolve(); // power requests go out one at a time, in order
-let helperInfo = { available: false, tempC: null, temperature: null };
-let diagTimer = 0;
-
-/** The setting is on and the last probe found a helper. Everything else about the helper is gated on this. */
-const helperActive = () => state.settings.deviceHelper && helper.available;
-
-/** Probes once (boot, Settings opening, the setting being switched on); a display already asleep is switched off now. */
-async function probeHelper() {
-  if (!state.settings.deviceHelper) return;
-  helperInfo = await helper.probe();
-  if (state.asleep) powerOffAfterVeil();
-}
-
-const queuePower = (on) => (powerChain = powerChain.then(() => helper.power(on)));
-
-/** Power off only once the veil is up and painted (two frames), and only if the display is still asleep. */
-function powerOffAfterVeil() {
-  if (!helperActive() || tvOff) return;
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      if (!state.asleep || tvOff || !helperActive()) return;
-      tvOff = true;
-      queuePower(false);
-    }),
-  );
-}
-
-/** Wake: power on first, give the TV time, and only then let the poster fetch begin. A failed call does not block. */
-async function wakeTv() {
-  tvOff = false;
-  state.tvWaking = true;
-  try {
-    await queuePower(true);
-    await new Promise((resolve) => setTimeout(resolve, TV_WAKE_MS));
-  } finally {
-    state.tvWaking = false;
-  }
-}
-
-/** The setting was switched off while we had the TV powered off: one power on so the screen is not stranded, then silence. */
-function releaseTv() {
-  if (!tvOff) return;
-  tvOff = false;
-  if (helper.available) queuePower(true); // a failure is logged once by the helper; either way nothing more is sent
-}
-
-async function refreshTemperature() {
-  if (!helperActive()) return;
-  helperInfo = await helper.status();
-  if ($('diagnostics').open) renderDiagnostics();
-}
-
-/** Applies decideSleep() to the page: the veil and body.asleep. The wake lock is never touched. */
-function evaluateSleep() {
-  syncSleepClock();
-  const now = new Date();
-  const { asleep, why } = decideSleep({
-    now,
-    settings: state.settings,
-    lastPlaybackAt: state.lastPlaybackAt,
-    playingNow: state.playing,
-    manualWakeUntil: state.manualWakeUntil,
-    clockOk: isPlausibleClock(now),
-  });
-  state.sleepWhy = why;
-  if (asleep === state.asleep) return;
-  state.asleep = asleep;
-  syncFirstRun(); // an asleep display asks plex.tv for nothing (K50)
-  $('sleep-veil').hidden = !asleep;
-  $('app').inert = asleep; // top-layer dialogs are outside #app and stay usable
-  document.body.classList.toggle('asleep', asleep);
-  if (asleep) $('controls').classList.remove('visible');
-  log.info(asleep ? `Asleep (${why})` : 'Awake');
-  if (!asleep && why !== 'manual wake') requestReloadAfterWake(); // a manual wake would lose its 60 s to the reload (K39)
-  const next = () => !state.busy && !state.paused && tick(); // asleep: look for playback now; awake: show a poster now
-  if (asleep) {
-    powerOffAfterVeil();
-    next();
-  } else if (tvOff && helperActive()) {
-    wakeTv().then(() => !state.asleep && next());
-  } else {
-    tvOff = false; // the setting was switched off since the power off: no helper call at all
-    next();
-  }
-}
-setInterval(evaluateSleep, 1000);
-
-// ---------- Frame brightness and night dim ----------
-
-const BRIGHTNESS_JUMP_MS = 2 * 60_000;
-let brightnessTimer = 0;
-
-/** Sets the frame (or stage) brightness for the current minute and re-arms the timer for the next minute boundary. */
-function evaluateBrightness() {
-  const now = new Date();
-  display.setBrightness(effectiveBrightness(now, state.settings), state.settings.nightDimTarget);
-  clearTimeout(brightnessTimer);
-  // Aligned to the minute boundary; a timer that fires a hair early just re-arms for the remaining sliver.
-  brightnessTimer = setTimeout(evaluateBrightness, 60_000 - (now.getTime() % 60_000));
-}
-
-const SWALLOW_MS = 800;
-
-/** Settings and Diagnostics sit above the veil; input aimed at them is never swallowed. */
-const inOpenDialog = (e) => e.target instanceof Element && Boolean(e.target.closest('dialog[open]'));
-
-/**
- * A touch, click or key press while asleep only wakes: it never reaches the control under the finger.
- * Clicks stay swallowed until SWALLOW_MS after the last press that began asleep or inside that window, so a
- * second blind tap does not land on the controls the first one uncovered. During a manual wake any press or
- * key restarts the minute, in dialogs too.
- */
-function manualWake(e) {
-  const swallowing = e.type === 'pointerdown' && performance.now() < state.swallowUntil;
-  if (!state.asleep && !swallowing && state.sleepWhy !== 'manual wake') return;
-  syncSleepClock();
-  state.manualWakeUntil = Date.now() + MANUAL_WAKE_MS;
-  if ((state.asleep || swallowing) && !inOpenDialog(e)) {
-    e.stopPropagation();
-    e.preventDefault();
-    if (e.type === 'pointerdown') state.swallowUntil = performance.now() + SWALLOW_MS;
-  }
-  evaluateSleep();
-}
-window.addEventListener('pointerdown', manualWake, true);
-window.addEventListener('keydown', manualWake, true);
-window.addEventListener(
-  'pointermove',
-  () => {
-    if (state.sleepWhy !== 'manual wake') return;
-    syncSleepClock();
-    state.manualWakeUntil = Date.now() + MANUAL_WAKE_MS;
-  },
-  { capture: true, passive: true },
-);
-window.addEventListener(
-  'click',
-  (e) => {
-    if (performance.now() >= state.swallowUntil || inOpenDialog(e)) return;
-    e.stopPropagation();
-    e.preventDefault();
-  },
-  true,
-);
+// Their code is in js/sleep-control.js, tv-power.js, reload.js and brightness-timer.js; the timers start here, in this order.
+const brightness = createBrightnessTimer({ display, getSettings: () => state.settings });
+const reload = createReload({ state, storage, log, getLastDrawAt: () => lastDrawAt });
+setInterval(reload.dailyReloadTick, 1000);
+const tv = createTvPower({ state, helper, tick, diagnosticsOpen: () => $('diagnostics').open, renderDiagnostics });
+const sleepControl = createSleepControl({ state, log, $, tick, syncFirstRun, tv, reload, brightness, getClient: () => client, getEngine: () => engine });
+setInterval(sleepControl.evaluateSleep, 1000);
+sleepControl.listenForManualWake();
 
 // ---------- Errors carry their fix (R-SET-6) ----------
 
@@ -692,7 +354,7 @@ async function runFix(id) {
   if (id === 'test') return requestSettings({ test: true });
   if (id === 'diagnostics') return requestDiagnostics();
   // A saved setting changes only behind the PIN, like every other route to one. It saves, rebuilds the pool request and ticks.
-  if (id === 'unwatched' && (await requestPin())) return applySettings({ ...state.settings, unwatchedOnly: false });
+  if (id === 'unwatched' && (await pinGate.requestPin())) return applySettings({ ...state.settings, unwatchedOnly: false });
 }
 
 // ---------- UI state ----------
@@ -761,6 +423,7 @@ function setPaused(paused) {
   btn.querySelector('use').setAttribute('href', paused ? '#i-play' : '#i-pause');
   if (paused) {
     clearTimeout(state.timer);
+    state.tickAfterWake = null; // a tick queued by the TV wake window does not run after Pause
     state.nextAt = 0;
     log.info('Auto-refresh paused');
   } else {
@@ -791,7 +454,7 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   }
   state.settings = persist ? save(storage, next) : next;
   applyControlLabels();
-  evaluateBrightness(); // live preview and Save both show at once
+  brightness.evaluate(); // live preview and Save both show at once
   // Whatever is on screen is re-checked against the settings now in force on EVERY apply, previews and Cancel
   // included, even offline (K20, D29). This comes BEFORE the frame is applied, because a custom frame's load has no
   // timeout and must not keep an above-limit poster on screen.
@@ -819,12 +482,12 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   }
   updateWakeLock();
   updatePinButton();
-  if (state.settings.deviceHelper && !prev.deviceHelper) probeHelper();
-  if (!state.settings.deviceHelper && prev.deviceHelper) releaseTv();
-  if (prev.dailyReloadTime !== state.settings.dailyReloadTime) reloadArmed = false; // a new time is not "passing" until it does
-  syncSleepClock();
+  if (state.settings.deviceHelper && !prev.deviceHelper) tv.probeHelper();
+  if (!state.settings.deviceHelper && prev.deviceHelper) tv.releaseTv();
+  if (prev.dailyReloadTime !== state.settings.dailyReloadTime) reload.rearm(); // a new time is not "passing" until it does
+  sleepControl.syncSleepClock();
   if (restartIdle) state.lastPlaybackAt = Date.now(); // a save counts as a fresh start for the idle clock (boot after an automatic reload keeps it)
-  evaluateSleep();
+  sleepControl.evaluateSleep();
 
   syncFirstRun(); // configured now: the code flow stops; still not: it carries on (or starts)
   if (!isConfigured(state.settings)) {
@@ -840,19 +503,9 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   tick({ force });
 }
 
-// ---------- The PIN gate ----------
+// ---------- The PIN gate (js/pin-gate.js) ----------
 
-const pinPrompt = createPinPrompt({
-  dialog: $('pin-dialog'),
-  storage,
-  getAuth: () => ({ hash: state.settings.settingsPinHash, salt: state.settings.settingsPinSalt }),
-});
-
-/**
- * The ONE PIN check (D16: a deterrent, not security). True at once when no PIN is set; otherwise the PIN dialog
- * decides. Settings, Diagnostics, import, Reset everything, the token reveal and the token export all ask here.
- */
-const requestPin = () => (state.settings.settingsPinHash ? pinPrompt.verify() : Promise.resolve(true));
+const pinGate = createPinGate({ dialog: $('pin-dialog'), storage, getSettings: () => state.settings });
 
 /**
  * Opens Settings, after the PIN when one is set. Every route to Settings (button, `s`, empty card, the fixes, first run) ends
@@ -862,7 +515,7 @@ const requestPin = () => (state.settings.settingsPinHash ? pinPrompt.verify() : 
  * never reaches the sheet, let alone storage, without the PIN.
  */
 async function requestSettings(options = {}) {
-  if (!settingsUI.isOpen && !(await requestPin())) return; // cancelled: a token the card earned stays pending (below)
+  if (!settingsUI.isOpen && !(await pinGate.requestPin())) return; // cancelled: a token the card earned stays pending (below)
   if (settingsUI.isOpen) {
     // Open already, or opened a moment ago by another request that shared this PIN prompt: act on the open sheet.
     if (options.signIn) settingsUI.startSignIn();
@@ -873,17 +526,17 @@ async function requestSettings(options = {}) {
   pendingToken = null;
   settingsUI.open({ ...options, token });
   syncFirstRun(); // the sheet is its own place to sign in: the card's code steps aside
-  probeHelper();
+  tv.probeHelper();
 }
 
 /** Opens Diagnostics, after the PIN when one is set. */
 async function requestDiagnostics() {
-  if (await requestPin()) openDiagnostics();
+  if (await pinGate.requestPin()) openDiagnostics();
 }
 
 const settingsUI = createSettingsUI({
-  requestPin,
-  choosePin: () => pinPrompt.choose(),
+  requestPin: pinGate.requestPin,
+  choosePin: () => pinGate.prompt.choose(),
   getSettings: () => state.settings,
   clientId: clientIdValue,
   log,
@@ -902,25 +555,16 @@ const settingsUI = createSettingsUI({
   },
 });
 
-function togglePin() {
-  const s = state.settings;
-  const current = display.currentPoster ? engine?.current : null; // a blocked poster is not on screen: it cannot be pinned
-  if (s.staticRatingKey) {
-    applySettings({ ...s, staticRatingKey: '', staticTitle: '' });
-    toast('Unpinned — rotating posters again.');
-  } else if (current) {
-    applySettings({ ...s, staticRatingKey: current.ratingKey, staticTitle: current.title });
-    toast(`Pinned "${current.title}".`);
-  } else {
-    toast('Nothing to pin yet.');
-  }
-}
+// A blocked poster is not on screen: it cannot be pinned.
+const posterPin = createPosterPin({ getSettings: () => state.settings, getCurrent: () => (display.currentPoster ? engine?.current : null), applySettings });
 
 function rotate() {
   applySettings({ ...state.settings, rotation: (state.settings.rotation + 90) % 360 });
 }
 
 // ---------- Diagnostics ----------
+
+let diagTimer = 0; // the CPU temperature refresh, running only while Diagnostics is open
 
 function renderDiagnostics() {
   const s = state.settings;
@@ -929,7 +573,7 @@ function renderDiagnostics() {
     Version: VERSION,
     'Service worker': navigator.serviceWorker?.controller ? 'controlling' : 'none',
     'Secure context': window.isSecureContext ? 'yes' : 'no',
-    'Daily reload': dailyReloadRow(),
+    'Daily reload': reload.dailyReloadRow(),
     Installed: matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches ? 'yes' : 'no (running in a tab)',
     Server: s.serverUrl ? `${s.serverName || ''} ${s.serverUrl}`.trim() : '—',
     Token: s.plexToken ? `${s.plexToken.slice(0, 4)}…` : '—',
@@ -947,8 +591,8 @@ function renderDiagnostics() {
     'Wake lock': state.wakeLock ? 'held' : s.keepAwake ? 'not held' : 'off',
     Storage: storage.persistent ? 'localStorage' : 'memory only (settings will not persist!)',
     Screen: `${innerWidth}×${innerHeight} @${devicePixelRatio}x, rotation ${s.rotation}°`,
-    ...(helperActive() && helperInfo.tempC !== null
-      ? { 'CPU temperature': `${helperInfo.tempC} °C${helperInfo.temperature ? ` (${helperInfo.temperature})` : ''}` }
+    ...(tv.helperActive() && tv.info.tempC !== null
+      ? { 'CPU temperature': `${tv.info.tempC} °C${tv.info.temperature ? ` (${tv.info.temperature})` : ''}` }
       : {}),
     ...(pinResetFlag ? { 'PIN reset': 'PIN reset flag present — remove "resetPin" from config.json' } : {}),
   };
@@ -975,9 +619,9 @@ function openDiagnostics() {
   renderDiagnostics();
   $('diag-shortcuts').hidden = !listShortcuts(state.settings).length; // R-CTRL-3: no list while the shortcuts are off
   $('diagnostics').showModal();
-  if (helperActive()) {
-    refreshTemperature();
-    diagTimer = setInterval(refreshTemperature, DIAG_TEMP_MS);
+  if (tv.helperActive()) {
+    tv.refreshTemperature();
+    diagTimer = setInterval(tv.refreshTemperature, DIAG_TEMP_MS);
   }
 }
 $('diagnostics').addEventListener('close', () => {
@@ -1007,7 +651,7 @@ const actions = {
   diagnostics: requestDiagnostics,
   refresh: () => (engine ? tick({ force: true, notify: true }) : requestSettings()),
   pause: () => setPaused(!state.paused),
-  pin: togglePin,
+  pin: posterPin.togglePin,
   rotate,
   fullscreen: toggleFullscreen,
   shortcuts: openShortcuts,
@@ -1221,7 +865,7 @@ async function updateWakeLock() {
 
 document.addEventListener('visibilitychange', () => {
   updateWakeLock();
-  if (document.visibilityState === 'visible') evaluateBrightness();
+  if (document.visibilityState === 'visible') brightness.evaluate();
   if (document.visibilityState === 'visible' && !state.paused && state.nextAt && Date.now() >= state.nextAt - 1000) tick();
 });
 window.addEventListener('online', () => {
@@ -1247,7 +891,7 @@ function registerServiceWorker() {
   const hadController = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     // A new version took over: reload into it once nothing is in the way (the daily reload's waits).
-    if (hadController) reloadPending = 'update';
+    if (hadController) reload.requestUpdateReload();
   });
   navigator.serviceWorker
     .register('sw.js')
@@ -1399,7 +1043,7 @@ async function boot() {
   if (source === 'legacy') log.info('Migrated settings from the previous version (layout reset to defaults).');
   applyKiosk(); // hidden and inert before anything is awaited
   applyControlLabels();
-  evaluateSleep(); // black before config.json is awaited, as before
+  sleepControl.evaluateSleep(); // black before config.json is awaited, as before
   const config = await readConfigJson();
   if (source === 'defaults' && config !== null) {
     const provisioned = provisionedSettings(config);
@@ -1411,20 +1055,20 @@ async function boot() {
   // The PIN reset (D10, Q21): while config.json serves {"resetPin": true} the PIN is cleared on every load.
   pinResetFlag = config !== null && shouldResetPin(parseJson(config));
   if (pinResetFlag) {
-    pinPrompt.resetLock(); // the lockout too
+    pinGate.prompt.resetLock(); // the lockout too
     if (state.settings.settingsPinHash || state.settings.settingsPinSalt) {
       state.settings = save(storage, { ...state.settings, settingsPinHash: '', settingsPinSalt: '' });
     }
-    pinPrompt.cancelVerify(); // a prompt opened during the config.json wait asks for a PIN that no longer exists
+    pinGate.prompt.cancelVerify(); // a prompt opened during the config.json wait asks for a PIN that no longer exists
     log.warn('PIN reset flag present in config.json: the settings PIN was cleared. Remove the flag once you are done.');
   }
   applyKiosk(); // a provisioned file may have switched kiosk mode on
-  evaluateSleep(); // black before the first poster, not after
+  sleepControl.evaluateSleep(); // black before the first poster, not after
   if (!storage.persistent) log.warn('localStorage unavailable — settings will not survive a reload.');
 
   registerServiceWorker();
   await applySettings(state.settings, { persist: false, restartIdle: carriedPlayback === null });
-  probeHelper(); // once at boot; nothing at all when the setting is off
+  tv.probeHelper(); // once at boot; nothing at all when the setting is off
   bootSettled = true;
   syncFirstRun(); // unconfigured after config.json: the code appears on the card by itself; Settings is not forced open
   wake();

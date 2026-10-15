@@ -25,8 +25,16 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
   async function loadPool(s) {
     const key = `${s.libraryKey}|${s.unwatchedOnly}|${s.randomPoolSize}|${s.maxContentRating}`;
     if (pool.length && key === poolKey && now() - poolAt < POOL_TTL_MS) return pool;
-    const loaded = await client.pool({ libraryKey: s.libraryKey, unwatchedOnly: s.unwatchedOnly, size: s.randomPoolSize, maxContentRating: s.maxContentRating });
-    if (s.maxContentRating) await recheckCachedRatings();
+    // The re-check (D37) is fetched alongside the pool request, not after it (D80). Plex is asked only for allowed
+    // ratings (`client.pool` passes the limit); the local gate is `permitted()` at pick time, and nothing filters the
+    // returned list here before `pool = loaded`. A pool failure rejects the load and applies nothing: with the server
+    // unreachable every batch would fail too, and reporting them all unrated would empty the offline cache the caller
+    // falls back to.
+    const [loaded, ratings] = await Promise.all([
+      client.pool({ libraryKey: s.libraryKey, unwatchedOnly: s.unwatchedOnly, size: s.randomPoolSize, maxContentRating: s.maxContentRating }),
+      s.maxContentRating ? fetchCachedRatings() : null,
+    ]);
+    if (ratings) onRatings(ratings);
     pool = loaded;
     poolKey = key;
     poolAt = now();
@@ -39,10 +47,11 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
    * RECHECK_BATCH (`GET /library/metadata/<k1>,<k2>,...`), at most RECHECK_REQUESTS requests. A title the response
    * does not return, a batch that fails, and any key not asked about at all are stored as unrated, which the offline
    * fallback skips under a limit (fails closed). A title merely absent from the random pool says nothing about its rating.
+   * Returns the list for onRatings, or null when there is nothing cached.
    */
-  async function recheckCachedRatings() {
+  async function fetchCachedRatings() {
     const keys = cachedKeys();
-    if (!keys.length) return;
+    if (!keys.length) return null;
     const byKey = new Map();
     for (let n = 0; n < RECHECK_REQUESTS && n * RECHECK_BATCH < keys.length; n++) {
       try {
@@ -51,7 +60,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
         // nothing in this batch is confirmed: its keys are stored as unrated below
       }
     }
-    onRatings(keys.map((k) => byKey.get(k) ?? { ratingKey: k, contentRating: '' }));
+    return keys.map((k) => byKey.get(k) ?? { ratingKey: k, contentRating: '' });
   }
 
   /** The sessions to look at: those already in hand, else a fetch. A refused call (401/403) means nothing is playing (K18). */

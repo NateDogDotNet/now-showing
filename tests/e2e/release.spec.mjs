@@ -1,10 +1,17 @@
-// Release (R-REL-1; D16): 2.1.0 replaces the 2.0.0 shell cache.
-// Service workers are allowed (the default blocks them). A stale `shell-2.0.0` cache is created in the page before the
-// service worker registers, as an installed 2.0.0 client would have; after the new worker activates, `shell-2.1.0`
-// exists and `shell-2.0.0` is gone (sw.js `activate` deletes every other `shell-*` cache).
+// Release (R-REL-1; D16): the current VERSION (read from sw.js) replaces an older shell cache.
+// Service workers are allowed (the default blocks them). A stale `shell-previous` cache is created in the page before the
+// service worker registers, as an older installed client would have; after the new worker activates, `shell-<VERSION>`
+// exists and the stale cache is gone (sw.js `activate` deletes every other `shell-*` cache).
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { withApp } from './lib.mjs';
+
+// sw.js is not a module: read its VERSION constant from the text.
+const VERSION = /const VERSION = '([^']+)'/.exec(readFileSync(new URL('../../sw.js', import.meta.url), 'utf8'))?.[1];
+assert.ok(VERSION, 'sw.js names a VERSION');
+const CURRENT = `shell-${VERSION}`;
+const STALE = 'shell-previous';
 
 const OPTS = {
   serveArgs: [], // a dedicated server, as pi-stability does
@@ -14,22 +21,22 @@ const OPTS = {
 
 await withApp(OPTS, async ({ page, app }) => {
   // Hold registration back until the stale cache exists, so the new worker's activate step finds it.
-  await page.addInitScript(() => {
-    const stale = caches.open('shell-2.0.0').then((c) => c.put('/stale-marker', new Response('2.0.0')));
+  await page.addInitScript((staleName) => {
+    const made = caches.open(staleName).then((c) => c.put('/stale-marker', new Response('stale')));
     const register = navigator.serviceWorker.register.bind(navigator.serviceWorker);
-    navigator.serviceWorker.register = (...args) => stale.then(() => register(...args));
-  });
+    navigator.serviceWorker.register = (...args) => made.then(() => register(...args));
+  }, STALE);
   await page.goto(app.url);
   await page.waitForFunction(() => Boolean(navigator.serviceWorker?.controller), null, { timeout: 20000 });
   await page.waitForFunction(
-    async () => {
+    async ([current, stale]) => {
       const keys = await caches.keys();
-      return keys.includes('shell-2.1.0') && !keys.includes('shell-2.0.0');
+      return keys.includes(current) && !keys.includes(stale);
     },
-    null,
+    [CURRENT, STALE],
     { timeout: 20000 },
   );
   const keys = (await page.evaluate(() => caches.keys())).filter((k) => k.startsWith('shell-'));
-  assert.deepEqual(keys, ['shell-2.1.0'], `only the current shell cache remains: ${JSON.stringify(keys)}`);
-  console.log('  ok  shell-2.0.0 was replaced by shell-2.1.0 on activation');
+  assert.deepEqual(keys, [CURRENT], `only the current shell cache remains: ${JSON.stringify(keys)}`);
+  console.log(`  ok  ${STALE} was replaced by ${CURRENT} on activation`);
 });
