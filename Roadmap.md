@@ -38,7 +38,7 @@
 
 ## ✅ Done in 2.1.1 (the 2.1.x polish items and the `js/main.js` split)
 
-2.1.1 is a point release of the 2.1.x polish items and the split of `js/main.js`. It is on the `2.1.x` branch, not merged to `main`, with no git tag and no GitHub release (D79, D13). The TV power behaviour below is covered by tests with a fake helper and has not been run on a Raspberry Pi with HDMI-CEC.
+2.1.1 is a point release of the 2.1.x polish items and the split of `js/main.js`. It was merged to `main` on 2026-10-15 (pull request #2), with no git tag and no GitHub release (D79, D13). The TV power behaviour below is covered by tests with a fake helper and has not been run on a Raspberry Pi with HDMI-CEC.
 
 - **Recommended protection list shows the Dim label**: the night-dim row reads "The whole picture", the label the Dim select uses, not the stored value `stage`
 - **TV power-on after a failed helper read (partial fix)**: the wake no longer depends on `helper.available`; power-on is sent whenever the display switched the TV off, also when the setting is switched off while the TV is off. "Do not let a single failed read clear `available`" is not done, because it lives in `js/helper.js` (see "Carried from 2.1.1"): until the next probe (boot, Settings opening, the setting switched on), a sleep right after a failed read may skip the power-off
@@ -277,9 +277,7 @@ Left over when 2.1.1 closed.
 
 - **A single failed helper read still clears `helper.available`.** The fix lives in `js/helper.js`; see the TV power-on bullet under "Done in 2.1.1".
 - **Overlapping TV wake windows.** A sleep and a wake again within 4 s let the first window's end clear `tvWaking` early. This was already so before 2.1.1 and is unlikely.
-- **A flaky helper test.** `tests/device-helper.test.js` "a real hung command that forks a grandchild…" is flaky under host load (100 polls of 20 ms). Make the waits deadline-based.
 - **Stale names in comments.** Two comments in `tests/e2e/content-rating.spec.mjs` (lines 961, 974) still say `refreshRating`.
 - **Rating re-check after a pool failure.** The re-check still sends its remaining batches and discards them; there is no effect on correctness.
 - **Comments that still place moved code in `js/main.js`.** `js/sleep.js:1` and `tests/e2e/helper.spec.mjs:254` (which copies `TV_WAKE_MS`, now exported by `js/tv-power.js`).
 - **`tests/tv-power.test.js` replaces `requestAnimationFrame` globally without restoring it.** Harmless while node:test runs each file in its own process; a test tidy-up.
-- **On merge of `2.1.x` into `main`:** update the README status callout (README.md line 11) and the lead paragraph of "Done in 2.1.1" (Roadmap.md line 41), which both say 2.1.1 is on the `2.1.x` branch and not merged.
