@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/plex.test.js && node --test tests/plex.test.js",
+  "exit": 0,
+  "seconds": 0.39,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: pinSignIn throws when no code can be had, and shows no code\nok 35 - pinSignIn throws when no code can be had, and shows no code\n  ---\n  duration_ms: 1.481986\n  type: 'test'\n  ...\n# Subtest: pinSignIn stops at once when aborted, before or during the wait\nok 36 - pinSignIn stops at once when aborted, before or during the wait\n  ---\n  duration_ms: 20.658744\n  type: 'test'\n  ...\n# Subtest: toPoster: an episode keeps its own contentRating and carries a non-empty grandparentContentRating as seriesRating\nok 37 - toPoster: an episode keeps its own contentRating and carries a non-empty grandparentContentRating as seriesRating\n  ---\n  duration_ms: 0.241052\n  type: 'test'\n  ...\n# Subtest: toPoster: an episode without a non-empty grandparentContentRating marks its rating as the episode's own\nok 38 - toPoster: an episode without a non-empty grandparentContentRating marks its rating as the episode's own\n  ---\n  duration_ms: 0.182206\n  type: 'test'\n  ...\n# Subtest: a TV-MA episode of a TV-PG show is refused live under PG and cached as TV-PG\nok 39 - a TV-MA episode of a TV-PG show is refused live under PG and cached as TV-PG\n  ---\n  duration_ms: 0.220489\n  type: 'test'\n  ...\n1..39\n# tests 39\n# suites 0\n# pass 39\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 338.230163",
+  "stderr_tail": ""
+}

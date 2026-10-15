@@ -1,0 +1,14 @@
+{
+  "cmd": "test -f tests/poster-cache.test.js && node --test tests/poster-cache.test.js",
+  "exit": 0,
+  "seconds": 0.27,
+  "parsed": {
+    "passed": null,
+    "failed": null,
+    "skipped": null,
+    "errors": null
+  },
+  "launched": true,
+  "stdout_tail": "  ...\n# Subtest: an episode poster never changes the stored rating of its show, through put or refreshRating\nok 28 - an episode poster never changes the stored rating of its show, through put or refreshRating\n  ---\n  duration_ms: 0.382625\n  type: 'test'\n  ...\n# Subtest: an episode without a rating never stores \"\" over the show rating, and a new episode-only entry has no rating (fails closed)\nok 29 - an episode without a rating never stores \"\" over the show rating, and a new episode-only entry has no rating (fails closed)\n  ---\n  duration_ms: 0.455248\n  type: 'test'\n  ...\n# Subtest: the show rating still follows Plex when the show item itself is seen\nok 30 - the show rating still follows Plex when the show item itself is seen\n  ---\n  duration_ms: 0.516271\n  type: 'test'\n  ...\n# Subtest: seriesRating is stored under the show key by put and refreshRating, even beside a different own rating\nok 31 - seriesRating is stored under the show key by put and refreshRating, even beside a different own rating\n  ---\n  duration_ms: 0.330195\n  type: 'test'\n  ...\n# Subtest: an empty seriesRating never overwrites the stored show rating\nok 32 - an empty seriesRating never overwrites the stored show rating\n  ---\n  duration_ms: 0.419817\n  type: 'test'\n  ...\n1..32\n# tests 32\n# suites 0\n# pass 32\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 230.751795",
+  "stderr_tail": ""
+}
