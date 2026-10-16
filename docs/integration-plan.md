@@ -944,6 +944,7 @@ Added at the close of run 3 (2026-10-16, conductor-4) on the owner's word (D88).
 
 ### 37. `polish-2.2` — The run-3 follow-ups and the spec drift, in one round
 
+- **Status:** landed in run 4 on branch `2.2` (16246ba, D88).
 - **Goal:** Clear the "Carried from 2.2 so far" list of everything that is a one-line or one-function fix, and make `docs/spec.md` say what the code does.
 - **Findings:** run-3 reviews (fill r2 UX walk, position r1/r3/r4 anchored) · **Requirements:** R-SET-5, R-FILL-1 · **Rulings:** D85, D86, D87, D88
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `docs-2.2-progress`
@@ -965,6 +966,7 @@ Added at the close of run 3 (2026-10-16, conductor-4) on the owner's word (D88).
 
 ### 38. `gap-fill-inside-frame` — Fill the gap between the poster and the frame window: blurred poster or colour matte
 
+- **Status:** landed in run 4 on branch `2.2` (ae02ca4, D89); the e2e fixture is pillarbox bands from the mock's 2:3 posters, not a 16:9 poster (D89).
 - **Goal:** When the poster does not match the frame window's shape, the empty bands inside the window show a dimmed blurred copy of the poster or a solid colour taken from the poster's edge, instead of black (D67, first cut: the two styles that need no new data source).
 - **Findings:** D67 (owner request 2026-10-14) · **Requirements:** R-FILL-1 · **Rulings:** D1, D67, D85, D88
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `polish-2.2`
