@@ -504,7 +504,7 @@ Settings and input ergonomics for a keyboardless, remote-or-touch-only device. E
 
 ### 22. `position-drag-nudge` — Drag and nudge poster positioning
 
-- **Status:** landed in run 3 on branch `2.2` (a1b3152, D83, D86); the position bar never covers the poster, the offset sliders span ±100, size keys step 1 (D86).
+- **Status:** landed in run 3 on branch `2.2` (a1b3152, D83, D86); the position bar keeps off the poster and the frame wherever a clear spot exists (a see-through strip at the bottom on near-square screens), the offset sliders span ±100, size keys step 1 (D86).
 - **Goal:** Place the poster by dragging it or with arrow keys while Settings is open, instead of tiny sliders.
 - **Findings:** U5 · **Requirements:** R-SET-5
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `rotation-layout-and-shell`, `settings-and-schedule-core`, `settings-sheet`, `touch-and-labels`, `metadata-and-now-playing`
