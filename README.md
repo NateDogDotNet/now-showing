@@ -8,7 +8,7 @@ There's no build step, no backend and no dependencies: just static files that ta
 
 ![Poster inside the marquee frame](assets/screenshots/portrait.png)
 
-> **Status of version 2.1: 2.1.1 is the current version, on `main` (merged on 2026-10-15 through pull request #2; no git tag). Validated against a real Plex server, not yet run on a Raspberry Pi.** The code and its tests (`npm test`, `npm run test:e2e`) run against a mock Plex server, and on 2026-10-14 the app was also checked against a real Plex Media Server: all 17 core rows and the 15 extended rows that need no Pi passed. The 12 Raspberry Pi rows (V1-E11 to V1-E22) were skipped because no Pi was available, and the release was closed without them, so nothing in 2.1 has been run on a real Raspberry Pi. Version 2.1.1 adds the 2.1.x fixes and splits `js/main.js` into modules; the validation above was done on 2.1.0. Anything below that nobody has checked on a Pi is tagged **(verify)**, which means "not yet verified": on a Raspberry Pi or, for one item, with data the test server lacks (the country-prefixed ratings, V1-E04). That covers every Chromium flag, policy and package name, and every OS and helper command. The checklists are in [`docs/validation/real-server-core.md`](docs/validation/real-server-core.md) and [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md). If a Pi row is ever run and passes, its tag comes off here.
+> **Status of version 2.1: 2.1.1 is the current version, on `main` (merged on 2026-10-15 through pull request #2; no git tag). Validated against a real Plex server, not yet run on a Raspberry Pi.** Work for 2.2 (drag-and-nudge positioning in `js/position.js` and the landscape fill in `js/fill.js`) is on branch `2.2` and is unreleased: it is not on `main`, `VERSION` is still 2.1.1, and none of it has been run on a Raspberry Pi (D79). The code and its tests (`npm test`, `npm run test:e2e`) run against a mock Plex server, and on 2026-10-14 the app was also checked against a real Plex Media Server: all 17 core rows and the 15 extended rows that need no Pi passed. The 12 Raspberry Pi rows (V1-E11 to V1-E22) were skipped because no Pi was available, and the release was closed without them, so nothing in 2.1 has been run on a real Raspberry Pi. Version 2.1.1 adds the 2.1.x fixes and splits `js/main.js` into modules; the validation above was done on 2.1.0. Anything below that nobody has checked on a Pi is tagged **(verify)**, which means "not yet verified": on a Raspberry Pi or, for one item, with data the test server lacks (the country-prefixed ratings, V1-E04). That covers every Chromium flag, policy and package name, and every OS and helper command. The checklists are in [`docs/validation/real-server-core.md`](docs/validation/real-server-core.md) and [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md). If a Pi row is ever run and passes, its tag comes off here.
 
 ---
 
@@ -43,6 +43,8 @@ There's no build step, no backend and no dependencies: just static files that ta
 | **Code on the empty screen** | A display that is not set up yet asks plex.tv for a code by itself and shows it large on the empty screen. No keyboard needed. |
 | **Frames** | Three built-in marquee frames, no frame, or your own transparent PNG. The poster window is detected automatically. |
 | **Live layout controls** | Poster size, X/Y offset and fit mode, previewed live behind the settings panel. |
+| **Position poster** | Settings > Frame & layout > Position poster sets the settings sheet aside for a small bar, so you can drag the poster with a mouse or a finger, or nudge it with the arrow keys (Shift for bigger steps). `+` and `-` change the size; Done or Esc keeps the placement, Cancel reverts. (2.2, on branch `2.2`, unreleased) |
+| **Landscape fill** | Settings > Frame & layout > Landscape fill uses the empty sides of a landscape screen for a dimmed copy of the poster or a panel with the title, rating, runtime, year and synopsis. Off by default. (2.2, on branch `2.2`, unreleased) |
 | **Rotation** | 0/90/180/270° for portrait screens mounted sideways. The controls and dialogs turn with the picture. |
 | **Works offline** | The app shell is precached by a service worker. Posters you have seen are kept on the device (100 by default) and are reused instead of downloaded again, so the display keeps rotating real artwork while Plex is down, then retries with exponential backoff. Needs https or localhost. |
 | **Pause** | Freezes the current poster (not persisted, so a reboot resumes). |
@@ -61,7 +63,7 @@ There's no build step, no backend and no dependencies: just static files that ta
 | **Import / export** | Settings as JSON (token optional), or drop a `config.json` beside the app to provision a device. |
 | **Diagnostics** | Connection state, cache, service worker, wake lock, sleep, daily reload and clock status, the CPU temperature when the helper is on, plus a log of recent events. |
 
-Not in 2.1 and planned for 2.2: dragging or nudging the poster into place, and using the empty sides of a landscape screen for a blurred backdrop or an info panel. See [`Roadmap.md`](Roadmap.md).
+Position poster and Landscape fill are built on branch `2.2` and not yet released; the gap fill inside the frame is still planned for 2.2. See "Done in 2.2 so far" in [`Roadmap.md`](Roadmap.md).
 
 ### Keyboard shortcuts
 
@@ -428,7 +430,7 @@ The year is a constant, `MIN_PLAUSIBLE_YEAR` in `js/schedule.js`, which a develo
 - **Never put a reverse proxy in front of `serve.mjs`.** A reverse proxy on the same machine (Caddy, nginx, Nginx Proxy Manager) connects from loopback, so every client on your network would look local and could download the token (and drive the helper). If you must serve it through a proxy, serve only the app files and block `/config.json` and `/__helper/` in the proxy (not yet verified), or don't keep a `config.json` there.
 - **It is read on the first run only.** If the device has no saved settings, the file seeds them. It does not override settings you saved later. The one exception is `resetPin` (see [Kiosk](#kiosk)), which is read on every load.
 - **Delete it after the first run.** The token is saved in the browser by then. Delete it, and any `resetPin` flag, once you have used it. It is git-ignored; never commit it.
-- **What it can contain.** Every key of an exported settings file works, except the PIN (`settingsPinHash`, `settingsPinSalt`). Keys you can't find in the Settings sheet but can set here: `rotateUi`, `statusIndicator` (`dot` or `off`), `posterCacheLimit` and `resetPin`. A bad value falls back to the default. `fillMode` is accepted but does nothing in 2.1 (the landscape fill is planned for 2.2).
+- **What it can contain.** Every key of an exported settings file works, except the PIN (`settingsPinHash`, `settingsPinSalt`). Keys you can't find in the Settings sheet but can set here: `rotateUi`, `statusIndicator` (`dot` or `off`), `posterCacheLimit` and `resetPin`. A bad value falls back to the default. `fillMode` is accepted but does nothing in 2.1; on branch `2.2` it is the Landscape fill select (unreleased).
 
 ```json
 {
@@ -457,11 +459,13 @@ js/
   engine.js             decides which poster to show; applies the content limit (pure, unit-tested)
   plex.js               Plex server + plex.tv client (sign-in, discovery, sessions, ratings, runtime format)
   display.js            frame/poster rendering, rotation, pixel shift, cross-fade, progress bar
+  fill.js               landscape fill: the dimmed backdrop and the info panel (2.2, unreleased)
   layout.js             geometry: stage size, poster box, pixel-shift orbit (pure, unit-tested)
   poster-cache.js       offline poster cache (Cache API) with a limit and stored ratings
   ratings.js            the content-rating ladder and country table; the one rule that allows or hides a rating (pure)
   settings.js           schema, validation, migration, import/export
   settings-ui.js        settings panel, Recommended protection, the plex.tv code flow
+  position.js           position mode: drag or nudge the poster, the small bar (2.2, unreleased)
   schedule.js           local-time helpers: windows across midnight, DST, plausible clock (pure)
   sleep.js              the sleep decision: schedule, idle, playback wake, manual wake (pure)
   brightness.js         frame brightness and the stepped night dim (pure)
