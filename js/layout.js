@@ -33,6 +33,22 @@ export function shiftOffset(step, marginPx) {
   return { x: fx * marginPx, y: fy * marginPx };
 }
 
+/** How many steps the glide's path has; callers walk the whole orbit by this, not by a literal. */
+export function shiftSteps() {
+  return SHIFT_PATH.length;
+}
+
+/**
+ * Room for the pixel-shift glide in screen pixels: what is left of the viewport around the stage on the tighter axis,
+ * halved. `stageW`/`stageH` are the stage's layout size (a CSS rotation does not change it), so at rotation 90 or 270 the
+ * stage's width lies along the screen's height. display.js glides by this and position.js draws the same orbit (D86).
+ */
+export function shiftRoom({ viewportW, viewportH, stageW, stageH, rotation = 0 }) {
+  const sideways = Math.round(rotation / 90) % 2 !== 0;
+  const room = Math.min((viewportW - (sideways ? stageH : stageW)) / 2, (viewportH - (sideways ? stageW : stageH)) / 2);
+  return Math.max(0, Math.floor(room));
+}
+
 /**
  * Poster box inside the stage, in pixels relative to the stage's top-left.
  * `win` is the frame's transparent window in percent; scale grows/shrinks the

@@ -289,8 +289,5 @@ Left over when 2.1.1 closed.
 ### Carried from 2.2 so far
 Owner follow-ups from the two 2.2 features built so far; polish, not shipped.
 
-- **The Landscape fill help text explains only the portrait case.** The text under the select (`#fill-help` in `index.html`) says a portrait screen shows nothing extra and does not describe the two modes (D85).
 - **The info panel has no top or bottom margin of its own** (D85).
-- **An automatic reload can still fire during position mode** (daily, after wake, update) and drop an unsaved placement. `js/reload.js` waits only on an open dialog (D86).
 - **The translucent position bar's hint can lose contrast over lit marquee bulbs** on near-square screens (D86).
-- **`js/position.js` re-derives the pixel-shift glide room with the formula in `js/display.js`.** A shared function belongs in `js/layout.js` (D86).

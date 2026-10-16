@@ -2,7 +2,7 @@
 // instead of with the tiny sliders. On a TV remote the D-pad arrives as arrow keys, so nudging matters more than drag.
 // The pure functions are first; createPositionMode() is the controller settings-ui.js wires (nothing happens at import).
 
-import { shiftOffset } from './layout.js';
+import { shiftOffset, shiftRoom, shiftSteps } from './layout.js';
 
 export const OFFSET_MIN = -100;
 export const OFFSET_MAX = 100; // the stored range (js/settings.js), also the offset sliders' range
@@ -49,23 +49,12 @@ export function nudge(value, step, { shift = false, min = OFFSET_MIN, max = OFFS
 }
 
 /**
- * Room for the pixel-shift glide in screen pixels, worked out the way display.js layout() does: what is left of the viewport
- * around the stage on the tighter axis, halved. `stageW`/`stageH` are the stage's layout size (a CSS rotation does not
- * change it), so at rotation 90 or 270 the stage's width lies along the screen's height.
- */
-export function shiftRoom({ viewportW, viewportH, stageW, stageH, rotation = 0 }) {
-  const sideways = Math.round(rotation / 90) % 2 !== 0;
-  const room = Math.min((viewportW - (sideways ? stageH : stageW)) / 2, (viewportH - (sideways ? stageW : stageH)) / 2);
-  return Math.max(0, Math.floor(room));
-}
-
-/**
  * The extent of the glide's whole orbit around the resting position, { minX, maxX, minY, maxY } in screen pixels, read from
  * the same path layout.js steps the stage along (so a change to that path is followed here).
  */
 export function shiftOrbit(room) {
   const orbit = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
-  for (let step = 0; step < 9; step++) {
+  for (let step = 0; step < shiftSteps(); step++) {
     const { x, y } = shiftOffset(step, room);
     orbit.minX = Math.min(orbit.minX, x) + 0; // `+ 0` turns a -0 into 0
     orbit.maxX = Math.max(orbit.maxX, x) + 0;

@@ -98,15 +98,22 @@ test('other keys do nothing', () => {
   for (const k of ['o', 's', 'r', 'p', ' ', 'Enter', 'a']) assert.equal(keyToChange(k, false, { offsetX: 0, offsetY: 0, scale: 100 }), null);
 });
 
-test('shiftRoom is what layout() leaves around the stage on the tighter axis, swapped when sideways', async () => {
-  const { shiftRoom } = await import('../js/position.js');
-  assert.equal(shiftRoom({ viewportW: 1920, viewportH: 1080, stageW: 1888, stageH: 1048 }), 16);
-  assert.equal(shiftRoom({ viewportW: 1920, viewportH: 1080, stageW: 1048, stageH: 1888, rotation: 90 }), 16);
-  assert.equal(shiftRoom({ viewportW: 1920, viewportH: 1080, stageW: 3000, stageH: 3000 }), 0);
-});
-
 test('shiftOrbit covers every point the glide visits', async () => {
   const { shiftOrbit } = await import('../js/position.js');
   assert.deepEqual(shiftOrbit(16), { minX: -16, maxX: 16, minY: -16, maxY: 16 });
   assert.deepEqual(shiftOrbit(0), { minX: 0, maxX: 0, minY: 0, maxY: 0 });
+});
+
+test('the orbit follows the length of SHIFT_PATH in js/layout.js, not a literal', async () => {
+  const { shiftOrbit } = await import('../js/position.js');
+  const { shiftOffset, shiftSteps } = await import('../js/layout.js');
+  // Independent expectation: walk two laps of the path (the offsets wrap), so a loop bound hard-coded in position.js that
+  // is shorter than the path misses a point this still sees.
+  const seen = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  for (let step = 0; step < 2 * shiftSteps(); step++) {
+    const { x, y } = shiftOffset(step, 7);
+    seen.minX = Math.min(seen.minX, x); seen.maxX = Math.max(seen.maxX, x);
+    seen.minY = Math.min(seen.minY, y); seen.maxY = Math.max(seen.maxY, y);
+  }
+  assert.deepEqual(shiftOrbit(7), { minX: seen.minX + 0, maxX: seen.maxX + 0, minY: seen.minY + 0, maxY: seen.maxY + 0 });
 });

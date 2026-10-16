@@ -2,7 +2,7 @@
 
 import { detectWindow, findFrame, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { formatRuntime } from './plex.js';
-import { posterBox, shiftOffset, stageSize } from './layout.js';
+import { posterBox, shiftOffset, shiftRoom, stageSize } from './layout.js';
 import { backdropBox, fillState, infoBox, infoParts, infoTitleSize, swapBackdrop, visibleRight } from './fill.js';
 
 const POSTER_ASPECT = 2 / 3;
@@ -186,11 +186,8 @@ export function createDisplay(root = document) {
     const sideways = settings.rotation === 90 || settings.rotation === 270;
     if (settings.pixelShift) {
       // Room left on the tighter axis, in screen pixels (the stage is rotated into place by CSS).
-      const room = Math.min(
-        (window.innerWidth - (sideways ? height : width)) / 2,
-        (window.innerHeight - (sideways ? width : height)) / 2,
-      );
-      const { x, y } = shiftOffset(shiftStep, Math.max(0, Math.floor(room)));
+      const room = shiftRoom({ viewportW: window.innerWidth, viewportH: window.innerHeight, stageW: width, stageH: height, rotation: settings.rotation });
+      const { x, y } = shiftOffset(shiftStep, room);
       el.stage.style.translate = `${x}px ${y}px`;
     } else {
       el.stage.style.removeProperty('translate');

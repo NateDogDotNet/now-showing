@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { posterBox, requestSize, shiftOffset, stageSize } from '../js/layout.js';
+import { posterBox, requestSize, shiftOffset, shiftRoom, shiftSteps, stageSize } from '../js/layout.js';
 import { detectWindow } from '../js/frames.js';
 import { createBackoff } from '../js/backoff.js';
 
@@ -61,4 +61,24 @@ test('shiftOffset is bounded, never repeats back to back, covers 9 points in 9 s
   assert.equal(new Set(pts.slice(0, 9).map(key)).size, 9);
   assert.deepEqual(pts.map(key), Array.from({ length: 60 }, (_, i) => key(shiftOffset(i, m))));
   assert.notEqual(key(pts[8]), key(pts[9])); // the wrap-around step also moves
+});
+
+test('shiftRoom is what display.js leaves around the stage with the 1.5 % margin, on the tighter axis', () => {
+  // Stage sizes come from stageSize() with aspect 1.5 and margin 0.015, the way display.js lays out.
+  assert.equal(shiftRoom({ viewportW: 1920, viewportH: 1080, stageW: 1571, stageH: 1047 }), 16);
+  assert.equal(shiftRoom({ viewportW: 1080, viewportH: 1920, stageW: 1047, stageH: 698 }), 16);
+  assert.equal(shiftRoom({ viewportW: 1280, viewportH: 720, stageW: 1047, stageH: 698 }), 11);
+  assert.equal(shiftRoom({ viewportW: 1920, viewportH: 1080, stageW: 1047, stageH: 698, rotation: 90 }), 16);
+  assert.equal(shiftRoom({ viewportW: 1920, viewportH: 1080, stageW: 3000, stageH: 3000 }), 0);
+});
+
+test('shiftRoom swaps the stage axes when sideways', () => {
+  assert.equal(shiftRoom({ viewportW: 1920, viewportH: 1080, stageW: 1048, stageH: 1888, rotation: 270 }), 16);
+});
+
+test('shiftSteps is the length of the glide path', () => {
+  assert.equal(shiftSteps(), 9);
+  const seen = new Set();
+  for (let i = 0; i < shiftSteps(); i++) seen.add(JSON.stringify(shiftOffset(i, 5)));
+  assert.equal(seen.size, shiftSteps());
 });
