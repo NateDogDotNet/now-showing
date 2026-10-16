@@ -104,7 +104,7 @@ const NEW_DEFAULTS = {
   pixelShift: true, pixelShiftMinutes: 3, frameBrightness: 100, nightDim: false, nightDimStart: '22:00',
   nightDimEnd: '07:00', nightDimLevel: 60, nightDimTarget: 'frame', dailyReload: true, dailyReloadTime: '04:00',
   kioskMode: false, disableShortcuts: false, settingsPinHash: '', settingsPinSalt: '', deviceHelper: false,
-  controlLabels: 'auto', showMeta: false, showProgress: true, showPlayer: false, fillMode: 'none',
+  controlLabels: 'auto', showMeta: false, showProgress: true, showPlayer: false, fillMode: 'none', gapFill: 'none',
 };
 
 test('defaults table for the new keys', () => {
@@ -227,4 +227,23 @@ test('stored 2.0.0 settings load with new keys filled', () => {
   const { settings } = load(memoryStorage({ [STORAGE_KEY]: JSON.stringify({ rotateSeconds: 60 }) }));
   assert.equal(settings.rotateSeconds, 60);
   assert.equal(settings.pixelShift, true);
+});
+
+test('gapFill: default none; none, blur and matte are kept, anything else falls back to none', () => {
+  assert.equal(defaults().gapFill, 'none');
+  for (const v of ['none', 'blur', 'matte']) assert.equal(sanitize({ gapFill: v }).gapFill, v);
+  for (const bad of ['info', 'BLUR', '', null, 7, true, undefined]) assert.equal(sanitize({ gapFill: bad }).gapFill, 'none', String(bad));
+});
+
+test('gapFill migrates: stored settings without it load as none; one saved with it round-trips; imports and exports carry it', () => {
+  const old = load(memoryStorage({ [STORAGE_KEY]: JSON.stringify({ rotateSeconds: 60 }) })).settings;
+  assert.equal(old.gapFill, 'none');
+  const storage = memoryStorage();
+  save(storage, { ...defaults(), gapFill: 'matte' });
+  assert.equal(load(storage).settings.gapFill, 'matte');
+  const exported = toExport({ ...defaults(), gapFill: 'blur' });
+  assert.equal(exported.settings.gapFill, 'blur');
+  assert.equal(fromImport(JSON.stringify(exported)).gapFill, 'blur');
+  const bad = { format: 'plex-poster-display/settings', version: 1, settings: { rotateSeconds: 60, gapFill: 'sepia' } };
+  assert.equal(fromImport(JSON.stringify(bad)).gapFill, 'none');
 });

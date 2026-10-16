@@ -138,3 +138,83 @@ export function infoParts(poster, formatRuntime) {
     summary: trimSummary(poster.summary, SUMMARY_MAX),
   };
 }
+
+// ---- Gap fill inside the frame window (R-FILL-1, D67) ----
+// The same tiny-canvas technique as the backdrop, for the empty bands inside the frame window: 'blur' is the poster at 48 px
+// upscaled by CSS; 'matte' is one flat colour from the poster's edge. Both sit at BACKDROP_OPACITY inside the stage.
+
+/** The gap fill's styles; 'none' draws nothing. */
+export const GAP_STYLES = ['none', 'blur', 'matte'];
+/** The share of a poster's width and height, per side, that edgeColour averages. */
+export const EDGE_SHARE = 0.02;
+
+/**
+ * The average colour of the outermost 2 % of a poster's pixels (a ring at least one pixel thick) as `rgb(r, g, b)`.
+ * Pure. Transparent pixels do not count; null when there is nothing to average.
+ */
+export function edgeColour({ width, height, data }) {
+  if (!(width > 0 && height > 0) || !data || data.length < width * height * 4) return null;
+  const t = Math.max(1, Math.ceil(EDGE_SHARE * Math.min(width, height)));
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let n = 0;
+  for (let y = 0; y < height; y++) {
+    const edgeRow = y < t || y >= height - t;
+    for (let x = 0; x < width; x++) {
+      if (!edgeRow && x >= t && x < width - t) {
+        x = Math.max(x, width - t - 1); // skip the interior of this row
+        continue;
+      }
+      const i = (y * width + x) * 4;
+      if (data[i + 3] === 0) continue;
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
+      n++;
+    }
+  }
+  if (!n) return null;
+  return `rgb(${Math.round(r / n)}, ${Math.round(g / n)}, ${Math.round(b / n)})`;
+}
+
+/**
+ * Draws the gap fill for `img` into `canvas`. 'blur' is drawBackdrop. 'matte' reads the poster at 48 px, takes edgeColour
+ * and leaves a 1 x 1 canvas of that colour. A canvas the browser will not let us read (a cross-origin poster) draws nothing:
+ * false, never a throw, so the matte shows nothing rather than a guess.
+ */
+export function drawGapFill(canvas, img, style) {
+  if (style === 'blur') return drawBackdrop(canvas, img);
+  if (style !== 'matte') return false;
+  if (!drawBackdrop(canvas, img)) return false;
+  try {
+    const ctx = canvas.getContext('2d');
+    const colour = edgeColour(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    if (!colour) return false;
+    canvas.width = 1;
+    canvas.height = 1;
+    ctx.fillStyle = colour;
+    ctx.fillRect(0, 0, 1, 1);
+    return true;
+  } catch {
+    try {
+      canvas.width = 1; // a tainted canvas keeps nothing readable; clear it
+    } catch {
+      // nothing more to do
+    }
+    return false;
+  }
+}
+
+/** swapBackdrop for the gap fill: `style` 'blur' or 'matte' draws the canvas for the poster coming up, anything else shows none. */
+export function swapGapFill(canvases, next, img, style) {
+  const drew = drawGapFill(canvases[next], img, style);
+  canvases[next].classList.toggle('active', drew);
+  canvases[1 - next].classList.remove('active');
+  return drew;
+}
+
+/** Whether the gap layer shows: a style is on and the poster leaves at least one band. The layer fades to this with the poster. */
+export function gapLayerOpen(style, bands) {
+  return (style === 'blur' || style === 'matte') && Array.isArray(bands) && bands.length > 0;
+}

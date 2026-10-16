@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatRuntime } from '../js/plex.js';
-import { BACKDROP_OPACITY, BACKDROP_WIDTH, PANEL_MIN_EM, SUMMARY_MAX, backdropBox, drawBackdrop, fillState, infoBox, infoParts, infoTitleSize, isLandscape, swapBackdrop, trimSummary, visibleRight } from '../js/fill.js';
+import { BACKDROP_OPACITY, BACKDROP_WIDTH, PANEL_MIN_EM, SUMMARY_MAX, backdropBox, drawBackdrop, drawGapFill, edgeColour, fillState, gapLayerOpen, infoBox, infoParts, infoTitleSize, isLandscape, swapBackdrop, swapGapFill, trimSummary, visibleRight } from '../js/fill.js';
 import { posterBox } from '../js/layout.js';
 
 test('isLandscape is the effective aspect: 90 and 270 swap width and height', () => {
@@ -236,4 +236,100 @@ test('swapBackdrop never leaves a stale image showing: a failed draw, an unloade
     assert.equal(canvases[0].classList.contains('active'), false, `${name}: the old canvas is off`);
     assert.equal(canvases[1].classList.contains('active'), false, `${name}: the stale canvas is off`);
   }
+});
+
+// ---- gap fill (D67) ----
+
+/** RGBA pixels from a function (x, y) -> [r, g, b, a?]. */
+function pixels(width, height, fn) {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const [r, g, b, a = 255] = fn(x, y);
+      data.set([r, g, b, a], (y * width + x) * 4);
+    }
+  }
+  return { width, height, data };
+}
+
+test('edgeColour: a flat image is its own colour, as rgb(r, g, b)', () => {
+  assert.equal(edgeColour(pixels(48, 72, () => [200, 100, 50])), 'rgb(200, 100, 50)');
+});
+
+test('edgeColour averages only the outermost 2 percent: the interior does not count', () => {
+  // 100 x 100: a ring 2 px thick. Edge red, interior blue.
+  const img = pixels(100, 100, (x, y) => (x < 2 || x >= 98 || y < 2 || y >= 98 ? [255, 0, 0] : [0, 0, 255]));
+  assert.equal(edgeColour(img), 'rgb(255, 0, 0)');
+  // Two edge colours in equal measure average out: left half of the ring black, right half white.
+  const half = pixels(100, 100, (x, y) => (x < 2 || x >= 98 || y < 2 || y >= 98 ? (x < 50 ? [0, 0, 0] : [255, 255, 255]) : [9, 9, 9]));
+  assert.equal(edgeColour(half), 'rgb(128, 128, 128)');
+});
+
+test('edgeColour: a small image uses a ring one pixel thick; fully transparent or empty input is null', () => {
+  const tiny = pixels(48, 72, (x, y) => (x === 0 || x === 47 || y === 0 || y === 71 ? [10, 20, 30] : [250, 250, 250]));
+  assert.equal(edgeColour(tiny), 'rgb(10, 20, 30)');
+  assert.equal(edgeColour(pixels(4, 4, () => [1, 2, 3, 0])), null);
+  assert.equal(edgeColour({ width: 0, height: 0, data: new Uint8ClampedArray(0) }), null);
+  assert.equal(edgeColour({ width: 4, height: 4, data: new Uint8ClampedArray(8) }), null);
+});
+
+test('edgeColour does not count transparent pixels', () => {
+  const img = pixels(50, 50, (x) => (x === 0 ? [0, 0, 0, 0] : [90, 90, 90]));
+  assert.equal(edgeColour(img), 'rgb(90, 90, 90)');
+});
+
+test('drawGapFill matte leaves a 1 x 1 canvas of the edge colour; blur is the backdrop draw', () => {
+  const calls = [];
+  const flat = pixels(48, 72, () => [40, 80, 120]);
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext: () => ({
+      drawImage() {},
+      getImageData: () => flat,
+      fillRect: (...a) => calls.push(['fillRect', ...a]),
+      set fillStyle(v) { calls.push(['fillStyle', v]); },
+    }),
+  };
+  assert.equal(drawGapFill(canvas, loaded, 'matte'), true);
+  assert.deepEqual([canvas.width, canvas.height], [1, 1]);
+  assert.deepEqual(calls, [['fillStyle', 'rgb(40, 80, 120)'], ['fillRect', 0, 0, 1, 1]]);
+  const blur = { width: 0, height: 0, getContext: () => ({ drawImage() {} }) };
+  assert.equal(drawGapFill(blur, loaded, 'blur'), true);
+  assert.ok(blur.width > 0 && blur.width <= 64, `blur canvas ${blur.width} px wide`);
+  assert.equal(drawGapFill(blur, loaded, 'none'), false);
+});
+
+test('a tainted canvas (getImageData throws) draws no matte and never throws', () => {
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext: () => ({ drawImage() {}, getImageData() { throw new Error('SecurityError'); }, fillRect() { throw new Error('must not paint'); } }),
+  };
+  assert.equal(drawGapFill(canvas, loaded, 'matte'), false);
+  assert.equal(drawGapFill(canvas, { naturalWidth: 0, naturalHeight: 0 }, 'matte'), false);
+});
+
+test('swapGapFill shows the new canvas only when it drew; otherwise neither is active (no stale gap fill)', () => {
+  const [a, b] = [fakeLayerCanvas(), fakeLayerCanvas()];
+  a.classList.add('active');
+  assert.equal(swapGapFill([a, b], 1, loaded, 'blur'), true);
+  assert.equal(b.classList.contains('active'), true);
+  assert.equal(a.classList.contains('active'), false);
+  for (const style of ['none', 'bogus']) {
+    a.classList.add('active');
+    b.classList.add('active');
+    assert.equal(swapGapFill([a, b], 1, loaded, style), false, style);
+    assert.equal(a.classList.contains('active') || b.classList.contains('active'), false, style);
+  }
+});
+
+test('gapLayerOpen: the layer shows only with a style on and at least one band (what it fades to with the poster)', () => {
+  const band = { left: 0, top: 0, width: 10, height: 10 };
+  assert.equal(gapLayerOpen('blur', [band]), true);
+  assert.equal(gapLayerOpen('matte', [band, band]), true);
+  assert.equal(gapLayerOpen('blur', []), false, 'a poster that leaves no band');
+  assert.equal(gapLayerOpen('none', [band]), false, 'the style is off');
+  assert.equal(gapLayerOpen('sepia', [band]), false);
+  assert.equal(gapLayerOpen('blur', undefined), false);
 });

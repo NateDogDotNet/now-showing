@@ -70,7 +70,7 @@ body.idle.hide-cursor, body.idle.hide-cursor * { cursor: none !important; }
 }
 .poster-layer.active { opacity: 1; }
 /* A poster that is above the household limit is taken off the screen at once, without the fade (K20). */
-body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-blocked .player-label, body.poster-blocked .progress, body.poster-blocked .fill-canvas, body.poster-blocked .info-panel { opacity: 0; transition: none; visibility: hidden; }
+body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-blocked .player-label, body.poster-blocked .progress, body.poster-blocked .fill-canvas, body.poster-blocked .gap-fill, body.poster-blocked .info-panel { opacity: 0; transition: none; visibility: hidden; }
 /* A poster still fading out when the limit is tightened is hidden at once, not faded (C7M1). */
 .poster-layer.cut:not(.active) { opacity: 0; transition: none; }
 /* Its backdrop goes with it (display.js mirrors .cut onto the paired canvas), or a blurred copy of a disallowed title would fade on. */
@@ -105,6 +105,27 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
   transition: opacity var(--fade-ms) ease; /* the same length as .poster-layer, started in the same task */
 }
 .fill-canvas.active { opacity: 1; }
+
+/* Gap fill (D67): the frame window's own empty bands. #gap-fill is the window itself, black, behind the poster box (which turns
+   transparent while it is open so the bands show through); .gap-tint holds the one or two canvases at the same 0.25 cap as the
+   backdrop. It lives inside the stage, so rotation, pixel shift and the stage brightness all carry it. The canvases are
+   .fill-canvas, so the cross-fade, the .cut mirror and poster-blocked rules above apply to them unchanged. No CSS filters. */
+.gap-fill {
+  position: absolute;
+  overflow: hidden;
+  background: #000; /* opaque while the layer is in the page, so the landscape backdrop never shows through the window */
+  pointer-events: none;
+}
+.gap-tint {
+  position: absolute;
+  inset: 0;
+  opacity: 0; /* faded in with an incoming poster that leaves a band, out with one that leaves none, over the poster's own fade */
+  transition: opacity var(--fade-ms) ease;
+}
+.gap-fill.open .gap-tint { opacity: 0.25; } /* the same cap as the backdrop */
+/* The blurred copy is placed by display.js to continue the poster (its centre and aspect, scaled to cover the window). */
+.gap-tint .fill-canvas { object-fit: fill; }
+.poster-box.gap-open { background: transparent; }
 
 /* Beside the frame, type sized from the short side of the screen for reading across a room. The body is centred while it fits;
    when it does not it starts at the top (auto margins never go negative), so the title is never pushed off the screen. */

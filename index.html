@@ -36,6 +36,12 @@
         <canvas id="fill-a" class="fill-canvas" width="48" height="72"></canvas>
         <canvas id="fill-b" class="fill-canvas" width="48" height="72"></canvas>
       </div>
+      <div id="gap-fill" class="gap-fill" aria-hidden="true" hidden>
+        <div class="gap-tint">
+          <canvas id="gap-a" class="fill-canvas" width="48" height="72"></canvas>
+          <canvas id="gap-b" class="fill-canvas" width="48" height="72"></canvas>
+        </div>
+      </div>
       <div id="poster-box" class="poster-box">
         <img id="poster-a" class="poster-layer" alt="" decoding="async" />
         <img id="poster-b" class="poster-layer" alt="" decoding="async" />
@@ -247,6 +253,14 @@
             </select>
           </label>
           <p id="fill-help" class="muted small">Fills the empty sides of a landscape screen: “Dimmed poster backdrop” with a blurred copy of the poster, or “Title and synopsis” in a panel beside it, hidden when the side is too narrow, as on a 4:3 screen. Any large lit area shortens the life of an OLED screen, so both are off by default. A portrait screen shows nothing extra.</p>
+          <label>Gap fill
+            <select name="gapFill">
+              <option value="none">Off</option>
+              <option value="blur">Dimmed blurred poster</option>
+              <option value="matte">Colour matte</option>
+            </select>
+          </label>
+          <p id="gap-help" class="muted small">Fills the gap inside the frame’s window when the poster does not reach its edges, with a blurred copy (“Dimmed blurred poster”) or one colour from its edge (“Colour matte”). A gap of a few pixels is closed by scaling or cropping the poster slightly.</p>
           <label>Control labels
             <select name="controlLabels">
               <option value="auto">Auto</option>
