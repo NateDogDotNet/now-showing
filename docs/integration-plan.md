@@ -925,6 +925,7 @@ Added at the invocation of run 3 (2026-10-15, conductor-4). Starting commit `061
 
 ### 36. `docs-2.2-progress` — Roadmap and README say what 2.2 has so far
 
+- **Status:** landed in run 3 on branch `2.2` (e4a769d, D83).
 - **Goal:** The Roadmap and README describe the two shipped 2.2 features as done-but-unreleased on branch `2.2`, so the docs match the code before the 2.2 release phase exists.
 - **Findings:** — · **Requirements:** — · **Rulings:** D41, D67, D83
 - **Mode:** afk · **Tags:** docs · **Blocked by:** `fill-blur-and-info`, `position-drag-nudge`
