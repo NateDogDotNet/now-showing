@@ -937,3 +937,49 @@ Added at the invocation of run 3 (2026-10-15, conductor-4). Starting commit `061
   4. narrated: keep-docs-current run inside the phase over `06150e6..HEAD`; the anchored documentation review (the `/doc-review` substitute, D83) APPROVE on disk.
 - **Notes/hazards:**
   - Facts the text must not misstate: the blur is a tiny canvas upscaled by CSS, never a CSS blur filter; the backdrop brightness is capped at 0.25; `fillMode` default stays `none`; position mode is active only while Settings is in position mode, so the arrow keys and `+`/`-` are not global shortcuts; nothing has been run on a Raspberry Pi (D79); `VERSION` is 2.1.1.
+
+## Run 4 — 2.2 continues: the polish items and the gap fill inside the frame (D87, D88)
+
+Added at the close of run 3 (2026-10-16, conductor-4) on the owner's word (D88). Starting commit `14b1fd4` on branch `2.2`; working branch `2.2`; every `<start>..HEAD` range in this section means `14b1fd4..HEAD`. The run-3 conventions apply unchanged: no release phase, `VERSION` stays 2.1.1 until the owner's bump before the 2.2 merge; `ui` phases get the UX-walk reviewer with Playwright as the `/ux-simulate` substitute and the kernel gate as `/phase-gate` (D83). Two habits adopted from the run-3 optimization round: every `ui` builder brief carries the viewport-and-size checklist (1920×1080, 1080×1920, 1280×720, 1366×768, 1024×768, 1080×1080; poster scale 50–200; saved offsets; a resize; the first-run and error cards) to build and check before Step 4; and the conductor checks `free -m` and `pgrep -fc 'chrome-headless-shell --'` before any e2e run and waits below about 2 GB available. Order: `polish-2.2` first (it touches the shared files the gap fill reads), then `gap-fill-inside-frame`.
+
+### 37. `polish-2.2` — The run-3 follow-ups and the spec drift, in one round
+
+- **Goal:** Clear the "Carried from 2.2 so far" list of everything that is a one-line or one-function fix, and make `docs/spec.md` say what the code does.
+- **Findings:** run-3 reviews (fill r2 UX walk, position r1/r3/r4 anchored) · **Requirements:** R-SET-5, R-FILL-1 · **Rulings:** D85, D86, D87, D88
+- **Mode:** afk · **Tags:** ui · **Blocked by:** `docs-2.2-progress`
+- **Output:** `js/reload.js`, `tests/reload.test.js`, `js/layout.js`, `tests/layout.test.js`, `js/display.js`, `js/position.js`, `tests/position.test.js`, `index.html`, `docs/spec.md`, `Roadmap.md`
+- **Acceptance criteria:**
+  1. `node --test tests/reload.test.js tests/layout.test.js tests/position.test.js`  (`reloadMustWait` returns a reason while `body.positioning` is set, with a unit case; `shiftRoom` is exported from `js/layout.js` once and imported by both `js/display.js` and `js/position.js`, with the same number at 1920×1080, 1080×1920, 1280×720 and rotation 90 pinned in `tests/layout.test.js`; `js/position.js` no longer defines its own `shiftRoom` and its orbit loop follows the path length instead of a fixed 9)
+  2. `grep -q 'positioning' js/reload.js && grep -q 'export function shiftRoom' js/layout.js && ! grep -q 'export function shiftRoom' js/position.js && grep -q "shiftRoom" js/display.js && grep -q "from './layout.js'" js/position.js`
+  3. `grep -A1 'id="fill-help"' index.html | grep -qi 'backdrop' && grep -A1 'id="fill-help"' index.html | grep -qiE 'synopsis|panel' && grep -A1 'id="fill-help"' index.html | grep -qiE '4:3|narrow|too narrow'`  (the help text names both modes and says the panel is hidden when the side is too narrow, as on a 4:3 screen; it still says a portrait screen shows nothing extra and keeps the OLED sentence)
+  4. `grep -q '8 em' docs/spec.md && grep -qi 'own synopsis' docs/spec.md && grep -qiE 'all (the )?global shortcuts|global shortcuts (are|do) (off|nothing)' docs/spec.md`  (R-FILL-1 says the panel hides below 8 em of the title size, D85, and that an episode shows its own synopsis, D84; the position section says all global shortcuts are off in position mode, D86)
+  5. `npm test && node tests/e2e/run.mjs position fill pixel-shift && node scripts/check-precache.mjs`
+  6. `! grep -q 'can still fire during position mode' Roadmap.md && ! grep -q 're-derives the pixel-shift glide room' Roadmap.md && ! grep -q 'explains only the portrait case' Roadmap.md && grep -q 'top or bottom margin' Roadmap.md && grep -q 'lit marquee bulbs' Roadmap.md`  (the three fixed items leave "Carried from 2.2 so far"; the two cosmetic notes stay, D88)
+  7. narrated: the anchored review plus the UX-walk substitute over the help text and position mode at the checklist viewports; the kernel gate.
+- **Notes/hazards:**
+  - `js/reload.js:63–66` `reloadMustWait` is the one place to add the wait; the daily, after-wake and update reloads all go through it. The e2e `pi-stability` and `smoke` specs drive reloads with a fake clock: do not change their timing.
+  - `js/display.js:10` `SHIFT_MARGIN = 0.015` and `:159`/`:182` compute the glide room; `js/position.js:56` repeats the formula. The shared function moves to `js/layout.js` beside `shiftOffset` (:30), pure and unit-tested; `display.js` keeps its constant name or imports it — either way one definition.
+  - The help text is `index.html:249` `#fill-help`; keep it to two sentences plus the OLED sentence.
+  - `docs/spec.md:125` and `:167–171` are the drifted lines (`.orchestrator/artifacts/close--docs-drift-r1.md` of run 3 quotes them).
+  - Not in this phase (D88): the info panel margins and the translucent bar's hint contrast — cosmetic, kept as Roadmap notes.
+
+### 38. `gap-fill-inside-frame` — Fill the gap between the poster and the frame window: blurred poster or colour matte
+
+- **Goal:** When the poster does not match the frame window's shape, the empty bands inside the window show a dimmed blurred copy of the poster or a solid colour taken from the poster's edge, instead of black (D67, first cut: the two styles that need no new data source).
+- **Findings:** D67 (owner request 2026-10-14) · **Requirements:** R-FILL-1 · **Rulings:** D1, D67, D85, D88
+- **Mode:** afk · **Tags:** ui · **Blocked by:** `polish-2.2`
+- **Output:** `js/fill.js`, `tests/fill.test.js`, `js/layout.js`, `tests/layout.test.js`, `js/display.js`, `js/settings.js`, `tests/settings.test.js`, `index.html`, `css/app.css`, `tests/e2e/gap-fill.spec.mjs`
+- **Acceptance criteria:**
+  1. `node --test tests/fill.test.js tests/layout.test.js tests/settings.test.js`  (`gapBands({ win, box })` returns the parts of the frame window not covered by the poster box — at fit `contain` the letterbox or pillarbox pair, at scale < 100 or with an offset the surrounding bands — and an empty list when the poster covers the window or the gap is under 4 px on both axes; `edgeColour(imageData)` returns the average colour of the outermost 2 % of a poster's pixels as `rgb(r, g, b)`, pure; `gapFill` is a settings key with default `none` and values `none | blur | matte`, migrated and exported)
+  2. `npm run test:e2e -- gap-fill`  (`pixelShift:false`; 1080×1920, marquee frame, fit `contain`, a wide 16:9 poster from the mock: with `gapFill:'blur'` the two letterbox bands inside the window show a canvas ≤ 64 px intrinsic width whose effective brightness is ≤ 0.25 and below the poster's, and NO element has a non-`none` computed `filter`/`backdrop-filter`; with `gapFill:'matte'` the bands are a solid colour equal to `edgeColour` of the shown poster within ±8 per channel; with `gapFill:'none'` the DOM and pixels equal today's; at fit `cover` nothing shows; a 3 px gap is closed by scaling the poster, not filled; the gap fill cross-fades with the poster; night dim to the stage dims it with the poster; with `pixelShift:true` it moves with the stage)
+  3. `grep -Eq 'pixelShift: *false' tests/e2e/gap-fill.spec.mjs`
+  4. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (the full suite is the seam check: this phase edits `js/display.js`, `index.html` and `css/app.css` after `polish-2.2`)
+  5. `test -f css/app.css && ! grep -nE 'backdrop-filter|filter: *blur' css/app.css`
+  6. narrated: the anchored review and the UX-walk substitute (the checklist viewports, all three frames and no frame, both styles, both fits, scale 50–200); the kernel gate.
+- **Notes/hazards:**
+  - Blur technique as D85: a tiny canvas (reuse `drawBackdrop` from `js/fill.js`, 48 px, cap 64) scaled by CSS; never `filter: blur()`. OLED: the gap fill is dimmer than the poster (opacity cap 0.25 for blur; the matte is a flat colour and is dimmed by the same stage brightness and night-dim path, D85 item 5).
+  - The poster box and window come from `js/layout.js` `posterBox` and the frame's `win`; the bands are stage-pixel rectangles clipped to the window (`css/app.css:67` `object-fit: var(--poster-fit)` decides what the poster covers — read how `contain` leaves bands).
+  - `edgeColour` reads the decoded poster from a small canvas (reuse the backdrop canvas or draw once at 48 px); a cross-origin taint returns null and the matte falls back to `blur` behaviour or nothing — fail closed, never throw (D37 family: a blocked poster shows no gap fill either; `body.poster-blocked` hides it like the backdrop).
+  - Settings: a "Gap fill" select beside "Landscape fill" in the Frame & layout fieldset, with help text that says what the gap is; default `none`; the live preview applies it. No new shortcut.
+  - Deferred by D88 to later 2.2/2.4 phases: backdrop art (server data), smart crop (Pi-dependent detection), better-fitting artwork (TMDB sources).
+  - Mock: the `MOVIES` rows are portrait posters; add one wide (16:9) image to `scripts/mock-plex.mjs` only if no row produces a letterbox at fit `contain` — if a mock change is needed it is a question, since `scripts/mock-plex.mjs` is outside Output.
