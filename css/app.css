@@ -586,6 +586,73 @@ summary { cursor: pointer; color: var(--muted); }
 /* Kiosk: a press must reach the corner hold, not scroll, select or open a long-press menu. */
 body.kiosk #app { touch-action: none; user-select: none; -webkit-user-select: none; }
 
+/* Position mode (R-SET-5): a non-modal bar docked at the viewer's bottom edge, clear of the poster's centre. The controls step
+   aside and the poster takes the drag, so a touch must not scroll or select. It carries the UI rotation like the toast. */
+.position-bar {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform-origin: 0 0;
+  transform: rotate(var(--ui-rotation)) translate(-50%, calc(var(--vh) / 2 - max(12px, env(safe-area-inset-bottom, 0px)) - 100%));
+  width: max-content;
+  max-width: min(calc(var(--vw) * 0.94), 760px);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 8px 8px 18px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  z-index: 40;
+}
+.position-bar[hidden] { display: none; }
+/* Side margin (landscape): hint over Done. position.js sets --dock-x (the bar's near edge, from the screen centre, in the
+   viewer's frame) and --dock-w; the width is also held inside the screen edge by the same inset the toast uses. */
+.position-bar[data-dock="side"] {
+  max-width: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 14px;
+}
+.position-bar[data-dock="side"][data-side="right"] {
+  transform: rotate(var(--ui-rotation)) translate(var(--dock-x), -50%);
+  width: min(var(--dock-w), calc(var(--vw) / 2 - var(--dock-x) - max(12px, env(safe-area-inset-right, 0px))));
+}
+.position-bar[data-dock="side"][data-side="left"] {
+  transform: rotate(var(--ui-rotation)) translate(calc(var(--dock-x) - 100%), -50%);
+  width: min(var(--dock-w), calc(var(--vw) / 2 + var(--dock-x) - max(12px, env(safe-area-inset-left, 0px))));
+}
+.position-bar[data-dock="top"] {
+  transform: rotate(var(--ui-rotation)) translate(-50%, calc(var(--vh) / -2 + max(12px, env(safe-area-inset-top, 0px))));
+}
+/* No placement clears the poster (a near-square screen, a poster scaled past the margins): stay at the bottom but let the
+   poster's edge show through. Only Done takes the pointer, so a drag that starts under the bar still moves the poster. */
+.position-bar[data-dock="over"] { background: rgba(18, 18, 20, 0.6); pointer-events: none; }
+.position-bar[data-dock="over"] .position-hint { opacity: 0.8; }
+.position-bar[data-dock="over"] .btn { pointer-events: auto; }
+/* While a drag is under way the bar steps back, so the poster's edge shows through it; it returns when the drag ends. */
+.position-bar { transition: opacity 0.15s; }
+body.dragging .position-bar { opacity: 0.35; }
+.position-hint { margin: 0; color: var(--text); font-size: 16px; line-height: 1.4; }
+.position-hint .nowrap { white-space: nowrap; }
+.position-bar .btn { min-width: 88px; min-height: 44px; justify-content: center; }
+.position-bar .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#position-btn { min-height: 44px; }
+body.positioning .controls { display: none; }
+/* The synopsis panel sits in the side margin, where the bar may dock; position mode needs only the poster. */
+body.positioning .info-panel { visibility: hidden; }
+#position-btn:disabled { cursor: default; }
+.position-row { flex-wrap: wrap; }
+.position-reason { flex-basis: 100%; font-size: 13px; }
+body.positioning #app { touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+body.positioning.dragging #app { cursor: grabbing; }
+/* The idle rule (body.idle.hide-cursor *) hides the cursor on every descendant, the poster included: beat it on all of them. */
+body.positioning.idle.hide-cursor #app,
+body.positioning.idle.hide-cursor #app * { cursor: grab !important; }
+body.positioning.dragging.idle.hide-cursor #app,
+body.positioning.dragging.idle.hide-cursor #app * { cursor: grabbing !important; }
+
 /* A small keypad dialog, centred in the viewer's frame; like every dialog it carries its own rotation (D2). */
 .pin-sheet {
   width: min(340px, var(--vw));

@@ -665,6 +665,7 @@ document.addEventListener('click', (e) => {
 const KEYS = keyMap(); // js/shortcuts.js: the same table the `?` dialog lists, so the two cannot drift
 document.addEventListener('keydown', (e) => {
   if (state.settings.disableShortcuts) return;
+  if (document.body.classList.contains('positioning')) return; // position mode owns the arrows, + and -, and must not rotate or reopen mid-drag
   // (`dialog[open]`: for a frame after a sheet closes, focus can still sit on a button inside it.)
   if (e.target.closest('input, select, textarea, dialog[open]') || e.ctrlKey || e.metaKey || e.altKey) return;
   const action = KEYS[normalizeKey(e.key)];
