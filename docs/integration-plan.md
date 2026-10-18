@@ -1009,3 +1009,55 @@ Added after the close of run 4 (2026-10-18, conductor-4) on the owner's word (D9
   - The "What's new in 2.1" toast (js/main.js:1088–1097) is NOT changed: a 2.2 upgrade notice is a product decision the owner has not made (D91 item 3).
   - No tag, no GitHub release. The pull request is opened after this phase lands; it is not merged (D13).
   - Facts not to misstate: blur is a tiny canvas, never a CSS blur filter; both fills capped at 0.25; `fillMode` and `gapFill` default `none`; nothing has run on a Raspberry Pi (D79).
+
+## Run 6 — 2.2 is released: its upgrade notice, the merge, the merged docs, and the run-4 optimization proposals (D92, D93)
+
+Added after the close of run 5 (2026-10-18, conductor-4) on the owner's word (D93). Starting commit: the D93 commit on branch `2.2`. Conventions as runs 3–5. Order: `whats-new-2.2` lands on `2.2`; the conductor merges pull request #3 (owner-approved, D93); `docs-2.2-merged` lands on `main`; `orchestrator-improvements` lands in `~/.claude`.
+
+### 40. `whats-new-2.2` — A 2.2 upgrade notice, once per display
+
+- **Goal:** A display that was configured before 2.2 is told once what 2.2 adds, and can open Settings where those controls are.
+- **Requirements:** R-UPG-1 (superseded by R-UPG-2) · **Rulings:** D44, D73 (K60), D93
+- **Mode:** afk · **Tags:** ui · **Blocked by:** `release-2.2.0`
+- **Output:** `js/main.js`, `js/settings-ui.js`, `index.html`, `tests/e2e/preset.spec.mjs`, `tests/e2e/lib.mjs`, `tests/e2e/smoke.spec.mjs`, `docs/spec.md`, `README.md`, `Roadmap.md`
+- **Acceptance criteria:**
+  1. `grep -q "What's new in 2.2" js/main.js && ! grep -q "What's new in 2.1" js/main.js && grep -q "'2.2'" js/main.js`
+  2. `npm run test:e2e -- preset`  (configured, marker absent → the 2.2 toast once, not after a reload; marker `'2.1'` → the 2.2 toast once and the marker becomes `'2.2'`; marker `'2.2'` → nothing; unconfigured → nothing, marker `'2.2'`; K60 config.json first boot → nothing, marker `'2.2'`; **Open settings** opens Settings with the Frame & layout fieldset in view, and through the PIN keypad when a PIN is set)
+  3. `npm run test:e2e -- smoke`
+  4. `grep -q "plexPoster.whatsNew" tests/e2e/lib.mjs && grep -q "'2.2'" tests/e2e/lib.mjs`  (the harness seeds `'2.2'`, so no other spec sees the toast)
+  5. `grep -q 'R-UPG-2' docs/spec.md && grep -q "What's new in 2.2" README.md && ! grep -q "What's new in 2.1\" with" README.md`
+  6. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, on a quiet machine)
+  7. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/main.js|js/settings-ui.js|index.html|tests/e2e/preset.spec.mjs|tests/e2e/lib.mjs|tests/e2e/smoke.spec.mjs|docs/spec.md|README.md|Roadmap.md)')"`
+  8. narrated: anchored review and a UX walk (the toast at 1920×1080 and 1080×1920, rotation 0 and 90; Open settings lands on Frame & layout) APPROVE on disk.
+- **Notes/hazards:**
+  - The harness seeds the marker only when absent; it must seed `'2.2'` or every spec sees a toast.
+  - `index.html` may only gain an id on the Frame & layout fieldset.
+  - VERSION stays 2.2.0. The notice text names no feature that is off by default as if it were on.
+
+### 41. `docs-2.2-merged` — The docs say 2.2.0 is on `main`
+
+- **Goal:** After pull request #3 is merged, README and Roadmap say 2.2.0 is the current version on `main`, not "on branch 2.2, not yet merged".
+- **Rulings:** D13, D79, D93 · **Mode:** afk · **Tags:** docs · **Blocked by:** `whats-new-2.2` and the merge of #3
+- **Output:** `README.md`, `Roadmap.md`
+- **Acceptance criteria:**
+  1. `! grep -qi 'not yet merged' README.md Roadmap.md && ! grep -q 'on branch `2.2`' README.md Roadmap.md`
+  2. `grep -q 'pull request #3' README.md && grep -q '2.2.0' README.md`
+  3. `npm test`
+  4. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(README.md|Roadmap.md)')"`
+  5. narrated: the documentation review APPROVE on disk.
+- **Notes/hazards:** nothing has run on a Raspberry Pi (D79); no tag.
+
+### 42. `orchestrator-improvements` — The five run-4 optimization proposals
+
+- **Goal:** The next run spends fewer rounds on timing flakes and repeat geometry findings, waits less on memory, and reads true per-round token costs.
+- **Rulings:** D93 · **Mode:** afk · **Tags:** docs · **Blocked by:** `docs-2.2-merged`
+- **Repository:** `~/.claude` (dotclaude), branch `master`.
+- **Output:** `skills/integration-orchestrator/SKILL.md`, `skills/integration-orchestrator/reference/run-economy.md`, `agents/orchestrator-builder.md`, `scripts/cc_utils/closer.py`, `scripts/cc_utils/test_closer.py`
+- **Acceptance criteria:**
+  1. Proposal 1 (fake clock): `grep -qi 'wall' agents/orchestrator-builder.md && grep -qi 'fake clock\|transitionend' agents/orchestrator-builder.md`
+  2. Proposal 2 (sweep the edge cases): `grep -qi 'sweep' agents/orchestrator-builder.md`
+  3. Proposal 3 (memory gate before the suite and the UX walk, one batch; a crash is still a failure): `grep -qi 'MemAvailable\|free memory' skills/integration-orchestrator/SKILL.md skills/integration-orchestrator/reference/run-economy.md`
+  4. Proposal 4 (branch at the second consecutive fresh-gate failure in a timing-class criterion): `grep -qi 'second' skills/integration-orchestrator/SKILL.md && grep -qi 'timing' skills/integration-orchestrator/SKILL.md`
+  5. Proposal 5 (per-round token delta in metrics): `python3 -m pytest -q scripts/cc_utils/test_closer.py` and a new test that a resumed row records its delta
+  6. `cd ~/.claude && python3 scripts/cc_utils/closer.py evalguard --base e63906c2`  (ok: no evaluator loosened)
+  7. narrated: a fresh reviewer confirms each change stays inside its proposal's "must not touch" line.
