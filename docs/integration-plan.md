@@ -1061,3 +1061,45 @@ Added after the close of run 5 (2026-10-18, conductor-4) on the owner's word (D9
   5. Proposal 5 (per-round token delta in metrics): `python3 -m pytest -q scripts/cc_utils/test_closer.py` and a new test that a resumed row records its delta
   6. `cd ~/.claude && python3 scripts/cc_utils/closer.py evalguard --base e63906c2 --allow "<the owner's D93 words>"`  (ok, with `sections_changed` and `anchors_lost` empty and only `closer.py` and `test_closer.py` among the evaluator files: proposal 5 must change the kernel, so the kernel's own rule applies — an evaluator change passes only with the user's words; D93 correction)
   7. narrated: a fresh reviewer confirms each change stays inside its proposal's "must not touch" line.
+
+## Run 7 — 2.2.1: the run-4 cosmetic follow-ups (D94, D95)
+
+Added after the close of run 6 (2026-10-18, conductor-5) on the owner's word ("clean uo the branches. then /orchestrate the run-4 items."; D95). Starting commit: `main` eeb622c3, on a new branch `2.2.x`. Conventions as runs 3–6. Order: `polish-2.2.1` then `release-2.2.1`; the branch is pushed; no pull request, merge or tag unless the owner asks (D13, D79).
+
+### 43. `polish-2.2.1` — Panel margins, hint contrast, no ghosts in wide blurred bands, two position workers
+
+- **Goal:** The four cosmetic follow-ups carried from run 4 are fixed: the info panel keeps clear of the screen's top and bottom edge, the position hint stays readable over lit marquee bulbs, a wide blurred gap band shows no copy of the poster's inner detail, and the position spec no longer flakes under memory pressure by default.
+- **Requirements:** R-FILL-1, R-FILL-3 · **Rulings:** D85, D86, D89, D94, D95
+- **Mode:** afk · **Tags:** ui · **Blocked by:** none
+- **Output:** `js/fill.js`, `js/layout.js`, `js/display.js`, `css/app.css`, `tests/fill.test.js`, `tests/layout.test.js`, `tests/e2e/fill.spec.mjs`, `tests/e2e/gap-fill.spec.mjs`, `tests/e2e/position.spec.mjs`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `node --test tests/fill.test.js tests/layout.test.js`  (unit cases: the info panel's box keeps a top and a bottom margin equal to its left gap, 4 % of the screen height, at 1920×1080, 2560×1080 and rotation 90; whatever function the blur fix changes is pinned with cases at a wide and a narrow band)
+  2. `node tests/e2e/run.mjs fill`  (a new case: with a synopsis long enough to overflow, the title's top and the panel text's bottom are at least 4 % of the screen height from the screen's edges, at 1920×1080 and 2560×1080)
+  3. `node tests/e2e/run.mjs gap-fill`  (a new case named "no ghost": blur, posterScale 80, offsets (0,0), (10,0), (0,10); in each band, every on-screen sample at least 24 px from the poster edge differs from the band's sample next to that edge by no more than the case's stated tolerance per channel, so the mock poster's year and ring do not reappear in the band; the existing cases stay green)
+  4. `E2E_POSITION_WORKERS= node tests/e2e/run.mjs position && grep -q "E2E_POSITION_WORKERS || 2" tests/e2e/position.spec.mjs`  (default two workers, the variable still overrides; a new case: in the translucent "over" dock the hint's text colour, composited over the bar's background on pure white, has a WCAG contrast of at least 4.5:1, and the bar's background alpha stays below 1)
+  5. `grep '^\*\*R-FILL-1' docs/spec.md | grep -qi 'margin' && grep '^\*\*R-FILL-3' docs/spec.md | grep -qiE 'ghost|inner detail' && grep -q '4\.5:1' docs/spec.md`  (R-FILL-1 states the panel's top and bottom margin; R-FILL-3 states that a wide band shows no copy of the poster's inner detail; the position section states the hint's 4.5:1 contrast in the "over" dock)
+  6. `npm test && node tests/e2e/run.mjs fill gap-fill position pixel-shift && node scripts/check-precache.mjs`
+  7. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/fill.js|js/layout.js|js/display.js|css/app.css|tests/fill.test.js|tests/layout.test.js|tests/e2e/fill.spec.mjs|tests/e2e/gap-fill.spec.mjs|tests/e2e/position.spec.mjs|docs/spec.md)')"`
+  8. narrated: the anchored review and a UX walk (the panel at 1920×1080 and 2560×1080 with a long synopsis; the gap fill at posterScale 80 with blur and matte; the position bar's "over" dock on the marquee frame at a near-square screen) APPROVE on disk.
+- **Notes/hazards:**
+  - D89 stands: the blurred copy continues the poster's edges, both fills keep the 0.25 cap, no CSS blur filter, the matte is unchanged. The fix removes the inner-detail ghost; it does not replace the blur with the matte.
+  - D86 item 4 stands: the "over" dock stays translucent and takes input only on Done; the bar never overlaps the poster box at any point of the orbit.
+  - D85 stands: the panel hides below 8 title-size em; a margin that narrows the box must not change which screens show the panel (4:3 and 5:4 still show none, 16:9 and wider still show it).
+  - No new setting. VERSION stays 2.2.0 in this phase.
+
+### 44. `release-2.2.1` — The version and the docs say 2.2.1
+
+- **Goal:** `VERSION` is 2.2.1 everywhere it appears, the Roadmap moves the fixed items out of "Carried from 2.2" into a "Done in 2.2.1" section, and the README status line names 2.2.1 on branch `2.2.x`.
+- **Rulings:** D13, D79, D95 · **Mode:** afk · **Tags:** docs · **Blocked by:** `polish-2.2.1`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`
+- **Acceptance criteria:**
+  1. `grep -q "VERSION = '2.2.1'" sw.js && grep -q "VERSION = '2.2.1'" js/main.js && test "$(grep -c '"version": "2.2.1"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
+  2. `npm run test:e2e -- release`
+  3. `grep -qE '^## .*Done in 2\.2\.1' Roadmap.md && ! grep -q 'no top or bottom margin of its own' Roadmap.md && ! grep -q 'lit marquee bulbs' <(sed -n '/Carried from 2.2/,$p' Roadmap.md) && ! grep -q 'Faint ghosts' <(sed -n '/Carried from 2.2/,$p' Roadmap.md)`
+  4. `grep -q '2.2.1' README.md && grep -q '2.2.x' README.md`
+  5. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, by the conductor, after the memory gate)
+  6. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|Roadmap.md|README.md)')"`
+  7. narrated: keep-docs-current over `eeb622c3..HEAD` inside the phase; the anchored documentation review APPROVE on disk.
+- **Notes/hazards:**
+  - The "What's new in 2.2" notice and its marker `'2.2'` are not changed: 2.2.1 adds nothing to announce (WHATS_NEW_VERSION stays `'2.2'`).
+  - No tag, no GitHub release, no pull request (D13, D79). Nothing has run on a Raspberry Pi; only 2.1.0 was checked against a real Plex server.
