@@ -122,7 +122,7 @@ Priorities: **P0** fix-first, **P1** protection, **P2** polish, **P3** bigger fe
 **R-SET-5 (P2, U5) Direct poster positioning.** A "Position poster" mode collapses the sheet to a slim bar (a modal dialog's backdrop would swallow pointer events) and enables: drag on the poster to move it, arrow keys to nudge by 0.1 % (Shift = 1 %), `+`/`-` for size. The pure drag-to-percent maths lives in a new module with unit tests. Sliders remain.
 - Dragging the poster by 100 px on a 1000 px stage changes `posterOffsetX` by 10 % (rotation 0) and by the equivalent rotated amount at 90/180/270.
 - ArrowRight nudges +0.1, Shift+ArrowRight +1.0; `+`/`-` change size; values clamp to [-100, 100].
-- Esc or Done restores the sheet with the new values; Cancel on the sheet reverts them. Arrow keys do not trigger global shortcuts while in position mode.
+- Esc or Done restores the sheet with the new values; Cancel on the sheet reverts them. All global shortcuts are off while in position mode, so the arrow keys and `+`/`-` only move and size the poster (D86). An automatic reload (daily, after wake, update) waits until position mode ends, so an unsaved placement is not dropped.
 
 **R-SET-6 (P2, U14) Errors carry their fix.** `kind: 'auth'` (token rejected) shows a **Sign in again** button that opens settings and starts the PIN flow; `kind: 'network'`/`'timeout'` shows **Diagnostics** and **Test connection** buttons; `kind: 'empty'` offers **Turn off "unwatched only"**. This applies to the empty-state card, the connection test result and the toast.
 - Token `bad`: the empty-state card shows **Sign in again**; pressing it starts a pin request (intercepted plex.tv).
@@ -164,10 +164,13 @@ Priorities: **P0** fix-first, **P1** protection, **P2** polish, **P3** bigger fe
 
 ### Fill modes
 
-**R-FILL-1 (P2, U7) Landscape fill: blur and info panel.** `fillMode` (`none` default | `blur` | `info`). `blur`: a backdrop made from the current poster, downscaled once to a tiny canvas (48 px wide, which avoids visible banding at large scale) and scaled up by CSS (smooth upscaling is the blur; **no `filter: blur()` and no `backdrop-filter`**, which are expensive on a Pi GPU), dimmed to at most 25 % brightness for OLED safety. `info`: a side panel (title, summary trimmed to 300 characters, runtime, rating, year) beside the poster, shown only when the effective aspect is landscape. Both are off in portrait. Crossfade follows the poster. Multi-poster layouts are deferred (D1).
+**R-FILL-1 (P2, U7) Landscape fill: blur and info panel.** `fillMode` (`none` default | `blur` | `info`). `blur`: a backdrop made from the current poster, downscaled once to a tiny canvas (48 px wide, which avoids visible banding at large scale) and scaled up by CSS (smooth upscaling is the blur; **no `filter: blur()` and no `backdrop-filter`**, which are expensive on a Pi GPU), dimmed to at most 25 % brightness for OLED safety. `info`: a side panel (title, summary trimmed to 300 characters, runtime, rating, year) beside the poster, shown only when the effective aspect is landscape and hidden when its box is narrower than 8 em of the title's font size (so 4:3 and 5:4 screens show the backdrop and no panel, D85); an episode shows its own synopsis, not the show's (D84). Both are off in portrait. Crossfade follows the poster. Multi-poster layouts are deferred (D1).
 - 1920x1080, rotation 0, `blur`: `#fill-backdrop` exists with a canvas intrinsic width at most 64 px and effective brightness at most 0.25; no element has a computed blur `filter` or `backdrop-filter`.
 - `info`: `#info-panel` shows title, runtime, rating, year and a summary of at most 301 characters; in a portrait viewport (or rotation 90 on a portrait screen that makes the effective aspect portrait) neither mode renders; `none` matches today.
 - `isLandscape({w,h,rotation})` accounts for 90/270; `trimSummary(text, 300)` cuts on a word boundary with an ellipsis.
+
+**R-FILL-3 (P2) Gap fill inside the frame.** `gapFill` (`none` default | `blur` | `matte`) fills the bands the poster image leaves inside the frame window (for example at fit "Fit inside window", or at a size below 100 %). `blur` reuses the R-FILL-1 tiny canvas (48 px wide, scaled up by CSS, no `filter: blur()`), lined up with the poster (same centre and aspect, scaled from its centre to cover the window). `matte` is one flat colour, the average of the poster's outer 2 %. Both are dimmed to at most 25 % brightness (the 0.25 cap of R-FILL-1). A gap under 4 px on its own is closed, not filled: the poster grows to the window edge (at "Fit inside window", evenly about its centre, or by a few pixels of crop when the box's own bands are that thin). A thin strip beside a wider band is filled with that band (D89). The fill cross-fades with the poster, and nothing of a blocked poster shows (D37); a poster whose edge cannot be read (cross-origin) gets no matte. D67, D89.
+- `gapFill:'blur'` at fit "Fit inside window" shows the fill in the side bands at brightness at most 0.25 with no computed blur `filter`; `matte` draws the poster's edge colour, capped; a gap under 4 px with no wider band draws no fill; `none` matches today.
 
 ### Sleep and protection
 
@@ -280,8 +283,11 @@ An **owner-pinned** poster is exempt. Client-side ladder: `G=TV-Y=TV-G < PG=TV-Y
 
 ### Upgrade and release
 
-**R-UPG-1 (P2, sceptic M8) One-time "What's new in 2.1" toast.** After the upgrade, a configured install shows once a toast "What's new in 2.1: one-tap display protection for always-on screens." (amended at recommended-protection-preset r1 to the shipped wording) with an **Open settings** action. The seen marker is `plexPoster.whatsNew` (a plain key, not a setting). A fresh (unconfigured) install never sees it.
+**R-UPG-1 (P2, sceptic M8; superseded by R-UPG-2) One-time "What's new in 2.1" toast.** After the upgrade, a configured install shows once a toast "What's new in 2.1: one-tap display protection for always-on screens." (amended at recommended-protection-preset r1 to the shipped wording) with an **Open settings** action. The seen marker is `plexPoster.whatsNew` (a plain key, not a setting). A fresh (unconfigured) install never sees it.
 - With `plexPoster.whatsNew` unset and the app configured, the toast appears once and not after a reload; unconfigured never; the e2e harness seeds the marker so other specs are unaffected.
+
+**R-UPG-2 (D93) One-time "What's new in 2.2" toast.** Supersedes R-UPG-1; the 2.1 toast is retired. At boot, if the seen marker `plexPoster.whatsNew` equals `'2.2'` nothing happens. Otherwise the marker is written as `'2.2'`, and if the display is configured it shows once the toast "What's new in 2.2: drag the poster into place, and fill the empty space around it." with an **Open settings** action that opens Settings (through the PIN gate when a PIN is set) with the Frame & layout fieldset in view. A fresh (unconfigured) install, including a first boot configured by `config.json`, shows nothing but still gets the marker. The e2e harness seeds `'2.2'` so no spec sees the toast unless it clears or sets the marker.
+- Marker absent or `'2.1'` and the app configured: the toast appears once, not after a reload, and the marker becomes `'2.2'`; marker `'2.2'`: nothing; unconfigured, and a `config.json` first boot: nothing, marker `'2.2'`; **Open settings** opens Settings at Frame & layout, through the PIN keypad when a PIN is set; the e2e harness seeds `'2.2'` so other specs are unaffected.
 
 **R-REL-1 (P3; D11, D13, D16) Single version bump and release gate.** `VERSION` in `sw.js`, `js/main.js` and `package.json` is bumped to `2.1.0` once, in the final `release-bump` phase. The rationale is clean releases, not that per-phase bumps reload clients (any `sw.js` edit already triggers a service-worker update). Every phase that adds a file to `js/` also adds it to `SHELL` in `sw.js`, checked recursively by `scripts/check-precache.mjs`. The release requires `Rotated: yes` in the token receipt and `Overall: PASS` in both validation files; optional and deferred phases never block it. The run pushes to its working branch only (D13); a PR or merge happens only when the owner asks.
 - `release-bump` is blocked by `rotate-plex-token`, `real-server-validation` and `real-server-validation-extended`; its criteria check `Rotated: yes` and `Overall: PASS` in both files, the three versions equal `2.1.0`, `npm test`, `npm run test:e2e` and the precache check; the release e2e seeds a stale `shell-2.0.0` cache and asserts it is deleted and `shell-2.1.0` exists after activation.
@@ -296,8 +302,8 @@ An **owner-pinned** poster is exempt. Client-side ladder: `G=TV-Y=TV-G < PG=TV-Y
 | Animated frame bulbs | E3 (was R-FRM-3) | The overlay does not rest the underlying bulb pixels and an infinite animation keeps the Pi compositing around the clock | deferred (D1) → Roadmap |
 | Frame rotation (daily/weekly frame) | E5 (was R-FRM-2) | The three built-in frames place their bulb rings within about 1.5 points of each other, so rotating gives little relief beyond pixel shift | deferred (D1) → Roadmap |
 | Hardware brightness through the helper | E6 part | DDC/CI is absent on consumer TVs, HDMI has no backlight sysfs (D8) | dropped |
-| Drag and nudge poster positioning | U5 (R-SET-5) | Release scope cut to ship the protection features sooner (D41) | 2.2 → Roadmap |
-| Landscape fill: blurred backdrop and info panel | U7 (R-FILL-1) | Release scope cut; large display.js change (D41) | 2.2 → Roadmap |
+| Drag and nudge poster positioning | U5 (R-SET-5) | Release scope cut to ship the protection features sooner (D41) | shipped in 2.2.0 on branch 2.2 |
+| Landscape fill: blurred backdrop and info panel | U7 (R-FILL-1) | Release scope cut; large display.js change (D41) | shipped in 2.2 (2.2.0) |
 | Local-network Plex server discovery | — | Roadmap only (D3); GDM needs a UDP listener in `serve.mjs` | Roadmap (exists) |
 | Multiple libraries mixed in the random pool, collections, genre/decade filters, "recently added" mode | Roadmap ideas | Not in the findings; the library picker and pool code would change shape | stay on the Roadmap |
 | Server-side PIN enforcement or real authentication | — | The app has no backend by design; the PIN deters casual use (D16) | — |
@@ -341,6 +347,7 @@ All new keys are added to `SCHEMA` in `js/settings.js` in one phase (`settings-a
 | `showProgress` | `true` | bool | | R-NP-1 |
 | `showPlayer` | `false` | bool | | R-NP-1 |
 | `fillMode` | `'none'` | none\|blur\|info | lit pixels on OLED, opt-in | R-FILL-1 |
+| `gapFill` | `'none'` | none\|blur\|matte | lit pixels on OLED, opt-in | R-FILL-3 |
 
 Removed from r1 by D1: `bulbAnimation`, `frameRotation`, `frameRotationIds`, `frameIdRandom`, `fillCount` and the `multi` fill value. Non-setting storage keys: `plexPoster.lastReload`, `plexPoster.pinLock`, `plexPoster.whatsNew`.
 
@@ -435,4 +442,4 @@ Plex `contentRating` filter parameter, multi-value syntax and real country-prefi
 | D1 | Non-goals and deferred table | `docs` (Roadmap entries) |
 | D3 | R-FIRST-1 | `settings-sheet` |
 
-Supporting requirements with no finding of their own: R-TOPO-1, R-DOC-8, R-DOC-9 (`docs`), R-DOC-7 (`docs`), R-PROT-5 and R-UPG-1 (`recommended-protection-preset`), R-REL-1 (`release-bump`).
+Supporting requirements with no finding of their own: R-TOPO-1, R-DOC-8, R-DOC-9 (`docs`), R-DOC-7 (`docs`), R-PROT-5 and R-UPG-1 (`recommended-protection-preset`), R-UPG-2 (`whats-new-2.2`), R-REL-1 (`release-bump`).

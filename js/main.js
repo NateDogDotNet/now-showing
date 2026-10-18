@@ -21,7 +21,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.1.1';
+export const VERSION = '2.2.0';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -665,6 +665,7 @@ document.addEventListener('click', (e) => {
 const KEYS = keyMap(); // js/shortcuts.js: the same table the `?` dialog lists, so the two cannot drift
 document.addEventListener('keydown', (e) => {
   if (state.settings.disableShortcuts) return;
+  if (document.body.classList.contains('positioning')) return; // position mode owns the arrows, + and -, and must not rotate or reopen mid-drag
   // (`dialog[open]`: for a frame after a sheet closes, focus can still sit on a button inside it.)
   if (e.target.closest('input, select, textarea, dialog[open]') || e.ctrlKey || e.metaKey || e.altKey) return;
   const action = KEYS[normalizeKey(e.key)];
@@ -1049,7 +1050,7 @@ async function boot() {
     const provisioned = provisionedSettings(config);
     if (provisioned) {
       state.settings = save(storage, provisioned);
-      storage.setItem(WHATS_NEW_KEY, '2.1'); // provisioned from nothing: a fresh install, so there is no upgrade to announce (D73)
+      storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION); // provisioned from nothing: a fresh install, so there is no upgrade to announce (D73)
     }
   }
   // The PIN reset (D10, Q21): while config.json serves {"resetPin": true} the PIN is cleared on every load.
@@ -1075,22 +1076,23 @@ async function boot() {
   announceWhatsNew();
 }
 
-// ---------- The upgrade notice (R-UPG-1) ----------
+// ---------- The upgrade notice (R-UPG-2) ----------
 
 const WHATS_NEW_KEY = 'plexPoster.whatsNew';
+const WHATS_NEW_VERSION = '2.2';
 
 /**
- * Once per install: a configured display without the marker is an upgrade, so it is told what is new and pointed at the
- * Display protection fieldset (through the normal PIN gate). An unconfigured one is a fresh install, not an upgrade, so it
- * shows nothing. Either way the marker is written, so it never shows again.
+ * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new
+ * and pointed at the Frame & layout fieldset (through the normal PIN gate). An unconfigured one is a fresh install, not an
+ * upgrade, so it shows nothing. Either way the marker is written, so it never shows again. The 2.1 notice is retired.
  */
 function announceWhatsNew() {
-  if (storage.getItem(WHATS_NEW_KEY) !== null) return;
-  storage.setItem(WHATS_NEW_KEY, '2.1');
+  if (storage.getItem(WHATS_NEW_KEY) === WHATS_NEW_VERSION) return;
+  storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION);
   if (!isConfigured(state.settings)) return;
-  toast("What's new in 2.1: one-tap display protection for always-on screens.", {
+  toast("What's new in 2.2: drag the poster into place, and fill the empty space around it.", {
     action: 'Open settings',
-    onAction: () => requestSettings({ section: 'protection' }),
+    onAction: () => requestSettings({ section: 'layout' }),
     ms: 20_000,
   });
 }

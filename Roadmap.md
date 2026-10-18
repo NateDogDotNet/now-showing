@@ -48,12 +48,21 @@
 - **The release e2e reads the version**: `tests/e2e/release.spec.mjs` reads `VERSION` from `sw.js`, so a version bump no longer breaks it
 - **`js/main.js` split**: sleep, TV power, the reloads, brightness and the PIN gate moved to `js/sleep-control.js`, `js/tv-power.js`, `js/reload.js`, `js/brightness-timer.js`, `js/pin-gate.js` and `js/poster-pin.js` (1,472 lines became 1,098), with no change in behaviour; each module is a factory that main.js constructs, with unit tests
 
+## ✅ Done in 2.2 (2.2.0, on branch `2.2`, not yet merged to `main`)
+
+Three 2.2 features are built and tested on branch `2.2`. `VERSION` is 2.2.0 on that branch, but nothing here is on `main` yet (`main` still has 2.1.1), and nothing has been run on a Raspberry Pi (D79).
+
+- **Drag and nudge positioning (D86)**: Settings > Frame & layout > **Position poster** sets the modal sheet aside for a small non-modal bar. Drag the poster with a mouse or a finger, or nudge it with the arrow keys (0.1 % of the stage per press, Shift for ten times that; Shift applies to the arrows only). `+`, `=`, `-` and `_` (and the numpad keys) change the size by 1 within 50 to 150. **Done** or Esc returns to the sheet with the new values; **Cancel** still reverts. The global keyboard shortcuts are off while positioning. The bar keeps off the poster and the frame wherever a clear spot exists (bottom, else the wider side margin, else the top, measured over the whole pixel-shift orbit); where nothing clears, as on a near-square screen, it is a see-through strip at the bottom with only Done taking clicks or taps; the keys still work. The offset sliders now span -100 to 100. Position poster is disabled, with the reason shown as text, whenever the empty card shows (the sign-in card or an error card), because there is no poster to place.
+- **Landscape fill (D85)**: Settings > Frame & layout > **Landscape fill** uses the empty sides of a landscape screen for a dimmed poster backdrop or an info panel. It is off by default (`fillMode` is `none`). The backdrop is a tiny canvas (48 px wide, 64 px at most) scaled up by CSS, not a CSS blur filter, and its opacity is capped at 0.25 so it lights little of an OLED. The info panel shows the title, rating, runtime and year, and a synopsis cut to 300 characters plus an ellipsis; an episode shows its own synopsis (D84). The panel uses the right side only, and it is hidden when its box is narrower than 8 em of the title size, so 4:3 and 5:4 screens get the backdrop and no panel in info mode. The backdrop cross-fades with the poster; the text switches at once.
+- **Gap fill (D89)**: Settings > Frame & layout > **Gap fill** (Off, Dimmed blurred poster, Colour matte) fills the bands the poster leaves inside the frame window, as at "Fit inside window" or at a size below 100 %. The blurred copy is a tiny canvas lined up with the poster (same centre and aspect, scaled up from its centre to cover the window); the matte is one flat colour, the average of the poster's outer 2 %. Both are capped at 0.25 brightness, like the landscape backdrop, and both cross-fade with the poster. A gap under 4 px on its own is closed by growing or cropping the poster a few pixels, not filled. It is off by default (`gapFill` is `none`), and nothing of a blocked poster shows (D37). Not in scope: backdrop art, smart crop and better-fitting artwork, which stay planned.
+- **Upgrade notice (D93)**: a configured display upgraded to 2.2 shows a one-time "What's new in 2.2" toast whose **Open settings** button opens Frame & layout (R-UPG-2).
+
 ## 🧭 Suggested order
 
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
 
 1. **2.1.x:** done (2.1.1), including the `js/main.js` split that the source-adapter work needed first.
-2. **2.2:** drag-and-nudge positioning and landscape fill with gap fill (already specified), then, roughly in this order: the rating schedule, poster selection (libraries, genres, ratings) with weighting and no repeats, viewer profiles (a profile bundles a selection and a limit), "On this day", the playlist and Find a poster (they share the list storage), frame and marquee styles with the marquee captions and info captions, poster transitions, touch gestures (which reuse the transitions' slide and the styles), and theme music. The playlist stores each entry as source plus item ID, never a Plex-only key, so it keeps working once other sources exist.
+2. **2.2:** drag-and-nudge positioning, the landscape fill and the gap fill are done on branch `2.2` (2.2.0, not yet merged to `main`); then, roughly in this order: the rating schedule, poster selection (libraries, genres, ratings) with weighting and no repeats, viewer profiles (a profile bundles a selection and a limit), "On this day", the playlist and Find a poster (they share the list storage), frame and marquee styles with the marquee captions and info captions, poster transitions, touch gestures (which reuse the transitions' slide and the styles), and theme music. The playlist stores each entry as source plus item ID, never a Plex-only key, so it keeps working once other sources exist.
 3. **2.3:** the source-adapter refactor with Plex as the first adapter and no change in behaviour, then Jellyfin, then Emby (close to Jellyfin's API); multiple servers in poster selection; Play now; the movie-night countdown; birthday and occasion mode; and the Picture frame sources (Plex Photos first, then a folder and Immich, then museum art). Every adapter maps its own ratings for the household limit and fails closed, with its own adversarial review.
 4. **2.4:** the no-server mode as a TMDB adapter. It needs the adapter layer, a TMDB key the user supplies (stored like the Plex token), TMDB's attribution, a certification mapping for the household limit, and it has no now-playing. Clear-logo marquees, poster artwork sources and the filter on any production house come with it; Coming Soon for titles not in the library comes after 2.4.
 5. **3.0:** Browse first mode (with the Browse button in poster mode), the main-screen choice (Posters, Browse first, Picture frame, Home controls) and Home controls. It is built from Find a poster, the gestures and Play now, so it comes after them.
@@ -61,17 +70,15 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Planned for 2.2
 
-Moved out of 2.1 so the screen-protection features ship sooner (D41). Both are fully specified in `docs/integration-plan.md` (phases 22 and 23).
+Drag and nudge positioning and the landscape fill were moved out of 2.1 so the screen-protection features ship sooner (D41); both are built, and so is the gap fill inside the frame (D67, phase 38, D89); see "Done in 2.2". Three styles of the gap fill are still deferred (D88).
 
-### Drag and nudge poster positioning
-Place the poster by dragging it, or with the arrow keys, while Settings is open, instead of with tiny sliders. Works at every rotation (R-SET-5).
+### Gap fill inside the frame: the deferred styles
+The Gap fill setting ships with **Off**, **Dimmed blurred poster** and **Colour matte**. D67 specifies more choices for the same gap (when the poster does not match the frame window's shape: "Fit inside window", or a poster scaled or offset smaller than the window):
 
-### Landscape fill: blurred backdrop or info panel
-Use the empty sides of a landscape screen for a dimmed, blurred copy of the poster or a synopsis panel (R-FILL-1). The same fill handles the gap *inside* the frame (D67).
-
-- **Gap fill inside the frame:** the gap appears when the poster does not match the frame window's shape: with fit "contain" (letterbox), or when the poster is scaled or offset smaller than the window (`posterFit` is `cover` by default, which crops instead). A Settings choice picks the fill: **blurred poster** (a dimmed, blurred copy behind it), **colour matte** (the poster's dominant or edge colour, like a gallery mat), **backdrop art** (the title's background art from the server), **smart crop** (fill the window by cropping, but keep the title and faces in view instead of a plain centre crop), or **better-fitting artwork** (pick an alternate poster closer to the window's shape, with the poster artwork sources entry).
-- **Constraints:** the fill is dimmer than the poster and follows frame brightness and night dim, so it does not light more of an OLED than the poster would; it moves with pixel shift and changes with the poster's transition; smart crop never crops away the title text when the poster has one, and how well face and text detection run on a Pi is (verify), otherwise the crop stays a simple centre crop; a gap of a few pixels is closed by scaling, not filled.
-- **Order:** 2.2, inside the already-specified `fill-blur-and-info` work; better-fitting artwork waits for the TMDB sources (2.4).
+- **Backdrop art:** the title's background art from the server.
+- **Smart crop:** fill the window by cropping, but keep the title and faces in view instead of a plain centre crop. Smart crop never crops away the title text when the poster has one, and how well face and text detection run on a Pi is (verify); otherwise the crop stays a simple centre crop.
+- **Better-fitting artwork:** pick an alternate poster closer to the window's shape, with the poster artwork sources entry; it waits for the TMDB sources (2.4).
+- **Constraints that carry over:** a fill is dimmer than the poster and does not light more of an OLED than the poster would; it moves with pixel shift and changes with the poster's transition.
 
 ## 🔜 Ideas
 
@@ -281,3 +288,10 @@ Left over when 2.1.1 closed.
 - **Rating re-check after a pool failure.** The re-check still sends its remaining batches and discards them; there is no effect on correctness.
 - **Comments that still place moved code in `js/main.js`.** `js/sleep.js:1` and `tests/e2e/helper.spec.mjs:254` (which copies `TV_WAKE_MS`, now exported by `js/tv-power.js`).
 - **`tests/tv-power.test.js` replaces `requestAnimationFrame` globally without restoring it.** Harmless while node:test runs each file in its own process; a test tidy-up.
+
+### Carried from 2.2
+Owner follow-ups from the 2.2 features; polish, not shipped.
+
+- **The info panel has no top or bottom margin of its own** (D85).
+- **The translucent position bar's hint can lose contrast over lit marquee bulbs** on near-square screens (D86).
+- **Faint ghosts in very wide blurred gap bands**: the blurred copy continues the poster's edges, so faint smudges of the poster's own detail can remain in a very wide band (D89).

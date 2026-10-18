@@ -34,7 +34,7 @@ const chromium = pw.chromium || pw.default?.chromium;
 // Defaults every spec starts from (convention 7): geometry specs must not see pixel shift,
 // and the upgrade toast must not interfere.
 const DEFAULT_SETTINGS = { pixelShift: false, dailyReload: false };
-const WHATS_NEW_MARKER = 'e2e';
+const WHATS_NEW_MARKER = '2.2'; // the current release's marker (R-UPG-2): any other value shows the upgrade toast
 
 // K48: no spec reaches the real plex.tv. A page with no Plex token asks plex.tv for a sign-in code on load, so such a
 // context answers plex.tv itself: a code that is never approved and an empty resource list. A spec that tests the

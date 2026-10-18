@@ -2,7 +2,8 @@
 
 import { detectWindow, findFrame, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { formatRuntime } from './plex.js';
-import { posterBox, shiftOffset, stageSize } from './layout.js';
+import { blurRect, closeGap, gapBands, imageRect, posterBox, shiftOffset, shiftRoom, stageSize } from './layout.js';
+import { backdropBox, fillState, infoBox, infoParts, gapLayerOpen, infoTitleSize, swapBackdrop, swapGapFill, visibleRight } from './fill.js';
 
 const POSTER_ASPECT = 2 / 3;
 // Empty border per side while pixel shift is on; the stage moves inside it.
@@ -26,6 +27,14 @@ export function createDisplay(root = document) {
     layers: [root.getElementById('poster-a'), root.getElementById('poster-b')],
     frame: root.getElementById('frame'),
     title: root.getElementById('title-card'),
+    backdrop: root.getElementById('fill-backdrop'),
+    canvases: [root.getElementById('fill-a'), root.getElementById('fill-b')], // one per poster layer: they cross-fade together
+    gap: root.getElementById('gap-fill'),
+    gapCanvases: [root.getElementById('gap-a'), root.getElementById('gap-b')], // the gap fill's pair, cross-fading with the poster layers
+    info: root.getElementById('info-panel'),
+    infoTitle: root.getElementById('info-title'),
+    infoMeta: root.getElementById('info-meta'),
+    infoSummary: root.getElementById('info-summary'),
     progress: root.getElementById('progress'),
     playerLabel: root.getElementById('player-label'),
   };
@@ -41,6 +50,12 @@ export function createDisplay(root = document) {
   let shiftStep = 0;
   let shiftTimer = null;
   let shiftEveryMs = 0;
+  let fill = 'none'; // the landscape fill in force: 'none' | 'blur' | 'info' (fillMode on a landscape screen)
+  let infoRoom = false; // the empty side is wide enough for the info panel
+  let gapHideTimer = null; // fallback: takes the gap layer away if the tint's transitionend never comes after gapFill was turned off
+  let gapHideCancel = null; // removes the pending transitionend listener of that hide
+  let gapStyle = 'none'; // the gap fill in force: 'none' | 'blur' | 'matte' (the gapFill setting; the layer shows only while a band does)
+  let infoText = false; // the poster on screen has a title for the panel to show
 
   /** Runs the pixel-shift step timer while `pixelShift` is on, restarting it only when the interval changes. */
   function syncShiftTimer() {
@@ -97,6 +112,144 @@ export function createDisplay(root = document) {
     }
   }
 
+  /** The gap fill of the poster on screen (after the style changed), drawn from its decoded layer; none when there is none to draw. */
+  function drawFrontGap() {
+    const img = el.layers[front];
+    swapGapFill(el.gapCanvases, front, img, img.classList.contains('active') ? gapStyle : 'none');
+  }
+
+  /**
+   * Fits the poster box to the frame window and shows the gap fill in the bands the poster leaves (D67). A gap under 4 px is
+   * closed, never filled: a contained poster grows evenly about its centre until it meets the window, and is cropped a few pixels
+   * only when the box's own bands are under 4 px. Returns the box to use.
+   * With gapFill off nothing changes: the box is the one posterBox gave and the gap layer stays hidden.
+   */
+  function layoutGap(stageW, stageH, box) {
+    const want = settings.gapFill === 'blur' || settings.gapFill === 'matte' ? settings.gapFill : 'none';
+    let fit = settings.posterFit;
+    let out = box;
+    let open = false;
+    if (want !== 'none') {
+      const win = posterBox({ stageW, stageH, win: frame.window });
+      const img = el.layers[front];
+      const known = img.classList.contains('active') && img.naturalWidth > 0;
+      const aspect = known ? img.naturalWidth / img.naturalHeight : POSTER_ASPECT;
+      const closed = closeGap({ win, box, aspect, fit });
+      out = closed.box;
+      fit = closed.fit;
+      open = gapLayerOpen(want, gapBands({ win, box: out, aspect, fit }));
+      Object.assign(el.gap.style, { left: `${win.left}px`, top: `${win.top}px`, width: `${win.width}px`, height: `${win.height}px` });
+      // The blurred copy continues the poster: its centre, its aspect, scaled up from there to cover the window.
+      const shown = imageRect({ box: out, aspect, fit });
+      const r = blurRect({ win, centre: { x: shown.left + shown.width / 2, y: shown.top + shown.height / 2 }, aspect, minWidth: shown.width });
+      Object.assign(el.gapCanvases[front].style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+    }
+    // The layer stays in the page while the style is on; its tint fades with the poster (css/app.css), so a poster with no band
+    // fades it out and one with a band fades it in, instead of either switching at once. Its black window stays opaque to the
+    // end of the fade, and the poster box stays transparent over it, so nothing behind the window (the landscape backdrop) shows.
+    clearTimeout(gapHideTimer);
+    if (gapHideCancel) gapHideCancel();
+    el.gap.classList.toggle('open', open);
+    if (want !== 'none') el.gap.hidden = false;
+    if (open) {
+      el.box.classList.add('gap-open');
+    } else if (want !== 'none' ? el.box.classList.contains('gap-open') : !el.gap.hidden) {
+      // No band now (a poster with none, or the style turned off): the tint fades out first, and the box stays transparent over the
+      // layer until that fade ends, so the dim band does not snap to black. Then the box takes its black back, and the layer
+      // goes too when the style is off. The end is the tint's own transitionend for opacity; the timer only covers a missed event.
+      // Either one cancels the other, and the next pass cancels both.
+      const tint = el.gap.firstElementChild;
+      const done = () => {
+        if (gapHideCancel) gapHideCancel();
+        if (want === 'none') el.gap.hidden = true;
+        el.box.classList.remove('gap-open');
+      };
+      const onEnd = (e) => {
+        if (e.target === tint && e.propertyName === 'opacity') done();
+      };
+      tint.addEventListener('transitionend', onEnd);
+      gapHideCancel = () => {
+        tint.removeEventListener('transitionend', onEnd);
+        clearTimeout(gapHideTimer);
+        gapHideCancel = null;
+      };
+      gapHideTimer = setTimeout(done, (settings?.crossfadeMs ?? 0) + 500);
+    }
+    const was = gapStyle;
+    gapStyle = want;
+    if (want !== was) drawFrontGap();
+    return { box: out, fit };
+  }
+
+  /** The backdrop of the poster on screen, drawn from its (already decoded) layer; nothing shows when there is none to draw. */
+  function drawFrontBackdrop() {
+    const img = el.layers[front];
+    swapBackdrop(el.canvases, front, img, img.classList.contains('active'));
+  }
+
+  /**
+   * Cuts a backdrop canvas with its poster layer. main.js hides a poster that is fading out and no longer allowed with
+   * `.cut` (K20, C7M1); the canvas of the same index gets `.cut` in the same task (a mutation observer's microtask), so
+   * a blurred copy of the title the limit just disallowed does not finish its fade.
+   */
+  function mirrorCut() {
+    el.layers.forEach((layer, i) => {
+      const cut = layer.classList.contains('cut');
+      el.canvases[i].classList.toggle('cut', cut);
+      el.gapCanvases[i].classList.toggle('cut', cut); // the gap fill is a copy of the poster too
+    });
+  }
+  if (typeof MutationObserver === 'function') {
+    const watcher = new MutationObserver(mirrorCut);
+    el.layers.forEach((layer) => watcher.observe(layer, { attributes: true, attributeFilter: ['class'] }));
+  }
+
+  function syncInfoVisibility() {
+    el.info.hidden = !(fill === 'info' && infoRoom && infoText);
+  }
+
+  /**
+   * Lets the synopsis take the lines left under the title and the facts, so a long one ends in an ellipsis inside the box
+   * instead of running off its bottom. Measured, so it runs only while the panel shows (on a change of box or text).
+   */
+  function fitInfoSummary() {
+    const summary = el.infoSummary;
+    summary.style.removeProperty('--info-lines');
+    if (el.info.hidden || summary.hidden) return;
+    const lineHeight = parseFloat(getComputedStyle(summary).lineHeight);
+    if (!(lineHeight > 0)) return;
+    const parts = [el.infoTitle, el.infoMeta].filter((part) => !part.hidden);
+    const gap = parseFloat(getComputedStyle(el.infoTitle.parentElement).rowGap) || 0;
+    const used = parts.reduce((sum, part) => sum + part.offsetHeight, 0) + parts.length * gap;
+    summary.style.setProperty('--info-lines', String(Math.max(1, Math.floor((el.info.clientHeight - used) / lineHeight))));
+  }
+
+  /**
+   * Places the landscape fill (stage pixels; the stage's rotation and pixel shift carry it) and shows the one that applies.
+   * `posterRight` is where the visible poster ends, in stage pixels: the info panel starts after it.
+   */
+  function layoutFill(stageW, stageH, screenW, screenH, posterRight) {
+    const mode = fillState({ mode: settings.fillMode, w: window.innerWidth, h: window.innerHeight, rotation: settings.rotation });
+    const was = fill;
+    fill = mode;
+    el.backdrop.hidden = mode !== 'blur';
+    // Room for the pixel-shift glide, so an edge of the screen is never bare and the panel never slides off it.
+    const margin = settings.pixelShift ? Math.ceil(SHIFT_MARGIN * Math.max(screenW, screenH)) + 2 : 0;
+    if (mode === 'blur') {
+      const b = backdropBox({ stageW, stageH, screenW, screenH, margin });
+      Object.assign(el.backdrop.style, { left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px` });
+      if (was !== 'blur') drawFrontBackdrop();
+    }
+    if (mode === 'info') {
+      const b = infoBox({ stageW, stageH, screenW, screenH, posterRight, margin });
+      Object.assign(el.info.style, { left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px` });
+      el.info.style.setProperty('--info-title-size', `${infoTitleSize(screenW, screenH)}px`);
+      infoRoom = b.width > 0;
+    }
+    syncInfoVisibility();
+    fitInfoSummary();
+  }
+
   function layout() {
     if (!settings) return null;
     const { width, height } = stageSize({
@@ -108,14 +261,11 @@ export function createDisplay(root = document) {
     });
     el.stage.style.width = `${width}px`;
     el.stage.style.height = `${height}px`;
+    const sideways = settings.rotation === 90 || settings.rotation === 270;
     if (settings.pixelShift) {
       // Room left on the tighter axis, in screen pixels (the stage is rotated into place by CSS).
-      const sideways = settings.rotation === 90 || settings.rotation === 270;
-      const room = Math.min(
-        (window.innerWidth - (sideways ? height : width)) / 2,
-        (window.innerHeight - (sideways ? width : height)) / 2,
-      );
-      const { x, y } = shiftOffset(shiftStep, Math.max(0, Math.floor(room)));
+      const room = shiftRoom({ viewportW: window.innerWidth, viewportH: window.innerHeight, stageW: width, stageH: height, rotation: settings.rotation });
+      const { x, y } = shiftOffset(shiftStep, room);
       el.stage.style.translate = `${x}px ${y}px`;
     } else {
       el.stage.style.removeProperty('translate');
@@ -131,7 +281,7 @@ export function createDisplay(root = document) {
     rootStyle.setProperty('--vw', `${uiSideways ? window.innerHeight : window.innerWidth}px`);
     rootStyle.setProperty('--vh', `${uiSideways ? window.innerWidth : window.innerHeight}px`);
 
-    const box = posterBox({
+    const planned = posterBox({
       stageW: width,
       stageH: height,
       win: frame.window,
@@ -139,14 +289,16 @@ export function createDisplay(root = document) {
       offsetX: settings.posterOffsetX,
       offsetY: settings.posterOffsetY,
     });
+    const { box, fit } = layoutGap(width, height, planned);
     Object.assign(el.box.style, {
       left: `${box.left}px`,
       top: `${box.top}px`,
       width: `${box.width}px`,
       height: `${box.height}px`,
     });
-    el.box.style.setProperty('--poster-fit', settings.posterFit);
+    el.box.style.setProperty('--poster-fit', fit);
     rootStyle.setProperty('--fade-ms', `${settings.crossfadeMs}ms`);
+    layoutFill(width, height, sideways ? window.innerHeight : window.innerWidth, sideways ? window.innerWidth : window.innerHeight, visibleRight({ stageW: width, box }));
     return box;
   }
 
@@ -230,7 +382,11 @@ export function createDisplay(root = document) {
       if (image instanceof Blob) objectUrls.set(next, url);
       next.classList.add('active');
       prev.classList.remove('active');
+      // The backdrop changes in the same task as the poster, through the same transition, so the two stay in step.
+      swapBackdrop(el.canvases, 1 - front, next, fill === 'blur');
+      swapGapFill(el.gapCanvases, 1 - front, next, gapStyle); // and the gap fill, through the same transition
       front = 1 - front;
+      if (settings) layout(); // this poster's shape decides which bands it leaves
       this.currentPoster = poster;
       this.setTitle(poster);
 
@@ -247,8 +403,20 @@ export function createDisplay(root = document) {
       }
     },
 
-    /** The overlay slot: the 2.0.0 title line when `showTitle`, and "rating · runtime · year" when `showMeta`. */
+    /**
+     * The overlay slot: the 2.0.0 title line when `showTitle`, and "rating · runtime · year" when `showMeta`.
+     * It also fills the landscape info panel (title, the same meta line, the trimmed summary) from the same poster.
+     */
     setTitle(poster) {
+      const info = infoParts(poster, formatRuntime);
+      el.infoTitle.textContent = info.title;
+      el.infoMeta.textContent = info.meta;
+      el.infoMeta.hidden = !info.meta;
+      el.infoSummary.textContent = info.summary;
+      el.infoSummary.hidden = !info.summary;
+      infoText = Boolean(info.title);
+      syncInfoVisibility();
+      fitInfoSummary();
       const lines = [];
       if (settings?.showTitle && poster?.title) lines.push([poster.title, poster.year && `(${poster.year})`].filter(Boolean).join(' '));
       if (settings?.showMeta && poster) {

@@ -32,6 +32,16 @@
 
   <main id="app" class="app" aria-live="polite">
     <div id="stage" class="stage">
+      <div id="fill-backdrop" class="fill-backdrop" aria-hidden="true" hidden>
+        <canvas id="fill-a" class="fill-canvas" width="48" height="72"></canvas>
+        <canvas id="fill-b" class="fill-canvas" width="48" height="72"></canvas>
+      </div>
+      <div id="gap-fill" class="gap-fill" aria-hidden="true" hidden>
+        <div class="gap-tint">
+          <canvas id="gap-a" class="fill-canvas" width="48" height="72"></canvas>
+          <canvas id="gap-b" class="fill-canvas" width="48" height="72"></canvas>
+        </div>
+      </div>
       <div id="poster-box" class="poster-box">
         <img id="poster-a" class="poster-layer" alt="" decoding="async" />
         <img id="poster-b" class="poster-layer" alt="" decoding="async" />
@@ -40,6 +50,13 @@
         <div id="progress" class="progress" aria-hidden="true" hidden></div>
       </div>
       <img id="frame" class="frame" alt="" />
+      <aside id="info-panel" class="info-panel" hidden>
+        <div class="info-body">
+          <h2 id="info-title" class="info-title"></h2>
+          <p id="info-meta" class="info-meta"></p>
+          <p id="info-summary" class="info-summary"></p>
+        </div>
+      </aside>
     </div>
     <div id="empty" class="empty" hidden>
       <div class="empty-card">
@@ -69,6 +86,12 @@
     <button type="button" data-action="rotate" aria-label="Rotate display"><svg><use href="#i-rotate"/></svg><span class="label" aria-hidden="true">Rotate</span></button>
     <button type="button" data-action="fullscreen" aria-label="Full screen"><svg><use href="#i-fullscreen"/></svg><span class="label" aria-hidden="true">Full screen</span></button>
   </nav>
+
+  <!-- Position mode (R-SET-5): the Settings sheet steps aside for this non-modal bar, so the poster can be dragged. -->
+  <section id="position-bar" class="position-bar" aria-label="Position poster" hidden>
+    <p class="position-hint">Drag the poster, or use the arrow keys (Shift for bigger steps). <span class="nowrap">+ and −</span> change the size. Done or Esc to finish.</p>
+    <button type="button" class="btn primary" id="position-done">Done</button>
+  </section>
 
   <dialog id="settings" class="sheet" aria-labelledby="settings-title">
     <form id="settings-form" method="dialog" novalidate>
@@ -189,7 +212,7 @@
           </details>
         </fieldset>
 
-        <fieldset data-live>
+        <fieldset id="layout-fieldset" data-live>
           <legend>Frame &amp; layout</legend>
           <label>Frame
             <select name="frameId" id="frame-select"></select>
@@ -208,12 +231,12 @@
             <input name="posterScale" type="range" min="50" max="150" step="0.5" />
           </label>
           <label>Horizontal offset <output data-for="posterOffsetX"></output>
-            <input name="posterOffsetX" type="range" min="-25" max="25" step="0.1" />
+            <input name="posterOffsetX" type="range" min="-100" max="100" step="0.1" />
           </label>
           <label>Vertical offset <output data-for="posterOffsetY"></output>
-            <input name="posterOffsetY" type="range" min="-25" max="25" step="0.1" />
+            <input name="posterOffsetY" type="range" min="-100" max="100" step="0.1" />
           </label>
-          <div class="input-row"><button type="button" class="btn small" id="reset-layout">Reset layout</button></div>
+          <div class="input-row position-row"><button type="button" class="btn small" id="reset-layout">Reset layout</button><button type="button" class="btn" id="position-btn">Position poster</button><span class="muted position-reason" id="position-reason" hidden>Connect to Plex first, then you can position the poster.</span></div>
           <label>Rotation
             <select name="rotation">
               <option value="0">0° (portrait)</option>
@@ -222,6 +245,22 @@
               <option value="270">270°</option>
             </select>
           </label>
+          <label>Landscape fill
+            <select name="fillMode">
+              <option value="none">Off</option>
+              <option value="blur">Dimmed poster backdrop</option>
+              <option value="info">Title and synopsis</option>
+            </select>
+          </label>
+          <p id="fill-help" class="muted small">Fills the empty sides of a landscape screen: “Dimmed poster backdrop” with a blurred copy of the poster, or “Title and synopsis” in a panel beside it, hidden when the side is too narrow, as on a 4:3 screen. Any large lit area shortens the life of an OLED screen, so both are off by default. A portrait screen shows nothing extra.</p>
+          <label>Gap fill
+            <select name="gapFill">
+              <option value="none">Off</option>
+              <option value="blur">Dimmed blurred poster</option>
+              <option value="matte">Colour matte</option>
+            </select>
+          </label>
+          <p id="gap-help" class="muted small">Fills the gap inside the frame’s window when the poster does not reach its edges, with a blurred copy (“Dimmed blurred poster”) or one colour from its edge (“Colour matte”). A gap of a few pixels is closed by scaling or cropping the poster slightly.</p>
           <label>Control labels
             <select name="controlLabels">
               <option value="auto">Auto</option>

@@ -3,6 +3,7 @@
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { createPin, checkPin, createPlexClient, discoverServers, firstReachable } from './plex.js';
+import { createPositionMode } from './position.js';
 import { defaults, fromImport, isConfigured, sanitize, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
@@ -89,6 +90,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // The sign-in controls show when nothing is connected yet, or after Change; otherwise the "Connected to" card does.
   let connectionOpen = true;
   let testing = false;
+  let keepOriginal = false; // set when the sheet closes FOR position mode: the close event then leaves the preview and `original` alone
   let countRun = 0; // bumped whenever the library list is rebuilt or the sheet closes, so a late count is ignored
 
   // Frame options are built from the registry so new frames only need adding there.
@@ -447,8 +449,65 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     closePreset();
     setTokenShown(false); // the token is hidden again whenever the sheet closes
     cancelSignIn();
+    if (keepOriginal) {
+      keepOriginal = false;
+      return;
+    }
     if (original) onPreview(original); // undo live preview
     original = null;
+  });
+
+  // ---- position mode (R-SET-5): the modal sheet makes the page inert, so it steps aside for a non-modal bar ----
+
+  const FIELD_OF = { offsetX: 'posterOffsetX', offsetY: 'posterOffsetY', scale: 'posterScale' };
+  const num = (name) => Number(field(name).value);
+  const position = createPositionMode({
+    bar: $('position-bar'),
+    doneButton: $('position-done'),
+    surface: $('app'),
+    stage: $('stage'),
+    avoid: [$('stage'), $('poster-box'), $('frame')],
+    read: () => ({ offsetX: num('posterOffsetX'), offsetY: num('posterOffsetY'), scale: num('posterScale'), rotation: num('rotation') }),
+    write: (change) => {
+      for (const [key, value] of Object.entries(change)) field(FIELD_OF[key]).value = value;
+      syncDependent();
+      onPreview(read());
+    },
+    onDone: resumeSheet,
+  });
+
+  /** What open() asks of the sheet once it is up; `auto` adds the connection test a fresh open runs for a saved connection. */
+  function runOpenOptions({ wantSignIn, token, test, section }, auto) {
+    if (section === 'protection') $('protection-fieldset').scrollIntoView({ block: 'start' });
+    else if (section === 'layout') $('layout-fieldset').scrollIntoView({ block: 'start' });
+    if (token) signIn({ token });
+    else if (wantSignIn) signIn();
+    else if (test || (auto && original.plexToken && original.serverUrl)) testConnection();
+  }
+
+  /** Done or Escape: the sheet comes back with the values just set and the SAME `original`, so Cancel still reverts. */
+  function resumeSheet() {
+    if (!dialog.open) dialog.showModal();
+    syncDependent();
+    $('position-btn').focus();
+  }
+
+  // Nothing to position while the empty or sign-in card is up (the same signal main.js uses: the card's own hidden flag).
+  function syncPositionButton() {
+    const noPoster = !$('empty').hidden;
+    $('position-btn').disabled = noPoster;
+    $('position-reason').hidden = !noPoster;
+    // A hidden element that aria-describedby names still supplies the description, so the link exists only while the reason shows.
+    if (noPoster) $('position-btn').setAttribute('aria-describedby', 'position-reason');
+    else $('position-btn').removeAttribute('aria-describedby');
+  }
+  new MutationObserver(syncPositionButton).observe($('empty'), { attributes: true, attributeFilter: ['hidden'] });
+  syncPositionButton();
+
+  $('position-btn').addEventListener('click', () => {
+    keepOriginal = true;
+    closeSheet();
+    position.start();
   });
 
   $('preset-btn').addEventListener('click', openPreset);
@@ -543,9 +602,17 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     /**
      * Opens the sheet. `signIn` starts a plex.tv code in it at once (the fix for a rejected token); `token` is one the empty
      * card's code already earned, so the sheet picks up at "Signed in"; `test` runs the connection test even when it would not
-     * run by itself; `section` ('protection') scrolls the sheet to that fieldset.
+     * run by itself; `section` ('protection' or 'layout') scrolls the sheet to that fieldset.
      */
     open({ signIn: wantSignIn = false, token = null, test = false, section = '' } = {}) {
+      if (position.active) {
+        // Finish position mode (the sheet returns with the values set so far and the same `original`), then honour the
+        // options as a normal open would: a sign-in started from the empty card must still sign in.
+        position.stop();
+        resumeSheet();
+        runOpenOptions({ wantSignIn, token, test, section }, false);
+        return;
+      }
       if (dialog.open) return;
       original = getSettings();
       $('form-error').textContent = '';
@@ -558,10 +625,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       $('manual-connection').open = Boolean(original.plexToken && !original.serverName);
       closePreset();
       dialog.showModal();
-      if (section === 'protection') $('protection-fieldset').scrollIntoView({ block: 'start' });
-      if (token) signIn({ token });
-      else if (wantSignIn) signIn();
-      else if (test || (original.plexToken && original.serverUrl)) testConnection();
+      runOpenOptions({ wantSignIn, token, test, section }, true);
     },
     /** For the fix buttons, while the sheet is already open. */
     startSignIn: () => signIn(),

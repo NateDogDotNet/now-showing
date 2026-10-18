@@ -63,6 +63,7 @@ export function createReload({ state, storage, log, getLastDrawAt }) {
   /** Not now, but soon: a dialog is open, a poster is loading, or the last poster is still fading in. */
   function reloadMustWait() {
     if (document.querySelector('dialog[open]')) return 'a dialog is open';
+    if (document.body?.classList.contains('positioning')) return 'the poster is being positioned'; // an unsaved placement would be lost (D86)
     if (state.busy || state.tvWaking) return 'a poster is loading';
     if (Date.now() < state.manualWakeUntil) return 'a manual wake is running'; // it would lose its 60 s to the reload
     if (performance.now() - getLastDrawAt() < (state.settings.crossfadeMs ?? 0) + 250) return 'a poster is fading in';

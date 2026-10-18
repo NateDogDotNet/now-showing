@@ -504,7 +504,7 @@ Settings and input ergonomics for a keyboardless, remote-or-touch-only device. E
 
 ### 22. `position-drag-nudge` — Drag and nudge poster positioning
 
-- **Status:** deferred to 2.2 (D41); not part of the 2.1 release.
+- **Status:** landed in run 3 on branch `2.2` (a1b3152, D83, D86); the position bar keeps off the poster and the frame wherever a clear spot exists (a see-through strip at the bottom on near-square screens), the offset sliders span ±100, size keys step 1 (D86).
 - **Goal:** Place the poster by dragging it or with arrow keys while Settings is open, instead of tiny sliders.
 - **Findings:** U5 · **Requirements:** R-SET-5
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `rotation-layout-and-shell`, `settings-and-schedule-core`, `settings-sheet`, `touch-and-labels`, `metadata-and-now-playing`
@@ -529,7 +529,7 @@ One remaining fill feature, the extended real-server validation, the single docs
 
 ### 23. `fill-blur-and-info` — Landscape fill: blurred backdrop and info panel
 
-- **Status:** deferred to 2.2 (D41); not part of the 2.1 release.
+- **Status:** landed in run 3 on branch `2.2` (72e9244, D83, D85); the info panel hides below 8 title-size em (D85).
 - **Goal:** Use the empty sides of a landscape screen for a dimmed poster backdrop or a synopsis panel.
 - **Findings:** U7 · **Requirements:** R-FILL-1 · **Rulings:** D1
 - **Mode:** afk · **Tags:** ui · **Blocked by:** `metadata-and-now-playing`, `rotation-layout-and-shell`, `pi-stability`
@@ -546,7 +546,7 @@ One remaining fill feature, the extended real-server validation, the single docs
   - Blur technique: draw the poster into a tiny canvas (48 px wide) once per poster and scale it up with CSS; smooth upscaling is the blur. `filter: blur()`/`backdrop-filter` on a full-screen layer is exactly the Pi GPU cost `pi-stability` removed.
   - OLED: backdrop opacity capped at 25%; default `none`; mention in the setting's help text that large lit areas shorten OLED life.
   - `summary` can be long: trim before it enters any stored descriptor (localStorage budget).
-  - Mock: add `summary` to the existing 8 `MOVIES`. Multi-poster layout is deferred (D1); this phase delivers U7 for single-poster landscape screens.
+  - Mock: add `summary` to every `MOVIES` row (eight). Multi-poster layout is deferred (D1); this phase delivers U7 for single-poster landscape screens.
 
 ### 24. `real-server-validation-extended` — Validate the (verify) items on real hardware and a real server
 
@@ -918,3 +918,146 @@ Every finding ID is delivered by at least one phase, or is `deferred (D1)` with 
 | E16 | `kiosk-and-pin` |
 | E17 | `docs` |
 | D1 | `docs` (Roadmap entries for every deferral) |
+
+## Run 3 — 2.2 begins: the two deferred phases and a docs note (D41, D83)
+
+Added at the invocation of run 3 (2026-10-15, conductor-4). Starting commit `06150e6` on `main`; working branch `2.2`; every `<start>..HEAD` range in this section means `06150e6..HEAD`. The conventions above apply unchanged, except that this run has no release phase: `VERSION` stays 2.1.1 (convention 5's one bump happens in the 2.2 release phase, later), and a FOLLOW-UP in the run index says `VERSION` is bumped before `2.2` merges to `main`. `fill-blur-and-info` (23) and `position-drag-nudge` (22) share `index.html`, `css/app.css` and `sw.js`, so they run one at a time (convention 6), fill first; `position-drag-nudge`'s criterion 4 is the full suite and closes the code work. D67's gap fill inside the frame is not in this run (D83).
+
+### 36. `docs-2.2-progress` — Roadmap and README say what 2.2 has so far
+
+- **Status:** landed in run 3 on branch `2.2` (e4a769d, D83).
+- **Goal:** The Roadmap and README describe the two shipped 2.2 features as done-but-unreleased on branch `2.2`, so the docs match the code before the 2.2 release phase exists.
+- **Findings:** — · **Requirements:** — · **Rulings:** D41, D67, D83
+- **Mode:** afk · **Tags:** docs · **Blocked by:** `fill-blur-and-info`, `position-drag-nudge`
+- **Output:** `Roadmap.md`, `README.md`
+- **Acceptance criteria:**
+  1. `test -f Roadmap.md && grep -qE '^## .*Done in 2\.2' Roadmap.md && grep -q 'Drag and nudge' Roadmap.md && grep -q 'Landscape fill' Roadmap.md`  (the two "Planned for 2.2" entries move under a "Done in 2.2 so far (unreleased, on branch `2.2`)" heading, one bullet each saying what shipped and what was not in scope; the gap fill inside the frame (D67) stays a planned 2.2 item)
+  2. `test -f README.md && grep -q 'js/fill.js' README.md && grep -q 'js/position.js' README.md`  (the layout table gains one line per new module; the status callout says 2.2 work is on branch `2.2`, unreleased)
+  3. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(Roadmap.md|README.md)')"`  (nothing else changed; `VERSION` stays 2.1.1)
+  4. narrated: keep-docs-current run inside the phase over `06150e6..HEAD`; the anchored documentation review (the `/doc-review` substitute, D83) APPROVE on disk.
+- **Notes/hazards:**
+  - Facts the text must not misstate: the blur is a tiny canvas upscaled by CSS, never a CSS blur filter; the backdrop brightness is capped at 0.25; `fillMode` default stays `none`; position mode is active only while Settings is in position mode, so the arrow keys and `+`/`-` are not global shortcuts; nothing has been run on a Raspberry Pi (D79); `VERSION` is 2.1.1.
+
+## Run 4 — 2.2 continues: the polish items and the gap fill inside the frame (D87, D88)
+
+Added at the close of run 3 (2026-10-16, conductor-4) on the owner's word (D88). Starting commit `14b1fd4` on branch `2.2`; working branch `2.2`; every `<start>..HEAD` range in this section means `14b1fd4..HEAD`. The run-3 conventions apply unchanged: no release phase, `VERSION` stays 2.1.1 until the owner's bump before the 2.2 merge; `ui` phases get the UX-walk reviewer with Playwright as the `/ux-simulate` substitute and the kernel gate as `/phase-gate` (D83). Two habits adopted from the run-3 optimization round: every `ui` builder brief carries the viewport-and-size checklist (1920×1080, 1080×1920, 1280×720, 1366×768, 1024×768, 1080×1080; poster scale 50–200; saved offsets; a resize; the first-run and error cards) to build and check before Step 4; and the conductor checks `free -m` and `pgrep -fc 'chrome-headless-shell --'` before any e2e run and waits below about 2 GB available. Order: `polish-2.2` first (it touches the shared files the gap fill reads), then `gap-fill-inside-frame`.
+
+### 37. `polish-2.2` — The run-3 follow-ups and the spec drift, in one round
+
+- **Status:** landed in run 4 on branch `2.2` (16246ba, D88).
+- **Goal:** Clear the "Carried from 2.2 so far" list of everything that is a one-line or one-function fix, and make `docs/spec.md` say what the code does.
+- **Findings:** run-3 reviews (fill r2 UX walk, position r1/r3/r4 anchored) · **Requirements:** R-SET-5, R-FILL-1 · **Rulings:** D85, D86, D87, D88
+- **Mode:** afk · **Tags:** ui · **Blocked by:** `docs-2.2-progress`
+- **Output:** `js/reload.js`, `tests/reload.test.js`, `js/layout.js`, `tests/layout.test.js`, `js/display.js`, `js/position.js`, `tests/position.test.js`, `index.html`, `docs/spec.md`, `Roadmap.md`
+- **Acceptance criteria:**
+  1. `node --test tests/reload.test.js tests/layout.test.js tests/position.test.js`  (`reloadMustWait` returns a reason while `body.positioning` is set, with a unit case; `shiftRoom` is exported from `js/layout.js` once and imported by both `js/display.js` and `js/position.js`, with the same number at 1920×1080, 1080×1920, 1280×720 and rotation 90 pinned in `tests/layout.test.js`; `js/position.js` no longer defines its own `shiftRoom` and its orbit loop follows the path length instead of a fixed 9)
+  2. `grep -q 'positioning' js/reload.js && grep -q 'export function shiftRoom' js/layout.js && ! grep -q 'export function shiftRoom' js/position.js && grep -q "shiftRoom" js/display.js && grep -q "from './layout.js'" js/position.js`
+  3. `grep -A1 'id="fill-help"' index.html | grep -qi 'backdrop' && grep -A1 'id="fill-help"' index.html | grep -qiE 'synopsis|panel' && grep -A1 'id="fill-help"' index.html | grep -qiE '4:3|narrow|too narrow'`  (the help text names both modes and says the panel is hidden when the side is too narrow, as on a 4:3 screen; it still says a portrait screen shows nothing extra and keeps the OLED sentence)
+  4. `grep -q '8 em' docs/spec.md && grep -qi 'own synopsis' docs/spec.md && grep -qiE 'all (the )?global shortcuts|global shortcuts (are|do) (off|nothing)' docs/spec.md`  (R-FILL-1 says the panel hides below 8 em of the title size, D85, and that an episode shows its own synopsis, D84; the position section says all global shortcuts are off in position mode, D86)
+  5. `npm test && node tests/e2e/run.mjs position fill pixel-shift && node scripts/check-precache.mjs`
+  6. `! grep -q 'can still fire during position mode' Roadmap.md && ! grep -q 're-derives the pixel-shift glide room' Roadmap.md && ! grep -q 'explains only the portrait case' Roadmap.md && grep -q 'top or bottom margin' Roadmap.md && grep -q 'lit marquee bulbs' Roadmap.md`  (the three fixed items leave "Carried from 2.2 so far"; the two cosmetic notes stay, D88)
+  7. narrated: the anchored review plus the UX-walk substitute over the help text and position mode at the checklist viewports; the kernel gate.
+- **Notes/hazards:**
+  - `js/reload.js:63–66` `reloadMustWait` is the one place to add the wait; the daily, after-wake and update reloads all go through it. The e2e `pi-stability` and `smoke` specs drive reloads with a fake clock: do not change their timing.
+  - `js/display.js:10` `SHIFT_MARGIN = 0.015` and `:159`/`:182` compute the glide room; `js/position.js:56` repeats the formula. The shared function moves to `js/layout.js` beside `shiftOffset` (:30), pure and unit-tested; `display.js` keeps its constant name or imports it — either way one definition.
+  - The help text is `index.html:249` `#fill-help`; keep it to two sentences plus the OLED sentence.
+  - `docs/spec.md:125` and `:167–171` are the drifted lines (`.orchestrator/artifacts/close--docs-drift-r1.md` of run 3 quotes them).
+  - Not in this phase (D88): the info panel margins and the translucent bar's hint contrast — cosmetic, kept as Roadmap notes.
+
+### 38. `gap-fill-inside-frame` — Fill the gap between the poster and the frame window: blurred poster or colour matte
+
+- **Status:** landed in run 4 on branch `2.2` (ae02ca4, D89); the e2e fixture is pillarbox bands from the mock's 2:3 posters, not a 16:9 poster (D89).
+- **Goal:** When the poster does not match the frame window's shape, the empty bands inside the window show a dimmed blurred copy of the poster or a solid colour taken from the poster's edge, instead of black (D67, first cut: the two styles that need no new data source).
+- **Findings:** D67 (owner request 2026-10-14) · **Requirements:** R-FILL-1 · **Rulings:** D1, D67, D85, D88
+- **Mode:** afk · **Tags:** ui · **Blocked by:** `polish-2.2`
+- **Output:** `js/fill.js`, `tests/fill.test.js`, `js/layout.js`, `tests/layout.test.js`, `js/display.js`, `js/settings.js`, `tests/settings.test.js`, `index.html`, `css/app.css`, `tests/e2e/gap-fill.spec.mjs`
+- **Acceptance criteria:**
+  1. `node --test tests/fill.test.js tests/layout.test.js tests/settings.test.js`  (`gapBands({ win, box })` returns the parts of the frame window not covered by the poster box — at fit `contain` the letterbox or pillarbox pair, at scale < 100 or with an offset the surrounding bands — and an empty list when the poster covers the window or the gap is under 4 px on both axes; `edgeColour(imageData)` returns the average colour of the outermost 2 % of a poster's pixels as `rgb(r, g, b)`, pure; `gapFill` is a settings key with default `none` and values `none | blur | matte`, migrated and exported)
+  2. `npm run test:e2e -- gap-fill`  (`pixelShift:false`; 1080×1920, marquee frame, fit `contain`, a wide 16:9 poster from the mock: with `gapFill:'blur'` the two letterbox bands inside the window show a canvas ≤ 64 px intrinsic width whose effective brightness is ≤ 0.25 and below the poster's, and NO element has a non-`none` computed `filter`/`backdrop-filter`; with `gapFill:'matte'` the bands are a solid colour equal to `edgeColour` of the shown poster within ±8 per channel; with `gapFill:'none'` the DOM and pixels equal today's; at fit `cover` nothing shows; a 3 px gap is closed by scaling the poster, not filled; the gap fill cross-fades with the poster; night dim to the stage dims it with the poster; with `pixelShift:true` it moves with the stage)
+  3. `grep -Eq 'pixelShift: *false' tests/e2e/gap-fill.spec.mjs`
+  4. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (the full suite is the seam check: this phase edits `js/display.js`, `index.html` and `css/app.css` after `polish-2.2`)
+  5. `test -f css/app.css && ! grep -nE 'backdrop-filter|filter: *blur' css/app.css`
+  6. narrated: the anchored review and the UX-walk substitute (the checklist viewports, all three frames and no frame, both styles, both fits, scale 50–200); the kernel gate.
+- **Notes/hazards:**
+  - Blur technique as D85: a tiny canvas (reuse `drawBackdrop` from `js/fill.js`, 48 px, cap 64) scaled by CSS; never `filter: blur()`. OLED: the gap fill is dimmer than the poster (opacity cap 0.25 for blur; the matte is a flat colour and is dimmed by the same stage brightness and night-dim path, D85 item 5).
+  - The poster box and window come from `js/layout.js` `posterBox` and the frame's `win`; the bands are stage-pixel rectangles clipped to the window (`css/app.css:67` `object-fit: var(--poster-fit)` decides what the poster covers — read how `contain` leaves bands).
+  - `edgeColour` reads the decoded poster from a small canvas (reuse the backdrop canvas or draw once at 48 px); a cross-origin taint returns null and the matte falls back to `blur` behaviour or nothing — fail closed, never throw (D37 family: a blocked poster shows no gap fill either; `body.poster-blocked` hides it like the backdrop).
+  - Settings: a "Gap fill" select beside "Landscape fill" in the Frame & layout fieldset, with help text that says what the gap is; default `none`; the live preview applies it. No new shortcut.
+  - Deferred by D88 to later 2.2/2.4 phases: backdrop art (server data), smart crop (Pi-dependent detection), better-fitting artwork (TMDB sources).
+  - Mock: the `MOVIES` rows are portrait posters; add one wide (16:9) image to `scripts/mock-plex.mjs` only if no row produces a letterbox at fit `contain` — if a mock change is needed it is a question, since `scripts/mock-plex.mjs` is outside Output.
+
+## Run 5 — 2.2.0: the docs catch up with the gap fill, one version bump, the pull request (D90, D91)
+
+Added after the close of run 4 (2026-10-18, conductor-4) on the owner's word (D91). Starting commit `edcc49e` on branch `2.2`. Conventions as runs 3–4. This run has a release phase: `VERSION` is bumped once, here (convention 5, R-REL-1, D16). The pull request `2.2` → `main` is opened at the end by the conductor on the owner's word; merging stays the owner's (D13).
+
+### 39. `release-2.2.0` — Docs say what 2.2 has; bump the version once
+
+- **Goal:** README, Roadmap and `docs/spec.md` describe the three 2.2 features as they are built (drag and nudge, the landscape fill, the gap fill), and `VERSION` is 2.2.0 in all four files; the full suite passes on a quiet machine.
+- **Findings:** run-4 close drift check (`close--docs-drift-r1.md`) · **Requirements:** R-REL-1, R-DOC-7, R-FILL-1 · **Rulings:** D16, D67, D85, D86, D89, D90, D91
+- **Mode:** afk · **Tags:** docs · **Blocked by:** `gap-fill-inside-frame`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `grep -q "VERSION = '2.2.0'" sw.js && grep -q "VERSION = '2.2.0'" js/main.js && test "$(grep -c '"version": "2.2.0"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
+  2. `npm run test:e2e -- release`
+  3. `grep -qE '^## .*Done in 2\.2' Roadmap.md && grep -q 'Gap fill' Roadmap.md && ! grep -q 'stays planned below' Roadmap.md && ! grep -q 'the gap fill is next' Roadmap.md && ! grep -q 'has no plan phase yet' Roadmap.md`  (the gap fill is a "Done in 2.2" bullet naming the two shipped styles; the three deferred styles — backdrop art, smart crop, better-fitting artwork — stay planned; the 2.2 heading says 2.2.0 on branch `2.2`, not yet on `main`)
+  4. `grep -q '2.2.0' README.md && grep -q 'Gap fill' README.md && ! grep -q 'still planned for 2.2' README.md`  (status callout names 2.2.0 on branch `2.2`; a Features row for Gap fill; the layout row for fill.js mentions the gap fill)
+  5. `grep -q 'gapFill' docs/spec.md && grep -qE 'R-FILL-3|[Gg]ap fill' docs/spec.md`  (a short requirement for gapFill none|blur|matte, the 4 px rule, the 0.25 cap, fail closed; a settings-table row; corrected in run 5 from `R-FILL-2|gap fill`, which matched only a retired ID — D91 correction)
+  6. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (run once, by the conductor, when the machine is quiet: ≥ 2.5 GB available and no other session's browsers)
+  7. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|Roadmap.md|README.md|docs/spec.md)')"`
+  8. narrated: keep-docs-current over `14b1fd4..HEAD` inside the phase; the anchored documentation review APPROVE on disk.
+- **Notes/hazards:**
+  - The "What's new in 2.1" toast (js/main.js:1088–1097) is NOT changed: a 2.2 upgrade notice is a product decision the owner has not made (D91 item 3).
+  - No tag, no GitHub release. The pull request is opened after this phase lands; it is not merged (D13).
+  - Facts not to misstate: blur is a tiny canvas, never a CSS blur filter; both fills capped at 0.25; `fillMode` and `gapFill` default `none`; nothing has run on a Raspberry Pi (D79).
+
+## Run 6 — 2.2 is released: its upgrade notice, the merge, the merged docs, and the run-4 optimization proposals (D92, D93)
+
+Added after the close of run 5 (2026-10-18, conductor-4) on the owner's word (D93). Starting commit: the D93 commit on branch `2.2`. Conventions as runs 3–5. Order: `whats-new-2.2` lands on `2.2`; the conductor merges pull request #3 (owner-approved, D93); `docs-2.2-merged` lands on `main`; `orchestrator-improvements` lands in `~/.claude`.
+
+### 40. `whats-new-2.2` — A 2.2 upgrade notice, once per display
+
+- **Goal:** A display that was configured before 2.2 is told once what 2.2 adds, and can open Settings where those controls are.
+- **Requirements:** R-UPG-1 (superseded by R-UPG-2) · **Rulings:** D44, D73 (K60), D93
+- **Mode:** afk · **Tags:** ui · **Blocked by:** `release-2.2.0`
+- **Output:** `js/main.js`, `js/settings-ui.js`, `index.html`, `tests/e2e/preset.spec.mjs`, `tests/e2e/lib.mjs`, `tests/e2e/smoke.spec.mjs`, `docs/spec.md`, `README.md`, `Roadmap.md`
+- **Acceptance criteria:**
+  1. `grep -q "What's new in 2.2" js/main.js && ! grep -q "What's new in 2.1" js/main.js && grep -q "'2.2'" js/main.js`
+  2. `npm run test:e2e -- preset`  (configured, marker absent → the 2.2 toast once, not after a reload; marker `'2.1'` → the 2.2 toast once and the marker becomes `'2.2'`; marker `'2.2'` → nothing; unconfigured → nothing, marker `'2.2'`; K60 config.json first boot → nothing, marker `'2.2'`; **Open settings** opens Settings with the Frame & layout fieldset in view, and through the PIN keypad when a PIN is set)
+  3. `npm run test:e2e -- smoke`
+  4. `grep -q "plexPoster.whatsNew" tests/e2e/lib.mjs && grep -q "'2.2'" tests/e2e/lib.mjs`  (the harness seeds `'2.2'`, so no other spec sees the toast)
+  5. `grep -q 'R-UPG-2' docs/spec.md && grep -q "What's new in 2.2" README.md && ! grep -q "What's new in 2.1\" with" README.md`
+  6. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, on a quiet machine)
+  7. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/main.js|js/settings-ui.js|index.html|tests/e2e/preset.spec.mjs|tests/e2e/lib.mjs|tests/e2e/smoke.spec.mjs|docs/spec.md|README.md|Roadmap.md)')"`
+  8. narrated: anchored review and a UX walk (the toast at 1920×1080 and 1080×1920, rotation 0 and 90; Open settings lands on Frame & layout) APPROVE on disk.
+- **Notes/hazards:**
+  - The harness seeds the marker only when absent; it must seed `'2.2'` or every spec sees a toast.
+  - `index.html` may only gain an id on the Frame & layout fieldset.
+  - VERSION stays 2.2.0. The notice text names no feature that is off by default as if it were on.
+
+### 41. `docs-2.2-merged` — The docs say 2.2.0 is on `main`
+
+- **Goal:** After pull request #3 is merged, README and Roadmap say 2.2.0 is the current version on `main`, not "on branch 2.2, not yet merged".
+- **Rulings:** D13, D79, D93 · **Mode:** afk · **Tags:** docs · **Blocked by:** `whats-new-2.2` and the merge of #3
+- **Output:** `README.md`, `Roadmap.md`
+- **Acceptance criteria:**
+  1. `! grep -qi 'not yet merged' README.md Roadmap.md && ! grep -q 'on branch `2.2`' README.md Roadmap.md`
+  2. `grep -q 'pull request #3' README.md && grep -q '2.2.0' README.md`
+  3. `npm test`
+  4. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(README.md|Roadmap.md)')"`
+  5. narrated: the documentation review APPROVE on disk.
+- **Notes/hazards:** nothing has run on a Raspberry Pi (D79); no tag.
+
+### 42. `orchestrator-improvements` — The five run-4 optimization proposals
+
+- **Goal:** The next run spends fewer rounds on timing flakes and repeat geometry findings, waits less on memory, and reads true per-round token costs.
+- **Rulings:** D93 · **Mode:** afk · **Tags:** docs · **Blocked by:** `docs-2.2-merged`
+- **Repository:** `~/.claude` (dotclaude), branch `master`.
+- **Output:** `skills/integration-orchestrator/SKILL.md`, `skills/integration-orchestrator/reference/run-economy.md`, `agents/orchestrator-builder.md`, `scripts/cc_utils/closer.py`, `scripts/cc_utils/test_closer.py`
+- **Acceptance criteria:**
+  1. Proposal 1 (fake clock): `grep -qi 'wall' agents/orchestrator-builder.md && grep -qi 'fake clock\|transitionend' agents/orchestrator-builder.md`
+  2. Proposal 2 (sweep the edge cases): `grep -qi 'sweep' agents/orchestrator-builder.md`
+  3. Proposal 3 (memory gate before the suite and the UX walk, one batch; a crash is still a failure): `grep -qi 'MemAvailable\|free memory' skills/integration-orchestrator/SKILL.md skills/integration-orchestrator/reference/run-economy.md`
+  4. Proposal 4 (branch at the second consecutive fresh-gate failure in a timing-class criterion): `grep -qi 'second' skills/integration-orchestrator/SKILL.md && grep -qi 'timing' skills/integration-orchestrator/SKILL.md`
+  5. Proposal 5 (per-round token delta in metrics): `python3 -m pytest -q scripts/cc_utils/test_closer.py` and a new test that a resumed row records its delta
+  6. `cd ~/.claude && python3 scripts/cc_utils/closer.py evalguard --base e63906c2`  (ok: no evaluator loosened)
+  7. narrated: a fresh reviewer confirms each change stays inside its proposal's "must not touch" line.

@@ -91,10 +91,10 @@ await withApp({ localStorage: { 'plexPoster.lastReload': '123' } }, async ({ pag
   check('localStorage seed + pixelShift false + wake lock stub');
 });
 
-// Contract defaults: whatsNew seeded, dailyReload false.
+// Contract defaults: whatsNew seeded '2.2', dailyReload false.
 await withApp({}, async ({ page, app }) => {
   await page.goto(app.url);
-  assert.notEqual(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), null);
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.2');
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('plexPoster.settings')).dailyReload), false);
   check('whatsNew seeded, dailyReload false');
 });

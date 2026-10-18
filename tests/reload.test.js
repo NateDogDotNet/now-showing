@@ -97,3 +97,18 @@ test('a wanted update reload waits while a dialog is open or a poster is loading
   await Promise.resolve();
   assert.equal(reloads.length, 1);
 });
+
+test('a wanted reload waits while the poster is being positioned and goes once it is not (D86)', async (t) => {
+  const reloads = withGlobals(t, fakeStore());
+  let positioning = true;
+  globalThis.document.body = { classList: { contains: (c) => c === 'positioning' && positioning } };
+  const { reload } = setup({ dailyReload: false });
+  reload.requestUpdateReload();
+  reload.dailyReloadTick();
+  await Promise.resolve();
+  assert.equal(reloads.length, 0, 'an unsaved placement is not dropped');
+  positioning = false;
+  reload.dailyReloadTick();
+  await Promise.resolve();
+  assert.equal(reloads.length, 1);
+});
