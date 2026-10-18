@@ -985,3 +985,27 @@ Added at the close of run 3 (2026-10-16, conductor-4) on the owner's word (D88).
   - Settings: a "Gap fill" select beside "Landscape fill" in the Frame & layout fieldset, with help text that says what the gap is; default `none`; the live preview applies it. No new shortcut.
   - Deferred by D88 to later 2.2/2.4 phases: backdrop art (server data), smart crop (Pi-dependent detection), better-fitting artwork (TMDB sources).
   - Mock: the `MOVIES` rows are portrait posters; add one wide (16:9) image to `scripts/mock-plex.mjs` only if no row produces a letterbox at fit `contain` — if a mock change is needed it is a question, since `scripts/mock-plex.mjs` is outside Output.
+
+## Run 5 — 2.2.0: the docs catch up with the gap fill, one version bump, the pull request (D90, D91)
+
+Added after the close of run 4 (2026-10-18, conductor-4) on the owner's word (D91). Starting commit `edcc49e` on branch `2.2`. Conventions as runs 3–4. This run has a release phase: `VERSION` is bumped once, here (convention 5, R-REL-1, D16). The pull request `2.2` → `main` is opened at the end by the conductor on the owner's word; merging stays the owner's (D13).
+
+### 39. `release-2.2.0` — Docs say what 2.2 has; bump the version once
+
+- **Goal:** README, Roadmap and `docs/spec.md` describe the three 2.2 features as they are built (drag and nudge, the landscape fill, the gap fill), and `VERSION` is 2.2.0 in all four files; the full suite passes on a quiet machine.
+- **Findings:** run-4 close drift check (`close--docs-drift-r1.md`) · **Requirements:** R-REL-1, R-DOC-7, R-FILL-1 · **Rulings:** D16, D67, D85, D86, D89, D90, D91
+- **Mode:** afk · **Tags:** docs · **Blocked by:** `gap-fill-inside-frame`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `grep -q "VERSION = '2.2.0'" sw.js && grep -q "VERSION = '2.2.0'" js/main.js && test "$(grep -c '"version": "2.2.0"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
+  2. `npm run test:e2e -- release`
+  3. `grep -qE '^## .*Done in 2\.2' Roadmap.md && grep -q 'Gap fill' Roadmap.md && ! grep -q 'stays planned below' Roadmap.md && ! grep -q 'the gap fill is next' Roadmap.md && ! grep -q 'has no plan phase yet' Roadmap.md`  (the gap fill is a "Done in 2.2" bullet naming the two shipped styles; the three deferred styles — backdrop art, smart crop, better-fitting artwork — stay planned; the 2.2 heading says 2.2.0 on branch `2.2`, not yet on `main`)
+  4. `grep -q '2.2.0' README.md && grep -q 'Gap fill' README.md && ! grep -q 'still planned for 2.2' README.md`  (status callout names 2.2.0 on branch `2.2`; a Features row for Gap fill; the layout row for fill.js mentions the gap fill)
+  5. `grep -q 'gapFill' docs/spec.md && grep -qE 'R-FILL-2|gap fill' docs/spec.md`  (a short requirement for gapFill none|blur|matte, the 4 px rule, the 0.25 cap, fail closed; a settings-table row)
+  6. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (run once, by the conductor, when the machine is quiet: ≥ 2.5 GB available and no other session's browsers)
+  7. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|Roadmap.md|README.md|docs/spec.md)')"`
+  8. narrated: keep-docs-current over `14b1fd4..HEAD` inside the phase; the anchored documentation review APPROVE on disk.
+- **Notes/hazards:**
+  - The "What's new in 2.1" toast (js/main.js:1088–1097) is NOT changed: a 2.2 upgrade notice is a product decision the owner has not made (D91 item 3).
+  - No tag, no GitHub release. The pull request is opened after this phase lands; it is not merged (D13).
+  - Facts not to misstate: blur is a tiny canvas, never a CSS blur filter; both fills capped at 0.25; `fillMode` and `gapFill` default `none`; nothing has run on a Raspberry Pi (D79).
