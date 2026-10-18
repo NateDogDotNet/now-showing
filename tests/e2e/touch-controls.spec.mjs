@@ -559,6 +559,271 @@ touchCase(
   },
 );
 
+// ---------------------------------------------------------------- D96: the controls hide again after a dialog closes
+// A closing dialog gives focus back to the control that opened it. The idle timer used to treat any focus inside #controls
+// as "keep showing", so after Settings (or any dialog) the controls stayed up for good. Only a keyboard user's focus holds them.
+
+/** With no input, the controls hide and body.idle returns (the timer is 3.5 s; `until` waits on the state, not on the clock). */
+const hidesOnItsOwn = (page, what) =>
+  until(
+    () => page.evaluate(() => document.body.classList.contains('idle') && !document.getElementById('controls').classList.contains('visible')),
+    `the controls to hide ${what}`,
+  );
+/** The pointer rests on the stage, off the controls (a pointer over them rightly holds them), and the controls hide. */
+const hidesOnceParked = async (page, what) => {
+  await page.mouse.move(600, 300);
+  await hidesOnItsOwn(page, what);
+};
+/** A pointer move shows them, and with no further input they hide again. */
+const showsAndHidesAgain = async (page, what) => {
+  await page.mouse.move(700, 200);
+  await page.mouse.move(720, 220);
+  await until(() => controlsVisible(page), `a pointer move to show the controls ${what}`);
+  await hidesOnItsOwn(page, `again ${what}`);
+};
+/** A mouse at rest on the stage reveals the controls, then a click on `selector`. */
+async function mouseOpen(page, app, selector) {
+  await openIdle(page, app);
+  await page.mouse.move(600, 300);
+  await until(() => controlsVisible(page), 'the mouse to reveal the controls');
+  await animationsDone(page);
+  await page.click(selector);
+}
+
+for (const how of ['cancel', 'escape', 'save']) {
+  touchCase(`D96 a mouse opens Settings and closes it by ${how}: the controls hide on their own`, { settings: seed() }, async ({ page, app }) => {
+    await mouseOpen(page, app, '#controls [data-action="settings"]');
+    await until(() => isOpen(page, 'settings'), 'Settings to open');
+    if (how === 'cancel') await page.click('#settings-cancel');
+    else if (how === 'escape') await page.keyboard.press('Escape');
+    else await page.click('#settings-save');
+    await until(async () => !(await isOpen(page, 'settings')), 'Settings to close');
+    await hidesOnceParked(page, `after Settings ${how}`);
+    await showsAndHidesAgain(page, `after Settings ${how}`);
+    check(`D96 Settings closed by ${how}: hides, shows on a move, hides again`);
+  });
+}
+
+touchCase('D96 Diagnostics and the shortcuts overlay: the controls hide after each closes', { settings: seed() }, async ({ page, app }) => {
+  await mouseOpen(page, app, '#controls [data-action="diagnostics"]');
+  await until(() => isOpen(page, 'diagnostics'), 'Diagnostics to open');
+  await page.click('#diag-close');
+  await until(async () => !(await isOpen(page, 'diagnostics')), 'Diagnostics to close');
+  await hidesOnceParked(page, 'after Diagnostics');
+  await showsAndHidesAgain(page, 'after Diagnostics');
+  // The overlay, by its Diagnostics button and by `?`.
+  await page.mouse.move(600, 300);
+  await until(() => controlsVisible(page), 'the mouse to reveal the controls again');
+  await animationsDone(page);
+  await page.click('#controls [data-action="diagnostics"]');
+  await until(() => isOpen(page, 'diagnostics'), 'Diagnostics to open again');
+  await page.click('#diag-shortcuts');
+  await until(() => isOpen(page, 'shortcuts'), 'the shortcuts overlay to open');
+  await page.click('#shortcuts-close');
+  await until(async () => !(await isOpen(page, 'shortcuts')), 'the overlay to close');
+  await page.click('#diag-close');
+  await until(async () => !(await isOpen(page, 'diagnostics')), 'Diagnostics to close again');
+  await hidesOnceParked(page, 'after the shortcuts overlay');
+  await page.keyboard.press('?');
+  await until(() => isOpen(page, 'shortcuts'), '? to open the overlay');
+  await page.keyboard.press('Escape');
+  await until(async () => !(await isOpen(page, 'shortcuts')), 'Esc to close the overlay');
+  await hidesOnceParked(page, 'after ? and Esc');
+  check('D96 Diagnostics and the shortcuts overlay: hide on their own');
+});
+
+touchCase('D96 a touch opens Settings and closes it: the controls hide on their own', { ...TOUCH, settings: seed() }, async ({ page, app }) => {
+  await openIdle(page, app);
+  await tapAt(page, '#controls [data-action="settings"]'); // reveals only (R-CTRL-2)
+  await until(() => controlsVisible(page), 'the first tap to reveal the controls');
+  await animationsDone(page);
+  await tapAt(page, '#controls [data-action="settings"]');
+  await until(() => isOpen(page, 'settings'), 'Settings to open on the second tap');
+  await tapAt(page, '#settings-cancel');
+  await until(async () => !(await isOpen(page, 'settings')), 'Settings to close');
+  await hidesOnItsOwn(page, 'after a touch closes Settings');
+  check('D96 touch: Settings closed, the controls hide');
+});
+
+touchCase('D96 a mouse click on Pause or Pin poster leaves the controls hiding on their own', { settings: seed() }, async ({ page, app }) => {
+  await openIdle(page, app);
+  for (const action of ['pause', 'pin']) {
+    await page.mouse.move(600, 300);
+    await until(() => controlsVisible(page), 'the mouse to reveal the controls');
+    await animationsDone(page);
+    await page.click(`#controls [data-action="${action}"]`);
+    await hidesOnceParked(page, `after a mouse click on ${action}`);
+  }
+  check('D96 Pause and Pin poster by mouse: the controls still hide');
+});
+
+touchCase('D96 rotation 90: Settings closed by mouse, the controls hide', { settings: seed({ rotation: 90 }) }, async ({ page, app }) => {
+  await mouseOpen(page, app, '#controls [data-action="settings"]');
+  await until(() => isOpen(page, 'settings'), 'Settings to open');
+  await page.click('#settings-cancel');
+  await until(async () => !(await isOpen(page, 'settings')), 'Settings to close');
+  await hidesOnceParked(page, 'after Settings with the UI rotated');
+  check('D96 rotation 90: hides after Settings');
+});
+
+touchCase(
+  'D96 a PIN set: Settings opened through the keypad, closed, the controls hide',
+  { settings: seed({ settingsPinHash: pinAuth.hash, settingsPinSalt: pinAuth.salt }) },
+  async ({ page, app }) => {
+    await mouseOpen(page, app, '#controls [data-action="settings"]');
+    await until(() => isOpen(page, 'pin-dialog'), 'the PIN keypad');
+    for (const d of PIN) await page.click(`#pin-dialog [data-key="${d}"]`);
+    await page.click('#pin-dialog [data-key="ok"]');
+    await until(() => isOpen(page, 'settings'), 'Settings to open after the PIN');
+    await page.click('#settings-cancel');
+    await until(async () => !(await isOpen(page, 'settings')), 'Settings to close');
+    await hidesOnceParked(page, 'after the PIN path');
+    check('D96 PIN path: the controls hide after Settings');
+  },
+);
+
+// r2 gaps. A Tab inside a dialog is a walk through its fields, not through the controls.
+touchCase('D96 a mouse opens Settings, Tabs between the fields, closes by Esc: the controls hide', { settings: seed() }, async ({ page, app }) => {
+  await mouseOpen(page, app, '#controls [data-action="settings"]');
+  await until(() => isOpen(page, 'settings'), 'Settings to open');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Escape');
+  await until(async () => !(await isOpen(page, 'settings')), 'Settings to close');
+  await hidesOnceParked(page, 'after Tab, Tab, Esc in Settings');
+  await showsAndHidesAgain(page, 'after Tab, Tab, Esc in Settings');
+  check('D96 Tab inside Settings then Esc: the controls hide');
+});
+
+touchCase('D96 a mouse opens Diagnostics, Tabs, closes by Esc: the controls hide', { settings: seed() }, async ({ page, app }) => {
+  await mouseOpen(page, app, '#controls [data-action="diagnostics"]');
+  await until(() => isOpen(page, 'diagnostics'), 'Diagnostics to open');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Escape');
+  await until(async () => !(await isOpen(page, 'diagnostics')), 'Diagnostics to close');
+  await hidesOnceParked(page, 'after Tab, Esc in Diagnostics');
+  check('D96 Tab inside Diagnostics then Esc: the controls hide');
+});
+
+// The path only the dialog-Tab guard protects: nothing moves the mouse after the dialog closes, so no pointer event can
+// clear the flag. The mouse clicks into the dialog (off the controls), Tab walks its fields, Esc closes it.
+touchCase('D96 mouse clicks into a Settings field, Tab, Tab, Esc, mouse still: the controls hide', { settings: seed() }, async ({ page, app }) => {
+  await mouseOpen(page, app, '#controls [data-action="settings"]');
+  await until(() => isOpen(page, 'settings'), 'Settings to open');
+  await page.click('#settings-form input[name="serverUrl"]');
+  assert.equal(await page.evaluate(() => document.getElementById('controls').matches(':hover')), false, 'the pointer is off the controls');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Escape');
+  await until(async () => !(await isOpen(page, 'settings')), 'Settings to close');
+  await hidesOnItsOwn(page, 'after a click in a field, Tab, Tab, Esc with the mouse still');
+  check('D96 click in a Settings field, Tab, Tab, Esc: the controls hide with the mouse still');
+});
+
+touchCase('D96 mouse clicks into Diagnostics, Tab, Esc, mouse still: the controls hide', { settings: seed() }, async ({ page, app }) => {
+  await mouseOpen(page, app, '#controls [data-action="diagnostics"]');
+  await until(() => isOpen(page, 'diagnostics'), 'Diagnostics to open');
+  await page.click('#diag-title');
+  assert.equal(await page.evaluate(() => document.getElementById('controls').matches(':hover')), false, 'the pointer is off the controls');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Escape');
+  await until(async () => !(await isOpen(page, 'diagnostics')), 'Diagnostics to close');
+  await hidesOnItsOwn(page, 'after a click in Diagnostics, Tab, Esc with the mouse still');
+  check('D96 click in Diagnostics, Tab, Esc: the controls hide with the mouse still');
+});
+
+// A finger leaves Chromium's sticky :hover on the tapped button; it must not hold the controls.
+touchCase('D96 a touch tap on Pause leaves the controls hiding on their own', { ...TOUCH, settings: seed() }, async ({ page, app }) => {
+  await openIdle(page, app);
+  await tapAt(page, '#controls [data-action="pause"]'); // reveals only (R-CTRL-2)
+  await until(() => controlsVisible(page), 'the first tap to reveal the controls');
+  await animationsDone(page);
+  await tapAt(page, '#controls [data-action="pause"]');
+  await until(async () => (await page.getAttribute('#controls [data-action="pause"]', 'aria-pressed')) === 'true', 'Pause to act');
+  await hidesOnItsOwn(page, 'after a touch tap on Pause');
+  check('D96 touch: Pause tapped, the controls hide');
+});
+
+// A press ends keyboard use: Tab into the controls, then a touch tap on a control (no mouse movement can clear the flag here).
+touchCase('D96 a Tab, then a touch tap on a control: the press ends keyboard use and the controls hide', { ...TOUCH, settings: seed() }, async ({ page, app }) => {
+  await openIdle(page, app);
+  await tapAt(page, '#controls [data-action="pause"]');
+  await until(() => controlsVisible(page), 'the first tap to reveal the controls');
+  await animationsDone(page);
+  await page.keyboard.press('Tab'); // keyboard use on a touch device
+  await tapAt(page, '#controls [data-action="refresh"]');
+  await hidesOnItsOwn(page, 'after Tab then a tap');
+  check('D96 Tab then a tap: the press clears keyboard use');
+});
+
+touchCase('D96 Tab into the controls, then a mouse click on Settings and Cancel: the controls hide', { settings: seed() }, async ({ page, app }) => {
+  await openIdle(page, app);
+  await page.keyboard.press('Tab');
+  await until(() => controlsVisible(page), 'a key to reveal the controls');
+  await animationsDone(page);
+  await page.click('#controls [data-action="settings"]');
+  await until(() => isOpen(page, 'settings'), 'Settings to open');
+  await page.click('#settings-cancel');
+  await until(async () => !(await isOpen(page, 'settings')), 'Settings to close');
+  await hidesOnceParked(page, 'after Tab, then the mouse took over');
+  check('D96 Tab, then the mouse opens and closes Settings: the controls hide');
+});
+
+touchCase('D96 Settings opened by the s shortcut after a click left focus on a control, closed by Esc: the controls hide', { settings: seed() }, async ({ page, app }) => {
+  await openIdle(page, app);
+  await page.mouse.move(600, 300);
+  await until(() => controlsVisible(page), 'the mouse to reveal the controls');
+  await animationsDone(page);
+  await page.click('#controls [data-action="pause"]'); // focus stays on Pause
+  await page.keyboard.press('s');
+  await until(() => isOpen(page, 'settings'), 'Settings to open by s');
+  await page.keyboard.press('Escape');
+  await until(async () => !(await isOpen(page, 'settings')), 'Settings to close');
+  await hidesOnceParked(page, 'after s and Esc');
+  check('D96 s opens Settings, Esc closes: the controls hide');
+});
+
+// A real mouse movement ends keyboard use; a wheel, and a "move" to where the mouse already is, do not.
+touchCase('D96 a keyboard user who then moves the mouse away: the controls hide; a wheel alone does not release them', { settings: seed(), clock: { time: '2026-01-05T12:00:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await page.clock.runFor(10_000);
+  await waitIdle(page);
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('#controls'))), true, 'Tab reached a control');
+  await page.mouse.move(700, 200); // the mouse arrives on the stage
+  await page.mouse.move(700, 200); // and a move to the same spot is not a movement
+  await page.mouse.wheel(0, 100);
+  await page.clock.runFor(20_000);
+  assert.equal(await controlsVisible(page), true, 'a wheel and a zero move leave the keyboard user their controls');
+  await page.mouse.move(740, 240); // a real movement
+  await page.clock.runFor(10_000);
+  assert.equal(await controlsVisible(page), false, 'a real mouse movement ends keyboard use');
+  check('D96 keyboard then mouse: a real move releases the controls, a wheel does not');
+});
+
+// The keyboard rule stays: a user who Tabbed into the controls keeps them shown while the focus ring is there. A fake
+// clock runs 20 s past the 3.5 s timer without waiting, so the "still shown" half does not depend on elapsed time.
+touchCase('D96 a keyboard user who Tabs into the controls keeps them shown', { settings: seed(), clock: { time: '2026-01-05T12:00:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await page.clock.runFor(10_000);
+  await waitIdle(page);
+  let focused = '';
+  for (let i = 0; i < 4 && !focused; i++) {
+    await page.keyboard.press('Tab');
+    focused = await page.evaluate(() => document.activeElement?.closest('#controls') && document.activeElement.dataset.action);
+  }
+  assert.ok(focused, 'Tab reached a control');
+  await page.clock.runFor(20_000);
+  assert.equal(await controlsVisible(page), true, 'still shown 20 s after the Tab, focus inside');
+  assert.equal(await page.evaluate(() => document.body.classList.contains('idle')), false);
+  await page.evaluate(() => document.activeElement.blur()); // focus leaves: they hide
+  await page.clock.runFor(10_000);
+  assert.equal(await controlsVisible(page), false, 'hidden once the focus is gone');
+  check('D96 keyboard: shown while the focus is in the controls, hidden after it leaves');
+});
+
 // ---------------------------------------------------------------- run
 
 const WORKERS = Number(process.env.E2E_TOUCH_WORKERS || 3);

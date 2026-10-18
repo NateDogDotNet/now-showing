@@ -736,12 +736,47 @@ function hideControls() {
   updateStatus(); // the dot takes over from the pill
 }
 
+// D96: what holds the controls shown once nothing else happens.
+//  - Focus inside them, for a keyboard user only. A closing dialog (and a mouse click or tap on a control) leaves focus on
+//    the control, and the old `:focus-within` test then re-armed the timer forever. `keyboardFocus` is set by a Tab outside
+//    any open dialog (a Tab between Settings fields is not a walk through the controls) and cleared by a pointer press or
+//    by a mouse that actually moved (pointermove also fires at a touch and, with unchanged coordinates, after a relayout).
+//  - A pointer over them, unless the last pointer was a touch: a finger leaves Chromium's sticky `:hover` on the button it
+//    tapped, which would hold the controls for good after Pause, Pin poster, Refresh or Rotate.
+let keyboardFocus = false;
+let lastPointerType = 'mouse';
+let mouseAt = null;
+document.addEventListener(
+  'keydown',
+  (e) => e.key === 'Tab' && !document.querySelector('dialog[open]') && (keyboardFocus = true),
+  { capture: true, passive: true },
+);
+document.addEventListener(
+  'pointerdown',
+  (e) => {
+    keyboardFocus = false;
+    lastPointerType = e.pointerType;
+  },
+  { capture: true, passive: true },
+);
+document.addEventListener(
+  'pointermove',
+  (e) => {
+    lastPointerType = e.pointerType;
+    if (e.pointerType !== 'mouse') return;
+    if (mouseAt && (mouseAt.x !== e.clientX || mouseAt.y !== e.clientY)) keyboardFocus = false;
+    mouseAt = { x: e.clientX, y: e.clientY };
+  },
+  { capture: true, passive: true },
+);
+
 /** Pointer or key activity shows the controls for a moment. Kiosk mode ignores it: see revealControls(). */
 function wake() {
   if (state.settings.kioskMode) return;
   showControls();
   idleTimer = setTimeout(() => {
-    if ($('controls').matches(':hover, :focus-within')) return wake();
+    const controls = $('controls');
+    if ((lastPointerType !== 'touch' && controls.matches(':hover')) || (keyboardFocus && controls.matches(':focus-within'))) return wake();
     hideControls();
   }, 3500);
 }
