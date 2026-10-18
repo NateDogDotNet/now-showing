@@ -1,4 +1,4 @@
-// Recommended protection (R-PROT-5, D4, D5, D6, Q20) and the upgrade toast (R-UPG-1).
+// Recommended protection (R-PROT-5, D4, D5, D6, Q20) and the upgrade toast (R-UPG-2).
 // Every case names pixelShift: false and dailyReload: false (convention 7) unless it tests them.
 
 import assert from 'node:assert/strict';
@@ -143,14 +143,17 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
 });
 
 // ---- the upgrade toast ----
-const clearMarkerOnce = (page) =>
-  page.addInitScript(() => {
+// Sets the marker once per tab (null removes it), so a reload keeps whatever the app wrote since.
+const markerOnce = (page, value) =>
+  page.addInitScript((v) => {
     if (sessionStorage.getItem('__markerCleared')) return;
     sessionStorage.setItem('__markerCleared', '1');
-    localStorage.removeItem('plexPoster.whatsNew');
-  });
+    if (v === null) localStorage.removeItem('plexPoster.whatsNew');
+    else localStorage.setItem('plexPoster.whatsNew', v);
+  }, value);
+const clearMarkerOnce = (page) => markerOnce(page, null);
 const toastState = (page) => page.evaluate(() => ({ hidden: document.getElementById('toast').hidden, text: document.getElementById('toast').textContent, buttons: [...document.querySelectorAll('#toast button')].map((b) => b.textContent) }));
-const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.1/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.2/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
 
 await withApp({ settings: seed() }, async ({ page, app }) => {
   await clearMarkerOnce(page);
@@ -158,12 +161,25 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await waitToast(page);
   const t = await toastState(page);
   assert.ok(t.buttons.includes('Open settings'), `buttons: ${t.buttons}`);
-  assert.notEqual(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), null, 'marker written');
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.2', 'marker written');
   await page.reload();
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
   await page.waitForTimeout(1500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'not shown again after a reload');
   check('upgrade toast shows once for a configured install');
+});
+
+// A 2.1 install (marker '2.1') is told about 2.2 once, and the marker moves on.
+await withApp({ settings: seed() }, async ({ page, app }) => {
+  await markerOnce(page, '2.1');
+  await page.goto(app.url);
+  await waitToast(page);
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.2', 'marker becomes 2.2');
+  await page.reload();
+  await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
+  await page.waitForTimeout(1500);
+  assert.ok(!(await toastState(page)).text.includes("What's new"), 'not shown again after a reload');
+  check("marker '2.1': the 2.2 toast shows once and the marker becomes 2.2");
 });
 
 await withApp({ settings: seed() }, async ({ page, app }) => {
@@ -173,13 +189,13 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await page.click('#toast button:has-text("Open settings")');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
   const where = await page.evaluate(() => {
-    const f = document.getElementById('protection-fieldset').getBoundingClientRect();
+    const f = document.getElementById('layout-fieldset').getBoundingClientRect();
     const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
     return { top: f.top, bottom: f.bottom, bodyTop: body.top, bodyBottom: body.bottom };
   });
   assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyBottom, `fieldset scrolled into view: ${JSON.stringify(where)}`);
-  assert.equal(await page.locator('#preset-btn').isVisible(), true);
-  check('Open settings opens Settings at Display protection');
+  assert.equal(await page.locator('#layout-fieldset legend').isVisible(), true);
+  check('Open settings opens Settings at Frame & layout');
 });
 
 await withApp({ settings: seed({ settingsPinHash: auth.hash, settingsPinSalt: auth.salt }) }, async ({ page, app }) => {
@@ -192,6 +208,12 @@ await withApp({ settings: seed({ settingsPinHash: auth.hash, settingsPinSalt: au
   for (const d of PIN) await page.click(`#pin-dialog [data-key="${d}"]`);
   await page.click('#pin-dialog [data-key="ok"]');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
+  const where = await page.evaluate(() => {
+    const f = document.getElementById('layout-fieldset').getBoundingClientRect();
+    const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
+    return { top: f.top, bottom: f.bottom, bodyTop: body.top, bodyBottom: body.bottom };
+  });
+  assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyBottom, `fieldset scrolled into view after the PIN: ${JSON.stringify(where)}`);
   check('Open settings goes through the PIN gate');
 });
 
@@ -200,6 +222,7 @@ await withApp({ settings: { pixelShift: false, dailyReload: false } }, async ({ 
   await page.goto(app.url);
   await page.waitForTimeout(2500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'unconfigured: no toast');
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.2', 'unconfigured: marker written');
   assert.ok(!(await page.evaluate(() => document.querySelector('#toast button'))) || (await toastState(page)).hidden);
   check('unconfigured install never shows the toast');
 });
@@ -227,7 +250,7 @@ await withApp({ settings: {} }, async ({ page, context, app }) => {
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
   await page.waitForTimeout(1500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'a fresh config.json install shows no upgrade toast');
-  assert.equal(await marker(page), '2.1', 'the marker is written');
+  assert.equal(await marker(page), '2.2', 'the marker is written');
   check('K60: a config.json-provisioned first boot writes the marker and shows no toast');
 });
 
@@ -237,6 +260,6 @@ await withApp({ settings: seed() }, async ({ page, context, app }) => {
   await clearMarkerOnce(page);
   await page.goto(app.url);
   await waitToast(page);
-  assert.equal(await marker(page), '2.1');
+  assert.equal(await marker(page), '2.2');
   check('K60: an upgraded stored install (config.json beside it) still shows the toast');
 });

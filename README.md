@@ -211,7 +211,7 @@ Settings > Display protection > **Recommended protection** lists what it will ch
 
 It **does not** turn on idle sleep, set a content limit, or change the connection, kiosk mode, the PIN or the helper. Use [Household with children](#accounts) and the [PIN](#kiosk) separately.
 
-After you upgrade a configured display from 2.0, a toast "What's new in 2.1" with an **Open settings** button shows once.
+After you upgrade a configured display to 2.2 (2.2.0, on branch `2.2`, not yet merged), a toast "What's new in 2.2" with an **Open settings** button shows once; the button opens Settings at Frame & layout.
 
 #### Sleep
 

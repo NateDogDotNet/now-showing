@@ -479,6 +479,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   /** What open() asks of the sheet once it is up; `auto` adds the connection test a fresh open runs for a saved connection. */
   function runOpenOptions({ wantSignIn, token, test, section }, auto) {
     if (section === 'protection') $('protection-fieldset').scrollIntoView({ block: 'start' });
+    else if (section === 'layout') $('layout-fieldset').scrollIntoView({ block: 'start' });
     if (token) signIn({ token });
     else if (wantSignIn) signIn();
     else if (test || (auto && original.plexToken && original.serverUrl)) testConnection();
@@ -601,7 +602,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     /**
      * Opens the sheet. `signIn` starts a plex.tv code in it at once (the fix for a rejected token); `token` is one the empty
      * card's code already earned, so the sheet picks up at "Signed in"; `test` runs the connection test even when it would not
-     * run by itself; `section` ('protection') scrolls the sheet to that fieldset.
+     * run by itself; `section` ('protection' or 'layout') scrolls the sheet to that fieldset.
      */
     open({ signIn: wantSignIn = false, token = null, test = false, section = '' } = {}) {
       if (position.active) {
