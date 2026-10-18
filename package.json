@@ -1,6 +1,6 @@
 {
   "name": "now-showing",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "private": true,
   "description": "Installable, offline-capable PWA that shows Plex movie posters full-screen inside a decorative frame.",
   "type": "module",

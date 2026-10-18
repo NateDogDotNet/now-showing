@@ -169,6 +169,9 @@ Priorities: **P0** fix-first, **P1** protection, **P2** polish, **P3** bigger fe
 - `info`: `#info-panel` shows title, runtime, rating, year and a summary of at most 301 characters; in a portrait viewport (or rotation 90 on a portrait screen that makes the effective aspect portrait) neither mode renders; `none` matches today.
 - `isLandscape({w,h,rotation})` accounts for 90/270; `trimSummary(text, 300)` cuts on a word boundary with an ellipsis.
 
+**R-FILL-3 (P2) Gap fill inside the frame.** `gapFill` (`none` default | `blur` | `matte`) fills the bands the poster image leaves inside the frame window (for example at fit "Fit inside window", or at a size below 100 %). `blur` reuses the R-FILL-1 tiny canvas (48 px wide, scaled up by CSS, no `filter: blur()`), lined up with the poster (same centre and aspect, scaled from its centre to cover the window). `matte` is one flat colour, the average of the poster's outer 2 %. Both are dimmed to at most 25 % brightness (the 0.25 cap of R-FILL-1). A gap under 4 px on its own is closed, not filled: the poster grows to the window edge (at "Fit inside window", evenly about its centre, or by a few pixels of crop when the box's own bands are that thin). A thin strip beside a wider band is filled with that band (D89). The fill cross-fades with the poster, and nothing of a blocked poster shows (D37); a poster whose edge cannot be read (cross-origin) gets no matte. D67, D89.
+- `gapFill:'blur'` at fit "Fit inside window" shows the fill in the side bands at brightness at most 0.25 with no computed blur `filter`; `matte` draws the poster's edge colour, capped; a gap under 4 px with no wider band draws no fill; `none` matches today.
+
 ### Sleep and protection
 
 **R-PROT-1 (P1, E1; D4) Sleep.** Two triggers, either sufficient: a daily schedule (`sleepEnabled` default **false**, `sleepStart`, `sleepEnd`; windows may cross midnight; device local time) and idle sleep (`idleSleepHours` > 0 hours with no playback; **0 = off, the default**; its help text says the screen stays black between movies). Asleep means: a pure black full-screen veil (`#sleep-veil`), controls and status hidden, poster fetches suspended (now-playing polling continues, at most every `nowPlayingPollSeconds`), and, when the device helper is on and available, display power off (R-HELP-2). **The screen wake lock stays held** while asleep so the panel stays lit and playback can wake it; releasing the wake lock is not used as a sleep mechanism, because re-acquiring a lock does not wake a screen the OS already blanked. The README tells Pi/Android users to turn OS screen blanking off. Wake: playback starts (`wakeOnPlayback`, default true, also during the scheduled window), the scheduled window ends, or a user touch/key/click (manual wake for 60 s, then back to sleep if the trigger still holds). On wake a poster is fetched at once. Schedules wait for a plausible clock (R-PROT-6).
@@ -296,8 +299,8 @@ An **owner-pinned** poster is exempt. Client-side ladder: `G=TV-Y=TV-G < PG=TV-Y
 | Animated frame bulbs | E3 (was R-FRM-3) | The overlay does not rest the underlying bulb pixels and an infinite animation keeps the Pi compositing around the clock | deferred (D1) → Roadmap |
 | Frame rotation (daily/weekly frame) | E5 (was R-FRM-2) | The three built-in frames place their bulb rings within about 1.5 points of each other, so rotating gives little relief beyond pixel shift | deferred (D1) → Roadmap |
 | Hardware brightness through the helper | E6 part | DDC/CI is absent on consumer TVs, HDMI has no backlight sysfs (D8) | dropped |
-| Drag and nudge poster positioning | U5 (R-SET-5) | Release scope cut to ship the protection features sooner (D41) | 2.2 → Roadmap |
-| Landscape fill: blurred backdrop and info panel | U7 (R-FILL-1) | Release scope cut; large display.js change (D41) | 2.2 → Roadmap |
+| Drag and nudge poster positioning | U5 (R-SET-5) | Release scope cut to ship the protection features sooner (D41) | shipped in 2.2.0 on branch 2.2 |
+| Landscape fill: blurred backdrop and info panel | U7 (R-FILL-1) | Release scope cut; large display.js change (D41) | shipped in 2.2 (2.2.0) |
 | Local-network Plex server discovery | — | Roadmap only (D3); GDM needs a UDP listener in `serve.mjs` | Roadmap (exists) |
 | Multiple libraries mixed in the random pool, collections, genre/decade filters, "recently added" mode | Roadmap ideas | Not in the findings; the library picker and pool code would change shape | stay on the Roadmap |
 | Server-side PIN enforcement or real authentication | — | The app has no backend by design; the PIN deters casual use (D16) | — |
@@ -341,6 +344,7 @@ All new keys are added to `SCHEMA` in `js/settings.js` in one phase (`settings-a
 | `showProgress` | `true` | bool | | R-NP-1 |
 | `showPlayer` | `false` | bool | | R-NP-1 |
 | `fillMode` | `'none'` | none\|blur\|info | lit pixels on OLED, opt-in | R-FILL-1 |
+| `gapFill` | `'none'` | none\|blur\|matte | lit pixels on OLED, opt-in | R-FILL-3 |
 
 Removed from r1 by D1: `bulbAnimation`, `frameRotation`, `frameRotationIds`, `frameIdRandom`, `fillCount` and the `multi` fill value. Non-setting storage keys: `plexPoster.lastReload`, `plexPoster.pinLock`, `plexPoster.whatsNew`.
 
