@@ -1052,12 +1052,12 @@ Added after the close of run 5 (2026-10-18, conductor-4) on the owner's word (D9
 - **Goal:** The next run spends fewer rounds on timing flakes and repeat geometry findings, waits less on memory, and reads true per-round token costs.
 - **Rulings:** D93 · **Mode:** afk · **Tags:** docs · **Blocked by:** `docs-2.2-merged`
 - **Repository:** `~/.claude` (dotclaude), branch `master`.
-- **Output:** `skills/integration-orchestrator/SKILL.md`, `skills/integration-orchestrator/reference/run-economy.md`, `agents/orchestrator-builder.md`, `scripts/cc_utils/closer.py`, `scripts/cc_utils/test_closer.py`
+- **Output:** `skills/integration-orchestrator/SKILL.md`, `skills/integration-orchestrator/reference/run-economy.md`, `agents/orchestrator-builder.md`, `scripts/cc_utils/closer.py`, `scripts/cc_utils/test_closer.py`, `commands/orchestrate.md` (added at r1 review: it restates the branch rule; D93 correction)
 - **Acceptance criteria:**
   1. Proposal 1 (fake clock): `grep -qi 'wall' agents/orchestrator-builder.md && grep -qi 'fake clock\|transitionend' agents/orchestrator-builder.md`
   2. Proposal 2 (sweep the edge cases): `grep -qi 'sweep' agents/orchestrator-builder.md`
   3. Proposal 3 (memory gate before the suite and the UX walk, one batch; a crash is still a failure): `grep -qi 'MemAvailable\|free memory' skills/integration-orchestrator/SKILL.md skills/integration-orchestrator/reference/run-economy.md`
   4. Proposal 4 (branch at the second consecutive fresh-gate failure in a timing-class criterion): `grep -qi 'second' skills/integration-orchestrator/SKILL.md && grep -qi 'timing' skills/integration-orchestrator/SKILL.md`
   5. Proposal 5 (per-round token delta in metrics): `python3 -m pytest -q scripts/cc_utils/test_closer.py` and a new test that a resumed row records its delta
-  6. `cd ~/.claude && python3 scripts/cc_utils/closer.py evalguard --base e63906c2`  (ok: no evaluator loosened)
+  6. `cd ~/.claude && python3 scripts/cc_utils/closer.py evalguard --base e63906c2 --allow "<the owner's D93 words>"`  (ok, with `sections_changed` and `anchors_lost` empty and only `closer.py` and `test_closer.py` among the evaluator files: proposal 5 must change the kernel, so the kernel's own rule applies — an evaluator change passes only with the user's words; D93 correction)
   7. narrated: a fresh reviewer confirms each change stays inside its proposal's "must not touch" line.
