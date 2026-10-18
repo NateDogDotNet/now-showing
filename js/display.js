@@ -2,7 +2,7 @@
 
 import { detectWindow, findFrame, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { formatRuntime } from './plex.js';
-import { blurRect, closeGap, gapBands, imageRect, posterBox, shiftOffset, shiftRoom, stageSize } from './layout.js';
+import { blurPlan, closeGap, gapBands, imageRect, posterBox, shiftOffset, shiftRoom, stageSize } from './layout.js';
 import { backdropBox, fillState, infoBox, infoParts, gapLayerOpen, infoTitleSize, swapBackdrop, swapGapFill, visibleRight } from './fill.js';
 
 const POSTER_ASPECT = 2 / 3;
@@ -115,7 +115,9 @@ export function createDisplay(root = document) {
   /** The gap fill of the poster on screen (after the style changed), drawn from its decoded layer; none when there is none to draw. */
   function drawFrontGap() {
     const img = el.layers[front];
-    swapGapFill(el.gapCanvases, front, img, img.classList.contains('active') ? gapStyle : 'none');
+    const style = img.classList.contains('active') ? gapStyle : 'none';
+    // The blur needs the layout (its plan), so layoutGap draws it; it is never drawn from here, whole and ghost-making (D95).
+    swapGapFill(el.gapCanvases, front, img, style === 'blur' ? 'none' : style);
   }
 
   /**
@@ -129,6 +131,9 @@ export function createDisplay(root = document) {
     let fit = settings.posterFit;
     let out = box;
     let open = false;
+    const was = gapStyle;
+    gapStyle = want;
+    let plan = null;
     if (want !== 'none') {
       const win = posterBox({ stageW, stageH, win: frame.window });
       const img = el.layers[front];
@@ -139,11 +144,21 @@ export function createDisplay(root = document) {
       fit = closed.fit;
       open = gapLayerOpen(want, gapBands({ win, box: out, aspect, fit }));
       Object.assign(el.gap.style, { left: `${win.left}px`, top: `${win.top}px`, width: `${win.width}px`, height: `${win.height}px` });
-      // The blurred copy continues the poster: its centre, its aspect, scaled up from there to cover the window.
-      const shown = imageRect({ box: out, aspect, fit });
-      const r = blurRect({ win, centre: { x: shown.left + shown.width / 2, y: shown.top + shown.height / 2 }, aspect, minWidth: shown.width });
-      Object.assign(el.gapCanvases[front].style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+      // The blurred copy continues the poster: the poster sits on its tile and the poster's edge rows and columns are stretched
+      // out to the window, so a wide band shows no inner detail of the poster (D95). Drawn again here, as the layout decides it.
+      plan = want === 'blur' && known ? blurPlan({ win, shown: imageRect({ box: out, aspect, fit }), imageAspect: aspect, fit }) : null;
+      if (plan) {
+        swapGapFill(el.gapCanvases, front, img, 'blur', plan);
+        Object.assign(el.gapCanvases[front].style, { left: `${plan.rect.left}px`, top: `${plan.rect.top}px`, width: `${plan.rect.width}px`, height: `${plan.rect.height}px` });
+      } else {
+        // The matte (one pixel) and a blur with no plan cover the whole window: a rectangle left over from an earlier blur would
+        // leave part of the bands black after a resize (D89: the matte is unchanged).
+        Object.assign(el.gapCanvases[front].style, { left: '0px', top: '0px', width: `${win.width}px`, height: `${win.height}px` });
+      }
     }
+    // A change of style redraws the matte or clears the canvas. A blur drawn from its plan above is not touched again: it would be
+    // cleared and drawn once more (or left cleared) for the want of the plan that only this function has (D95).
+    if (want !== was && !plan) drawFrontGap();
     // The layer stays in the page while the style is on; its tint fades with the poster (css/app.css), so a poster with no band
     // fades it out and one with a band fades it in, instead of either switching at once. Its black window stays opaque to the
     // end of the fade, and the poster box stays transparent over it, so nothing behind the window (the landscape backdrop) shows.
@@ -175,9 +190,6 @@ export function createDisplay(root = document) {
       };
       gapHideTimer = setTimeout(done, (settings?.crossfadeMs ?? 0) + 500);
     }
-    const was = gapStyle;
-    gapStyle = want;
-    if (want !== was) drawFrontGap();
     return { box: out, fit };
   }
 
@@ -384,7 +396,8 @@ export function createDisplay(root = document) {
       prev.classList.remove('active');
       // The backdrop changes in the same task as the poster, through the same transition, so the two stay in step.
       swapBackdrop(el.canvases, 1 - front, next, fill === 'blur');
-      swapGapFill(el.gapCanvases, 1 - front, next, gapStyle); // and the gap fill, through the same transition
+      // and the gap fill, through the same transition: the matte now, the blur by layout() just below, which knows where it goes
+      swapGapFill(el.gapCanvases, 1 - front, next, gapStyle === 'blur' ? 'none' : gapStyle);
       front = 1 - front;
       if (settings) layout(); // this poster's shape decides which bands it leaves
       this.currentPoster = poster;

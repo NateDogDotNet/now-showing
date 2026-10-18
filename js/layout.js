@@ -170,15 +170,54 @@ export function closeGap({ win, box, aspect, fit = 'cover', minGap = MIN_GAP_PX 
 }
 
 /**
- * The rectangle the blurred copy is drawn into, relative to the window's top-left: centred on the poster's image (`centre`, stage
- * px), the image's own aspect, scaled up from that centre just enough to cover the window, and never smaller than the image
- * itself (`minWidth`). The band beside each poster edge then shows a blurred continuation of that edge, not a stretched copy.
+ * How the blurred gap fill is laid out so that a band shows the poster's edge colours continued outward and nothing from inside
+ * the poster (D95). The fill canvas covers the window and holds a tiny grid: the poster at about `baseWidth` pixels (`tile`, whole
+ * pixels) and around it `pad` pixels per side, which fill.js stretches from the poster's outermost row or column. CSS then scales
+ * the canvas up (that is the blur), one scale per axis, so the tile lands exactly on the poster (`shown`, stage px) and each pad on
+ * the band beside it. The canvas stays within `maxW` x `maxH` pixels, so a wide band coarsens the grid rather than growing it
+ * (D67: a tiny canvas). `rect` is where the canvas goes, relative to the window's top-left. Null when the poster or the window
+ * has no size. `crop` is the part of the image (fractions of its width and height) the tile shows: the whole of it, except at fit
+ * "cover" (`fit`, with the image's `imageAspect`), where CSS crops the image to the box and so must the tile, or the rows stretched
+ * into the bands would be rows the screen never shows.
  */
-export function blurRect({ win, centre, aspect, minWidth = 0 }) {
-  const a = aspect > 0 ? aspect : 2 / 3;
-  const halfW = Math.max(centre.x - win.left, win.left + win.width - centre.x);
-  const halfH = Math.max(centre.y - win.top, win.top + win.height - centre.y);
-  const width = Math.max(minWidth, 2 * halfW, 2 * halfH * a);
-  const height = width / a;
-  return { left: centre.x - width / 2 - win.left, top: centre.y - height / 2 - win.top, width, height };
+export function blurPlan({ win, shown, imageAspect = 0, fit = 'contain', baseWidth = 48, maxW = 64, maxH = 128 }) {
+  if (!(win.width > 0 && win.height > 0 && shown.width > 0 && shown.height > 0)) return null;
+  const right = win.left + win.width;
+  const bottom = win.top + win.height;
+  const crop = { x: 0, y: 0, width: 1, height: 1 };
+  const boxAspect = shown.width / shown.height;
+  if (fit === 'cover' && imageAspect > 0) {
+    if (imageAspect > boxAspect) {
+      crop.width = boxAspect / imageAspect;
+      crop.x = (1 - crop.width) / 2;
+    } else {
+      crop.height = imageAspect / boxAspect;
+      crop.y = (1 - crop.height) / 2;
+    }
+  }
+  let unit = shown.width / baseWidth; // stage px per canvas px, before the tile is rounded to whole pixels
+  for (let i = 0; i < 80; i++, unit *= 1.1) {
+    const tw = Math.max(1, Math.round(shown.width / unit));
+    const th = Math.max(1, Math.round(shown.height / unit));
+    const sx = shown.width / tw;
+    const sy = shown.height / th;
+    const pad = {
+      left: Math.max(0, Math.ceil((shown.left - win.left) / sx)),
+      right: Math.max(0, Math.ceil((right - (shown.left + shown.width)) / sx)),
+      top: Math.max(0, Math.ceil((shown.top - win.top) / sy)),
+      bottom: Math.max(0, Math.ceil((bottom - (shown.top + shown.height)) / sy)),
+    };
+    const width = pad.left + tw + pad.right;
+    const height = pad.top + th + pad.bottom;
+    if ((width > maxW || height > maxH) && (tw > 1 || th > 1)) continue;
+    return {
+      width,
+      height,
+      tile: { x: pad.left, y: pad.top, width: tw, height: th },
+      pad,
+      crop,
+      rect: { left: shown.left - win.left - pad.left * sx, top: shown.top - win.top - pad.top * sy, width: width * sx, height: height * sy },
+    };
+  }
+  return null;
 }

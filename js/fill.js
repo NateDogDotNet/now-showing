@@ -103,14 +103,15 @@ export function visibleRight({ stageW, box }) {
 /**
  * The info panel box in stage pixels: from the visible poster's right edge (`posterRight`, default the stage's edge) plus a
  * gap, to the screen's edge minus a gap and `margin` (the pixel-shift glide, which carries the panel with the stage), as tall
- * as the stage. Width 0 when that is narrower than PANEL_MIN_EM of the title's font size: no panel.
+ * as the stage less that same gap above and below, so a long synopsis never reaches the screen's top or bottom edge (D85, D95).
+ * Width 0 when that is narrower than PANEL_MIN_EM of the title's font size: no panel.
  */
 export function infoBox({ stageW, stageH, screenW, screenH, posterRight = stageW, margin = 0 }) {
   const gap = Math.round(screenH * 0.04);
   const left = posterRight + gap;
   const width = Math.floor((stageW + screenW) / 2 - gap - margin - left);
   const tooNarrow = width < PANEL_MIN_EM * infoTitleSize(screenW, screenH);
-  return { left, top: 0, width: tooNarrow ? 0 : width, height: stageH };
+  return { left, top: gap, width: tooNarrow ? 0 : width, height: Math.max(0, stageH - 2 * gap) };
 }
 
 /**
@@ -179,12 +180,44 @@ export function edgeColour({ width, height, data }) {
 }
 
 /**
- * Draws the gap fill for `img` into `canvas`. 'blur' is drawBackdrop. 'matte' reads the poster at 48 px, takes edgeColour
- * and leaves a 1 x 1 canvas of that colour. A canvas the browser will not let us read (a cross-origin poster) draws nothing:
- * false, never a throw, so the matte shows nothing rather than a guess.
+ * Draws the blurred gap fill from a layout plan (layout.js blurPlan): the poster, tiny, in the plan's tile, and around it the
+ * poster's outermost row and column stretched out to the canvas's edge, corners included. The band beside a poster edge is
+ * then that edge's colours continued outward, whatever the band's width, and no feature from inside the poster reaches it (D95).
+ * False, drawing nothing, for an image that has not loaded, no plan or a canvas that cannot draw.
  */
-export function drawGapFill(canvas, img, style) {
-  if (style === 'blur') return drawBackdrop(canvas, img);
+export function drawGapBlur(canvas, img, plan) {
+  if (!(img?.naturalWidth > 0 && img?.naturalHeight > 0) || !plan) return false;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return false;
+  const { tile: t, pad, width, height, crop = { x: 0, y: 0, width: 1, height: 1 } } = plan;
+  try {
+    canvas.width = width;
+    canvas.height = height;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    ctx.drawImage(img, crop.x * nw, crop.y * nh, crop.width * nw, crop.height * nh, t.x, t.y, t.width, t.height);
+    // The sides first, from the tile's edge pixels; then the top and bottom from the full rows, which carries the corners.
+    // Copied without smoothing: a smoothed stretch reads past the one-pixel strip and fades the pad into the empty canvas.
+    ctx.imageSmoothingEnabled = false;
+    if (pad.left) ctx.drawImage(canvas, t.x, t.y, 1, t.height, 0, t.y, pad.left, t.height);
+    if (pad.right) ctx.drawImage(canvas, t.x + t.width - 1, t.y, 1, t.height, t.x + t.width, t.y, pad.right, t.height);
+    if (pad.top) ctx.drawImage(canvas, 0, t.y, width, 1, 0, 0, width, pad.top);
+    if (pad.bottom) ctx.drawImage(canvas, 0, t.y + t.height - 1, width, 1, 0, t.y + t.height, width, pad.bottom);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Draws the gap fill for `img` into `canvas`. 'blur' is drawBackdrop, or drawGapBlur once the layout (`plan`) is known.
+ * 'matte' reads the poster at 48 px, takes edgeColour and leaves a 1 x 1 canvas of that colour. A canvas the browser will not
+ * let us read (a cross-origin poster) draws nothing: false, never a throw, so the matte shows nothing rather than a guess.
+ */
+export function drawGapFill(canvas, img, style, plan = null) {
+  if (style === 'blur') return plan ? drawGapBlur(canvas, img, plan) : drawBackdrop(canvas, img);
   if (style !== 'matte') return false;
   if (!drawBackdrop(canvas, img)) return false;
   try {
@@ -207,8 +240,8 @@ export function drawGapFill(canvas, img, style) {
 }
 
 /** swapBackdrop for the gap fill: `style` 'blur' or 'matte' draws the canvas for the poster coming up, anything else shows none. */
-export function swapGapFill(canvases, next, img, style) {
-  const drew = drawGapFill(canvases[next], img, style);
+export function swapGapFill(canvases, next, img, style, plan = null) {
+  const drew = drawGapFill(canvases[next], img, style, plan);
   canvases[next].classList.toggle('active', drew);
   canvases[1 - next].classList.remove('active');
   return drew;

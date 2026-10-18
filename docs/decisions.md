@@ -325,3 +325,37 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Conductor record — 2026-10-18 (run 6 closed): D94
 
 - **D94 Run 6 closed: 2.2.0 is released on `main`, with its upgrade notice, and the run-4 optimization proposals are in the skill.** `whats-new-2.2` landed 7b5c13e on `2.2` (a one-time "What's new in 2.2" toast, marker `'2.2'`, Open settings → Frame & layout; R-UPG-2); pull request #3 was merged by the conductor on the owner's word (D93) at 2026-10-18T14:36:58Z, merge commit a6dfb32, after both CI checks passed on 7b5c13e; `docs-2.2-merged` landed 65a9c53 on `main` (2.2.0 current; only 2.1.0 was validated against a real Plex server; nothing on a Raspberry Pi); `orchestrator-improvements` landed dotclaude 4f2f5b38 (fake clock and sweep habits for builders, a 2,500 MB memory gate before combined suites, branching at the second timing-class failure, a "delta tokens" metrics column; `closer evalguard` ok with the owner's words, the Rubric, Step 5 and the cap unchanged). Every phase closed with a passing gate; Step 8 bands 100, 90 and 100. Two re-dispatches (a docs overclaim in the status line; a delta-on-amend bug and a missing threshold). 14 agent calls, about 448 k tokens, 0.42 agent-hours; no owner stops. The combined suite on the notice tree passed 21 of 23 specs, with `fill` and `gap-fill` failing on timing waits beside another session's browsers and passing alone on the same tree. No tag (D79). **Unknown carried:** the other gap-fill styles. **Out of scope:** Raspberry Pi validation. **Owner follow-ups:** the run-4 items (faint ghosts in very wide blurred bands, the position spec's three-worker default, two Roadmap cosmetic notes).
+
+## Owner decision — 2026-10-18 (verbatim: "clean uo the branches. then /orchestrate the run-4 items."): D95
+
+- **D95 Run 7 fixes the four run-4 follow-ups as 2.2.1 on branch `2.2.x`.** Branch cleanup: the merged local `2.2` is deleted; `origin/2.2` is left for the owner to delete, since the safety hook blocks a remote delete. Conductor's rulings under D44 (defaults, printed at the policy stop): (1) the work goes on a new branch `2.2.x` from `main` eeb622c3 and is pushed; VERSION 2.2.1; no pull request, merge or tag unless the owner asks (D13, D79), as 2.1.1 did (D80–D82). (2) Two phases: `polish-2.2.1` (ui) and `release-2.2.1` (docs). (3) Faint ghosts in very wide blurred bands (D89 item 4): the property is fixed in the plan and the mechanism is the builder's; D89's continuation, 0.25 cap, no CSS filter and matte stay. (4) The info panel's top and bottom margin equals its left gap, 4 % of the screen height (D85 follow-up); which screens show the panel does not change. (5) The position hint in the translucent "over" dock reaches a WCAG contrast of 4.5:1 over pure white behind the bar, and the bar stays translucent (D86 items 4 and 8). (6) The position spec defaults to two workers; `E2E_POSITION_WORKERS` still overrides. (7) Floor check: two phases after merging, but the ghost fix has an open mechanism, so the loop runs.
+
+## Owner decision — 2026-10-18 (verbatim: "Add to this orchestration plan the fix for the controls and properly hide and show . They work until I go into settings and come out again then the controls always show and never go away"): D96
+
+- **D96 Run 7 also fixes the controls that stop hiding after Settings.** Added during run 7 as phase 45 `controls-autohide` (ui), concurrent with `polish-2.2.1` (disjoint Outputs: `js/main.js` and `tests/e2e/touch-controls.spec.mjs`), and `release-2.2.1` now waits for it and lists it. Conductor's probe on 488390d9 (`controls-autohide--probe-r1b.out`): after Settings closes by Cancel, Esc or Save, focus returns to the Settings control button, `#controls` matches `:focus-within`, and `wake()` (js/main.js:741–747) re-arms its 3.5 s timer forever, so the controls never hide. Conductor's rulings under D44: the controls hide after 3.5 s of no input once a dialog has closed, whatever closed it and whether a mouse or a touch opened it; a keyboard user Tabbing through the controls keeps them shown; the mechanism is the builder's; kiosk mode and R-CTRL-2 are unchanged.
+
+## Conductor record — 2026-10-18 (run 7 closed): D97
+
+- **D97 Run 7 closed: 2.2.1 is on branch `2.2.x` (not merged, no tag, no GitHub release).** `polish-2.2.1` landed ae321c62: the info panel's top and bottom margin, a translucent "over" dock whose hint reads at 4.5:1 over white, and a blurred gap fill with no ghost of the poster's inner detail (`blurPlan` in `js/layout.js` replaces `blurRect`; the tile lands exactly on the poster and the edge row and column are stretched outward; at most 64 × 128 px). The position spec now defaults to two workers. `controls-autohide` landed 53928ae5: the controls hide again after Settings, Diagnostics or the shortcuts overlay close (D96). `release-2.2.1` landed 793f9e17: VERSION 2.2.1, package files, Roadmap "Done in 2.2.1" and the README status line; `WHATS_NEW_VERSION` stays `'2.2'`. Step 8 bands were 100, 100 and 90 (docs phase: tests n/a), every gate passed, there were 3 re-dispatches, and the owner was never stopped.
+
+  Conductor's rulings under D44, during the run:
+  - A sticky `:hover` after a touch is in scope: a tap on Pause, Pin poster, Refresh or Rotate must also let the controls hide.
+  - A real mouse move (not only a press) ends keyboard use; a wheel alone does not.
+  - `blurRect` is deleted, not kept beside `blurPlan`.
+  - The gap-fill cover-band check is measured from the poster's visible edge.
+
+  The full suite (`npm test && npm run test:e2e && node scripts/check-precache.mjs`) needed five runs on the shared 6 GB machine; the owner said "dont kill anything":
+  - r1: renderer crashes at 1.1 GB available.
+  - r1b: another process replaced Playwright's browser cache; the conductor reinstalled build 1194 with `npx playwright install chromium`.
+  - r1c and r1d: load failures; the failing specs passed when run alone.
+  - r1e: green, all 22 specs.
+
+  **Docs drift for the owner (close-time keep-docs-current, NEEDS REVIEW):**
+  - docs/spec.md:306 still says "shipped in 2.2.0 on branch 2.2"; branch `2.2` is gone.
+  - The controls' hide rule (D96) has no R-CTRL requirement in docs/spec.md.
+
+  **Owner follow-ups:**
+  - A hasTouch case that pins "a mouse resting on the controls right after a touch holds them" (reviewer mutant X4 survives).
+  - Should keyboard focus on the controls time out after a longer idle, and should a mouse wheel count as activity?
+
+  **Not ruled:** TV-remote D-pad focus. **Metrics:** 18 agent calls, about 1.05 M tokens, 2.89 agent-hours. No tag, no Pi validation (D79).
