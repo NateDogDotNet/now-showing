@@ -123,12 +123,14 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
   transition: opacity var(--fade-ms) ease;
 }
 .gap-fill.open .gap-tint { opacity: 0.25; } /* the same cap as the backdrop */
-/* The blurred copy is placed by display.js to continue the poster (its centre and aspect, scaled to cover the window). */
+/* The blurred copy is sized and placed by display.js from its plan (layout.js blurPlan): the poster on its own tile, its edge
+   rows and columns stretched to the window. The matte's canvas is one pixel, stretched over the whole window. */
 .gap-tint .fill-canvas { object-fit: fill; }
 .poster-box.gap-open { background: transparent; }
 
 /* Beside the frame, type sized from the short side of the screen for reading across a room. The body is centred while it fits;
-   when it does not it starts at the top (auto margins never go negative), so the title is never pushed off the screen. */
+   when it does not it starts at the top (auto margins never go negative), so the title is never pushed off the screen. The panel's
+   box (fill.js infoBox) keeps the screen's gap above and below, so even then the text stays clear of the screen's edge (D95). */
 .info-panel {
   position: absolute;
   display: flex;
@@ -648,9 +650,9 @@ body.kiosk #app { touch-action: none; user-select: none; -webkit-user-select: no
   transform: rotate(var(--ui-rotation)) translate(-50%, calc(var(--vh) / -2 + max(12px, env(safe-area-inset-top, 0px))));
 }
 /* No placement clears the poster (a near-square screen, a poster scaled past the margins): stay at the bottom but let the
-   poster's edge show through. Only Done takes the pointer, so a drag that starts under the bar still moves the poster. */
-.position-bar[data-dock="over"] { background: rgba(18, 18, 20, 0.6); pointer-events: none; }
-.position-bar[data-dock="over"] .position-hint { opacity: 0.8; }
+   poster's edge show through. Only Done takes the pointer, so a drag that starts under the bar still moves the poster.
+   The bar is dark enough that the hint, at full strength, reads at 4.5:1 or better even over pure white (a lit marquee bulb): 6.7:1 (D86, D95). */
+.position-bar[data-dock="over"] { background: rgba(18, 18, 20, 0.72); pointer-events: none; }
 .position-bar[data-dock="over"] .btn { pointer-events: auto; }
 /* While a drag is under way the bar steps back, so the poster's edge shows through it; it returns when the drag ends. */
 .position-bar { transition: opacity 0.15s; }

@@ -686,8 +686,9 @@ gapCase('15 the gap layer fades in and out with the poster when the next one is 
   check(`gap layer opacity ${out.layer.toFixed(2)} while fading out and ${into.toFixed(2)} while fading in (posters ${out.posters.map((v) => v.toFixed(2))})`);
 });
 
-// 16. The blurred copy continues the poster: placed on the poster's centre, in its aspect, scaled just to cover the window, so the
-//     band beside the poster's edge takes that edge's colour (not the poster's middle stretched over the window).
+// 16. The blurred copy continues the poster: its canvas covers the window with the poster on its own tile, and the poster's edge
+//     rows and columns stretched outward (D95), so the band beside the poster's edge takes that edge's colour (not the poster's middle
+//     stretched over the window). Case 18 checks that the band shows nothing from inside the poster.
 gapCase('16 the blur is lined up with the poster', { settings: seed({ gapFill: 'blur', posterFit: 'cover', posterScale: 80 }) }, async ({ page, app }) => {
   await prepare(page, app);
   const g = await geometry(page);
@@ -775,6 +776,249 @@ gapCase('17 gap fill off mid-fade never lets the landscape backdrop through the 
   assert.ok(sum(end) <= 6, `and it ends as today's black band: ${end}`);
   assert.equal((await state()).box, 'rgb(0, 0, 0)');
   check(`matte to none at 1920x1080 with the landscape fill: tint ${seen.map((s) => s.tint.toFixed(2))} at ${seen.map((s) => (s.elapsed / 1000).toFixed(1))}s, band ${seen.map((s) => sum(s.px))} (start ${sum(start)}), end ${end}`);
+});
+
+// 18. No ghost (D95; D89 item 4): a band shows the poster's edge colours continued outward and nothing from inside the poster. The
+//     mock poster has a year (#ddd, at 92 % of its height) and a ring (white at .25, around 37 %); a copy of the poster scaled past
+//     its own edge would put a smudge of each into a band. Walking out from the poster's edge, the band must not change.
+//     The tolerance: the layer is drawn at 0.25, so a level of the poster's own colour is a quarter of a level on screen, and the
+//     screenshot rounds each channel (a flat band reads 1 level apart at most). The old blur's smudges ran 5 to 8 levels from the
+//     band next to the edge at this brightness, and the poster's own features are larger still, so 2 is above the rounding and
+//     below anything the poster draws.
+const NO_GHOST_TOLERANCE = 2;
+const NEAR_EDGE_PX = 4; // the reference sample: this far outside the poster's edge
+const GHOST_MIN_PX = 24; // the samples that must match it start this far outside the edge, then every 24 px
+
+for (const [ox, oy] of [[0, 0], [10, 0], [0, 10]]) {
+  gapCase(`18 no ghost: a blurred band shows no inner detail of the poster (posterScale 80, offset ${ox},${oy})`, {
+    settings: seed({ gapFill: 'blur', posterFit: 'cover', posterScale: 80, posterOffsetX: ox, posterOffsetY: oy }),
+  }, async ({ page, app }) => {
+    await prepare(page, app);
+    const g = await geometry(page);
+    const { img, gaps } = bandsOf(g);
+    const win = rectOf(g.win);
+    const lo = (a, b) => Math.max(a, b);
+    const hi = (a, b) => Math.min(a, b);
+    // Each side: its band's depth on screen, and the positions along the poster's edge to walk out from.
+    const along = (from, to, n) => Array.from({ length: n }, (_, i) => from + ((to - from) * (i + 0.5)) / n);
+    const sides = [
+      { name: 'left', depth: hi(gaps.left, img.left), at: (d, t) => [img.left - d, t], lateral: along(lo(win.top, 0), hi(win.bottom, g.vh), 24) },
+      { name: 'right', depth: hi(gaps.right, g.vw - (img.left + img.width)), at: (d, t) => [img.left + img.width + d, t], lateral: along(lo(win.top, 0), hi(win.bottom, g.vh), 24) },
+      { name: 'top', depth: hi(gaps.top, img.top), at: (d, t) => [t, img.top - d], lateral: along(lo(img.left, lo(win.left, 0)), hi(img.left + img.width, hi(win.right, g.vw)), 24) },
+      { name: 'bottom', depth: hi(gaps.bottom, g.vh - (img.top + img.height)), at: (d, t) => [t, img.top + img.height + d], lateral: along(lo(img.left, lo(win.left, 0)), hi(img.left + img.width, hi(win.right, g.vw)), 24) },
+    ].filter((s) => s.depth > GHOST_MIN_PX + NEAR_EDGE_PX);
+    assert.ok(sides.length >= 2, `bands to look at: ${JSON.stringify(gaps)}`);
+    const points = [];
+    const plan = [];
+    for (const s of sides) {
+      const distances = [];
+      for (let d = GHOST_MIN_PX; d <= s.depth - 2; d += GHOST_MIN_PX) distances.push(d);
+      distances.push(s.depth - 2);
+      for (const t of s.lateral) {
+        plan.push({ side: s.name, t, near: points.length, far: distances.map((d, i) => ({ d, index: points.length + 1 + i })) });
+        points.push(s.at(NEAR_EDGE_PX, t), ...distances.map((d) => s.at(d, t)));
+      }
+    }
+    const px = await pixels(page, points);
+    let compared = 0;
+    let worst = 0;
+    for (const p of plan) {
+      const near = px[p.near];
+      for (const f of p.far) {
+        const spread = Math.max(...px[f.index].map((v, c) => Math.abs(v - near[c])));
+        worst = Math.max(worst, spread);
+        compared++;
+        assert.ok(spread <= NO_GHOST_TOLERANCE, `${p.side} band, ${f.d} px out at ${Math.round(p.t)}: ${px[f.index]} differs from ${near} next to the edge by ${spread} (more than ${NO_GHOST_TOLERANCE})`);
+      }
+    }
+    assert.ok(sides.some((s) => s.name === 'bottom' || s.name === 'top'), 'a top or bottom band, where the year would show');
+    check(`no ghost at offset ${ox},${oy}: ${sides.map((s) => `${s.name} ${Math.round(s.depth)} px`).join(', ')}; ${compared} samples, widest spread ${worst} (tolerance ${NO_GHOST_TOLERANCE})`);
+  });
+}
+
+// 19. D89 ("the matte is unchanged"): the active gap canvas covers the whole window whatever style came before it. A blurred canvas
+//     has a rectangle of its own; the matte's one pixel must not keep it after a switch, a resize or a rotation (a stale rectangle
+//     leaves part of the bands black).
+const coversWindow = (page) => page.evaluate(() => {
+  const c = document.querySelector('#gap-fill canvas.active')?.getBoundingClientRect();
+  const w = document.getElementById('gap-fill').getBoundingClientRect();
+  return Boolean(c) && c.left <= w.left + 1.5 && c.top <= w.top + 1.5 && c.right >= w.right - 1.5 && c.bottom >= w.bottom - 1.5;
+});
+const openSettings = async (page) => {
+  await page.evaluate(() => document.querySelector('[data-action="settings"]').click());
+  await page.waitForSelector('#settings[open]');
+};
+gapCase('19 the matte covers the window after a blur, through a resize and a rotation', { settings: seed({ gapFill: 'blur', posterFit: 'cover', posterScale: 80 }) }, async ({ page, app }) => {
+  await prepare(page, app);
+  assert.equal(await coversWindow(page), true, 'the blur covers the window to begin with');
+  await openSettings(page);
+  await page.selectOption('select[name="gapFill"]', 'matte');
+  await page.waitForFunction(() => document.querySelector('#gap-fill canvas.active')?.width === 1, null, { timeout: 5000 });
+  await page.click('#settings-save');
+  await page.waitForFunction(() => !document.getElementById('settings').open);
+  assert.equal(await coversWindow(page), true, 'the matte covers the window right after the switch');
+  await page.setViewportSize({ width: 1600, height: 2400 });
+  await page.waitForFunction(() => Math.abs(document.getElementById('gap-fill').getBoundingClientRect().width - 924) > 20, null, { timeout: 5000 });
+  await settled(page);
+  assert.equal(await coversWindow(page), true, 'and after a resize');
+  await openSettings(page);
+  await page.selectOption('select[name="rotation"]', '90');
+  await page.waitForFunction(() => document.getElementById('stage').style.getPropertyValue('--rotation') === '90deg', null, { timeout: 5000 });
+  await settled(page);
+  assert.equal(await coversWindow(page), true, 'and after a rotation');
+  check('blur, then matte, resized to 1600x2400, rotated 90: the active canvas covers #gap-fill each time');
+});
+
+// 20. D95: at fit "cover" the tile shows what the screen shows of the poster (the cover crop), so the band beside an edge continues
+//     the edge that is visible, not the row the crop cut off. The check is relative, so it does not hang on how the 0.25 tint rounds:
+//     the band, times 4, is nearer to the poster just inside its edge (what the screen shows) than to the image's own outer row (what
+//     the crop cut off), and never farther. The mock poster's top rows are flat, so there the two can tie; at the bottom the crop
+//     cut off a row that differs, so the band must be strictly nearer to the visible edge on at least one side.
+const dist = (a, b) => Math.max(...a.map((v, c) => Math.abs(v - b[c])));
+gapCase('20 cover at 80 %: the band continues the poster\'s visible edge, not the row the crop cut off', { settings: seed({ gapFill: 'blur', posterFit: 'cover', posterScale: 80 }) }, async ({ page, app }) => {
+  await prepare(page, app);
+  const g = await geometry(page);
+  const { img, gaps } = bandsOf(g);
+  assert.ok(gaps.top > 30 && gaps.bottom > 30, `top and bottom bands: ${JSON.stringify(gaps)}`);
+  const fractions = [0.3, 0.5, 0.7];
+  // The image's own outer rows, read from the decoded poster at the columns the samples sit over (cover crops the height here).
+  const outer = await page.evaluate((fractions) => {
+    const im = document.querySelector('.poster-layer.active');
+    const c = document.createElement('canvas');
+    c.width = im.naturalWidth;
+    c.height = im.naturalHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(im, 0, 0);
+    const at = (f, y) => [...ctx.getImageData(Math.round(f * (c.width - 1)), y, 1, 1).data].slice(0, 3);
+    return { top: fractions.map((f) => at(f, 0)), bottom: fractions.map((f) => at(f, c.height - 1)) };
+  }, fractions);
+  const spots = [
+    { name: 'top', edge: (x) => [x, img.top + 3], band: (x) => [x, img.top - 6] },
+    { name: 'bottom', edge: (x) => [x, img.top + img.height - 4], band: (x) => [x, img.top + img.height + 6] },
+  ];
+  let strictly = 0;
+  for (const spot of spots) {
+    const xs = fractions.map((f) => img.left + img.width * f);
+    const px = await pixels(page, xs.flatMap((x) => [spot.edge(x), spot.band(x)]));
+    xs.forEach((x, i) => {
+      const visible = px[i * 2];
+      const band = px[i * 2 + 1].map((v) => v * 4);
+      const cropped = outer[spot.name][i];
+      const toVisible = dist(band, visible);
+      const toCropped = dist(band, cropped);
+      assert.ok(toVisible <= toCropped, `${spot.name} band at ${Math.round(x)}: ${band} (x4) is nearer the cropped-off row ${cropped} than the visible edge ${visible}`);
+      if (toVisible < toCropped) strictly++;
+      check(`cover 80 %, ${spot.name} at ${Math.round(x)}: band x4 ${band}, visible edge ${visible} (off ${toVisible}), cropped-off row ${cropped} (off ${toCropped})`);
+    });
+  }
+  assert.ok(strictly > 0, 'the band is strictly nearer the visible edge somewhere (the bottom, where the crop cut off a different row)');
+});
+
+// 21 to 23. D95: the blur is only ever drawn from its plan once the layout is known. Drawn on its own (the whole poster at 48 px) it
+//     would put the poster's inside over the bands, for as long as a later layout took to repaint it, and a canvas cleared after the
+//     plan drew it would leave the bands black. A second layout() in the same task hides either, so these watch the writes themselves:
+//     every size written to a gap canvas, and every change of a gap canvas's class, recorded as they happen.
+const watchGapCanvases = (page) => page.evaluate(() => {
+  window.__gapSizes = [];
+    for (const dim of ['width', 'height']) {
+    const d = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, dim);
+    Object.defineProperty(HTMLCanvasElement.prototype, dim, {
+      ...d,
+      set(v) {
+        if (this.closest?.('#gap-fill')) window.__gapSizes.push(`${dim}=${v}`);
+        d.set.call(this, v);
+      },
+    });
+  }
+  // A record holds the class before the change; the class after it is the next record's "before" for that canvas, or what it is now.
+  window.__gapRecords = [];
+  new MutationObserver((records) => {
+    for (const r of records) window.__gapRecords.push({ id: r.target.id, before: r.oldValue || '' });
+  }).observe(document.getElementById('gap-fill'), { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+});
+const gapLog = (page) => page.evaluate(() => {
+  const records = window.__gapRecords.splice(0);
+  const classes = records.map((r, i) => {
+    const next = records.slice(i + 1).find((n) => n.id === r.id);
+    const after = next ? next.before : document.getElementById(r.id).className;
+    const was = /\bactive\b/.test(r.before);
+    const now = /\bactive\b/.test(after);
+    return `${r.id}:${was ? 'active' : 'inactive'}>${now ? 'active' : 'inactive'}`;
+  });
+  return { sizes: window.__gapSizes.splice(0), classes };
+});
+
+// 21. Switching the style in Settings: none -> blur -> matte -> blur.
+gapCase('21 switching to the blur never draws the whole poster over the bands', { settings: seed({ gapFill: 'none', posterFit: 'cover', posterScale: 80 }) }, async ({ page, app }) => {
+  await prepare(page, app);
+  await watchGapCanvases(page);
+  await openSettings(page);
+  for (const style of ['blur', 'matte', 'blur']) {
+    await page.selectOption('select[name="gapFill"]', style);
+    await page.waitForFunction((style) => (style === 'matte' ? document.querySelector('#gap-fill canvas.active')?.width === 1 : (document.querySelector('#gap-fill canvas.active')?.width || 0) > 1), style, { timeout: 5000 });
+    const { sizes } = await gapLog(page);
+    if (style === 'matte') continue; // the matte reads the poster at 48 px on its way to one pixel; that is not the blur
+    assert.ok(sizes.length > 0, `the canvases were drawn for the ${style}`);
+    assert.ok(!sizes.includes('width=48') && !sizes.includes('height=72'), `a plain 48 x 72 draw reached a gap canvas: ${sizes.join(' ')}`);
+    check(`switch to blur: only the plan's size was written to the gap canvases (${sizes.join(' ')})`);
+  }
+});
+
+// 22. A poster change under the blur: the incoming canvas is drawn from the plan, never the whole poster first.
+gapCase('22 a poster change under the blur never draws the whole poster over the bands', { settings: limitPool({ gapFill: 'blur', posterFit: 'cover', posterScale: 80 }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await settled(page);
+  const first = await altOf(page);
+  await watchGapCanvases(page);
+  await refreshUntil(page, (alt) => alt !== first && alt !== '', 'the other title');
+  await settled(page);
+  const { sizes, classes } = await gapLog(page);
+  assert.ok(sizes.length > 0, 'the incoming canvas was drawn');
+  assert.ok(!sizes.includes('width=48') && !sizes.includes('height=72'), `a plain 48 x 72 draw reached a gap canvas on a poster change: ${sizes.join(' ')}`);
+  assert.ok(await page.evaluate(() => (document.querySelector('#gap-fill canvas.active')?.width || 0) > 1), 'and the active canvas holds the plan');
+  check(`poster change under blur: sizes written ${sizes.join(' ')}; class changes ${classes.join(' ')}`);
+});
+
+// 23. Matte -> blur: the canvas the matte filled is drawn from the plan and keeps its class. It is not cleared first and drawn again.
+gapCase('23 matte to blur keeps the active gap canvas active', { settings: seed({ gapFill: 'matte', posterFit: 'cover', posterScale: 80 }) }, async ({ page, app }) => {
+  await prepare(page, app);
+  const activeId = await page.evaluate(() => document.querySelector('#gap-fill canvas.active')?.id);
+  assert.ok(activeId, 'the matte is on a canvas');
+  await watchGapCanvases(page);
+  await openSettings(page);
+  await page.selectOption('select[name="gapFill"]', 'blur');
+  await page.waitForFunction(() => (document.querySelector('#gap-fill canvas.active')?.width || 0) > 1, null, { timeout: 5000 });
+  const { classes } = await gapLog(page);
+  assert.deepEqual(classes.filter((c) => c.startsWith(`${activeId}:active>inactive`)), [], `the active canvas never lost its class on the switch: ${classes.join(' ')}`);
+  assert.equal(await page.evaluate(() => document.querySelector('#gap-fill canvas.active')?.id), activeId, 'and is still the active one');
+  check(`matte to blur: ${activeId} stayed active (class changes: ${classes.join(' ') || 'none'})`);
+});
+
+// 24. Probe: the blur with no plan to draw (a poster taken off the screen by a block, then a resize; a poster that never loads). No
+//     stale copy of an earlier poster shows in the window.
+gapCase('24 a blocked poster leaves no stale blur in the window after a resize', { settings: limitPool({ gapFill: 'blur', randomPoolSize: 1 }) }, async ({ page, app, mock }) => {
+  await mock.post('rate', { ratingKey: '1', contentRating: 'R' });
+  await page.goto(app.url);
+  await posterShown(page);
+  await settled(page);
+  for (let i = 0; i < 100; i++) {
+    if ((await page.evaluate(() => JSON.parse(localStorage.getItem('plexPoster.posterIndex') || '[]'))).length) break;
+    await page.waitForTimeout(100);
+  }
+  await mock.down();
+  await setHouseholdLimit(page);
+  await page.waitForFunction(() => document.body.classList.contains('poster-blocked'), null, { timeout: 5000 });
+  await page.setViewportSize({ width: 1600, height: 2400 });
+  await page.waitForFunction(() => Math.abs(document.getElementById('gap-fill').getBoundingClientRect().width - 924) > 20 || document.getElementById('gap-fill').hidden, null, { timeout: 5000 });
+  await settled(page);
+  assert.equal(await gapOn(page), false, 'the gap layer is hidden');
+  const shown = await page.evaluate(() => [...document.querySelectorAll('#gap-fill canvas')].map((c) => [c.id, getComputedStyle(c).visibility, getComputedStyle(c).opacity]));
+  assert.ok(shown.every(([, vis, op]) => vis === 'hidden' || Number(op) === 0), `every gap canvas is out of sight: ${JSON.stringify(shown)}`);
+  const g = await geometry(page);
+  const [inside] = await pixels(page, [[g.win.left + 15, g.win.top + g.win.height * 0.3]]); // a band's place, clear of the card's text
+  assert.ok(sum(inside) <= 6, `the window is black where the bands were: ${inside}`);
+  check(`blocked, then resized to 1600x2400: gap canvases ${JSON.stringify(shown)}, band place ${inside}`);
 });
 
 // ---------- run ----------

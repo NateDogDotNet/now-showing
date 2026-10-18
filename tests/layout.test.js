@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MIN_GAP_PX, blurRect, closeGap, gapBands, imageRect, posterBox, requestSize, shiftOffset, shiftRoom, shiftSteps, stageSize } from '../js/layout.js';
+import { MIN_GAP_PX, blurPlan, closeGap, gapBands, imageRect, posterBox, requestSize, shiftOffset, shiftRoom, shiftSteps, stageSize } from '../js/layout.js';
 import { detectWindow, findFrame } from '../js/frames.js';
 import { createBackoff } from '../js/backoff.js';
 
@@ -267,18 +267,82 @@ test('no strip under 4 px survives at contain and no image edge moves more than 
   assert.ok(acted > 100, `the sweep reached the closing path (${acted} times)`);
 });
 
-test('blurRect: centred on the poster, its aspect, just big enough to cover the window, never smaller than the poster', () => {
-  const win = { left: 100, top: 200, width: 800, height: 1000 };
-  const centre = { x: 500, y: 700 };
-  const r = blurRect({ win, centre, aspect: 2 / 3 });
-  assert.ok(same(r.left + r.width / 2 + win.left, centre.x) && same(r.top + r.height / 2 + win.top, centre.y), 'same centre');
-  assert.ok(same(r.width / r.height, 2 / 3), 'same aspect');
-  assert.ok(r.left <= 0 + 1e-9 && r.top <= 0 + 1e-9 && r.left + r.width >= win.width - 1e-9 && r.top + r.height >= win.height - 1e-9, `covers the window ${JSON.stringify(r)}`);
-  assert.ok(same(r.width, Math.max(800, 1000 * 2 / 3)), 'and no bigger than it must be');
-  const big = blurRect({ win, centre, aspect: 2 / 3, minWidth: 2000 });
-  assert.equal(big.width, 2000, 'the poster itself is the floor');
-  const off = blurRect({ win, centre: { x: 300, y: 700 }, aspect: 2 / 3 });
-  assert.ok(off.left + win.left + off.width / 2 === 300, 'an off-centre poster keeps the centre');
-  assert.ok(off.left + off.width >= win.width, 'and the far side is still covered');
-  assert.ok(blurRect({ win, centre, aspect: 0 }).width > 0, 'an unknown aspect falls back to 2:3');
+// blurPlan (D95): the poster on a tile, the band beside each edge a pad of that edge's own pixels.
+function checkPlan(plan, win, shown, label) {
+  assert.ok(plan, label);
+  assert.ok(plan.width <= 64 && plan.height <= 128, `${label}: a tiny canvas (${plan.width} x ${plan.height})`);
+  const sx = plan.rect.width / plan.width;
+  const sy = plan.rect.height / plan.height;
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  // The tile lands exactly on the poster, and the canvas covers the window.
+  assert.ok(near(plan.rect.left + plan.tile.x * sx + win.left, shown.left) && near(plan.rect.top + plan.tile.y * sy + win.top, shown.top), `${label}: tile origin`);
+  assert.ok(near(plan.tile.width * sx, shown.width) && near(plan.tile.height * sy, shown.height), `${label}: tile size`);
+  assert.ok(plan.rect.left <= 1e-6 || shown.left <= win.left + 1e-6, `${label}: covers the left`);
+  assert.ok(plan.rect.top <= 1e-6 || shown.top <= win.top + 1e-6, `${label}: covers the top`);
+  assert.ok(plan.rect.left + plan.rect.width >= win.width - 1e-6 || shown.left + shown.width >= win.left + win.width, `${label}: covers the right`);
+  assert.ok(plan.rect.top + plan.rect.height >= win.height - 1e-6 || shown.top + shown.height >= win.top + win.height, `${label}: covers the bottom`);
+}
+
+test('blurPlan, a wide band: the poster keeps its own place and the pad carries the band, in a tiny canvas', () => {
+  const win = { left: 100, top: 50, width: 1600, height: 900 };
+  const shown = { left: 100 + 560, top: 50 + 90, width: 480, height: 720 }; // a 480 px poster in a 1600 px window: 560 px bands
+  const plan = blurPlan({ win, shown });
+  checkPlan(plan, win, shown, 'wide');
+  assert.ok(plan.pad.left >= 10 && plan.pad.right >= 10, `a pad on each side: ${JSON.stringify(plan.pad)}`);
+  assert.ok(plan.tile.width < 48, 'a wide band coarsens the grid so the canvas stays tiny');
+});
+
+test('blurPlan, a narrow band: the tile is the full 48 px and the pad is a few pixels', () => {
+  const win = { left: 0, top: 0, width: 600, height: 900 };
+  const shown = { left: 28, top: 0, width: 544, height: 900 }; // a 28 px band each side
+  const plan = blurPlan({ win, shown });
+  checkPlan(plan, win, shown, 'narrow');
+  assert.equal(plan.tile.width, 48);
+  assert.ok(plan.pad.left >= 1 && plan.pad.left <= 4 && plan.pad.right >= 1 && plan.pad.right <= 4, JSON.stringify(plan.pad));
+  assert.equal(plan.pad.top + plan.pad.bottom, 0, 'and no letterbox');
+});
+
+test('blurPlan sweep: any poster scale and offset in a window stays tiny, covers the window and lands on the poster', () => {
+  let n = 0;
+  for (const [ww, wh] of [[600, 900], [1920, 1080], [1080, 1920], [2400, 800]]) {
+    const win = { left: 40, top: 30, width: ww, height: wh };
+    for (const scale of [0.1, 0.25, 0.5, 0.8, 1, 1.5]) {
+      for (const aspect of [2 / 3, 1, 1.78, 0.5]) {
+        for (const [ox, oy] of [[0, 0], [0.1, 0], [0, 0.1], [0.1, 0.1], [-0.2, 0.3]]) {
+          const h = Math.min(wh * scale, (ww * scale) / aspect);
+          const w = h * aspect;
+          const shown = { left: win.left + (ww - w) / 2 + ox * ww, top: win.top + (wh - h) / 2 + oy * wh, width: w, height: h };
+          checkPlan(blurPlan({ win, shown }), win, shown, `${ww}x${wh} scale ${scale} aspect ${aspect} offset ${ox},${oy}`);
+          n++;
+        }
+      }
+    }
+  }
+  assert.ok(n > 400);
+});
+
+test('blurPlan has nothing to plan for a poster or window with no size', () => {
+  assert.equal(blurPlan({ win: { left: 0, top: 0, width: 0, height: 10 }, shown: { left: 0, top: 0, width: 5, height: 5 } }), null);
+  assert.equal(blurPlan({ win: { left: 0, top: 0, width: 10, height: 10 }, shown: { left: 0, top: 0, width: 0, height: 5 } }), null);
+});
+
+test('blurPlan crops the tile as the screen crops the poster: all of it at contain and fill, the centre at cover (D95)', () => {
+  const win = { left: 0, top: 0, width: 1000, height: 1000 };
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  // A 2:3 poster in a 4:3 box at cover: the box is wider than the poster, so the height is cropped to its middle.
+  const wide = { left: 100, top: 300, width: 800, height: 600 };
+  const c = blurPlan({ win, shown: wide, imageAspect: 2 / 3, fit: 'cover' }).crop;
+  assert.ok(near(c.x, 0) && near(c.width, 1), 'the full width');
+  assert.ok(near(c.height, (2 / 3) / (4 / 3)) && near(c.y, (1 - c.height) / 2), `the middle of the height: ${JSON.stringify(c)}`);
+  // A 2:3 poster in a taller box (1:2): the width is cropped instead.
+  const tall = { left: 300, top: 100, width: 400, height: 800 };
+  const t = blurPlan({ win, shown: tall, imageAspect: 2 / 3, fit: 'cover' }).crop;
+  assert.ok(near(t.y, 0) && near(t.height, 1) && near(t.width, 0.5 / (2 / 3)) && near(t.x, (1 - t.width) / 2), JSON.stringify(t));
+  // The crop keeps the box's aspect: (crop of the image) in the image's pixels is the box's shape.
+  assert.ok(near((c.width * (2 / 3)) / c.height, 4 / 3) && near((t.width * (2 / 3)) / t.height, 0.5), 'same shape as the box');
+  for (const fit of ['contain', 'fill']) assert.deepEqual(blurPlan({ win, shown: wide, imageAspect: 2 / 3, fit }).crop, { x: 0, y: 0, width: 1, height: 1 }, fit);
+  assert.deepEqual(blurPlan({ win, shown: wide, fit: 'cover' }).crop, { x: 0, y: 0, width: 1, height: 1 }, 'an unknown image aspect crops nothing');
+  // A box of the image's own shape crops nothing at cover.
+  const same = blurPlan({ win, shown: { left: 100, top: 100, width: 400, height: 600 }, imageAspect: 2 / 3, fit: 'cover' }).crop;
+  assert.ok(near(same.width, 1) && near(same.height, 1) && near(same.x, 0) && near(same.y, 0));
 });

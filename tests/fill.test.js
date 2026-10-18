@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatRuntime } from '../js/plex.js';
-import { BACKDROP_OPACITY, BACKDROP_WIDTH, PANEL_MIN_EM, SUMMARY_MAX, backdropBox, drawBackdrop, drawGapFill, edgeColour, fillState, gapLayerOpen, infoBox, infoParts, infoTitleSize, isLandscape, swapBackdrop, swapGapFill, trimSummary, visibleRight } from '../js/fill.js';
+import { BACKDROP_OPACITY, BACKDROP_WIDTH, PANEL_MIN_EM, SUMMARY_MAX, backdropBox, drawBackdrop, drawGapBlur, drawGapFill, edgeColour, fillState, gapLayerOpen, infoBox, infoParts, infoTitleSize, isLandscape, swapBackdrop, swapGapFill, trimSummary, visibleRight } from '../js/fill.js';
 import { posterBox } from '../js/layout.js';
 
 test('isLandscape is the effective aspect: 90 and 270 swap width and height', () => {
@@ -109,8 +109,8 @@ test('backdropBox covers the screen around the stage, with room for pixel shift'
 
 test('infoBox sits to the right of the stage, inside the empty side, centred on the stage', () => {
   const b = infoBox({ stageW: 691, stageH: 1080, screenW: 1920, screenH: 1080 });
-  assert.equal(b.top, 0);
-  assert.equal(b.height, 1080);
+  assert.equal(b.top, 43, 'a margin above, as wide as the left gap');
+  assert.equal(b.height, 1080 - 2 * 43, 'and the same below');
   assert.ok(b.left > 691, 'right of the stage');
   assert.ok(b.left + b.width <= 691 + (1920 - 691) / 2, 'inside the side');
   assert.ok(b.width > 300, `wide enough to read: ${b.width}`);
@@ -332,4 +332,58 @@ test('gapLayerOpen: the layer shows only with a style on and at least one band (
   assert.equal(gapLayerOpen('none', [band]), false, 'the style is off');
   assert.equal(gapLayerOpen('sepia', [band]), false);
   assert.equal(gapLayerOpen('blur', undefined), false);
+});
+
+test('infoBox keeps a top and bottom margin equal to its left gap (4 % of the screen height), on every screen that shows it (D95)', () => {
+  for (const [screenW, screenH, rotation] of [[1920, 1080, 0], [2560, 1080, 0], [1080, 1920, 90]]) {
+    // The effective screen is what the viewer sees: rotation 90 swaps the screen's sides.
+    const w = rotation === 90 ? screenH : screenW;
+    const h = rotation === 90 ? screenW : screenH;
+    const stageW = Math.floor(h * 0.64);
+    const b = infoBox({ stageW, stageH: h, screenW: w, screenH: h });
+    const gap = Math.round(h * 0.04);
+    assert.ok(b.width > 0, `${w}x${h}: shown`);
+    assert.equal(b.left - stageW, gap, `${w}x${h}: left gap`);
+    assert.equal(b.top, gap, `${w}x${h}: top margin`);
+    assert.equal(h - (b.top + b.height), gap, `${w}x${h}: bottom margin`);
+  }
+  // The margin is vertical only: it never changes which screens show the panel.
+  assert.equal(infoBox({ stageW: 691, stageH: 1080, screenW: 1440, screenH: 1080 }).width, 0, '4:3 still has no panel');
+  assert.deepEqual(infoBox({ stageW: 10, stageH: 50, screenW: 100, screenH: 2000 }).height, 0, 'a stage shorter than two margins has no height, never a negative one');
+});
+
+test('drawGapBlur draws the poster on its tile and stretches its edge rows and columns outward (D95)', () => {
+  const calls = [];
+  const ctx = { drawImage: (...a) => calls.push(a) };
+  const canvas = { width: 0, height: 0, getContext: () => ctx };
+  const plan = { width: 20, height: 30, tile: { x: 5, y: 8, width: 10, height: 14 }, pad: { left: 5, right: 5, top: 8, bottom: 8 } };
+  assert.equal(drawGapBlur(canvas, loaded, plan), true);
+  assert.deepEqual([canvas.width, canvas.height], [20, 30]);
+  assert.deepEqual(calls, [
+    [loaded, 0, 0, 100, 150, 5, 8, 10, 14],
+    [canvas, 5, 8, 1, 14, 0, 8, 5, 14],
+    [canvas, 14, 8, 1, 14, 15, 8, 5, 14],
+    [canvas, 0, 8, 20, 1, 0, 0, 20, 8],
+    [canvas, 0, 21, 20, 1, 0, 22, 20, 8],
+  ]);
+  // A cropped tile (fit cover) reads only the part of the image the screen shows.
+  calls.length = 0;
+  drawGapBlur(canvas, loaded, { ...plan, crop: { x: 0.1, y: 0.2, width: 0.8, height: 0.5 } });
+  assert.deepEqual(calls[0], [loaded, 10, 30, 80, 75, 5, 8, 10, 14], 'the source is the crop, in the image\'s pixels');
+  // A side with no band draws no stretch.
+  calls.length = 0;
+  drawGapBlur(canvas, loaded, { width: 10, height: 14, tile: { x: 0, y: 0, width: 10, height: 14 }, pad: { left: 0, right: 0, top: 0, bottom: 0 } });
+  assert.equal(calls.length, 1);
+  assert.equal(drawGapBlur(canvas, { naturalWidth: 0, naturalHeight: 0 }, plan), false);
+  assert.equal(drawGapBlur(canvas, loaded, null), false);
+  assert.equal(drawGapBlur({ ...canvas, getContext: () => ({ drawImage() { throw new Error('boom'); } }) }, loaded, plan), false, 'never throws');
+});
+
+test('drawGapFill blur with a plan is drawGapBlur; without one it is the plain backdrop', () => {
+  const canvas = { width: 0, height: 0, getContext: () => ({ drawImage() {} }) };
+  const plan = { width: 20, height: 30, tile: { x: 5, y: 8, width: 10, height: 14 }, pad: { left: 5, right: 5, top: 8, bottom: 8 } };
+  assert.equal(drawGapFill(canvas, loaded, 'blur', plan), true);
+  assert.deepEqual([canvas.width, canvas.height], [20, 30]);
+  assert.equal(drawGapFill(canvas, loaded, 'blur'), true);
+  assert.equal(canvas.width, BACKDROP_WIDTH);
 });

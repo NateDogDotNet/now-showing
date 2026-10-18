@@ -416,6 +416,34 @@ fillCase('12 a very long title: the synopsis is clamped inside the box, the titl
   check(`long title: synopsis clamped to ${lines} lines, all inside the panel`);
 });
 
+// 12b. D85 follow-up, D95: when the text fills the panel (a long title takes the room, the synopsis gives way to one line), the title's
+//      top and the text's bottom keep the panel's own gap from the screen's edge, 4 % of the screen's height, not 0. A long title and a
+//      long synopsis make the body fill the panel (the synopsis takes every line the title leaves), so the case does not depend on the
+//      mock's own synopsis.
+for (const vp of [{ width: 1920, height: 1080 }, { width: 2560, height: 1080 }]) {
+  fillCase(`12b ${vp.width}x${vp.height} overflowing text keeps 4 % of the screen's height from the top and bottom edge`, { viewport: vp, settings: seed({ fillMode: 'info' }) }, async ({ page, app }) => {
+    await prepare(page, app);
+    await page.evaluate(() => {
+      document.getElementById('info-title').textContent = 'The Very Long and Winding Tale of the Velvet Curtain '.repeat(2);
+      document.getElementById('info-summary').textContent = 'A synopsis that goes on and on about the projectionist and the marquee. '.repeat(12);
+      window.dispatchEvent(new Event('resize'));
+    });
+    await page.waitForFunction(() => document.getElementById('info-summary').style.getPropertyValue('--info-lines') !== '', null, { timeout: 5000 });
+    await page.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 5000 });
+    const m = await page.evaluate(() => {
+      const r = (id) => document.getElementById(id).getBoundingClientRect();
+      const body = document.getElementById('info-title').parentElement.getBoundingClientRect();
+      return { panel: r('info-panel'), title: r('info-title'), meta: r('info-meta'), summary: r('info-summary'), body, line: parseFloat(getComputedStyle(document.getElementById('info-summary')).lineHeight) };
+    });
+    const margin = 0.04 * vp.height;
+    assert.ok(m.body.height >= m.panel.height - m.line, `the text fills the panel to within a line (body ${m.body.height.toFixed(0)} of ${m.panel.height.toFixed(0)} px), so it is the overflow case`);
+    assert.ok(m.title.top >= margin - 0.5, `the title's top (${m.title.top.toFixed(1)}) is at least ${margin} px from the top edge`);
+    assert.ok(vp.height - m.summary.bottom >= margin - 0.5, `the synopsis's bottom (${m.summary.bottom.toFixed(1)}) is at least ${margin} px from the bottom edge`);
+    assert.ok(vp.height - m.meta.bottom >= margin - 0.5, 'and so is the facts line');
+    check(`overflow at ${vp.width}x${vp.height}: title top ${m.title.top.toFixed(1)}, text bottom ${m.summary.bottom.toFixed(1)} of ${vp.height} (margin ${margin})`);
+  });
+}
+
 // 13. U2: the panel starts after the poster as it is drawn, at every poster size the Settings slider allows (50 to 150 percent), and
 //     goes away when the poster leaves too little room.
 for (const scale of [50, 100, 150]) {

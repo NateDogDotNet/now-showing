@@ -422,7 +422,7 @@ posCase('10 the same flow at 1080x1920 and the Done button is reachable', { view
 
 // ---------- r3: the placement is measured every time ----------
 
-const OVER_BG = /rgba\(.*0\.6\)/;
+const OVER_BG = /^rgba\(.*, 0?\.\d+\)$/; // translucent: an alpha below 1 (D86 item 4); the number itself is the contrast case's business
 
 /** The bar's overlap (px squared) with each thing it must clear, and whether it is whole on the screen. */
 const barReport = (page) => page.evaluate(() => {
@@ -551,7 +551,6 @@ for (const vp of [{ width: 1080, height: 1080 }, { width: 920, height: 720 }]) {
       const r = await barReport(page);
       assertClearOrOver(r, `${vp.width}x${vp.height}`);
       if (r.dock === 'over') {
-        assert.ok(Number(r.hintOpacity) < 1, 'and the hint is dimmed');
         assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('position-bar')).pointerEvents), 'none');
         assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('position-done')).pointerEvents), 'auto');
       }
@@ -560,9 +559,40 @@ for (const vp of [{ width: 1080, height: 1080 }, { width: 920, height: 720 }]) {
   }
 }
 
+// The hint's contrast in the translucent "over" dock (D86 item 8, D95): the worst case is a lit marquee bulb, pure white, behind the
+// bar. The bar's background composites over white, the hint's colour (at its opacity) over that, and the WCAG ratio of the two is 4.5:1
+// or better. The bar must still be translucent: an alpha below 1.
+const luminance = ([r, g, b]) => [r, g, b].map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+const over = (fg, alpha, bg) => fg.map((v, i) => v * alpha + bg[i] * (1 - alpha));
+const channels = (css) => { const m = css.match(/[\d.]+/g).map(Number); return { rgb: m.slice(0, 3), alpha: m.length > 3 ? m[3] : 1 }; };
+for (const vp of [{ width: 1080, height: 1080 }, { width: 920, height: 720 }]) {
+  posCase(`15b ${vp.width}x${vp.height}, marquee frame: the hint reads at 4.5:1 over pure white in the "over" dock`, { viewport: vp, settings: seed({ frameId: 'marquee' }) }, async ({ page, app }) => {
+    await prepare(page, app);
+    await startPositioning(page);
+    const s = await page.evaluate(() => {
+      const bar = document.getElementById('position-bar');
+      const hint = document.querySelector('.position-hint');
+      let opacity = 1;
+      for (let el = hint; el; el = el.parentElement) opacity *= Number(getComputedStyle(el).opacity);
+      return { dock: bar.dataset.dock, background: getComputedStyle(bar).backgroundColor, colour: getComputedStyle(hint).color, opacity };
+    });
+    assert.equal(s.dock, 'over', 'this screen has no clear placement, so the bar is the translucent one');
+    const bg = channels(s.background);
+    const fg = channels(s.colour);
+    assert.ok(bg.alpha < 1, `the bar stays translucent: alpha ${bg.alpha}`);
+    const white = [255, 255, 255];
+    const barOnWhite = over(bg.rgb, bg.alpha, white);
+    const textOnBar = over(fg.rgb, fg.alpha * s.opacity, barOnWhite);
+    const ratio = contrast(textOnBar, barOnWhite);
+    assert.ok(ratio >= 4.5, `hint ${textOnBar.map(Math.round)} on bar ${barOnWhite.map(Math.round)} over white: ${ratio.toFixed(2)}:1, under 4.5:1`);
+    check(`${vp.width}x${vp.height}: bar alpha ${bg.alpha}, hint ${textOnBar.map(Math.round)} on ${barOnWhite.map(Math.round)}: ${ratio.toFixed(2)}:1`);
+  });
+}
+
 // ---------- run ----------
 
-const WORKERS = Number(process.env.E2E_POSITION_WORKERS || 3);
+const WORKERS = Number(process.env.E2E_POSITION_WORKERS || 2);
 const failures = [];
 let nextCase = 0;
 await Promise.all(
