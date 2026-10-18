@@ -1064,7 +1064,7 @@ Added after the close of run 5 (2026-10-18, conductor-4) on the owner's word (D9
 
 ## Run 7 — 2.2.1: the run-4 cosmetic follow-ups (D94, D95)
 
-Added after the close of run 6 (2026-10-18, conductor-5) on the owner's word ("clean uo the branches. then /orchestrate the run-4 items."; D95). Starting commit: `main` eeb622c3, on a new branch `2.2.x`. Conventions as runs 3–6. Order: `polish-2.2.1` then `release-2.2.1`; the branch is pushed; no pull request, merge or tag unless the owner asks (D13, D79).
+Added after the close of run 6 (2026-10-18, conductor-5) on the owner's word ("clean uo the branches. then /orchestrate the run-4 items."; D95). Starting commit: `main` eeb622c3, on a new branch `2.2.x`. Conventions as runs 3–6. Order: `polish-2.2.1` and `controls-autohide` (added by the owner during the run, D96; concurrent, disjoint Outputs), then `release-2.2.1`; the branch is pushed; no pull request, merge or tag unless the owner asks (D13, D79).
 
 ### 43. `polish-2.2.1` — Panel margins, hint contrast, no ghosts in wide blurred bands, two position workers
 
@@ -1090,7 +1090,7 @@ Added after the close of run 6 (2026-10-18, conductor-5) on the owner's word ("c
 ### 44. `release-2.2.1` — The version and the docs say 2.2.1
 
 - **Goal:** `VERSION` is 2.2.1 everywhere it appears, the Roadmap moves the fixed items out of "Carried from 2.2" into a "Done in 2.2.1" section, and the README status line names 2.2.1 on branch `2.2.x`.
-- **Rulings:** D13, D79, D95 · **Mode:** afk · **Tags:** docs · **Blocked by:** `polish-2.2.1`
+- **Rulings:** D13, D79, D95, D96 · **Mode:** afk · **Tags:** docs · **Blocked by:** `polish-2.2.1`, `controls-autohide`
 - **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`
 - **Acceptance criteria:**
   1. `grep -q "VERSION = '2.2.1'" sw.js && grep -q "VERSION = '2.2.1'" js/main.js && test "$(grep -c '"version": "2.2.1"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
@@ -1103,3 +1103,18 @@ Added after the close of run 6 (2026-10-18, conductor-5) on the owner's word ("c
 - **Notes/hazards:**
   - The "What's new in 2.2" notice and its marker `'2.2'` are not changed: 2.2.1 adds nothing to announce (WHATS_NEW_VERSION stays `'2.2'`).
   - No tag, no GitHub release, no pull request (D13, D79). Nothing has run on a Raspberry Pi; only 2.1.0 was checked against a real Plex server.
+
+### 45. `controls-autohide` — The controls hide again after Settings closes
+
+- **Goal:** The display's controls go away on their own again after Settings (or any other dialog opened from them) is closed, as they do before Settings is opened.
+- **Rulings:** D96 · **Mode:** afk · **Tags:** ui · **Blocked by:** none (added during run 7; concurrent with `polish-2.2.1`, disjoint Output)
+- **Output:** `js/main.js`, `tests/e2e/touch-controls.spec.mjs`
+- **Acceptance criteria:**
+  1. `node tests/e2e/run.mjs touch-controls`  (new cases: a mouse opens Settings from the controls and closes it by Cancel, by Esc and by Save; with no further input the controls hide and `body.idle` returns within 3.5 s plus a margin; a pointer move then shows them and they hide again; the same after Diagnostics and the shortcuts overlay; a touch opening and closing Settings; a mouse click on another control (Pause) — the controls still hide; and a keyboard user who Tabs into the controls keeps them shown while the focus ring is in them)
+  2. `npm test && node tests/e2e/run.mjs touch-controls kiosk settings-sheet status ui-rotation sleep`  (kiosk mode, the status pill and the first-tap rule R-CTRL-2 unchanged)
+  3. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/main.js|tests/e2e/touch-controls.spec.mjs)')"`
+  4. narrated: the anchored review and a UX walk (mouse, touch and keyboard, at 1920×1080 and a phone) APPROVE on disk.
+- **Notes/hazards:**
+  - Probe (`controls-autohide--probe-r1b.out`): after Settings closes by Cancel, Esc or Save, focus is back on the Settings control button (`<button data-action="settings">`), `#controls:focus-within` is true, and the controls stay visible with `body.idle` absent 6 s later and 6 s after a mouse move. `wake()` (js/main.js:741–747) re-arms itself while `#controls` matches `:hover, :focus-within`.
+  - A closing dialog returns focus to the button that opened it; that is the browser's behaviour and keeps keyboard users in place — the fix must not move a keyboard user's focus elsewhere or drop the keyboard rule.
+  - Kiosk mode (`revealControls`, `applyKiosk`), R-CTRL-2's first-tap rule and the status pill (body.idle) are unchanged.
