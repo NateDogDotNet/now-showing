@@ -57,9 +57,9 @@ Three 2.2 features and the upgrade notice are built and tested. The version (2.2
 - **Gap fill (D89)**: Settings > Frame & layout > **Gap fill** (Off, Dimmed blurred poster, Colour matte) fills the bands the poster leaves inside the frame window, as at "Fit inside window" or at a size below 100 %. In 2.2.0 the blurred copy was a tiny canvas lined up with the poster (same centre and aspect, scaled up from its centre to cover the window); 2.2.1 replaced that placement (see "Done in 2.2.1"); the matte is one flat colour, the average of the poster's outer 2 %. Both are capped at 0.25 brightness, like the landscape backdrop, and both cross-fade with the poster. A gap under 4 px on its own is closed by growing or cropping the poster a few pixels, not filled. It is off by default (`gapFill` is `none`), and nothing of a blocked poster shows (D37). Not in scope: backdrop art, smart crop and better-fitting artwork, which stay planned.
 - **Upgrade notice (D93)**: a configured display upgraded to 2.2 shows a one-time "What's new in 2.2" toast whose **Open settings** button opens Frame & layout (R-UPG-2).
 
-## ✅ Done in 2.2.1 (on branch `2.2.x`, not merged)
+## ✅ Done in 2.2.1 (2.2.1, on `main`)
 
-The three polish items carried from 2.2 are fixed, and the controls now hide again after a dialog closes. This is on branch `2.2.x`, not on `main`: it is not merged, has no tag and no GitHub release (D13, D79, D95). It is tested against the mock Plex server only; only 2.1.0 was checked against a real Plex server, and nothing has been run on a Raspberry Pi.
+The three polish items carried from 2.2 are fixed, and the controls now hide again after a dialog closes. This is on `main`, merged on 2026-10-18 through pull request #4, with no tag and no GitHub release (D79, D95, D98). It is tested against the mock Plex server only; only 2.1.0 was checked against a real Plex server, and nothing has been run on a Raspberry Pi.
 
 - **Info panel margins (D85, D95)**: the Title-and-synopsis panel keeps a top and bottom margin equal to its left gap, 4 % of the screen height. Which screens show the panel is unchanged.
 - **Position bar contrast (D86, D95)**: the translucent "over" position bar is darker (background alpha 0.72) and its hint is at full strength, so the hint reads above 4.5:1 even over a lit bulb.

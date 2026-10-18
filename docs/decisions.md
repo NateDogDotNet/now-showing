@@ -359,3 +359,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   - Should keyboard focus on the controls time out after a longer idle, and should a mouse wheel count as activity?
 
   **Not ruled:** TV-remote D-pad focus. **Metrics:** 18 agent calls, about 1.05 M tokens, 2.89 agent-hours. No tag, no Pi validation (D79).
+
+## Owner decision — 2026-10-18 (verbatim: "open the PR for 2.2.x and merge it", "yes bump the timeout to 30 and merge", "yes do the docs commit on main after the merge"): D98
+
+- **D98 2.2.1 is merged to `main`.** Pull request #4 (`2.2.x` → `main`) was opened by the conductor. Both CI runs on bbcd333e were cancelled at the job's 20-minute limit right after the last browser spec passed, so on the owner's word f9627f6e raised `timeout-minutes` in `.github/workflows/ci.yml` from 20 to 30. Both checks then passed on f9627f6e (19 min 29 s and 20 min 21 s), and the conductor merged with a merge commit, 2c923b0a, at 2026-10-18T23:51:47Z. This docs commit updates README.md and Roadmap.md so they say 2.2.1 is on `main`. No tag, no GitHub release, no Pi validation (D79). Branch `2.2.x` stays on origin until the owner deletes it.
