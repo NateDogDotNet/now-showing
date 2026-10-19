@@ -21,7 +21,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.2.1';
+export const VERSION = '2.2.2';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -741,14 +741,22 @@ function hideControls() {
 //    the control, and the old `:focus-within` test then re-armed the timer forever. `keyboardFocus` is set by a Tab outside
 //    any open dialog (a Tab between Settings fields is not a walk through the controls) and cleared by a pointer press or
 //    by a mouse that actually moved (pointermove also fires at a touch and, with unchanged coordinates, after a relayout).
+//    That hold lasts at most KEYBOARD_HOLD_MS (30 s) after the last key press (any key): after that the controls hide even
+//    though focus stays where it is (focus is never moved), and the next key press shows them again.
+//    A mouse wheel counts as activity (it shows the controls and restarts the 3.5 s timer) and, being a mouse, ends keyboard use.
 //  - A pointer over them, unless the last pointer was a touch: a finger leaves Chromium's sticky `:hover` on the button it
 //    tapped, which would hold the controls for good after Pause, Pin poster, Refresh or Rotate.
 let keyboardFocus = false;
+let lastKeyAt = 0; // Date.now() of the last keydown, of any key
+const KEYBOARD_HOLD_MS = 30000;
 let lastPointerType = 'mouse';
 let mouseAt = null;
 document.addEventListener(
   'keydown',
-  (e) => e.key === 'Tab' && !document.querySelector('dialog[open]') && (keyboardFocus = true),
+  (e) => {
+    lastKeyAt = Date.now();
+    if (e.key === 'Tab' && !document.querySelector('dialog[open]')) keyboardFocus = true;
+  },
   { capture: true, passive: true },
 );
 document.addEventListener(
@@ -759,6 +767,7 @@ document.addEventListener(
   },
   { capture: true, passive: true },
 );
+document.addEventListener('wheel', () => (keyboardFocus = false), { capture: true, passive: true });
 document.addEventListener(
   'pointermove',
   (e) => {
@@ -776,11 +785,12 @@ function wake() {
   showControls();
   idleTimer = setTimeout(() => {
     const controls = $('controls');
-    if ((lastPointerType !== 'touch' && controls.matches(':hover')) || (keyboardFocus && controls.matches(':focus-within'))) return wake();
+    const keyboardHold = keyboardFocus && controls.matches(':focus-within') && Date.now() - lastKeyAt < KEYBOARD_HOLD_MS;
+    if ((lastPointerType !== 'touch' && controls.matches(':hover')) || keyboardHold) return wake();
     hideControls();
   }, 3500);
 }
-['pointermove', 'pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, wake, { passive: true }));
+['pointermove', 'pointerdown', 'keydown', 'wheel'].forEach((ev) => document.addEventListener(ev, wake, { passive: true }));
 
 // The first touch on hidden controls only reveals them (R-CTRL-2, U12). `.controls` ignores the pointer until `.visible`;
 // the pointerdown below adds it, and the browser then sends the tap's click to the button that just became hit-testable.

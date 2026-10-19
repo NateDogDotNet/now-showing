@@ -783,8 +783,8 @@ touchCase('D96 Settings opened by the s shortcut after a click left focus on a c
   check('D96 s opens Settings, Esc closes: the controls hide');
 });
 
-// A real mouse movement ends keyboard use; a wheel, and a "move" to where the mouse already is, do not.
-touchCase('D96 a keyboard user who then moves the mouse away: the controls hide; a wheel alone does not release them', { settings: seed(), clock: { time: '2026-01-05T12:00:00' } }, async ({ page, app }) => {
+// A mouse wheel and a real mouse movement end keyboard use; a "move" to where the mouse already is does not.
+touchCase('D96 a keyboard user who then moves the mouse away: the controls hide; a wheel also ends keyboard use', { settings: seed(), clock: { time: '2026-01-05T12:00:00' } }, async ({ page, app }) => {
   await page.goto(app.url);
   await posterShown(page);
   await page.clock.runFor(10_000);
@@ -793,13 +793,17 @@ touchCase('D96 a keyboard user who then moves the mouse away: the controls hide;
   assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('#controls'))), true, 'Tab reached a control');
   await page.mouse.move(700, 200); // the mouse arrives on the stage
   await page.mouse.move(700, 200); // and a move to the same spot is not a movement
-  await page.mouse.wheel(0, 100);
-  await page.clock.runFor(20_000);
-  assert.equal(await controlsVisible(page), true, 'a wheel and a zero move leave the keyboard user their controls');
+  await page.mouse.wheel(0, 100); // a wheel is a mouse: it ends keyboard use
+  await page.clock.runFor(10_000);
+  assert.equal(await controlsVisible(page), false, 'a wheel ends keyboard use: the controls hide about 3.5 s after it');
+  assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('#controls'))), true, 'focus was not moved');
+  await page.keyboard.press('Shift');
+  await page.clock.runFor(10_000);
+  assert.equal(await controlsVisible(page), false, 'a key alone no longer holds them');
   await page.mouse.move(740, 240); // a real movement
   await page.clock.runFor(10_000);
   assert.equal(await controlsVisible(page), false, 'a real mouse movement ends keyboard use');
-  check('D96 keyboard then mouse: a real move releases the controls, a wheel does not');
+  check('D96 keyboard then mouse: a wheel and a real move release the controls');
 });
 
 // The keyboard rule stays: a user who Tabbed into the controls keeps them shown while the focus ring is there. A fake
@@ -822,6 +826,80 @@ touchCase('D96 a keyboard user who Tabs into the controls keeps them shown', { s
   await page.clock.runFor(10_000);
   assert.equal(await controlsVisible(page), false, 'hidden once the focus is gone');
   check('D96 keyboard: shown while the focus is in the controls, hidden after it leaves');
+});
+
+// The keyboard hold ends 30 s after the last key press (any key); focus stays put and the next key shows the controls again.
+// Shift is harmless: it is in no KEYS entry. Both cases drive the fake clock only.
+async function tabIntoControls(page) {
+  let focused = '';
+  for (let i = 0; i < 4 && !focused; i++) {
+    await page.keyboard.press('Tab');
+    focused = await page.evaluate(() => document.activeElement?.closest('#controls') && document.activeElement.dataset.action);
+  }
+  assert.ok(focused, 'Tab reached a control');
+}
+const focusInControls = (page) => page.evaluate(() => Boolean(document.activeElement?.closest('#controls')));
+
+touchCase('D96 keyboard focus on the controls times out 30 s after the last key; the next key shows them again', { settings: seed(), clock: { time: '2026-01-05T12:00:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await page.clock.runFor(10_000);
+  await waitIdle(page);
+  await tabIntoControls(page);
+  await page.clock.runFor(25_000);
+  assert.equal(await controlsVisible(page), true, 'still shown 25 s after the Tab');
+  await page.clock.runFor(10_000);
+  assert.equal(await controlsVisible(page), false, 'hidden 35 s after the last key');
+  assert.equal(await focusInControls(page), true, 'focus was not moved');
+  await page.keyboard.press('Shift');
+  assert.equal(await controlsVisible(page), true, 'a key press shows them again');
+  check('D96 keyboard hold ends 30 s after the last key, focus stays, a key wakes them');
+});
+
+touchCase('D96 a key press restarts the 30 s keyboard hold', { settings: seed(), clock: { time: '2026-01-05T12:00:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await page.clock.runFor(10_000);
+  await waitIdle(page);
+  await tabIntoControls(page);
+  await page.clock.runFor(20_000);
+  await page.keyboard.press('Shift'); // the second key, 20 s after the first
+  await page.clock.runFor(25_000); // 45 s after the Tab, 25 s after the second key
+  assert.equal(await controlsVisible(page), true, 'still shown 25 s after the second key');
+  await page.clock.runFor(14_000); // 39 s after the second key, past the 30 s and one 3.5 s re-check
+  assert.equal(await controlsVisible(page), false, 'hidden once 30 s have passed since the second key');
+  assert.equal(await focusInControls(page), true, 'focus was not moved');
+  check('D96 a key press restarts the keyboard hold');
+});
+
+touchCase('D96 a mouse wheel on the bare stage shows hidden controls, and they hide again after 3.5 s', { settings: seed(), clock: { time: '2026-01-05T12:00:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await page.clock.runFor(10_000);
+  await waitIdle(page);
+  await page.mouse.move(600, 300);
+  await page.clock.runFor(10_000);
+  assert.equal(await controlsVisible(page), false, 'idle before the wheel');
+  await page.mouse.wheel(0, 100);
+  await until(() => controlsVisible(page), 'the wheel to show the controls');
+  await page.clock.runFor(10_000);
+  assert.equal(await controlsVisible(page), false, 'they hide again after the timer');
+  check('D96 a mouse wheel shows hidden controls');
+});
+
+// A real mouse movement alone (no wheel, no press) ends keyboard use. The first move only records where the mouse is.
+touchCase('D96 a keyboard user who then really moves the mouse to the bare stage: the controls hide', { settings: seed(), clock: { time: '2026-01-05T12:00:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await page.clock.runFor(10_000);
+  await waitIdle(page);
+  await page.mouse.move(700, 200); // the starting position
+  await tabIntoControls(page);
+  await page.mouse.move(760, 260, { steps: 6 }); // a real movement, away from the controls
+  await page.clock.runFor(5_000);
+  assert.equal(await controlsVisible(page), false, 'a real mouse move ends keyboard use: hidden well inside the 30 s window');
+  assert.equal(await focusInControls(page), true, 'focus was not moved');
+  check('D96 a real mouse move alone releases the keyboard hold');
 });
 
 // A hybrid laptop: a touch, then a mouse. The mouse's pointermove must set the last pointer type back to 'mouse', or a
