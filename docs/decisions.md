@@ -367,3 +367,16 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner decision — 2026-10-19 (verbatim: "make keyboard focus time out after 30 seconds", "the mouse wheel should count as activity too"): D99
 
 - **D99 2.2.2: the keyboard focus hold ends 30 s after the last key press, and the mouse wheel counts as activity.** Answers the two controls follow-ups from run 7 (D97). Conductor's rulings under D44: any key press restarts the 30 s, and the hold is re-checked on the 3.5 s timer, so the controls hide between 30 and about 33.5 s after the last key; focus is not moved; a wheel shows the controls, restarts the 3.5 s timer and ends keyboard use, like a real mouse move; kiosk mode still ignores all of it. The change ships as 2.2.2 (VERSION bumped because `sw.js` caches the shell by version), committed straight to `main` with no pull request, as the owner's recent requests were, with no tag and no GitHub release (D79). R-CTRL-4 in docs/spec.md is updated. Before the commit, four conductor mutants (hold unbounded, no wheel wake, the wheel keeps keyboard use, a mouse move keeps keyboard use) each failed exactly the case written for it, and touch-controls passed all 54 cases. The earlier follow-up test (efd5a258, a mouse resting on the controls after a touch) closed the third run-7 item. TV-remote D-pad focus is still not ruled.
+
+## Owner decision — 2026-10-19 (verbatim: "the TV remote arrow keys should work too"): D100
+
+- **D100 2.2.3: a TV remote's arrow keys navigate the control buttons (R-CTRL-5).** Closes the last run-7 item, TV-remote D-pad focus (D97). Conductor's rulings under D44:
+  - Arrows move focus to the nearest visible, enabled control button in that direction as it appears on screen, so rotation and `rotateUi` are followed. There is no wrap.
+  - When the controls are hidden, the first arrow only reveals them and puts focus on a control: the last focused one if it is still there, else the first. Nothing is activated (as R-CTRL-2 does for a first tap). This includes controls that hid after the 30 s keyboard hold with focus still on a button.
+  - An arrow is keyboard use, like Tab, so the 30 s hold (D99) applies. An arrow inside an open dialog is neither consumed nor keyboard use.
+  - Dialogs, text fields and position mode keep their own arrows. Kiosk mode never reveals on an arrow, but during its 15 s Enter-hold reveal the arrows navigate the controls without extending the reveal.
+  - `disableShortcuts` does not switch the arrows off: they are navigation, not shortcuts.
+
+  Builder rulings accepted: Ctrl, Meta or Alt with an arrow is ignored; the "nearest" score is along-axis distance plus twice the cross-axis distance; an arrow with the controls visible but focus elsewhere only puts focus on a control.
+
+  Before the commit, conductor mutants covered: arrows not marking keyboard use, arrows acting in dialogs, the first arrow on hidden controls also moving, and the direction filter dropped. Each failed a D100 case. Dropping the position-mode guard is equivalent, because `.controls` is `display: none` there and no button is navigable; the guard stays as defence in depth. The touch-controls (64 cases), position, settings-sheet, kiosk and release specs, 443 unit tests and the precache check passed. Committed straight to `main`, with no tag and no GitHub release (D79).
