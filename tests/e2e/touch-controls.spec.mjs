@@ -824,6 +824,30 @@ touchCase('D96 a keyboard user who Tabs into the controls keeps them shown', { s
   check('D96 keyboard: shown while the focus is in the controls, hidden after it leaves');
 });
 
+// A hybrid laptop: a touch, then a mouse. The mouse's pointermove must set the last pointer type back to 'mouse', or a
+// mouse resting on the controls would no longer hold them. {hasTouch} with the default desktop viewport (not isMobile) keeps
+// the mouse hover real. A fake clock runs 20 s past the 3.5 s timer without waiting.
+touchCase('D96 a touch, then a mouse resting on the controls holds them; parked on the stage they hide', { hasTouch: true, settings: seed(), clock: { time: '2026-01-05T12:00:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await page.clock.runFor(10_000);
+  await waitIdle(page);
+  await page.touchscreen.tap(600, 300); // a real touch on the bare stage: reveals the controls, the last pointer is a touch
+  await until(() => controlsVisible(page), 'the touch to reveal the controls');
+  await animationsDone(page);
+  const { x, y } = await centreOf(page, '#controls [data-action="pause"]');
+  await page.mouse.move(x - 60, y - 60);
+  await page.mouse.move(x, y, { steps: 8 }); // the mouse arrives on a control button and stays
+  assert.equal(await page.evaluate(() => document.getElementById('controls').matches(':hover')), true, 'the mouse is over the controls');
+  await page.clock.runFor(20_000);
+  assert.equal(await controlsVisible(page), true, 'a mouse resting on the controls holds them 20 s after a touch');
+  assert.equal(await page.evaluate(() => document.getElementById('controls').matches(':hover')), true, 'still hovering');
+  await page.mouse.move(600, 300, { steps: 8 }); // parked on the bare stage
+  await page.clock.runFor(10_000);
+  assert.equal(await controlsVisible(page), false, 'parked on the stage the controls hide');
+  check('D96 touch then mouse: a mouse on the controls holds them, on the stage they hide');
+});
+
 // ---------------------------------------------------------------- run
 
 const WORKERS = Number(process.env.E2E_TOUCH_WORKERS || 3);
