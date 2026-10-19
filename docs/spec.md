@@ -144,6 +144,11 @@ Priorities: **P0** fix-first, **P1** protection, **P2** polish, **P3** bigger fe
 - The table has `r p space o f s d ?` with a label each and no duplicate keys; `listShortcuts({disableShortcuts:true})` is empty.
 - `?` opens the dialog with at least 8 entries generated from the table (at rotation 90 `#shortcuts`' computed angle is 90 and its box lies inside the viewport); Esc closes it; with `disableShortcuts:true`, `?` does nothing.
 
+**R-CTRL-4 (P2, D96) The controls hide on their own.** Pointer or key activity shows the controls, and they hide 3.5 s after the last activity. Only two things hold them past that. A mouse or pen resting over them holds them, but not after a touch: a finger leaves the tapped button in `:hover`. Focus inside them holds them only for a keyboard user: a Tab outside any open dialog starts keyboard use, and a pointer press or a mouse that actually moves ends it. A Tab between the fields of an open dialog is not keyboard use. So when Settings, Diagnostics or the shortcut overlay closes, focus returns to the control that opened it but does not hold the controls, whatever closed the dialog (Save, Cancel, Esc) and whether a mouse, a touch or the `s` shortcut opened it. Kiosk mode never shows them on activity. Focus is never moved.
+- Mouse: open Settings, close it by Save, Cancel or Esc, keep still → the controls hide within 3.5 s; a mouse move shows them again and they hide again. The same after Diagnostics and after `?`.
+- Mouse: click into a Settings field, Tab, Esc, mouse still → the controls hide. Touch: a tap on Pause, Pin poster, Refresh or Rotate → the controls hide afterwards.
+- Keyboard: Tab into the controls → they stay shown while focus is on them; a real mouse move away → they hide. A mouse wheel alone does not release them.
+
 ### Frame brightness
 
 **R-FRM-4 (P1, E4) Frame brightness and night dim.** Setting `frameBrightness` (10-100, default 100) applies `filter: brightness()` to the frame image. Night dim: `nightDim` (default **false**, D6), `nightDimStart` 22:00, `nightDimEnd` 07:00, `nightDimLevel` 60, and `nightDimTarget` (`frame` default | `stage`; `stage` also dims the poster, D6 "whole-poster dim option"). The level is recomputed **once a minute in whole steps** (no CSS transition and no animated filter, resolving the conflict with R-PROT-4): dimming ramps in over the first 10 minutes after `nightDimStart` and out over the last 10 minutes before `nightDimEnd`, so the change is never a jump. The filter is placed on `#frame` (target `frame`) or `#stage` (target `stage`) only. Schedules wait for a plausible clock (R-PROT-6). With the device helper there is no hardware brightness (dropped, D8).
@@ -303,7 +308,7 @@ An **owner-pinned** poster is exempt. Client-side ladder: `G=TV-Y=TV-G < PG=TV-Y
 | Animated frame bulbs | E3 (was R-FRM-3) | The overlay does not rest the underlying bulb pixels and an infinite animation keeps the Pi compositing around the clock | deferred (D1) → Roadmap |
 | Frame rotation (daily/weekly frame) | E5 (was R-FRM-2) | The three built-in frames place their bulb rings within about 1.5 points of each other, so rotating gives little relief beyond pixel shift | deferred (D1) → Roadmap |
 | Hardware brightness through the helper | E6 part | DDC/CI is absent on consumer TVs, HDMI has no backlight sysfs (D8) | dropped |
-| Drag and nudge poster positioning | U5 (R-SET-5) | Release scope cut to ship the protection features sooner (D41) | shipped in 2.2.0 on branch 2.2 |
+| Drag and nudge poster positioning | U5 (R-SET-5) | Release scope cut to ship the protection features sooner (D41) | shipped in 2.2 (2.2.0) |
 | Landscape fill: blurred backdrop and info panel | U7 (R-FILL-1) | Release scope cut; large display.js change (D41) | shipped in 2.2 (2.2.0) |
 | Local-network Plex server discovery | — | Roadmap only (D3); GDM needs a UDP listener in `serve.mjs` | Roadmap (exists) |
 | Multiple libraries mixed in the random pool, collections, genre/decade filters, "recently added" mode | Roadmap ideas | Not in the findings; the library picker and pool code would change shape | stay on the Roadmap |
@@ -422,6 +427,7 @@ Plex `contentRating` filter parameter, multi-value syntax and real country-prefi
 | U11 | R-CTRL-1 | `touch-and-labels` |
 | U12 | R-CTRL-2 | `touch-and-labels` |
 | U13 | R-CTRL-3 | `touch-and-labels` |
+| — (D96) | R-CTRL-4 | `controls-autohide` |
 | U14 | R-SET-6 | `settings-sheet` |
 | E1 | R-PROT-1, R-PROT-6 | `sleep-mode`, `settings-and-schedule-core` |
 | E2 | R-PROT-2 | `pixel-shift` |
