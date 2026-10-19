@@ -21,7 +21,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.2.2';
+export const VERSION = '2.2.3';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -674,6 +674,62 @@ document.addEventListener('keydown', (e) => {
     actions[action]();
   }
 });
+
+// ---------- D-pad navigation of the controls (R-CTRL-5, D100) ----------
+// A TV remote's arrow keys move focus between the control buttons, in the direction they point on screen (the buttons'
+// bounding boxes already include rotation, so rotateUi needs no special case). Navigation, not a shortcut: `disableShortcuts`
+// does not switch it off. It does nothing in a dialog (native selects, sliders, text fields and the PIN keypad keep their
+// arrows), in position mode (js/position.js owns them; `.controls` is display: none there, so this guard is defence in
+// depth), or while the controls are inert (kiosk mode only). It runs in the
+// capture phase so it sees whether the controls were hidden before wake() shows them: on hidden controls the first arrow
+// only reveals them and puts focus on a control (the last focused one, else the first); it moves nothing and activates
+// nothing. An arrow is keyboard use, like Tab, so the 30 s hold applies. preventDefault only when the arrow is consumed.
+const ARROW_DIRS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+let lastControlFocus = null;
+$('controls').addEventListener('focusin', (e) => (lastControlFocus = e.target.closest('button')));
+
+const centreOfBox = (el) => {
+  const r = el.getBoundingClientRect();
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width };
+};
+const navigableControls = () =>
+  [...$('controls').querySelectorAll('button:not([disabled])')].filter((b) => b.getClientRects().length && centreOfBox(b).w > 0 && getComputedStyle(b).visibility !== 'hidden');
+
+document.addEventListener(
+  'keydown',
+  (e) => {
+    const dir = ARROW_DIRS[e.key];
+    if (!dir || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (document.body.classList.contains('positioning') || document.querySelector('dialog[open]')) return;
+    if (e.target.closest?.('input, select, textarea')) return;
+    const controls = $('controls');
+    if (controls.inert) return;
+    const buttons = navigableControls();
+    if (!buttons.length) return;
+    const wasHidden = !controls.classList.contains('visible');
+    const current = document.activeElement?.closest('#controls button');
+    e.preventDefault();
+    keyboardFocus = true;
+    if (wasHidden || !current || !buttons.includes(current)) {
+      (buttons.includes(lastControlFocus) ? lastControlFocus : buttons[0]).focus();
+      return;
+    }
+    const from = centreOfBox(current);
+    let best = null;
+    let bestScore = Infinity;
+    for (const b of buttons) {
+      if (b === current) continue;
+      const c = centreOfBox(b);
+      const along = (c.x - from.x) * dir[0] + (c.y - from.y) * dir[1];
+      const across = Math.abs((c.x - from.x) * dir[1] - (c.y - from.y) * dir[0]);
+      if (along < 1) continue; // not in that direction on screen
+      const score = along + 2 * across;
+      if (score < bestScore) [best, bestScore] = [b, score];
+    }
+    best?.focus();
+  },
+  { capture: true },
+);
 
 // ---------- Shortcuts dialog and control labels (R-CTRL-1, R-CTRL-3) ----------
 

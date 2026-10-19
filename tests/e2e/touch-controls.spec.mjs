@@ -902,6 +902,201 @@ touchCase('D96 a keyboard user who then really moves the mouse to the bare stage
   check('D96 a real mouse move alone releases the keyboard hold');
 });
 
+// ---------------------------------------------------------------- R-CTRL-5: D-pad navigation of the controls (D100)
+// Select these with E2E_TOUCH_ONLY='^D100'. Fake clock throughout; the keys are real key presses.
+
+const CLK = { time: '2026-01-05T12:00:00' };
+const activeAction = (page) => page.evaluate(() => document.activeElement?.closest('#controls') && document.activeElement.dataset.action);
+/** The visible control buttons with their on-screen centres, in DOM order. */
+const controlBoxes = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('#controls button:not([disabled])')]
+      .map((b) => ({ action: b.dataset.action, r: b.getBoundingClientRect() }))
+      .filter((b) => b.r.width > 0)
+      .map((b) => ({ action: b.action, x: b.r.x + b.r.width / 2, y: b.r.y + b.r.height / 2 })),
+  );
+async function idleDisplay(page, app) {
+  await page.goto(app.url);
+  await posterShown(page);
+  await page.clock.runFor(10_000);
+  await waitIdle(page);
+}
+
+touchCase('D100 hidden controls: the first ArrowRight only shows them and focuses a control, nothing is activated', { settings: seed(), clock: CLK }, async ({ page, app }) => {
+  await idleDisplay(page, app);
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await controlsVisible(page), true, 'shown');
+  assert.equal(await activeAction(page), 'settings', 'focus is on the first control');
+  assert.equal(await isOpen(page, 'settings'), false, 'no Settings dialog');
+  assert.equal(await isOpen(page, 'diagnostics'), false, 'no Diagnostics dialog');
+  assert.equal(await page.evaluate(() => document.querySelector('[data-action="pause"]').getAttribute('aria-pressed')), 'false', 'Pause untouched');
+  check('D100 the first arrow only reveals and focuses');
+});
+
+touchCase('D100 the arrows move focus to the next and previous button on screen, no wrap; Enter on Settings opens it', { settings: seed(), clock: CLK }, async ({ page, app }) => {
+  await idleDisplay(page, app);
+  await page.keyboard.press('ArrowRight'); // reveal + focus
+  const boxes = await controlBoxes(page);
+  const order = [...boxes].sort((a, b) => a.x - b.x).map((b) => b.action);
+  assert.ok(order.length >= 3, 'several buttons');
+  assert.equal(await activeAction(page), order[0], 'starts on the leftmost');
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await activeAction(page), order[0], 'no wrap to the left');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await activeAction(page), order[1], 'ArrowRight: next');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await activeAction(page), order[2], 'ArrowRight: next again');
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await activeAction(page), order[1], 'ArrowLeft: previous');
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await activeAction(page), order[1], 'ArrowDown on a one-row bar stays put');
+  for (let i = 0; i < order.length; i++) await page.keyboard.press('ArrowRight');
+  assert.equal(await activeAction(page), order[order.length - 1], 'no wrap to the right');
+  for (let i = 0; i < order.length; i++) await page.keyboard.press('ArrowLeft');
+  assert.equal(await activeAction(page), 'settings', 'back on Settings (leftmost)');
+  await page.keyboard.press('Enter');
+  await until(() => isOpen(page, 'settings'), 'Enter on Settings to open it');
+  check('D100 arrows move between buttons, no wrap, Enter activates');
+});
+
+touchCase('D100 inside Settings an arrow keeps its native behaviour on a select and a slider; focus stays', { settings: seed(), clock: CLK }, async ({ page, app }) => {
+  await idleDisplay(page, app);
+  await page.keyboard.press('s');
+  await until(() => isOpen(page, 'settings'), 'Settings to open');
+  await page.evaluate(() => document.querySelectorAll('#settings-form details').forEach((d) => (d.open = true)));
+  await page.focus('#settings-form [name="posterOffsetX"]');
+  const before = Number(await page.$eval('#settings-form [name="posterOffsetX"]', (el) => el.value));
+  await page.keyboard.press('ArrowRight');
+  const after = Number(await page.$eval('#settings-form [name="posterOffsetX"]', (el) => el.value));
+  assert.ok(after > before, `the slider moved natively (${before} -> ${after})`);
+  assert.equal(await page.evaluate(() => document.activeElement.name), 'posterOffsetX', 'focus stays on the slider');
+  await page.focus('#settings-form [name="posterFit"]');
+  const fit = await page.$eval('#settings-form [name="posterFit"]', (el) => el.value);
+  await page.keyboard.press('ArrowDown');
+  assert.notEqual(await page.$eval('#settings-form [name="posterFit"]', (el) => el.value), fit, 'the select changed natively');
+  assert.equal(await page.evaluate(() => document.activeElement.name), 'posterFit', 'focus stays on the select');
+  check('D100 arrows in Settings keep their native behaviour');
+});
+
+touchCase('D100 an arrow in an open dialog is not consumed and is not keyboard use', { settings: seed(), clock: CLK }, async ({ page, app }) => {
+  await idleDisplay(page, app);
+  await page.keyboard.press('d');
+  await until(() => isOpen(page, 'diagnostics'), 'Diagnostics to open');
+  await page.evaluate(() => {
+    window.__arrowPrevented = [];
+    document.addEventListener('keydown', (e) => e.key.startsWith('Arrow') && window.__arrowPrevented.push(e.defaultPrevented));
+  });
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowRight');
+  assert.deepEqual(await page.evaluate(() => window.__arrowPrevented), [false, false], 'the arrows were left alone');
+  await page.keyboard.press('Escape');
+  await until(async () => !(await isOpen(page, 'diagnostics')), 'Diagnostics to close');
+  await page.clock.runFor(6_000);
+  assert.equal(await controlsVisible(page), false, 'no keyboard use: the controls hide once the dialog is closed');
+  check('D100 an arrow in a dialog is left alone and is not keyboard use');
+});
+
+touchCase('D100 after the hold times out with focus still on a button, the first arrow only reveals; the next moves', { settings: seed(), clock: CLK }, async ({ page, app }) => {
+  await idleDisplay(page, app);
+  await page.keyboard.press('ArrowRight'); // reveal + focus the first button
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  const rested = await activeAction(page);
+  assert.notEqual(rested, 'settings', 'focus is on a button that is not the first');
+  await page.clock.runFor(35_000);
+  assert.equal(await controlsVisible(page), false, 'hidden after the keyboard hold');
+  assert.equal(await activeAction(page), rested, 'focus is still on that button');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await controlsVisible(page), true, 'the arrow shows the controls');
+  assert.equal(await activeAction(page), rested, 'focus stayed on the same button');
+  assert.equal(await isOpen(page, 'settings'), false, 'nothing was activated');
+  assert.equal(await isOpen(page, 'diagnostics'), false, 'nothing was activated');
+  await page.keyboard.press('ArrowRight');
+  assert.notEqual(await activeAction(page), rested, 'the next arrow moves');
+  check('D100 after the timeout the first arrow reveals without moving');
+});
+
+touchCase('D100 at rotation 90 with rotateUi the arrows follow the screen', { settings: seed({ rotation: 90, rotateUi: true }), clock: CLK }, async ({ page, app }) => {
+  await idleDisplay(page, app);
+  await page.keyboard.press('ArrowRight'); // reveal + focus
+  const boxes = await controlBoxes(page);
+  const xs = boxes.map((b) => b.x);
+  const ys = boxes.map((b) => b.y);
+  const vertical = Math.max(...ys) - Math.min(...ys) > Math.max(...xs) - Math.min(...xs);
+  assert.equal(vertical, true, 'rotated UI: the bar runs down the screen');
+  const order = [...boxes].sort((a, b) => a.y - b.y).map((b) => b.action);
+  const first = await activeAction(page);
+  assert.ok(first === order[0] || first === order[order.length - 1], 'focus started on an end of the bar');
+  const step = first === order[0] ? 'ArrowDown' : 'ArrowUp';
+  const seq = first === order[0] ? order : [...order].reverse();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await activeAction(page), first, 'sideways arrows go nowhere on a vertical bar');
+  await page.keyboard.press(step);
+  assert.equal(await activeAction(page), seq[1], `${step} moves along the screen to the next button`);
+  await page.keyboard.press(step === 'ArrowDown' ? 'ArrowUp' : 'ArrowDown');
+  assert.equal(await activeAction(page), seq[0], 'the opposite arrow comes back');
+  check('D100 rotation 90: arrows follow the screen');
+});
+
+touchCase('D100 an arrow is keyboard use: the controls stay up and hide about 33.5 s after the last arrow, focus stays', { settings: seed(), clock: CLK }, async ({ page, app }) => {
+  await idleDisplay(page, app);
+  await page.keyboard.press('ArrowRight');
+  await page.clock.runFor(25_000);
+  assert.equal(await controlsVisible(page), true, 'still shown 25 s after the arrow');
+  await page.keyboard.press('ArrowRight');
+  await page.clock.runFor(25_000);
+  assert.equal(await controlsVisible(page), true, 'a second arrow restarted the 30 s');
+  await page.clock.runFor(12_000);
+  assert.equal(await controlsVisible(page), false, 'hidden after the 30 s window');
+  assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('#controls'))), true, 'focus not moved');
+  check('D100 an arrow holds the controls for 30 s');
+});
+
+touchCase('D100 disableShortcuts does not switch the arrows off', { settings: seed({ disableShortcuts: true }), clock: CLK }, async ({ page, app }) => {
+  await idleDisplay(page, app);
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await controlsVisible(page), true);
+  assert.equal(await activeAction(page), 'settings');
+  await page.keyboard.press('ArrowRight');
+  assert.notEqual(await activeAction(page), 'settings', 'and they move');
+  check('D100 disableShortcuts leaves the arrows working');
+});
+
+touchCase('D100 kiosk: an arrow does not reveal the controls; during the reveal the arrows navigate them', { settings: seed({ kioskMode: true }), clock: CLK }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await page.clock.runFor(10_000);
+  await page.keyboard.press('ArrowRight');
+  await page.clock.runFor(1_000);
+  assert.equal(await controlsVisible(page), false, 'an arrow does not reveal in kiosk mode');
+  assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('#controls'))), false, 'and focuses nothing in the controls');
+  await page.keyboard.down('Enter');
+  await page.clock.runFor(3_200);
+  await page.keyboard.up('Enter');
+  await until(() => controlsVisible(page), 'the Enter hold to reveal the controls');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await activeAction(page), 'settings', 'during the reveal an arrow focuses a control');
+  await page.keyboard.press('ArrowRight');
+  assert.notEqual(await activeAction(page), 'settings', 'and the next moves');
+  check('D100 kiosk: no reveal by arrow, navigation during the reveal');
+});
+
+touchCase('D100 position mode keeps its arrows: the poster moves and the controls take nothing', { settings: seed(), clock: CLK }, async ({ page, app }) => {
+  await idleDisplay(page, app);
+  await page.keyboard.press('s');
+  await until(() => isOpen(page, 'settings'), 'Settings to open');
+  await page.evaluate(() => document.querySelectorAll('#settings-form details').forEach((d) => (d.open = true)));
+  await page.click('#position-btn');
+  await page.waitForSelector('#position-bar:not([hidden])');
+  const x0 = Number(await page.$eval('#settings-form [name="posterOffsetX"]', (el) => el.value));
+  await page.keyboard.press('ArrowRight');
+  const x1 = Number(await page.$eval('#settings-form [name="posterOffsetX"]', (el) => el.value));
+  assert.ok(x1 > x0, `ArrowRight moved the poster (${x0} -> ${x1})`);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'position-done', 'focus stayed on Done');
+  check('D100 position mode keeps its arrows');
+});
+
 // A hybrid laptop: a touch, then a mouse. The mouse's pointermove must set the last pointer type back to 'mouse', or a
 // mouse resting on the controls would no longer hold them. {hasTouch} with the default desktop viewport (not isMobile) keeps
 // the mouse hover real. A fake clock runs 20 s past the 3.5 s timer without waiting.

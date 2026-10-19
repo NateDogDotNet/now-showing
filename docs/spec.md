@@ -149,6 +149,10 @@ Priorities: **P0** fix-first, **P1** protection, **P2** polish, **P3** bigger fe
 - Mouse: click into a Settings field, Tab, Esc, mouse still → the controls hide. Touch: a tap on Pause, Pin poster, Refresh or Rotate → the controls hide afterwards.
 - Keyboard: Tab into the controls → they stay shown while focus is on them and keys are pressed; 30 s after the last key press they hide (focus stays on the control) and the next key press shows them again. A real mouse move away, or a mouse wheel, ends keyboard use: they hide 3.5 s later, with focus still on the control.
 
+**R-CTRL-5 (P2, D100) D-pad navigation of the controls.** The arrow keys of a TV remote move focus between the control buttons. With no dialog open, position mode off and the controls not inert, ArrowLeft, ArrowRight, ArrowUp and ArrowDown move focus to the nearest visible, enabled button in that direction as it appears on screen (bounding-box centres, so `rotateUi` and rotation are followed); with no button that way, focus stays (no wrap). The page does not scroll: `preventDefault` is called only when the arrow is consumed. When the controls are hidden, the first arrow only shows them and puts focus on a control (the last focused one if it is still there, else the first) and activates nothing; later arrows move. OK or Enter on a focused button activates it, as in any browser. An arrow counts as keyboard use, like Tab, so the 30 s hold of R-CTRL-4 applies; an arrow inside an open dialog does not, and keeps its native behaviour (selects, sliders, text fields, the PIN keypad). Position mode keeps its arrows. `disableShortcuts` does not turn this off: the arrows are navigation, not shortcuts. In kiosk mode an arrow never shows the controls; during the 15 s reveal, while the controls are not inert, arrows navigate them.
+- Hidden controls: ArrowRight shows them and focuses a control; nothing is activated and no dialog opens. Then ArrowRight and ArrowLeft move to the next and previous button, Enter on Settings opens Settings, and no key past the last button wraps.
+- In Settings an arrow changes a select or slider natively and focus does not jump to the controls. At rotation 90 with `rotateUi` the arrows follow the screen. An arrow holds the controls for 30 s after the last key, then they hide. Kiosk: an arrow does not show them. Position mode: arrows still move the poster. `disableShortcuts: true` leaves the arrows working.
+
 ### Frame brightness
 
 **R-FRM-4 (P1, E4) Frame brightness and night dim.** Setting `frameBrightness` (10-100, default 100) applies `filter: brightness()` to the frame image. Night dim: `nightDim` (default **false**, D6), `nightDimStart` 22:00, `nightDimEnd` 07:00, `nightDimLevel` 60, and `nightDimTarget` (`frame` default | `stage`; `stage` also dims the poster, D6 "whole-poster dim option"). The level is recomputed **once a minute in whole steps** (no CSS transition and no animated filter, resolving the conflict with R-PROT-4): dimming ramps in over the first 10 minutes after `nightDimStart` and out over the last 10 minutes before `nightDimEnd`, so the change is never a jump. The filter is placed on `#frame` (target `frame`) or `#stage` (target `stage`) only. Schedules wait for a plausible clock (R-PROT-6). With the device helper there is no hardware brightness (dropped, D8).
@@ -428,6 +432,7 @@ Plex `contentRating` filter parameter, multi-value syntax and real country-prefi
 | U12 | R-CTRL-2 | `touch-and-labels` |
 | U13 | R-CTRL-3 | `touch-and-labels` |
 | — (D96) | R-CTRL-4 | `controls-autohide` |
+| — (D100) | R-CTRL-5 | `dpad-navigation` |
 | U14 | R-SET-6 | `settings-sheet` |
 | E1 | R-PROT-1, R-PROT-6 | `sleep-mode`, `settings-and-schedule-core` |
 | E2 | R-PROT-2 | `pixel-shift` |
