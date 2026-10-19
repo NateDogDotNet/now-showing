@@ -88,18 +88,28 @@ The three polish items carried from 2.2 are fixed, and the controls now hide aga
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
 
 1. **2.1.x:** done (2.1.1), including the `js/main.js` split that the source-adapter work needed first.
-2. **2.2:** drag-and-nudge positioning, the landscape fill and the gap fill are done (2.2.0, on `main`); then, roughly in this order: the rating schedule, poster selection (libraries, genres, ratings) with weighting and no repeats, viewer profiles (a profile bundles a selection and a limit), "On this day", the playlist and Find a poster (they share the list storage), frame and marquee styles with the marquee captions and info captions, poster transitions, touch gestures (which reuse the transitions' slide and the styles), and theme music. The playlist stores each entry as source plus item ID, never a Plex-only key, so it keeps working once other sources exist.
+2. **2.2:** drag-and-nudge positioning, the landscape fill and the gap fill are done (2.2.0), and so are the point releases 2.2.1 to 2.2.3 (polish, and the controls on mouse, keyboard and TV remote), all on `main`; next, roughly in this order: the rating schedule, poster selection (libraries, genres, ratings) with weighting and no repeats, viewer profiles (a profile bundles a selection and a limit), "On this day", the playlist and Find a poster (they share the list storage), frame and marquee styles with the marquee captions and info captions, poster transitions, touch gestures (which reuse the transitions' slide and the styles), and theme music. The playlist stores each entry as source plus item ID, never a Plex-only key, so it keeps working once other sources exist.
 3. **2.3:** the source-adapter refactor with Plex as the first adapter and no change in behaviour, then Jellyfin, then Emby (close to Jellyfin's API); multiple servers in poster selection; Play now; the movie-night countdown; birthday and occasion mode; and the Picture frame sources (Plex Photos first, then a folder and Immich, then museum art). Every adapter maps its own ratings for the household limit and fails closed, with its own adversarial review.
 4. **2.4:** the no-server mode as a TMDB adapter. It needs the adapter layer, a TMDB key the user supplies (stored like the Plex token), TMDB's attribution, a certification mapping for the household limit, and it has no now-playing. Clear-logo marquees, poster artwork sources and the filter on any production house come with it; Coming Soon for titles not in the library comes after 2.4.
 5. **3.0:** Browse first mode (with the Browse button in poster mode), the main-screen choice (Posters, Browse first, Picture frame, Home controls) and Home controls. It is built from Find a poster, the gestures and Play now, so it comes after them.
 6. **Later:** the rest of the Ideas. Multiple displays comes last among the large features, lowest risk first (Change together and Mirror, then Chain, then Controller), because Controller opens the largest attack surface. It needs the source adapters' item IDs first (the `js/main.js` split is done in 2.1.1).
 
-## ⏭ Planned for 2.2
+## ⏭ Next
 
-Drag and nudge positioning and the landscape fill were moved out of 2.1 so the screen-protection features ship sooner (D41); both are built, and so is the gap fill inside the frame (D67, phase 38, D89); see "Done in 2.2". Three styles of the gap fill are still deferred (D88).
+2.2.0 to 2.2.3 are on `main` (see the "Done in 2.2" sections above), and nothing is in progress. The next features follow the suggested order:
+
+1. **Rating schedule**: time slots, each with its own household limit. It comes first because it is small and needs nothing new: it reuses the schedule helpers in `js/schedule.js` and the 2.1 content filter, and fails closed. See "Rating schedule" under Ideas.
+2. **Poster selection with weighting and no repeats**: libraries, genres and ratings, starting with a Plex smart collection or playlist as a source (Step 1). Both share the pool request. The Plex `genre` filter and the other metadata filter parameters are (verify) items to check on the real server first. See "Poster selection" and "Weighting and no repeats".
+3. **Viewer profiles**: after the two above, because a profile bundles a selection and a limit.
+
+After those, still in 2.2: "On this day", the playlist with Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music.
+
+- **Small items that can ride along** with any of these: the six tidy-ups under "Carried from 2.1.1" in the engineering backlog.
+- **Optional:** "Validate on a Raspberry Pi", whenever a Pi is at hand (D79).
+- **Not decided:** whether these features ship as 2.2.x releases or as a 2.3. The suggested order keeps them under 2.2 and puts the source adapters in 2.3.
 
 ### Gap fill inside the frame: the deferred styles
-The Gap fill setting ships with **Off**, **Dimmed blurred poster** and **Colour matte**. D67 specifies more choices for the same gap (when the poster does not match the frame window's shape: "Fit inside window", or a poster scaled or offset smaller than the window):
+Still deferred from 2.2 (D88), and not part of the next steps above. The Gap fill setting ships with **Off**, **Dimmed blurred poster** and **Colour matte**. D67 specifies more choices for the same gap (when the poster does not match the frame window's shape: "Fit inside window", or a poster scaled or offset smaller than the window):
 
 - **Backdrop art:** the title's background art from the server.
 - **Smart crop:** fill the window by cropping, but keep the title and faces in view instead of a plain centre crop. Smart crop never crops away the title text when the poster has one, and how well face and text detection run on a Pi is (verify); otherwise the crop stays a simple centre crop.
