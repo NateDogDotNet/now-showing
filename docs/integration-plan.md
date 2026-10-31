@@ -1214,7 +1214,7 @@ Added on the owner's word (2026-10-31, verbatim: "write the run 8 plan and orche
 - **Acceptance criteria:**
   1. `grep -q "VERSION = '2.3.0'" sw.js && grep -q "VERSION = '2.3.0'" js/main.js && test "$(grep -c '"version": "2.3.0"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
   2. `node tests/e2e/run.mjs release preset smoke`  (the notice: marker `'2.3'`; a configured display upgraded from 2.2 shows "What's new in 2.3" once with an Open settings action that opens Settings at Household; a fresh install shows nothing but gets the marker; the harness seeds `'2.3'`)
-  3. `grep -qE '^## .*Done in 2\.3' Roadmap.md && grep -q '2\.4' <(sed -n '/Suggested order/,/^## /p' Roadmap.md) && grep -qi 'rating schedule' README.md && grep -q '^\*\*R-UPG-3' docs/spec.md`
+  3. `grep -qE '^## .*Done in 2\.3' Roadmap.md && grep -qE '^[0-9]+\. \*\*2\.4:\*\* the source-adapter' Roadmap.md && grep -qE '^[0-9]+\. \*\*2\.5:\*\* the no-server mode' Roadmap.md && grep -qi 'rating schedule' README.md && grep -q '^\*\*R-UPG-3' docs/spec.md`
   4. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, by the conductor, after the memory gate)
   5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|tests/e2e/preset.spec.mjs|tests/e2e/smoke.spec.mjs|tests/e2e/lib.mjs|Roadmap.md|README.md|docs/spec.md)')"`
   6. narrated: keep-docs-current over `22c11fa3..HEAD` inside the phase; the anchored documentation review and a UX walk of the notice APPROVE on disk.
