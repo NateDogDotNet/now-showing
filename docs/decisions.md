@@ -417,3 +417,20 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   2. Each slot has a three-choice weekday select (Every day, Weekdays Mon–Fri, Weekends Sat–Sun). A stored set that matches none of these is kept and shown as "Selected days". An unreadable or empty set reads as every day at G. A slot carries past midnight until the next applicable slot starts.
   3. More than 8 slots: the first 8 readable slots, in file order, are kept. The editor cannot add a ninth.
   4. A slot change is noticed by a one-second check plus a check when the tab becomes visible, not by a timer to the next slot start (js/limit-schedule.js `createLimitWatch`). It follows sleep, wake and clock jumps with nothing to re-arm.
+
+## Conductor ruling — 2026-10-31 (rating-schedule r1 reviews; criterion change self-answered under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D103
+
+- **D103 Every rating-schedule slip fails closed, the base limit keeps its meaning, and the editor says what applies now.** This amends D102 items 1–2 and rating-schedule criteria 1 and 2. The question was saved in `.orchestrator/phases/rating-schedule.md` before re-scoring, and answered with option (a).
+  - **Unreadable time.** A schedule with any slot whose time is unreadable reads as the strictest limit (G) all day. It no longer drops that slot. This supersedes "drops a slot with an unreadable time". The editor refuses Save, with a message, while a slot's time is empty or unreadable.
+  - **Weekday sets.** A slot applies only on the days in its set. Before a day's first applicable slot, the previous day's last applicable slot carries over only when it also applies today. Otherwise the base limit (`maxContentRating`) applies. This supersedes D102 item 2's "a slot carries past midnight until the next applicable slot starts".
+  - **Status line.** Under the editor, a line shows the limit in force now and until when. This is a scope addition the plan did not name, taken under D44 as the remedy for the UX walk's Important 1.
+  - **Smaller fixes in the same round:**
+    - the time field's focus outline is visible
+    - the help text says the slots are kept but not applied while the household toggle is off
+    - the slot limit list shows the same labels as the main limit list
+    - each Remove button names its slot
+    - the empty card's advice names the time slots when one is in force
+    - the D37 cached-ratings re-check runs whenever the base limit or any slot sets a limit
+    - `limitInForce` reads an absent `maxContentRating` as the settings default '' and says so
+    - e2e case 4 asserts the offline fallback directly
+  - **Dismissed:** cold Minor 2, the redraw of a pinned or now-playing poster at a slot change. It happens at most a few times a day and shows the same poster.
