@@ -409,3 +409,11 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   6. **Safety.** The limit, or the slot or profile in force, is a ceiling and always wins (D5). An implausible clock, an unreadable slot or a missing profile gives the strictest limit (fail closed). A stricter change takes the poster off at once. The schedule, selection and profiles are applied on Save only and never live-previewed. Opening Settings behind the PIN is the gate on all of them, with no per-field gate.
   7. **Testing.** The run tests against the mock Plex server only. The Plex genre filter and the collection and playlist endpoints are (verify) items carried into `docs/validation/real-server-extended.md`. Nothing runs on a Raspberry Pi.
   8. **Floor check.** Six phases, three tagged `risk:high` (the child-safety limit), so the loop runs.
+
+## Conductor rulings — 2026-10-31 (rating-schedule r1 questions Q1–Q4, under D44): D102
+
+- **D102 How the rating schedule reads what it cannot trust, and when it notices a slot change.** The builder's four proposed readings, accepted under D44 (all fail closed or neutral; none relaxes D5 or D101):
+  1. A non-empty slot list with no readable slot is an unreadable schedule and reads as G all day. An empty or absent list is "no slots", and the base limit applies.
+  2. Each slot has a three-choice weekday select (Every day, Weekdays Mon–Fri, Weekends Sat–Sun). A stored set that matches none of these is kept and shown as "Selected days". An unreadable or empty set reads as every day at G. A slot carries past midnight until the next applicable slot starts.
+  3. More than 8 slots: the first 8 readable slots, in file order, are kept. The editor cannot add a ninth.
+  4. A slot change is noticed by a one-second check plus a check when the tab becomes visible, not by a timer to the next slot start (js/limit-schedule.js `createLimitWatch`). It follows sleep, wake and clock jumps with nothing to re-arm.
