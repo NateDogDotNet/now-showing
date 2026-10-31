@@ -380,3 +380,32 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   Builder rulings accepted: Ctrl, Meta or Alt with an arrow is ignored; the "nearest" score is along-axis distance plus twice the cross-axis distance; an arrow with the controls visible but focus elsewhere only puts focus on a control.
 
   Before the commit, conductor mutants covered: arrows not marking keyboard use, arrows acting in dialogs, the first arrow on hidden controls also moving, and the direction filter dropped. Each failed a D100 case. Dropping the position-mode guard is equivalent, because `.controls` is `display: none` there and no button is navigable; the guard stays as defence in depth. The touch-controls (64 cases), position, settings-sheet, kiosk and release specs, 443 unit tests and the precache check passed. Committed straight to `main`, with no tag and no GitHub release (D79).
+
+## Owner decision — 2026-10-31 (verbatim: "write the run 8 plan and orchestrate it as 2.3"): D101
+
+- **D101 Run 8 builds the Roadmap's next features as 2.3 on branch `2.3`.** Conductor's rulings under D44 (defaults, recorded at the policy stop):
+  1. **Release and branch.** The release is 2.3.0, on a new branch `2.3` from `main` 22c11fa3, which is pushed. No pull request, merge or tag unless the owner asks (D13, D79). The Roadmap renumbers: the source adapters move from 2.3 to 2.4, the no-server TMDB mode to 2.5, and 3.0 stays.
+  2. **Scope.** In scope:
+     - the rating schedule
+     - poster selection, Step 1 only: libraries, genres, ratings, and one collection (smart or not) or playlist as a source
+     - weighting and no repeats
+     - viewer profiles
+     - the 2.3.0 release with a "What's new in 2.3" notice (R-UPG-3, superseding R-UPG-2)
+
+     Out of scope:
+     - the in-app rule builder (poster selection Step 2)
+     - multiple servers (they come with the source adapters)
+     - "On this day", the playlist and Find a poster, and the rest of the Ideas
+  3. **Settings keys.** Each feature phase adds its own keys to `js/settings.js` (convention 10 is set aside for this run). The feature phases therefore run one after another. Only `mock-selection-data` runs beside `rating-schedule`.
+  4. **Profiles** bundle:
+     - the household limit
+     - `limitNowPlaying`
+     - the poster selection
+     - weighting
+     - the frame
+
+     Music and captions are not bundled, because neither feature exists. A profile that follows the Plex Home user now playing is out of scope.
+  5. **Defaults change nothing on upgrade.** No slots, no profiles, weighting off and a no-repeat window of 0 days, so a 2.2 display behaves as before. Settings saved before 2.3 with one `libraryKey` load as that one library.
+  6. **Safety.** The limit, or the slot or profile in force, is a ceiling and always wins (D5). An implausible clock, an unreadable slot or a missing profile gives the strictest limit (fail closed). A stricter change takes the poster off at once. The schedule, selection and profiles are applied on Save only and never live-previewed. Opening Settings behind the PIN is the gate on all of them, with no per-field gate.
+  7. **Testing.** The run tests against the mock Plex server only. The Plex genre filter and the collection and playlist endpoints are (verify) items carried into `docs/validation/real-server-extended.md`. Nothing runs on a Raspberry Pi.
+  8. **Floor check.** Six phases, three tagged `risk:high` (the child-safety limit), so the loop runs.
