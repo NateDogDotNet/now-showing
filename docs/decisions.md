@@ -527,3 +527,13 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
      - The rating help and R-SEL-1's bullet say ratings are offered up to the loosest of the limit and the time slots. (anchored r2 Minor 1, walk r2 Minor 3)
   5. **Stale client in Settings.** Settings drops the client of an earlier connection test when it reopens, so genres and sources always come from the current server. (anchored r2 Minor 3)
   6. **Stored ticks.** A stored rating tick above the offered range is kept on Save, not dropped. The engine's intersection with the limit in force decides what is shown. (anchored r2, declined to judge; D109 item 1)
+
+## Conductor rulings — 2026-11-01 (poster-selection r3 reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D111
+
+- **D111 A kept rating tick is visible, and the last selection gaps close.** This amends D110 item 6, which caused the round's Important. No criterion changes.
+  1. **Kept ticks above the offered range.** A stored rating tick above the offered range is shown as a ticked row marked as above the limit, so a parent sees it and can untick it. Ticking or unticking another rating box does not drop it. The engine's intersection with the limit in force still decides what is shown. (cold r3 Important and walk r3 Important 1; anchored r3, declined to judge)
+  2. **Empty card under a collection or playlist.** With ratings ticked, the empty card's advice also says to tick fewer ratings. (walk r3 Minor)
+  3. **A failing library.** When a library fails among several, the reduced pool is kept only briefly, then the full selection is asked for again. It is not kept for the pool's 30 minutes. (cold r3 Minor 1)
+  4. **Spec text.** The R-SEL-1 "Empty result" bullet in docs/spec.md gives the wording the engine prints and the "more libraries" condition. (anchored r3 Minor 1)
+  5. **Dismissed.** The multi-library pool load waits for each library's title count, with its 8-second timeout, every 30 minutes (cold r3 Minor 2). The counts are asked for in parallel, and the wait only shows when a count hangs; it slows loading and changes nothing shown.
+  6. **Process.** This is poster-selection's third re-dispatch, so it branches: two candidates in separate worktrees, and only the better by the computed Step 4 band is reviewed (re-dispatches 3 and 4 of 5). The rounds converged; each round's findings were new and smaller.
