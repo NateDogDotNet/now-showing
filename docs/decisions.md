@@ -555,3 +555,9 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   5. **Unwatched only.** `unwatchedOnly` is on by default, so the pool has no watched titles and "unwatched first" changes nothing until it is turned off. The help text says so. The e2e case turns it off.
   6. **Criterion 2's margin.** With "unwatched first", 4 of the eight titles marked watched, `unwatchedOnly` off and the window 0, at least 36 of 60 draws are unwatched. The spec seeds the page's random so the run repeats. At weight 3 with an unseeded random, a run falls below 36 in 0.68 % of runs. With no weight it falls below 36 in 99.97 %.
   7. **Unit criterion 1.** "At least twice as often" is measured on the engine's draw with a seeded random over 2,000 picks, with the window at 0.
+
+## Conductor rulings — 2026-11-01 (weighting-no-repeats r1 questions; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D114
+
+- **D114 The builder's Q11 and Q12 are ruled as proposed.**
+  1. **Q11, the live preview.** `weighting` and `noRepeatDays` are plain form fields, so another live control's preview carries their unsaved values to the engine, as `unwatchedOnly` and `randomPoolSize` do today. Cancel restores them. The fix needs js/main.js, which is outside this phase's Output. It goes to `viewer-profiles`, whose Output holds js/main.js: both keys join the preview carve-out there, with the D106 items.
+  2. **Q12, recording at window 0.** Nothing is stored while the window is 0 (D101 ruling 5: a default adds no storage key). Raising the window starts with an empty record.
