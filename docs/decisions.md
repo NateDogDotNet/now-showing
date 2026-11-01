@@ -477,3 +477,23 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
     5. R-FILT-2's carry-over sentence says the slots in force at the end of yesterday run on only when every one of them applies today, which is what the code does. This is the stricter reading of D105 in the corner anchored r4 Minor 1 names: base G, "PG-13 from 22:00 every day" and "No limit from 22:00 Sundays" give Monday 03:00 = G.
   - **Owner follow-up.** One unreadable slot time in an import or a stored value replaces the whole schedule with "G all day" without telling the user, and a Save then keeps it (cold r4 Minor 1). This fails safe; whether to show a notice is the owner's call.
   - **Unpicked candidate.** Candidate r5 (one `opening()` rule and a week-long brute-force test) also scored COMPLETE 75/75. Its work stays on branch `orch/rating-schedule-r5`, which the hook does not let the conductor delete.
+
+## Conductor rulings — 2026-11-01 (poster-selection pre-flight, before dispatch; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D107
+
+- **D107 How a poster selection combines, migrates and fails closed.** These rulings were made before the `poster-selection` builder was dispatched, because the plan's text leaves them open and each one changes the phase's Output.
+  1. **Source.** The source is either the chosen movie libraries or one collection (smart or not) or one playlist. A collection or playlist replaces the library choice; it does not add to it.
+     - The genre selection narrows a library source only. A collection or playlist is already curated.
+     - The rating selection and the limit in force (R-FILT-2) apply to every source. The rating selection is intersected with the limit in force and can never add an unrated or above-limit value (D5).
+  2. **Migration.** Settings saved before 2.3 with only `libraryKey` load as that one library, with no genres, no rating subset and no collection or playlist. Nothing else changes (D101 ruling 5).
+  3. **Proportional pool.** A pool over several libraries samples each library in proportion to its title count. The counts come from the libraries' size-0 count request. The pool size setting is the total, split by those shares.
+  4. **Offline.** While the selection narrows the pool (more than one library chosen, or any genre, rating subset, collection or playlist), a cached poster is drawn only when its cache entry records that it belongs to the selection in force: its library, its genres, or membership of that collection or playlist. An entry without those fields is never drawn under a narrowing selection (fail closed). With the 2.2 selection, one library and nothing else, offline behaves as today.
+  5. **Counts.** The mock's size-0 count ignores filters (mock-selection-data review M2), so no "N titles match" count that combines a filter with the size-0 request is shown or tested. Library checkboxes show the plain library count, as the library select does today.
+  6. **Unconfirmed Plex shapes.** Each Plex request shape the research could not confirm is a (verify) row in docs/validation/real-server-extended.md (D101 ruling 7). The client also filters the reply on the item's own fields, so a server that ignores a parameter cannot widen the pool. The rows cover:
+     - the genre list shape
+     - `genre=<key>`, `genre=<title>`, and the comma OR list
+     - the `Genre` tag's `filter` attribute
+     - the collection listing and children paths
+     - the playlist paths and attributes
+     - `viewCount` left off unwatched titles
+     - `totalSize` with filters
+  7. **Empty result.** A selection that matches nothing shows the empty card naming the selection (the libraries, genres, ratings, collection or playlist), with the existing advice about "unwatched only" and the limit.
