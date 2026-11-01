@@ -22,6 +22,7 @@ const SHELL = [
   'js/helper.js',
   'js/kiosk.js',
   'js/layout.js',
+  'js/limit-schedule.js',
   'js/pin-gate.js',
   'js/plex.js',
   'js/position.js',

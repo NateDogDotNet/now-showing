@@ -674,3 +674,131 @@ test('D80: a pool failure while the re-check is still running rejects without an
     process.off('unhandledRejection', onUnhandled);
   }
 });
+
+// ---- R-FILT-2 (D101): the engine holds every pick to the slot in force, failing closed ----
+
+const SLOTS = [{ start: '06:00', limit: 'G' }, { start: '15:00', limit: 'PG-13' }, { start: '22:00', limit: '' }];
+const MIXED_RATED = [rated('g', 'G'), rated('pg13', 'PG-13'), rated('r', 'R'), rated('tvma', 'TV-MA'), rated('nc', 'NC-17'), rated('blank', ''), poster('missing')];
+
+/** An engine on a clock the test sets: `clock.at` is a Date, read at every decide(). */
+function scheduled(overrides = {}, clientOpts = {}, start = new Date(2026, 0, 5, 7, 0)) {
+  const clock = { at: start };
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', maxContentRating: 'PG-13', limitSlots: SLOTS, ...overrides };
+  const client = fakeClient({ pool: MIXED_RATED, ...clientOpts });
+  const engine = createEngine({ client, getSettings: () => settings, now: () => clock.at.getTime(), random: spread() });
+  return { engine, client, settings, clock };
+}
+
+test('R-FILT-2: at a G slot only G titles are picked; at PG-13 up to PG-13; at "no limit" everything, unrated too', async () => {
+  const { engine, clock } = scheduled();
+  assert.deepEqual([...(await everyPick(engine))], ['g']);
+  clock.at = new Date(2026, 0, 5, 16, 0);
+  assert.deepEqual([...(await everyPick(engine))].sort(), ['g', 'pg13']);
+  clock.at = new Date(2026, 0, 5, 22, 30);
+  assert.equal((await everyPick(engine, 200)).size, MIXED_RATED.length);
+  clock.at = new Date(2026, 0, 6, 3, 0);
+  assert.equal((await everyPick(engine, 200)).size, MIXED_RATED.length, 'after midnight the 22:00 slot is still in force');
+});
+
+test('R-FILT-2: the pool is asked for the limit in force, and the pool cache key changes when the slot does', async () => {
+  const { engine, client, clock } = scheduled({}, {}, new Date(2026, 0, 5, 14, 50));
+  await engine.decide({ force: true });
+  await engine.decide({ force: true });
+  assert.equal(client.calls.pool, 1, 'same slot: cached');
+  clock.at = new Date(2026, 0, 5, 14, 59);
+  await engine.decide({ force: true });
+  assert.equal(client.calls.pool, 1, 'a minute before the boundary: still cached');
+  clock.at = new Date(2026, 0, 5, 15, 5); // 15 minutes after the first load: inside the 30 minute pool lifetime
+  const d = await engine.decide({ force: true });
+  assert.equal(client.calls.pool, 2, 'the slot changed: the pool is reloaded, not served from the old key');
+  assert.deepEqual(client.calls.poolArgs.map((a) => a.maxContentRating), ['G', 'PG-13']);
+  assert.ok(['g', 'pg13'].includes(d.poster.ratingKey));
+  clock.at = new Date(2026, 0, 5, 22, 0);
+  await engine.decide({ force: true });
+  assert.deepEqual(client.calls.poolArgs.map((a) => a.maxContentRating), ['G', 'PG-13', ''], 'no limit is asked for as "no limit"');
+});
+
+test('R-FILT-2: a stricter slot holds a pool that was loaded under a looser one (the server returns everything)', async () => {
+  const slots = [{ start: '10:00', limit: '' }, { start: '10:20', limit: 'G' }];
+  const { engine, client, clock } = scheduled({ limitSlots: slots }, {}, new Date(2026, 0, 5, 10, 5));
+  assert.ok((await everyPick(engine, 200)).size > 2, 'no limit');
+  clock.at = new Date(2026, 0, 5, 10, 25);
+  assert.deepEqual([...(await everyPick(engine))], ['g']);
+  assert.equal(client.calls.pool, 2);
+});
+
+test('R-FILT-2: an implausible clock holds the picks to the strictest of the slots and the base limit', async () => {
+  const { engine, client, clock } = scheduled({ maxContentRating: 'R' }, {}, new Date(1970, 0, 1, 23, 0));
+  assert.deepEqual([...(await everyPick(engine))], ['g']);
+  assert.equal(client.calls.poolArgs[0].maxContentRating, 'G');
+  clock.at = new Date(2026, 0, 5, 23, 0);
+  assert.equal((await everyPick(engine, 200)).size, MIXED_RATED.length, 'a clock that is set follows the slot');
+});
+
+test('R-FILT-2: with the household toggle off (base limit "") the slots are not applied', async () => {
+  const { engine, client } = scheduled({ maxContentRating: '' });
+  assert.equal((await everyPick(engine, 200)).size, MIXED_RATED.length);
+  assert.equal(client.calls.poolArgs[0].maxContentRating, '');
+});
+
+test('R-FILT-2: no slots behaves exactly as the base limit', async () => {
+  const { engine, client } = scheduled({ limitSlots: [] }, {}, new Date(1970, 0, 1));
+  assert.deepEqual([...(await everyPick(engine))].sort(), ['g', 'pg13']);
+  assert.equal(client.calls.poolArgs[0].maxContentRating, 'PG-13');
+});
+
+test('R-FILT-2: now playing is held to the slot in force when limitNowPlaying is on, and not when it is off', async () => {
+  const sessions = playingRated('R');
+  const on = scheduled({ showNowPlaying: true, limitNowPlaying: true }, { sessions });
+  assert.equal((await on.engine.decide()).poster.source, 'random', 'an R title at a G slot is hidden');
+  assert.equal(on.engine.session, null);
+  on.clock.at = new Date(2026, 0, 5, 22, 0);
+  assert.equal((await on.engine.decide({ force: true })).poster.source, 'now-playing', 'at "no limit" it shows');
+  const off = scheduled({ showNowPlaying: true, limitNowPlaying: false }, { sessions });
+  assert.equal((await off.engine.decide()).poster.source, 'now-playing', 'limitNowPlaying off: not held to the slot');
+  const unrated = scheduled({ showNowPlaying: true, limitNowPlaying: true }, { sessions: playingRated('') });
+  assert.equal((await unrated.engine.decide()).poster.source, 'random', 'unrated stays hidden in a slot that sets a limit');
+});
+
+test('R-FILT-2: the empty-card advice follows the slot in force', async () => {
+  const { engine } = scheduled({}, { pool: [rated('r', 'R')] });
+  await assert.rejects(engine.decide(), (err) => err.kind === 'empty' && /at or below G/.test(err.message) && /raise the limit/.test(err.message));
+});
+
+test('R-FILT-2 / D103: cached titles are re-rated whenever the base limit or any slot sets a limit, also in a "no limit" slot', async () => {
+  const { client, clock, settings } = scheduled();
+  const asked = [];
+  client.items = async (keys) => (asked.push(keys), []);
+  const engine = createEngine({ client, getSettings: () => settings, now: () => clock.at.getTime(), random: () => 0, cachedKeys: () => ['1'], onRatings: () => {} });
+  await engine.decide({ force: true });
+  assert.deepEqual(asked, [['1']], 'a G slot re-rates the cache');
+  clock.at = new Date(2026, 0, 5, 22, 0);
+  await engine.decide({ force: true });
+  assert.equal(asked.length, 2, 'a no-limit slot re-rates too: the base limit is set, so a stricter slot may follow');
+  clock.at = new Date(2026, 0, 6, 6, 0);
+  await engine.decide({ force: true });
+  assert.equal(asked.length, 3, 'the next G slot re-rates again');
+});
+
+test('D103: no re-check when neither the base limit nor any slot sets a limit; a slot that sets a limit is enough', async () => {
+  const noLimits = [{ start: '06:00', limit: '' }, { start: '22:00', limit: '' }];
+  const run = async (overrides) => {
+    const { client, clock, settings } = scheduled(overrides, {}, new Date(2026, 0, 5, 12, 0));
+    const asked = [];
+    client.items = async (keys) => (asked.push(keys), []);
+    const engine = createEngine({ client, getSettings: () => settings, now: () => clock.at.getTime(), random: () => 0, cachedKeys: () => ['1'], onRatings: () => {} });
+    await engine.decide({ force: true });
+    return asked.length;
+  };
+  assert.equal(await run({ maxContentRating: '', limitSlots: noLimits }), 0, 'toggle off and no slot sets a limit');
+  assert.equal(await run({ maxContentRating: '', limitSlots: [] }), 0);
+  assert.equal(await run({ maxContentRating: 'R', limitSlots: noLimits }), 1, 'the base limit sets one');
+  assert.equal(await run({ maxContentRating: '', limitSlots: SLOTS }), 1, 'a slot sets one (saved slots, toggle off)');
+});
+
+test('D103: the online empty-card advice names the time slots while slots exist, and only "raise the limit" without them', async () => {
+  const withSlotsAdvice = scheduled({}, { pool: [rated('r', 'R')] });
+  await assert.rejects(withSlotsAdvice.engine.decide(), (err) => /raise the limit or change the time slots/.test(err.message));
+  const plain = scheduled({ limitSlots: [] }, { pool: [rated('r', 'R')] }, new Date(2026, 0, 5, 12, 0));
+  await assert.rejects(plain.engine.decide(), (err) => /raise the limit\)/.test(err.message) && !/time slots/.test(err.message));
+});

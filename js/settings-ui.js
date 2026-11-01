@@ -3,7 +3,9 @@
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { createPin, checkPin, createPlexClient, discoverServers, firstReachable } from './plex.js';
+import { describeLimitNow, MAX_SLOTS, NO_LIMIT } from './limit-schedule.js';
 import { createPositionMode } from './position.js';
+import { parseHHMM } from './schedule.js';
 import { defaults, fromImport, isConfigured, sanitize, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
@@ -67,6 +69,14 @@ export async function pinSignIn(clientId, { signal, onCode, fetchImpl, pollMs = 
   return null;
 }
 
+// ---- the time slots (R-FILT-2): rows of start time, limit and days, held in the list itself until Save ----
+
+const DAY_SETS = { all: undefined, weekdays: [1, 2, 3, 4, 5], weekends: [0, 6] };
+const sameDays = (a, b) => a.length === b.length && a.every((d, i) => d === b[i]);
+
+/** The `days` select value for a stored weekday set; anything that is not a preset is 'custom' (kept as it is, shown as "Selected days"). */
+const daysChoice = (days) => (days ? Object.keys(DAY_SETS).find((k) => DAY_SETS[k] && sameDays(DAY_SETS[k], days)) || 'custom' : 'all');
+
 const countLabel = (n) => `${n.toLocaleString('en-US')} ${n === 1 ? 'title' : 'titles'}`;
 
 /**
@@ -109,6 +119,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     field('maxContentRating').value = s.maxContentRating || 'PG-13';
     ensureLibraryOption(s.libraryKey, s.libraryName);
     field('libraryKey').value = s.libraryKey;
+    renderSlots(s.limitSlots);
     pendingPin = { key: s.staticRatingKey || '', title: s.staticTitle || '' };
     $('pinned-title').textContent = s.staticRatingKey ? s.staticTitle || `item ${s.staticRatingKey}` : 'none';
     $('unpin-btn').hidden = !s.staticRatingKey;
@@ -127,6 +138,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       s[el.name] = el.type === 'checkbox' ? el.checked : el.value;
     }
     s.maxContentRating = $('household-toggle').checked ? field('maxContentRating').value : '';
+    s.limitSlots = readSlots(); // kept whatever the toggle says: with it off they are saved but not applied
     const lib = field('libraryKey');
     s.libraryName = lib.selectedOptions[0]?.dataset.title || s.libraryName;
     s.staticRatingKey = pendingPin.key;
@@ -135,6 +147,134 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     s.settingsPinSalt = pendingAuth.salt;
     return sanitize(s);
   }
+
+  // ---- the time slots ----
+
+  function slotRow(slot) {
+    const li = document.createElement('li');
+    li.className = 'slot-row';
+    const labelled = (text, control) => {
+      const label = document.createElement('label');
+      label.append(text, control);
+      return label;
+    };
+    const start = document.createElement('input');
+    start.type = 'time';
+    start.className = 'slot-start';
+    start.value = slot.start;
+    const limit = document.createElement('select');
+    limit.className = 'slot-limit';
+    // The same labels as the main limit select ("PG-13 (TV-14)"), then "No limit".
+    limit.append(...[...field('maxContentRating').options].map((o) => new Option(o.textContent.trim(), o.value)), new Option('No limit', NO_LIMIT));
+    limit.value = slot.limit;
+    const days = document.createElement('select');
+    days.className = 'slot-days';
+    days.append(new Option('Every day', 'all'), new Option('Weekdays', 'weekdays'), new Option('Weekends', 'weekends'));
+    const choice = daysChoice(slot.days);
+    if (choice === 'custom') {
+      days.append(new Option('Selected days', 'custom'));
+      li.dataset.days = JSON.stringify(slot.days);
+    }
+    days.value = choice;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn small slot-remove';
+    remove.textContent = 'Remove';
+    const name = () => (parseHHMM(start.value) === null ? 'Remove this slot' : `Remove the ${start.value} slot`);
+    remove.setAttribute('aria-label', name());
+    start.addEventListener('input', () => {
+      remove.setAttribute('aria-label', name());
+      clearSlotError(li);
+      clearSlotRefusal();
+    });
+    const error = document.createElement('p');
+    error.className = 'slot-error error';
+    error.id = `slot-error-${++slotRowCount}`;
+    error.hidden = true;
+    error.setAttribute('role', 'alert');
+    start.setAttribute('aria-describedby', error.id);
+    remove.addEventListener('click', () => {
+      li.remove();
+      clearSlotRefusal();
+      syncSlots();
+      $('slot-add').focus();
+    });
+    li.append(labelled('From', start), labelled('Show up to', limit), labelled('Days', days), remove, error);
+    return li;
+  }
+
+  let slotRowCount = 0;
+
+  function clearSlotError(li) {
+    li.querySelector('.slot-error').hidden = true;
+    li.querySelector('.slot-start').removeAttribute('aria-invalid');
+  }
+
+  /** Marks every row whose time is empty or unreadable, beside the row; true when there is one. Save is refused then (D103). */
+  function markBadSlotTimes() {
+    let first = null;
+    for (const li of $('slot-list').children) {
+      const start = li.querySelector('.slot-start');
+      if (parseHHMM(start.value) !== null) continue;
+      const error = li.querySelector('.slot-error');
+      error.textContent = 'Set a start time for this slot, or remove it.';
+      error.hidden = false;
+      start.setAttribute('aria-invalid', 'true');
+      first ??= start;
+    }
+    first?.focus();
+    slotRefusal = Boolean(first);
+    return slotRefusal;
+  }
+
+  /**
+   * The line under the household options (visible with the toggle off too): the limit in force now and until when, for the SAVED
+   * settings (unsaved edits count after Save), so it starts "Saved:".
+   */
+  function syncSlotStatus() {
+    const text = describeLimitNow(getSettings(), new Date());
+    $('slot-status').textContent = `Saved: ${text[0].toLowerCase()}${text.slice(1)}`;
+  }
+
+  let slotRefusal = false; // the footer shows the missing-start-time message
+
+  /** The footer message goes when no row is left with a bad time (the time was fixed, or the row removed). */
+  function clearSlotRefusal() {
+    if (!slotRefusal || $('slot-list').querySelector('[aria-invalid]')) return;
+    $('form-error').textContent = '';
+    slotRefusal = false;
+  }
+
+  function syncSlots() {
+    const rows = $('slot-list').children.length;
+    $('slot-empty').hidden = rows > 0;
+    $('slot-add').disabled = rows >= MAX_SLOTS;
+    $('slot-add').title = rows >= MAX_SLOTS ? `${MAX_SLOTS} time slots is the most` : '';
+  }
+
+  function renderSlots(slots) {
+    $('slot-list').replaceChildren(...slots.map(slotRow));
+    syncSlots();
+  }
+
+  /** The slots as the list shows them now. One unreadable time makes the whole schedule G all day (no row is dropped); Save refuses it first. */
+  function readSlots() {
+    return [...$('slot-list').children].map((li) => {
+      const choice = li.querySelector('.slot-days').value;
+      const days = choice === 'custom' ? JSON.parse(li.dataset.days) : DAY_SETS[choice];
+      const slot = { start: li.querySelector('.slot-start').value, limit: li.querySelector('.slot-limit').value };
+      return days ? { ...slot, days: [...days] } : slot;
+    });
+  }
+
+  setInterval(() => dialog.open && syncSlotStatus(), 1000); // the slot in force changes at its boundary while the sheet is open
+
+  $('slot-add').addEventListener('click', () => {
+    const row = slotRow({ start: '08:00', limit: field('maxContentRating').value });
+    $('slot-list').append(row);
+    syncSlots();
+    row.querySelector('.slot-start').focus();
+  });
 
   function syncPin() {
     const set = Boolean(pendingAuth.hash);
@@ -433,11 +573,17 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     const s = read();
     s.serverName = form.dataset.serverName || s.serverName;
     const err = $('form-error');
+    if (markBadSlotTimes()) {
+      // Refused: a slot with no readable time would make the whole schedule the strictest limit (D103). The rows are hidden while the toggle is off.
+      err.textContent = $('household-toggle').checked ? 'A time slot has no start time. Set it or remove the slot.' : 'A time slot has no start time. Turn on Household with children to see it, then set the time or remove the slot.';
+      return;
+    }
     if (s.plexToken && s.serverUrl && !s.libraryKey && !s.staticRatingKey) {
       err.textContent = 'Choose a library (test the connection to load them).';
       return;
     }
     err.textContent = '';
+    slotRefusal = false;
     original = null;
     cancelSignIn();
     closeSheet();
@@ -616,10 +762,12 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       if (dialog.open) return;
       original = getSettings();
       $('form-error').textContent = '';
+      slotRefusal = false;
       $('test-result').replaceChildren();
       $('first-run-hint').hidden = isConfigured(original);
       form.dataset.serverName = original.serverName;
       write(original);
+      syncSlotStatus();
       setTokenShown(false);
       $('advanced').open = false;
       $('manual-connection').open = Boolean(original.plexToken && !original.serverName);

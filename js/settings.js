@@ -1,6 +1,7 @@
 // Settings schema, persistence, legacy migration and import/export.
 // Everything is stored as one JSON blob so it can be exported and validated as a unit.
 
+import { sanitizeSlots } from './limit-schedule.js';
 import { parseHHMM } from './schedule.js';
 
 export const STORAGE_KEY = 'plexPoster.settings';
@@ -79,6 +80,8 @@ const SCHEMA = {
   // An unknown limit (a typo, a hand-edited file) fails closed to PG-13, never to "no limit" (K21, D31). Absent stays ''.
   maxContentRating: ['', (v) => (['', 'G', 'PG', 'PG-13', 'R', 'NC-17'].includes(v) ? v : 'PG-13')],
   limitNowPlaying: [true, bool],
+  // The limit by time of day (R-FILT-2, D101): applied only while a household limit is set; no slots = the limit above all day.
+  limitSlots: [[], (v) => sanitizeSlots(v)],
 
   // Display protection
   sleepEnabled: [false, bool],
@@ -116,15 +119,18 @@ export const SECRET_KEYS = ['plexToken'];
 /** PIN material: never written to an export and never accepted from an import file. */
 export const NEVER_EXPORT_KEYS = ['settingsPinHash', 'settingsPinSalt'];
 
+/** A default that is a list is copied, so no caller can change the schema's own. */
+const copyOf = (d) => (Array.isArray(d) ? [...d] : d);
+
 export function defaults() {
-  return Object.fromEntries(Object.entries(SCHEMA).map(([k, [d]]) => [k, d]));
+  return Object.fromEntries(Object.entries(SCHEMA).map(([k, [d]]) => [k, copyOf(d)]));
 }
 
 /** Returns a complete, valid settings object; unknown keys are dropped. */
 export function sanitize(input = {}) {
   const out = {};
   for (const [key, [def, fix]] of Object.entries(SCHEMA)) {
-    out[key] = key in input && input[key] !== undefined && input[key] !== null ? fix(input[key], def) : def;
+    out[key] = key in input && input[key] !== undefined && input[key] !== null ? fix(input[key], def) : copyOf(def);
   }
   return out;
 }

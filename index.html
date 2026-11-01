@@ -176,7 +176,16 @@
               </select>
             </label>
             <label class="check"><input name="limitNowPlaying" type="checkbox" /> Apply the limit to what's playing right now</label>
+
+            <div id="slot-editor" class="slot-editor" role="group" aria-labelledby="slot-label">
+              <span id="slot-label" class="field-label">Change the limit during the day</span>
+              <ul id="slot-list" class="slot-list"></ul>
+              <p id="slot-empty" class="muted small">No time slots: the limit above applies all day.</p>
+              <button type="button" class="btn small" id="slot-add">Add a time slot</button>
+              <p id="slot-help" class="muted small">A slot sets the limit from its start until the next slot starts, on the days you choose; where no slot applies, the limit above does. Slots apply when you press Save, and the line below describes the saved ones. If the clock is not set, the strictest limit applies. If you turn Household with children off, the slots are kept but not applied.</p>
+            </div>
           </div>
+          <p id="slot-status" class="slot-status" aria-live="polite"></p>
           <p id="household-help" class="muted small">Posters above the limit are never shown, online or from the offline cache, and unrated titles are hidden too. The exceptions are a poster you pinned and saved, and the title playing right now when "Apply the limit to what's playing right now" is off.</p>
         </fieldset>
 

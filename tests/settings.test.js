@@ -104,7 +104,7 @@ const NEW_DEFAULTS = {
   pixelShift: true, pixelShiftMinutes: 3, frameBrightness: 100, nightDim: false, nightDimStart: '22:00',
   nightDimEnd: '07:00', nightDimLevel: 60, nightDimTarget: 'frame', dailyReload: true, dailyReloadTime: '04:00',
   kioskMode: false, disableShortcuts: false, settingsPinHash: '', settingsPinSalt: '', deviceHelper: false,
-  controlLabels: 'auto', showMeta: false, showProgress: true, showPlayer: false, fillMode: 'none', gapFill: 'none',
+  controlLabels: 'auto', limitSlots: [], showMeta: false, showProgress: true, showPlayer: false, fillMode: 'none', gapFill: 'none',
 };
 
 test('defaults table for the new keys', () => {
@@ -246,4 +246,42 @@ test('gapFill migrates: stored settings without it load as none; one saved with 
   assert.equal(fromImport(JSON.stringify(exported)).gapFill, 'blur');
   const bad = { format: 'plex-poster-display/settings', version: 1, settings: { rotateSeconds: 60, gapFill: 'sepia' } };
   assert.equal(fromImport(JSON.stringify(bad)).gapFill, 'none');
+});
+
+// ---- R-FILT-2 (D101): the time slots ----
+
+test('limitSlots survives save and load, an export and an import', () => {
+  const slots = [{ start: '06:00', limit: 'G' }, { start: '15:00', limit: 'PG-13', days: [1, 2, 3, 4, 5] }, { start: '22:00', limit: '' }];
+  const storage = memoryStorage();
+  save(storage, { ...defaults(), maxContentRating: 'PG-13', limitSlots: slots });
+  assert.deepEqual(load(storage).settings.limitSlots, slots);
+  const file = toExport({ ...defaults(), limitSlots: slots });
+  assert.deepEqual(file.settings.limitSlots, slots);
+  assert.deepEqual(fromImport(JSON.stringify(file), defaults()).limitSlots, slots);
+});
+
+test('limitSlots from storage written before 2.3 (no key) is no slots, which changes nothing', () => {
+  const storage = memoryStorage({ [STORAGE_KEY]: JSON.stringify({ maxContentRating: 'PG' }) });
+  const s = load(storage).settings;
+  assert.deepEqual(s.limitSlots, []);
+  assert.equal(s.maxContentRating, 'PG');
+});
+
+test('limitSlots from a hand-edited or corrupt file fails closed through the sanitiser', () => {
+  const bad = (limitSlots) => fromImport({ limitSlots }, defaults()).limitSlots;
+  assert.deepEqual(bad('06:00'), [{ start: '00:00', limit: 'G' }], 'not a list: the strictest limit all day');
+  assert.deepEqual(bad([{ start: '06:00', limit: 'bogus' }]), [{ start: '06:00', limit: 'G' }], 'unknown limit -> G');
+  assert.deepEqual(bad([{ start: '06:00', limit: 'R' }, { start: '25:00', limit: '' }]), [{ start: '00:00', limit: 'G' }], 'an unreadable time: the whole schedule is G all day, no slot dropped');
+  assert.deepEqual(bad(Array.from({ length: 20 }, (_, i) => ({ start: `${String(i).padStart(2, '0')}:00`, limit: 'PG' }))), [{ start: '00:00', limit: 'G' }], 'more than 8 slots: G all day');
+  const storage = memoryStorage({ [STORAGE_KEY]: JSON.stringify({ maxContentRating: 'R', limitSlots: { start: '06:00' } }) });
+  assert.deepEqual(load(storage).settings.limitSlots, [{ start: '00:00', limit: 'G' }]);
+});
+
+test('limitSlots: the default list is not shared between callers', () => {
+  const a = defaults();
+  a.limitSlots.push({ start: '06:00', limit: 'G' });
+  assert.deepEqual(defaults().limitSlots, []);
+  const b = sanitize({});
+  b.limitSlots.push({ start: '06:00', limit: 'G' });
+  assert.deepEqual(sanitize({}).limitSlots, []);
 });

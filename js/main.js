@@ -13,6 +13,7 @@ import { createPosterPin } from './poster-pin.js';
 import { allows } from './ratings.js';
 import { createReload, takeCarriedPlayback } from './reload.js';
 import { requestSize } from './layout.js';
+import { createLimitWatch, limitInForce } from './limit-schedule.js';
 import { isPlausibleClock } from './schedule.js';
 import { createSettingsUI, pinSignIn } from './settings-ui.js';
 import { fromImport, isConfigured, load, save, STORAGE_KEY } from './settings.js';
@@ -102,10 +103,16 @@ const cachedBlobs = new WeakSet(); // blobs served from the poster cache (not fr
 
 // ---------- Household limit on what is already on screen ----------
 
+/**
+ * The household limit in force now: the time-of-day slot, or the base limit (R-FILT-2, js/limit-schedule.js). Every reader
+ * of the limit in this file calls this; `state.settings.maxContentRating` is only the base limit and is not read for a decision.
+ */
+const limitNow = () => limitInForce(state.settings, new Date());
+
 /** May this poster stay on screen under the current settings? A pinned poster is exempt (D5), and so is a now-playing one unless `limitNowPlaying` is on. */
 function allowedOnScreen(poster) {
   const s = state.settings;
-  if (allows(s.maxContentRating, poster.contentRating)) return true;
+  if (allows(limitNow(), poster.contentRating)) return true;
   if (s.staticRatingKey && poster.ratingKey === s.staticRatingKey) return true;
   return poster.source === 'now-playing' && s.limitNowPlaying === false;
 }
@@ -141,6 +148,28 @@ function blockPoster() {
   display.setTitle(null);
   display.setNowPlaying(null);
 }
+
+/** Whatever is on screen is checked against the limit in force now: a poster that is not allowed comes off at once, a fading one is cut. */
+function enforceOnScreen() {
+  if (display.currentPoster && !allowedOnScreen(display.currentPoster)) blockPoster();
+  else cutOutgoing(); // a poster still fading out under a crossfade is not allowed to finish its fade (C7M1)
+}
+
+// The slot in force changes at a slot boundary with no Save and no reload. A one second check (as sleep and the daily reload
+// use) follows the clock through sleep, wake, a tab left hidden and a clock that jumps; it needs no timer to re-arm. A stricter
+// limit takes the poster off at once, exactly as a Save does, and a forced tick draws its replacement; a looser one waits for the next rotation.
+const limitWatch = createLimitWatch({
+  getSettings: () => state.settings,
+  onChange: () => {
+    enforceOnScreen();
+    // A boundary replaces the poster on screen only when it is no longer allowed (D105): an allowed poster stays, paused or not,
+    // and a looser limit takes effect at the next rotation (the pool key already follows the limit in force).
+    if (display.currentPoster) return;
+    if (state.busy) state.forceAfter = true; // a tick already running began under the old limit
+    tick({ force: true });
+  },
+});
+setInterval(limitWatch.check, 1000);
 
 /**
  * The progress bar and player label follow the session the engine saw this tick, but only while that very
@@ -288,7 +317,7 @@ async function handleFailure(err, { notify = false } = {}) {
   const due = !current || Date.now() - (current.shownAt || 0) >= state.settings.rotateSeconds * 1000;
   if (due && !fatal && !state.asleep) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const cached = await cache.random(current?.ratingKey, state.settings.maxContentRating).catch(() => null);
+      const cached = await cache.random(current?.ratingKey, limitNow()).catch(() => null);
       if (!cached) break;
       try {
         if (!(await showPoster(cached.poster, cached.blob))) continue; // no longer allowed: not drawn, not shown
@@ -305,7 +334,8 @@ async function handleFailure(err, { notify = false } = {}) {
   if (!display.currentPoster) {
     // The limit is the reason only when it emptied the cache: posters are cached, and none of them passes it (D73).
     const stored = cache.entries();
-    const limited = state.settings.maxContentRating && !fatal && stored.length > 0 && !stored.some((e) => allows(state.settings.maxContentRating, e.contentRating));
+    const limit = limitNow();
+    const limited = limit && !fatal && stored.length > 0 && !stored.some((e) => allows(limit, e.contentRating));
     showEmpty(true, limited ? 'No posters within the household limit are available while Plex is unreachable.' : err.message, err.kind);
   }
   // A refresh somebody asked for that fails with a poster still on screen has nothing else to say so: the toast carries the fixes.
@@ -437,18 +467,18 @@ function setPaused(paused) {
 
 async function applySettings(next, { persist = true, preview = false, restartIdle = true } = {}) {
   const prev = state.settings;
-  // A live preview shows layout only. The household limit and the pin are never previewed (CCI1, C6I1): while the
+  // A live preview shows layout only. The household limit, its time slots and the pin are never previewed (CCI1, C6I1): while the
   // dialog is open the previous, saved values keep applying, so only Save changes them and Cancel has nothing to undo
   // (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the
   // kiosk switches, the settings PIN and the device helper: an unsaved change to any of them is never in force. The Display
   // protection fieldset is not live either (K30): a pixel-shift or daily-reload change waits for Save, even when a live
   // layout field moves while it is unsaved. The brightness controls are their own live block and are not listed here.
   if (preview) {
-    const { maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
+    const { maxContentRating, limitSlots, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
     const { pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime } = prev;
     next = {
       ...next,
-      ...{ maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper },
+      ...{ maxContentRating, limitSlots, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper },
       ...{ pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime },
     };
   }
@@ -458,8 +488,7 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   // Whatever is on screen is re-checked against the settings now in force on EVERY apply, previews and Cancel
   // included, even offline (K20, D29). This comes BEFORE the frame is applied, because a custom frame's load has no
   // timeout and must not keep an above-limit poster on screen.
-  if (display.currentPoster && !allowedOnScreen(display.currentPoster)) blockPoster();
-  else cutOutgoing(); // a poster still fading out under a crossfade is not allowed to finish its fade (C7M1)
+  enforceOnScreen();
   try {
     await display.apply(state.settings);
   } catch (err) {
@@ -496,7 +525,11 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   }
   // Online, the forced tick below picks the replacement for a blocked poster; offline, handleFailure shows an
   // allowed cached poster or the empty card.
-  const limitChanged = ['maxContentRating', 'limitNowPlaying'].some((k) => prev[k] !== state.settings[k]);
+  // Slots are compared by what they do now: the limit in force before and after this Save (the same instant). When it differs the
+  // watch adopts it here, so the next check does not report the same change again with a second forced draw.
+  const inForceChanged = limitInForce(prev, new Date()) !== limitNow();
+  if (inForceChanged) limitWatch.sync();
+  const limitChanged = inForceChanged || ['maxContentRating', 'limitNowPlaying'].some((k) => prev[k] !== state.settings[k]);
   // A tick already running began before this save and may not honour it, so a forced tick is queued for when it ends.
   const force = connectionChanged || limitChanged;
   if (force && state.busy) state.forceAfter = true;
@@ -968,6 +1001,7 @@ async function updateWakeLock() {
 document.addEventListener('visibilitychange', () => {
   updateWakeLock();
   if (document.visibilityState === 'visible') brightness.evaluate();
+  if (document.visibilityState === 'visible') limitWatch.check(); // a hidden tab's timers are slowed: catch up with the clock now
   if (document.visibilityState === 'visible' && !state.paused && state.nextAt && Date.now() >= state.nextAt - 1000) tick();
 });
 window.addEventListener('online', () => {

@@ -2,6 +2,7 @@
 // main.js calls `decide()` on a timer and renders whatever it returns.
 
 import { pickNowPlaying } from './plex.js';
+import { limitInForce, sanitizeSlots } from './limit-schedule.js';
 import { allows } from './ratings.js';
 
 const POOL_TTL_MS = 30 * 60 * 1000;
@@ -22,6 +23,16 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
   let poolAt = 0;
   const recent = [];
 
+  // The settings as decide() reads them: `maxContentRating` is replaced by the limit in force at this moment (R-FILT-2), so
+  // the pool key, the Plex request, the re-check, the permit test and the empty-card advice below all follow the time-of-day
+  // slot, and none of them can read the base limit by mistake. `limitSet` says whether the base limit or any slot sets a limit
+  // (the D37 re-check runs then, even in a slot that sets no limit, so the cache's ratings are fresh when a stricter slot starts).
+  const inForce = () => {
+    const s = getSettings();
+    const limitSet = Boolean(s.maxContentRating) || sanitizeSlots(s.limitSlots).some((slot) => slot.limit !== '');
+    return { ...s, maxContentRating: limitInForce(s, new Date(now())), limitSet };
+  };
+
   async function loadPool(s) {
     const key = `${s.libraryKey}|${s.unwatchedOnly}|${s.randomPoolSize}|${s.maxContentRating}`;
     if (pool.length && key === poolKey && now() - poolAt < POOL_TTL_MS) return pool;
@@ -32,7 +43,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
     // falls back to.
     const [loaded, ratings] = await Promise.all([
       client.pool({ libraryKey: s.libraryKey, unwatchedOnly: s.unwatchedOnly, size: s.randomPoolSize, maxContentRating: s.maxContentRating }),
-      s.maxContentRating ? fetchCachedRatings() : null,
+      s.limitSet ? fetchCachedRatings() : null,
     ]);
     if (ratings) onRatings(ratings);
     pool = loaded;
@@ -132,7 +143,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
      * `sessionsError` is the error of the caller's own failed sessions request this tick: it is not asked for again.
      */
     async decide({ force = false, sessions, sessionsError } = {}) {
-      const s = getSettings();
+      const s = inForce();
 
       // Now playing wins over everything; a pinned poster replaces random rotation.
       session = null;
@@ -159,7 +170,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
       const next = pickRandom((await loadPool(s)).filter((p) => permitted(s, p)));
       if (!next) {
         // Each piece of advice is given only when it could help: "unwatched only" must be on, a limit must be set (K54).
-        const advice = [s.unwatchedOnly && 'try turning off "unwatched only"', s.maxContentRating && 'raise the limit'].filter(Boolean).join(' or ');
+        const advice = [s.unwatchedOnly && 'try turning off "unwatched only"', s.maxContentRating && (sanitizeSlots(s.limitSlots).length ? 'raise the limit or change the time slots' : 'raise the limit')].filter(Boolean).join(' or ');
         const where = `${s.maxContentRating ? ` at or below ${s.maxContentRating}` : ''}${advice ? ` (${advice})` : ''}`;
         throw Object.assign(new Error(`No posters found in that library${where}.`), { kind: 'empty' });
       }
