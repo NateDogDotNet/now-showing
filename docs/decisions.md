@@ -497,3 +497,11 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
      - `viewCount` left off unwatched titles
      - `totalSize` with filters
   7. **Empty result.** A selection that matches nothing shows the empty card naming the selection (the libraries, genres, ratings, collection or playlist), with the existing advice about "unwatched only" and the limit.
+
+## Conductor rulings — 2026-11-01 (poster-selection r1 questions Q5–Q8, under D44): D108
+
+- **D108 What D107 left open in poster selection.** The builder's four proposed readings were accepted under D44.
+  1. **Unreadable counts.** When a library's count cannot be read, or every count is zero, the pool size is split evenly. A library with a known count of 0 among known counts gets no share.
+  2. **Traceability.** R-SEL-1's traceability row sits after R-FILT-1's E14 row.
+  3. **Validation status.** `docs/validation/real-server-extended.md` ends `Overall: PENDING` while its new section H (verify) rows, V1-E28 to V1-E34, are unrun.
+  4. **Curated lists.** A collection's or playlist's items are kept to movies and cut to the pool size, best rated first. "Unwatched only" drops titles with a viewCount.
