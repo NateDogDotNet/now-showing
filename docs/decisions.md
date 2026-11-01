@@ -450,3 +450,18 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
     - the footer message clears when the bad time is fixed
     - the status line's spring-forward text names the real change time
   - **Dismissed:** the re-check of cached ratings while the household toggle is off and a saved slot sets a limit. It is the literal reading of D103 and costs one request.
+
+## Conductor ruling — 2026-11-01 (rating-schedule r3 reviews; criterion change self-answered under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D105
+
+- **D105 The rating schedule's carry-over never goes looser than the base limit unless a slot runs on from yesterday; every remaining slip fails closed.** This amends D102 item 3, D104's rule and rating-schedule criteria 1 and 2. The question was saved in `.orchestrator/phases/rating-schedule.md` with the grid `rating-schedule--carry-grid-r1.out`, and answered with option (a).
+  - **Carry-over.** Before a day's first applicable slot, the slot in force at the end of the previous day carries over when it also applies today, because a slot runs until the next one starts. Otherwise, the latest-starting of the previous day's slots that also apply today carries over (the stricter of two at the same start), but never looser than the base limit. When there is none, the base limit applies.
+    - The grid changes only two rows: cold r3 Saturday 03:00 (none → PG-13) and anchored r2 Monday 03:00 (none → PG-13).
+    - This supersedes D104's carry-over sentence.
+  - **Fall-back hour.** In the repeated hour of a fall-back clock change, a slot that has started does not stop applying.
+  - **More than 8 slots.** A schedule with more than 8 slots reads as the strictest limit all day. This supersedes D102 item 3, which kept the first 8.
+  - **Boundaries.** A slot boundary replaces the poster on screen only when it is no longer allowed. A paused display keeps an allowed poster, and a looser boundary takes effect at the next rotation.
+  - **Same round:**
+    - the help text says the status line is below
+    - the slot limit select does not clip at 1920×1080 or rotation 90, and the fit test allows for the arrow
+    - a test pins the same-day guard of the spring-forward text, so a zone that skips midnight (America/Santiago) cannot loop
+  - **Process.** The carry-over drew a loosening finding in rounds 1, 2 and 3 (the Recurring pattern). The next re-dispatch therefore branches: two candidates in separate worktrees, and only the better by the computed Step 4 band is reviewed (re-dispatches 3 and 4 of 5).
