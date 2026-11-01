@@ -570,3 +570,9 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   3. **The help is read with the controls.** Both controls name `#weighting-help` with `aria-describedby`, as the source menu does with its help. (walk r1 Minor 2)
   4. **A window set to 0 clears the record.** When the saved window is 0, the shown-titles record is removed from storage if it is there, so raising the window again starts empty, as D114 2 says. R-SEL-2's sentence states this; one unit test covers it. (anchored r1 Minor 1)
   5. **Dismissed.** The walk's other notes need no change: typed days are cleaned silently like the other number fields; the 19 px sideways scroll on a phone is the pre-existing owner follow-up; the live preview is D114 1.
+
+## Conductor record — 2026-11-01 (weighting-no-repeats closes on r2; non-blocking findings, under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D116
+
+- **D116 weighting-no-repeats lands as r2. Its two remaining Minors go to `viewer-profiles`, which has js/main.js in its Output.** Both round-2 reviews APPROVE; one re-dispatch was used. The `viewer-profiles` brief carries these items, each with a test, beside the D106 items and D114 1:
+  1. **The live preview may clear the record.** D114 1 lets an unsaved window value reach the engine through another control's live preview. Since D115 4, an unsaved 0 can then delete the saved record: Cancel restores the setting but not the record. When both keys join the preview carve-out in js/main.js, this case is covered by a test. Draws stay inside the limit; only earlier repeats follow. (anchored r2 Minor)
+  2. **Save with 0 clears the record.** A window saved as 0 clears the record at Save, not only at the next draw or shown poster, so 0 → Save → 3 → Save before any poster shows starts empty. (walk r2 Minor 1)
