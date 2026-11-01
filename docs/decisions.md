@@ -514,3 +514,16 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   3. **Empty-card advice.** While the selection narrows the pool, the empty card's advice also suggests widening the selection: more libraries, fewer genres or ratings, or the libraries instead of a collection or playlist. This adds to D107 item 7. (walk Minor 6)
   4. **New (verify) row.** A (verify) row asks whether a library list reply carries every `Genre` tag of an item. If Plex trims tags in list replies, the client's own genre check could drop titles. (anchored Minor 3)
   5. **Follow-up, outside run 8's phases.** A "Can't reach Plex" status message shows beside the empty card although the server answered. It does the same on the 2.2 path. This is a FOLLOW-UP for the owner. (walk, declined to judge)
+
+## Conductor rulings — 2026-11-01 (poster-selection r2 reviews, spec-gaps; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D110
+
+- **D110 Poster selection after a Save, collections under a limit, and partial failures.** These amend D107 and D109; no criterion changes.
+  1. **The empty card after a Save.** When a saved selection draws nothing (an "empty" result), the empty card naming the selection is shown if the poster on screen no longer matches the saved selection. A poster that still matches stays. (UX walk r2 Important 1. This was already true in 2.2 for an empty library, but genres and ratings make it common.)
+  2. **Collections and playlists under a limit.** Items the limit in force or the chosen ratings would reject are dropped before the list is cut to its size. The full listing still updates the offline memberships. With a rating subset the limit empties, no collection or playlist is requested, as for a library. (cold r2 Important 1 and Minor 2; anchored r2 Minor 2)
+  3. **A failing library.** When several libraries are chosen and one fails, the pool is built from the others. Only when all fail is the pool request a failure. (cold r2 Minor 3)
+  4. **Wording.**
+     - The empty-card advice reads as one sentence with no nested brackets, and suggests "more libraries" only when an unticked movie library exists. (cold r2 Minor 4, walk r2 Minor 2)
+     - The genre help no longer says "Test the connection" once the connection has been tested. (walk r2 Minor 1)
+     - The rating help and R-SEL-1's bullet say ratings are offered up to the loosest of the limit and the time slots. (anchored r2 Minor 1, walk r2 Minor 3)
+  5. **Stale client in Settings.** Settings drops the client of an earlier connection test when it reopens, so genres and sources always come from the current server. (anchored r2 Minor 3)
+  6. **Stored ticks.** A stored rating tick above the offered range is kept on Save, not dropped. The engine's intersection with the limit in force decides what is shown. (anchored r2, declined to judge; D109 item 1)
