@@ -434,3 +434,19 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
     - `limitInForce` reads an absent `maxContentRating` as the settings default '' and says so
     - e2e case 4 asserts the offline fallback directly
   - **Dismissed:** cold Minor 2, the redraw of a pinned or now-playing poster at a slot change. It happens at most a few times a day and shows the same poster.
+
+## Conductor ruling — 2026-11-01 (rating-schedule r2 reviews; criterion change self-answered under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D104
+
+- **D104 The carry-over takes the latest of yesterday's slots that also apply today.** This amends D103's carry-over sentence and rating-schedule criterion 1. The question was saved in `.orchestrator/phases/rating-schedule.md` before re-scoring, and answered with option (a).
+  - **The rule.** Before a day's first applicable slot, the latest-starting of the previous day's slots that also apply today carries over. Of two at the same start, the stricter wins. Only when there is no such slot does the base limit apply. This supersedes D103's "the previous day's last applicable slot carries over only when it also applies today".
+  - **Why.** Adding a slot can no longer move an hour it does not cover to the base limit (the cold review r2 case: "Mon 03:00 G" became "Mon 03:00 R").
+  - **The anchored review r2 tie case** (G Sundays-only and "No limit" every day, both at 22:00) gives "no limit" on Monday 03:00. The every-day slot is the slot that applies on Monday. That is the D103 reading "a slot applies only on the days in its set", and no fix is made.
+  - **Same round:**
+    - a test pins "the stricter wins" at the carry-over
+    - the stale comment at js/settings-ui.js:244 is fixed
+    - the status line names the saved settings ("Saved: …") so it does not contradict unsaved edits
+    - the slot limit select does not clip on a phone
+    - the toggle-off "kept, not applied" line shows where a parent can see it
+    - the footer message clears when the bad time is fixed
+    - the status line's spring-forward text names the real change time
+  - **Dismissed:** the re-check of cached ratings while the household toggle is off and a saved slot sets a limit. It is the literal reading of D103 and costs one request.
