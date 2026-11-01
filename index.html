@@ -139,12 +139,33 @@
             <button type="button" class="btn" id="test-btn">Test connection</button>
           </div>
           <p id="test-result" class="test-result muted small" aria-live="polite"></p>
+        </fieldset>
 
-          <label>Library
-            <select name="libraryKey" id="library-select">
-              <option value="">— test the connection to load libraries —</option>
+        <fieldset id="selection-fieldset">
+          <legend>Poster selection</legend>
+          <div id="library-group" role="group" aria-labelledby="library-label">
+            <span id="library-label" class="field-label">Movie libraries</span>
+            <ul id="library-list" class="pick-list">
+              <li class="muted small">Test the connection to load your libraries.</li>
+            </ul>
+          </div>
+          <label>Posters from
+            <select id="source-select" aria-describedby="source-help">
+              <option value="">The libraries above</option>
             </select>
           </label>
+          <p id="source-help" class="muted small">A collection (smart or not) or a playlist replaces the libraries above and takes no genre.</p>
+          <div id="genre-group" role="group" aria-labelledby="genre-label">
+            <span id="genre-label" class="field-label">Genres <span id="genre-count" class="muted"></span></span>
+            <ul id="genre-list" class="pick-list pick-grid"></ul>
+            <p id="genre-help" class="muted small">None ticked: every genre.</p>
+          </div>
+          <div id="rating-group" role="group" aria-labelledby="rating-label">
+            <span id="rating-label" class="field-label">Ratings</span>
+            <ul id="rating-list" class="pick-list pick-row"></ul>
+            <p id="rating-help" class="muted small">None ticked: every rating the household limit allows. Ratings are offered up to the loosest of the limit and the time slots, and the limit in force always wins.</p>
+          </div>
+          <p class="muted small">The selection applies when you press Save.</p>
         </fieldset>
 
         <fieldset>

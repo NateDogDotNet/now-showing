@@ -285,3 +285,99 @@ test('limitSlots: the default list is not shared between callers', () => {
   b.limitSlots.push({ start: '06:00', limit: 'G' });
   assert.deepEqual(sanitize({}).limitSlots, []);
 });
+
+// ---- the poster selection (R-SEL-1, D107) ----
+
+import { selectionOf } from '../js/selection.js';
+
+test('the selection keys default to nothing chosen', () => {
+  const d = defaults();
+  assert.deepEqual([d.libraryKeys, d.libraryNames, d.genres, d.ratings, d.source], [[], [], [], [], null]);
+});
+
+test('settings saved before 2.3 with only libraryKey load as that one library and nothing else changes', () => {
+  const storage = memoryStorage({ 'plexPoster.settings': JSON.stringify({ plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryName: 'Movies', maxContentRating: 'PG' }) });
+  const { settings, source } = load(storage);
+  assert.equal(source, 'storage');
+  assert.deepEqual([settings.libraryKeys, settings.libraryNames, settings.libraryKey, settings.libraryName], [['1'], ['Movies'], '1', 'Movies']);
+  assert.deepEqual([settings.genres, settings.ratings, settings.source], [[], [], null]);
+  const before = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryName: 'Movies', maxContentRating: 'PG' };
+  for (const k of Object.keys(before)) if (!['libraryKeys', 'libraryNames'].includes(k)) assert.deepEqual(settings[k], before[k], `${k} unchanged`);
+  assert.deepEqual(selectionOf(settings), { libraries: [{ key: '1', name: 'Movies' }], genres: [], ratings: [], source: null });
+});
+
+test('a library list sets libraryKey and libraryName to its first library, and the names line up with the keys', () => {
+  const s = sanitize({ libraryKeys: ['3', '1'], libraryNames: ['Kids Movies', 'Movies'], libraryKey: '9', libraryName: 'Old' });
+  assert.deepEqual([s.libraryKey, s.libraryName], ['3', 'Kids Movies']);
+  assert.deepEqual(sanitize({ libraryKeys: ['1', '3'], libraryNames: ['A'] }).libraryNames, ['A', '']);
+  assert.deepEqual(sanitize({ libraryKeys: ['1'], libraryNames: ['A', 'B', 'C'] }).libraryNames, ['A']);
+  const unnamed = sanitize({ libraryKeys: ['1'], libraryName: 'Movies' });
+  assert.equal(unnamed.libraryName, 'Movies', 'a first library with no recorded name keeps the stored name');
+  assert.deepEqual(sanitize({ libraryKeys: ['', ' '] }).libraryKeys, []);
+});
+
+test('an empty library list leaves libraryKey alone (that is a 2.2 file)', () => {
+  const s = sanitize({ libraryKeys: [], libraryKey: '4', libraryName: 'Four' });
+  assert.deepEqual([s.libraryKeys, s.libraryNames, s.libraryKey], [['4'], ['Four'], '4']);
+});
+
+test('genres, ratings and a source survive save and load, an export and an import', () => {
+  const chosen = {
+    libraryKeys: ['1', '3'], libraryNames: ['Movies', 'Kids Movies'],
+    genres: [{ key: '12', title: 'Comedy' }], ratings: ['G', 'PG'], source: { kind: 'collection', key: '102', title: 'Top Rated' },
+  };
+  const storage = memoryStorage();
+  save(storage, { ...defaults(), ...chosen });
+  const back = load(storage).settings;
+  for (const [k, v] of Object.entries(chosen)) assert.deepEqual(back[k], v, k);
+  const file = toExport({ ...defaults(), ...chosen });
+  for (const [k, v] of Object.entries(chosen)) assert.deepEqual(file.settings[k], v, `export ${k}`);
+  const imported = fromImport(JSON.stringify(file), defaults());
+  for (const [k, v] of Object.entries(chosen)) assert.deepEqual(imported[k], v, `import ${k}`);
+});
+
+test('junk in the selection keys is nothing chosen', () => {
+  const s = sanitize({ libraryKeys: 'x', libraryNames: 4, genres: 'Comedy', ratings: ['XX', 3], source: { kind: 'album', key: '1' } });
+  assert.deepEqual([s.libraryKeys, s.libraryNames, s.genres, s.ratings, s.source], [[], [], [], [], null]);
+  assert.deepEqual(sanitize({ ratings: ['R', 'G', 'G'] }).ratings, ['G', 'R']);
+});
+
+test('a hand-written 2.2 file that sets libraryKey replaces a chosen library list instead of being overruled by it', () => {
+  const current = sanitize({ ...defaults(), libraryKeys: ['1', '3'], libraryNames: ['Movies', 'Kids Movies'] });
+  const s = fromImport(JSON.stringify({ libraryKey: '3' }), current);
+  assert.deepEqual([s.libraryKey, s.libraryKeys], ['3', ['3']]);
+  const both = fromImport(JSON.stringify({ libraryKey: '9', libraryKeys: ['1'] }), current);
+  assert.deepEqual(both.libraryKeys, ['1'], 'a file that sends the list is the list');
+  const other = fromImport(JSON.stringify({ rotateSeconds: 60 }), current);
+  assert.deepEqual(other.libraryKeys, ['1', '3'], 'a file that says nothing about the library leaves it');
+});
+
+test('library names with no library are dropped, and a stale libraryName never labels another library', () => {
+  assert.deepEqual(sanitize({ libraryNames: ['Orphan'] }).libraryNames, []);
+  const s = sanitize({ libraryKey: '9', libraryName: 'Old nine', libraryKeys: ['1'] });
+  assert.deepEqual([s.libraryKey, s.libraryName, s.libraryNames], ['1', '', ['']]);
+});
+
+test('r2 gap 3: a 2.2 file that sets only libraryKey replaces the whole selection: that library, no genres, no rating subset, no source', () => {
+  const current = sanitize({
+    ...defaults(), libraryKeys: ['1', '3'], libraryNames: ['Movies', 'Kids Movies'], genres: [{ key: '12', title: 'Comedy' }], ratings: ['G'], source: { kind: 'collection', key: '102', title: 'Top Rated' },
+  });
+  const s = fromImport(JSON.stringify({ libraryKey: '3', libraryName: 'Kids Movies' }), current);
+  assert.deepEqual([s.libraryKey, s.libraryKeys, s.libraryNames, s.genres, s.ratings, s.source], ['3', ['3'], ['Kids Movies'], [], [], null]);
+  // The legacy per-key shape is a 2.2 file too.
+  const legacy = fromImport(JSON.stringify({ LIBRARY_KEY: '1' }), current);
+  assert.deepEqual([legacy.libraryKeys, legacy.genres, legacy.ratings, legacy.source], [['1'], [], [], null]);
+  // A file that sends any selection key keeps what it does not send, and one that says nothing about the library changes nothing.
+  assert.deepEqual(fromImport(JSON.stringify({ libraryKey: '3', genres: [{ key: '', title: 'Drama' }] }), current).genres, [{ key: '', title: 'Drama' }]);
+  const other = fromImport(JSON.stringify({ rotateSeconds: 60 }), current);
+  assert.deepEqual([other.genres, other.ratings, other.source.key], [[{ key: '12', title: 'Comedy' }], ['G'], '102']);
+});
+
+test('r2 gap 7: a collection or playlist is enough to be configured, a library or a pin is not needed', () => {
+  const base = { ...defaults(), plexToken: 't', serverUrl: 'http://s' };
+  assert.equal(isConfigured({ ...base, source: { kind: 'collection', key: '102', title: 'Top Rated' } }), true);
+  assert.equal(isConfigured(sanitize({ ...base, source: { kind: 'playlist', key: '201' } })), true);
+  assert.equal(isConfigured({ ...base, source: null }), false);
+  assert.equal(isConfigured({ ...base, source: { kind: 'collection', key: '' } }), false, 'no key: not a source');
+  assert.equal(isConfigured({ plexToken: '', serverUrl: 'http://s', source: { kind: 'collection', key: '1' } }), false, 'still needs the connection');
+});

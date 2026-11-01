@@ -66,7 +66,7 @@ const save = async (page) => {
   await page.click('#settings-save');
   await page.waitForFunction(() => !document.getElementById('settings').open, null, { timeout: 5000 });
 };
-const libraryLabels = (page) => page.$$eval('#library-select option', (os) => os.map((o) => o.textContent));
+const libraryLabels = (page) => page.$$eval('#library-list label', (ls) => ls.map((l) => l.textContent));
 const buttonTexts = (page, selector) => page.$$eval(`${selector} button`, (bs) => bs.map((b) => b.textContent.trim()));
 const visible = (page, selector) => page.isVisible(selector);
 const pinIs = (page, want) => page.waitForFunction((w) => document.getElementById('pin-dialog').open === w, want, { timeout: 5000 });
@@ -131,11 +131,11 @@ sheetCase('U4 library options carry their counts and skip Music', { settings: se
   await page.goto(app.url);
   await posterShown(page);
   await openSettings(page);
-  await page.waitForFunction(() => [...document.querySelectorAll('#library-select option')].some((o) => o.textContent === 'Movies · 8 titles'), null, { timeout: 10000 });
+  await page.waitForFunction(() => [...document.querySelectorAll('#library-list label')].some((o) => o.textContent === 'Movies · 8 titles'), null, { timeout: 10000 });
   const labels = await libraryLabels(page);
   assert.ok(labels.includes('Movies · 8 titles'), labels.join(' | '));
   assert.ok(!labels.some((l) => /Music/.test(l)), `Music is not listed: ${labels.join(' | ')}`);
-  assert.equal(await page.inputValue('#library-select'), '1', 'the saved library stays selected');
+  assert.equal(await page.isChecked('#library-list input[value="1"]'), true, 'the saved library stays ticked');
   assert.match(await page.textContent('#test-result'), /^✓/);
   check('U4 "Movies · 8 titles", no Music');
 });
@@ -177,7 +177,7 @@ sheetCase('U4 counts load after the test: a stalled count request never delays t
   assert.match(await page.textContent('#test-result'), /^✓/, 'the test finished while the count was still stalled');
   assert.ok((await libraryLabels(page)).includes('Movies'), 'the list is already there, without the count');
   release();
-  await page.waitForFunction(() => [...document.querySelectorAll('#library-select option')].some((o) => o.textContent === 'Movies · 8 titles'), null, { timeout: 10000 });
+  await page.waitForFunction(() => [...document.querySelectorAll('#library-list label')].some((o) => o.textContent === 'Movies · 8 titles'), null, { timeout: 10000 });
   check('U4 lazy counts');
 });
 
@@ -499,7 +499,7 @@ sheetCase(
       await page.waitForFunction(() => document.body.classList.contains('asleep'), null, { timeout: 15000 });
       await openSettings(page); // over the veil
       await settleTest(page);
-      await page.waitForFunction(() => [...document.querySelectorAll('#library-select option')].some((o) => /titles/.test(o.textContent)), null, { timeout: 10000 }); // the lazy counts have landed
+      await page.waitForFunction(() => [...document.querySelectorAll('#library-list label')].some((o) => /titles/.test(o.textContent)), null, { timeout: 10000 }); // the lazy counts have landed
       // No real pointer or key press from here to Save: any of those would wake the display by themselves (a manual wake).
       await page.evaluate(() => document.getElementById('connected-change').click());
       await page.fill('[name="serverUrl"]', `http://127.0.0.1:${portB}`);

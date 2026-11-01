@@ -280,7 +280,7 @@ firstRunCase('approving the code signs in: the sheet opens with the server and l
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 15000 });
   await page.waitForFunction(() => /^✓/.test(document.getElementById('test-result').textContent), null, { timeout: 15000 });
   assert.equal(await page.inputValue('[name="serverUrl"]'), `http://127.0.0.1:${app.mockPort}`);
-  assert.equal(await page.inputValue('#library-select'), '1', 'the movie library is chosen');
+  assert.equal(await page.isChecked('#library-list input[value="1"]'), true, 'the movie library is chosen');
   assert.equal(await page.getAttribute('[name="plexToken"]', 'type'), 'password', 'the token stays masked');
   assert.equal(tv.pins, 1);
   assert.equal(tv.resources, 1);

@@ -15,6 +15,7 @@ import { createReload, takeCarriedPlayback } from './reload.js';
 import { requestSize } from './layout.js';
 import { createLimitWatch, limitInForce } from './limit-schedule.js';
 import { isPlausibleClock } from './schedule.js';
+import { posterMatches, selectionKey, selectionOf } from './selection.js';
 import { createSettingsUI, pinSignIn } from './settings-ui.js';
 import { fromImport, isConfigured, load, save, STORAGE_KEY } from './settings.js';
 import { keyMap, listShortcuts, normalizeKey } from './shortcuts.js';
@@ -77,6 +78,7 @@ function rebuildClient() {
         // D37: while a limit is set, each online pool load re-confirms the cached titles' ratings.
         cachedKeys: () => cache.entries().map((e) => e.ratingKey),
         onRatings: (posters) => cache.refreshRatings(posters),
+        onMembers: (id, keys) => cache.syncMembers(id, keys), // a collection or playlist listed online: entries that left it lose the membership
       })
     : null;
   state.directImages = false;
@@ -317,7 +319,7 @@ async function handleFailure(err, { notify = false } = {}) {
   const due = !current || Date.now() - (current.shownAt || 0) >= state.settings.rotateSeconds * 1000;
   if (due && !fatal && !state.asleep) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const cached = await cache.random(current?.ratingKey, limitNow()).catch(() => null);
+      const cached = await cache.random(current?.ratingKey, limitNow(), selectionOf(state.settings)).catch(() => null);
       if (!cached) break;
       try {
         if (!(await showPoster(cached.poster, cached.blob))) continue; // no longer allowed: not drawn, not shown
@@ -331,6 +333,9 @@ async function handleFailure(err, { notify = false } = {}) {
       break;
     }
   }
+  // A saved selection that draws nothing takes a poster that no longer belongs to it off, so the empty card can name the selection;
+  // a poster that still matches stays (D110 item 1).
+  if (err.kind === 'empty' && display.currentPoster && !posterMatches(selectionOf(state.settings), limitNow(), display.currentPoster)) blockPoster();
   if (!display.currentPoster) {
     // The limit is the reason only when it emptied the cache: posters are cached, and none of them passes it (D73).
     const stored = cache.entries();
@@ -467,7 +472,7 @@ function setPaused(paused) {
 
 async function applySettings(next, { persist = true, preview = false, restartIdle = true } = {}) {
   const prev = state.settings;
-  // A live preview shows layout only. The household limit, its time slots and the pin are never previewed (CCI1, C6I1): while the
+  // A live preview shows layout only. The household limit, its time slots, the poster selection and the pin are never previewed (CCI1, C6I1): while the
   // dialog is open the previous, saved values keep applying, so only Save changes them and Cancel has nothing to undo
   // (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the
   // kiosk switches, the settings PIN and the device helper: an unsaved change to any of them is never in force. The Display
@@ -476,10 +481,12 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   if (preview) {
     const { maxContentRating, limitSlots, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
     const { pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime } = prev;
+    const { libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source } = prev; // the selection (R-SEL-1, D101 ruling 6)
     next = {
       ...next,
       ...{ maxContentRating, limitSlots, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper },
       ...{ pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime },
+      ...{ libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source },
     };
   }
   state.settings = persist ? save(storage, next) : next;
@@ -499,9 +506,10 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
 
   // The Plex client is rebuilt BEFORE evaluateSleep() below (C8M2, D28): when this Save is what wakes the display, the
   // wake tick must already use the new connection, not read a session or a pool from the old one.
-  const connectionChanged = ['plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some(
-    (k) => prev[k] !== state.settings[k],
-  );
+  // The poster selection compares by what it draws, not by object: every Save makes new lists.
+  const connectionChanged =
+    ['plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some((k) => prev[k] !== state.settings[k]) ||
+    selectionKey(selectionOf(prev)) !== selectionKey(selectionOf(state.settings));
   if (connectionChanged || !engine) rebuildClient();
 
   document.body.classList.toggle('hide-cursor', state.settings.hideCursor);

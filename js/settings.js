@@ -3,6 +3,7 @@
 
 import { sanitizeSlots } from './limit-schedule.js';
 import { parseHHMM } from './schedule.js';
+import { cleanGenres, cleanKeys, cleanNames, cleanRatings, cleanSource } from './selection.js';
 
 export const STORAGE_KEY = 'plexPoster.settings';
 export const EXPORT_FORMAT = 'plex-poster-display/settings';
@@ -37,6 +38,13 @@ const SCHEMA = {
   serverName: ['', str],
   libraryKey: ['', (v, d) => str(String(v ?? ''), d)],
   libraryName: ['', str],
+  // The poster selection (R-SEL-1, D107): the chosen movie libraries (libraryKey/libraryName always mirror the first), the genres and
+  // ratings that narrow them, or one collection/playlist that replaces them. Applied on Save, never live-previewed.
+  libraryKeys: [[], (v) => cleanKeys(v)],
+  libraryNames: [[], (v) => cleanNames(v)],
+  genres: [[], (v) => cleanGenres(v)],
+  ratings: [[], (v) => cleanRatings(v)],
+  source: [null, (v) => cleanSource(v)],
   username: ['', str],
 
   // What to show
@@ -132,11 +140,33 @@ export function sanitize(input = {}) {
   for (const [key, [def, fix]] of Object.entries(SCHEMA)) {
     out[key] = key in input && input[key] !== undefined && input[key] !== null ? fix(input[key], def) : copyOf(def);
   }
+  return reconcileLibraries(out);
+}
+
+/**
+ * libraryKey and libraryName are the first chosen library, so everything that reads one library (isConfigured, the Connected card,
+ * diagnostics) keeps working. A 2.2 object, with only libraryKey, becomes that one library in the list (D107 ruling 2). The names line
+ * up with the keys.
+ */
+function reconcileLibraries(out) {
+  if (!out.libraryKeys.length) {
+    if (out.libraryKey) {
+      out.libraryKeys = [out.libraryKey];
+      out.libraryNames = [out.libraryName];
+    } else {
+      out.libraryNames = [];
+    }
+    return out;
+  }
+  out.libraryNames = out.libraryKeys.map((_, i) => out.libraryNames[i] || '');
+  if (out.libraryKey && out.libraryKey !== out.libraryKeys[0]) out.libraryName = ''; // that name belonged to another library
+  out.libraryKey = out.libraryKeys[0];
+  out.libraryName = out.libraryNames[0] || out.libraryName;
   return out;
 }
 
 export function isConfigured(s) {
-  return Boolean(s.plexToken && s.serverUrl && (s.libraryKey || s.staticRatingKey));
+  return Boolean(s.plexToken && s.serverUrl && (s.libraryKey || s.staticRatingKey || s.source?.key)); // a collection or playlist is a source of its own
 }
 
 /**
@@ -233,6 +263,8 @@ export function fromImport(text, current = defaults()) {
   const known = Object.keys(incoming).filter((k) => k in SCHEMA && !NEVER_EXPORT_KEYS.includes(k));
   if (known.length === 0) throw new Error('No recognised settings in file.');
   const merged = { ...current };
+  // A 2.2-shaped file names one library: it replaces the whole selection (that library, no genres, no rating subset, no source), not just the list.
+  if (known.includes('libraryKey') && !known.includes('libraryKeys')) Object.assign(merged, { libraryKeys: [], libraryNames: [], genres: [], ratings: [], source: null });
   for (const k of known) merged[k] = incoming[k];
   return sanitize(merged);
 }

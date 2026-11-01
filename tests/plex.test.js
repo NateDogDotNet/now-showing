@@ -508,3 +508,190 @@ test('every poster the client lists carries the trimmed summary (pool, item, ite
   const lists = [await client.pool({ libraryKey: '1' }), [await client.item('1')], await client.items(['1', '2']), [playing]];
   for (const p of lists.flat()) assert.ok(p.summary.length > 0 && p.summary.length <= 301, `summary ${p.summary.length}`);
 });
+
+// ---- the poster selection (R-SEL-1, D107): the requests for libraries, genres, ratings, a collection and a playlist ----
+
+const ask = (url) => Object.fromEntries([...url.searchParams].filter(([k]) => k !== 'X-Plex-Token' && !k.startsWith('X-Plex-Client') && k !== 'X-Plex-Product'));
+
+test('request for one library, nothing else: the 2.2 request, with no genre and no rating filter', async () => {
+  const { calls, client } = poolCalls();
+  await client.pool({ libraryKey: '1', unwatchedOnly: true, size: 100 });
+  assert.equal(calls[0].pathname, '/library/sections/1/all');
+  assert.deepEqual(ask(calls[0]), { unwatched: '1', sort: 'rating:desc', 'X-Plex-Container-Start': '0', 'X-Plex-Container-Size': '100' });
+});
+
+test('request for two libraries: one pool request each, with its own size', async () => {
+  const { calls, client } = poolCalls();
+  await client.pool({ libraryKey: '1', size: 62 });
+  await client.pool({ libraryKey: '3', size: 38 });
+  assert.deepEqual(calls.map((u) => [u.pathname, u.searchParams.get('X-Plex-Container-Size')]), [['/library/sections/1/all', '62'], ['/library/sections/3/all', '38']]);
+});
+
+test('request for a genre set: genre=<keys joined by a comma>, sized plainly when there is no limit', async () => {
+  const { calls, client } = poolCalls();
+  await client.pool({ libraryKey: '1', size: 40, genres: ['12', '14'] });
+  assert.equal(calls[0].searchParams.get('genre'), '12,14');
+  assert.equal(calls[0].searchParams.get('X-Plex-Container-Size'), '40');
+  await client.pool({ libraryKey: '1', size: 40, genres: [] });
+  assert.equal(calls[1].searchParams.has('genre'), false, 'no genre chosen: no parameter');
+});
+
+test('request for a rating set: only the chosen rungs, intersected with the limit, oversampled like a limit', async () => {
+  const { calls, client } = poolCalls();
+  await client.pool({ libraryKey: '1', size: 100, maxContentRating: 'PG-13', ratings: ['G', 'PG'] });
+  const sent = calls[0].searchParams.get('contentRating').split(',');
+  assert.deepEqual([...sent].sort(), [...allowedValues('PG')].sort(), 'G and PG values, not the PG-13 ones');
+  assert.equal(calls[0].searchParams.get('X-Plex-Container-Size'), '300');
+  await client.pool({ libraryKey: '1', size: 100, maxContentRating: '', ratings: ['R'] });
+  assert.equal(calls[1].searchParams.get('X-Plex-Container-Size'), '300', 'a rating subset oversamples with no limit too');
+  assert.ok(calls[1].searchParams.get('contentRating').split(',').includes('TV-MA'));
+  assert.ok(!calls[1].searchParams.get('contentRating').split(',').includes('PG-13'));
+});
+
+test('request for a rating set that the limit leaves empty: no request at all, never an unfiltered one', async () => {
+  const { calls, client } = poolCalls([{ ratingKey: '1', title: 'A', thumb: '/t/1', contentRating: 'R' }]);
+  assert.deepEqual(await client.pool({ libraryKey: '1', size: 100, maxContentRating: 'PG', ratings: ['R', 'NC-17'] }), []);
+  assert.equal(calls.length, 0);
+});
+
+test('request for a collection and for a playlist: their own paths, no library path', async () => {
+  const { calls, client } = poolCalls([{ ratingKey: '2', title: 'B', thumb: '/t/2', type: 'movie' }]);
+  assert.deepEqual((await client.sourceItems({ kind: 'collection', key: '101' })).map((p) => p.ratingKey), ['2']);
+  assert.equal(calls[0].pathname, '/library/collections/101/children');
+  assert.deepEqual((await client.sourceItems({ kind: 'playlist', key: '201' })).map((p) => p.ratingKey), ['2']);
+  assert.equal(calls[1].pathname, '/playlists/201/items');
+  await client.sourceItems({ kind: 'playlist', key: 'a/b' });
+  assert.equal(calls[2].pathname, '/playlists/a%2Fb/items', 'the key is encoded');
+});
+
+test('a collection or playlist: items without art, episodes and the watched (when unwatched only) are left out; at most size, best rated first', async () => {
+  const items = [
+    { ratingKey: '1', type: 'movie', title: 'A', thumb: '/t/1', rating: 5 },
+    { ratingKey: '2', type: 'movie', title: 'B', thumb: '/t/2', rating: 9, viewCount: 2 },
+    { ratingKey: '3', type: 'movie', title: 'C', title2: 'x' },
+    { ratingKey: '4', type: 'episode', title: 'D', thumb: '/t/4' },
+    { ratingKey: '5', title: 'E', thumb: '/t/5', rating: 7 },
+    { ratingKey: '6', type: 'movie', title: 'F', thumb: '/t/6', rating: 8 },
+  ];
+  const { client } = poolCalls(items);
+  const unwatched = await client.sourceItems({ kind: 'collection', key: '1' }, { unwatchedOnly: true, size: 100 });
+  assert.deepEqual(unwatched.map((p) => p.ratingKey), ['6', '5', '1'], 'no art, an episode and a watched title are out; best rated first');
+  const all = await client.sourceItems({ kind: 'collection', key: '1' }, { unwatchedOnly: false, size: 100 });
+  assert.deepEqual(all.map((p) => p.ratingKey), ['2', '6', '5', '1'], 'a watched title stays when unwatched only is off');
+  const capped = await client.sourceItems({ kind: 'collection', key: '1' }, { unwatchedOnly: false, size: 2 });
+  assert.deepEqual(capped.map((p) => p.ratingKey), ['2', '6']);
+  assert.equal(unwatched[0].source, 'random');
+});
+
+test('genres(), collections() and playlists() read the lists Settings offers', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const u = new URL(url);
+    calls.push(u);
+    if (u.pathname.endsWith('/genre')) return jsonResponse({ MediaContainer: { Directory: [{ key: '12', title: 'Comedy', fastKey: '/x' }, { key: 14, title: 'Adventure' }, { title: 'No key' }, { key: '9' }] } });
+    if (u.pathname.endsWith('/collections')) return jsonResponse({ MediaContainer: { Metadata: [{ ratingKey: '101', title: 'Double Features', smart: '0' }, { ratingKey: '102', title: 'Top Rated', smart: '1' }, { title: 'broken' }] } });
+    return jsonResponse({ MediaContainer: { Metadata: [{ ratingKey: '201', title: 'Friday Night Picks' }] } });
+  };
+  const client = createPlexClient({ serverUrl: 'http://h:32400', token: 't', clientId: 'c', fetchImpl });
+  assert.deepEqual(await client.genres('1'), [{ key: '12', title: 'Comedy' }, { key: '14', title: 'Adventure' }, { key: '', title: 'No key' }]);
+  assert.equal(calls[0].pathname, '/library/sections/1/genre');
+  assert.deepEqual(await client.collections('1'), [{ key: '101', title: 'Double Features', smart: false }, { key: '102', title: 'Top Rated', smart: true }]);
+  assert.equal(calls[1].pathname, '/library/sections/1/collections');
+  assert.deepEqual(await client.playlists(), [{ key: '201', title: 'Friday Night Picks' }]);
+  assert.equal(calls[2].pathname, '/playlists');
+  assert.equal(calls[2].searchParams.get('playlistType'), 'video');
+});
+
+test('toPoster carries the title own genre tags, and nothing when there are none', () => {
+  const base = { type: 'movie', ratingKey: '1', title: 'A', thumb: '/t' };
+  assert.deepEqual(toPoster({ ...base, Genre: [{ id: 12, tag: 'Comedy', filter: 'genre=12' }, { id: 3 }, { tag: 'Drama' }] }, 'random').genres, ['Comedy', 'Drama']);
+  assert.equal('genres' in toPoster(base, 'random'), false);
+  assert.equal('genres' in toPoster({ ...base, Genre: [] }, 'random'), false);
+  assert.equal('genres' in toPoster({ ...base, Genre: 'Comedy' }, 'random'), false);
+});
+
+test('collections() also reads a container that lists them as Directory entries (the XML shape)', async () => {
+  const fetchImpl = async () => jsonResponse({ MediaContainer: { Directory: [{ ratingKey: '5', title: 'Dir collection', smart: '1' }] } });
+  const client = createPlexClient({ serverUrl: 'http://h:32400', token: 't', clientId: 'c', fetchImpl });
+  assert.deepEqual(await client.collections('1'), [{ key: '5', title: 'Dir collection', smart: true }]);
+});
+
+// ---- r2: the selection through an XML reply, and a curated list asking for the same extra items as a library ----
+
+test('r2 gap 1: an XML reply keeps the Genre tags, so a genre selection and the cached genres work on a server that answers XML', async () => {
+  const doc = fakeXml(['MediaContainer', { size: '2' }, [
+    ['Video', { type: 'movie', ratingKey: '4', title: 'Popcorn Skies', thumb: '/t/4', contentRating: 'R', viewCount: '2', rating: '6.8' }, [
+      ['Genre', { id: '14', tag: 'Adventure', filter: 'genre=14' }],
+      ['Genre', { id: '12', tag: 'Comedy', filter: 'genre=12' }],
+      ['Player', { title: 'x', state: 'playing' }],
+    ]],
+    ['Video', { type: 'movie', ratingKey: '5', title: 'Neon Matinee', thumb: '/t/5' }, []],
+  ]]);
+  const container = xmlToContainer(doc);
+  assert.deepEqual(container.Metadata[0].Genre, [{ id: '14', tag: 'Adventure', filter: 'genre=14' }, { id: '12', tag: 'Comedy', filter: 'genre=12' }]);
+  assert.equal('Genre' in container.Metadata[1], false, 'an item with no tags has no Genre list');
+  assert.equal(container.Metadata[0].Player.state, 'playing', 'the sub-elements that were kept before still are');
+  assert.deepEqual(toPoster(container.Metadata[0], 'random').genres, ['Adventure', 'Comedy']);
+  assert.equal(container.Metadata[0].viewCount, '2', 'attributes the selection reads survive as strings');
+});
+
+test('r2 gap 1: pool() over an XML reply returns posters with their genres', async () => {
+  const saved = globalThis.DOMParser;
+  globalThis.DOMParser = class {
+    parseFromString() {
+      return fakeXml(['MediaContainer', { size: '1' }, [['Video', { type: 'movie', ratingKey: '6', title: 'Last Reel', thumb: '/t/6' }, [['Genre', { id: '12', tag: 'Comedy' }]]]]]);
+    }
+  };
+  try {
+    const client = createPlexClient({ serverUrl: 'http://h:32400', token: 't', clientId: 'c', fetchImpl: async () => new Response('<MediaContainer size="1"><Video/></MediaContainer>', { status: 200, headers: { 'Content-Type': 'text/xml' } }) });
+    assert.deepEqual((await client.pool({ libraryKey: '1', size: 10 }))[0].genres, ['Comedy']);
+  } finally {
+    if (saved === undefined) delete globalThis.DOMParser;
+    else globalThis.DOMParser = saved;
+  }
+});
+
+test('r2 gap 9: a collection or playlist is cut to 3x the pool size (at most 500) under a limit or a rating subset, as a library is asked for', async () => {
+  const items = Array.from({ length: 700 }, (_, i) => ({ ratingKey: String(i), type: 'movie', title: 'T' + i, thumb: '/t/' + i, rating: 700 - i, contentRating: 'G' }));
+  const { client } = poolCalls(items);
+  const count = async (opts) => (await client.sourceItems({ kind: 'collection', key: '1' }, { unwatchedOnly: false, size: 10, ...opts })).length;
+  assert.equal(await count({}), 10, 'no limit: the pool size');
+  assert.equal(await count({ maxContentRating: '' }), 10);
+  assert.equal(await count({ maxContentRating: 'PG' }), 30, 'a limit: 3x');
+  assert.equal(await count({ maxContentRating: '', ratings: ['G'] }), 30, 'a rating subset: 3x');
+  assert.equal(await count({ maxContentRating: 'PG', size: 400 }), 500, 'capped at 500');
+  assert.equal(await count({ maxContentRating: 'PG', size: 166 }), 498);
+});
+
+test('r2 gap 8: sourceItems says every rating key the listing held, filtered out or not, so the cache can tell who left it', async () => {
+  const { client } = poolCalls([
+    { ratingKey: '1', type: 'movie', title: 'A', thumb: '/t/1' },
+    { ratingKey: '2', type: 'movie', title: 'B', thumb: '/t/2', viewCount: 3 },
+    { ratingKey: '3', type: 'episode', title: 'C', thumb: '/t/3' },
+    { ratingKey: '4', type: 'movie', title: 'D' },
+    { title: 'no key' },
+  ]);
+  const list = await client.sourceItems({ kind: 'collection', key: '1' }, { unwatchedOnly: true, size: 1 });
+  assert.deepEqual(list.map((p) => p.ratingKey), ['1']);
+  assert.deepEqual(list.listed, ['1', '2', '3', '4']);
+});
+
+test('r3 gap 2: what the limit in force or the chosen ratings reject is dropped before a collection is cut, so high-scoring rejected titles cannot crowd out the allowed ones', async () => {
+  // 300 R titles that score higher and 100 G titles: under a G limit with a pool of 100 the allowed ones must all come through.
+  const items = [
+    ...Array.from({ length: 300 }, (_, i) => ({ ratingKey: 'r' + i, type: 'movie', title: 'R' + i, thumb: '/t/r' + i, rating: 9, contentRating: 'R' })),
+    ...Array.from({ length: 100 }, (_, i) => ({ ratingKey: 'g' + i, type: 'movie', title: 'G' + i, thumb: '/t/g' + i, rating: 5, contentRating: 'G' })),
+  ];
+  const { client } = poolCalls(items);
+  const list = await client.sourceItems({ kind: 'collection', key: '1' }, { unwatchedOnly: false, size: 100, maxContentRating: 'G' });
+  assert.equal(list.length, 100);
+  assert.ok(list.every((p) => p.contentRating === 'G'));
+  assert.equal(list.listed.length, 400, 'the full listing still feeds the offline memberships');
+  const subset = await client.sourceItems({ kind: 'collection', key: '1' }, { unwatchedOnly: false, size: 10, maxContentRating: '', ratings: ['G'] });
+  assert.equal(subset.length, 30);
+  assert.ok(subset.every((p) => p.contentRating === 'G'), 'a chosen rating also drops the rest before the cut');
+  const open = await client.sourceItems({ kind: 'collection', key: '1' }, { unwatchedOnly: false, size: 10 });
+  assert.deepEqual(open.map((p) => p.contentRating), Array(10).fill('R'), 'no limit and no subset: the best rated, as before');
+  const unrated = poolCalls([{ ratingKey: '1', type: 'movie', title: 'u', thumb: '/t/1' }, { ratingKey: '2', type: 'movie', title: 'g', thumb: '/t/2', contentRating: 'gb/U' }]);
+  assert.deepEqual((await unrated.client.sourceItems({ kind: 'playlist', key: '1' }, { unwatchedOnly: false, maxContentRating: 'G' })).map((p) => p.ratingKey), ['2'], 'an unrated title is dropped under a limit; a prefixed rating on the ladder stays');
+});

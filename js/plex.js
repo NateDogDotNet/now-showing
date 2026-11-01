@@ -4,6 +4,7 @@
 // the query string) so browsers don't send a preflight that some Plex servers reject.
 
 import { allowedValues } from './ratings.js';
+import { ratingPasses, ratingValues } from './selection.js';
 import { SUMMARY_MAX, trimSummary } from './fill.js';
 
 export const PRODUCT = 'Now Showing';
@@ -41,6 +42,8 @@ export function xmlToContainer(doc) {
     const obj = attrs(child);
     for (const sub of Array.from(child.children)) {
       if (['User', 'Player', 'Session'].includes(sub.nodeName)) obj[sub.nodeName] = attrs(sub);
+      // The genre tags are a list, as in JSON (R-SEL-1): a genre selection reads them from the reply.
+      else if (sub.nodeName === 'Genre') (obj.Genre ||= []).push(attrs(sub));
     }
     // JSON puts library sections under Directory and items under Metadata; show
     // libraries return <Directory> items too, so list Directory elements in both.
@@ -136,6 +139,7 @@ export function toPoster(m, source) {
   // says its rating is the episode's, so the cache never stores it under the series' key.
   const seriesRating = isEpisode && typeof m.grandparentContentRating === 'string' ? m.grandparentContentRating : '';
   const ownRating = typeof m.contentRating === 'string' ? m.contentRating : '';
+  const genres = genresOf(m);
   return {
     ratingKey: String(isEpisode ? m.grandparentRatingKey || m.ratingKey : m.ratingKey),
     title: isEpisode ? m.grandparentTitle || m.title : m.title,
@@ -147,7 +151,13 @@ export function toPoster(m, source) {
     ...(seriesRating ? { seriesRating } : isEpisode ? { episodeRating: true } : {}), // seriesRating: the show's; episodeRating: contentRating is the episode's only
     duration: toMs(m.duration), // ms; the playing item's own length for an episode; 0 = unknown
     summary: trimSummary(m.summary, SUMMARY_MAX), // trimmed here, before it reaches any stored descriptor; '' = none sent (the offline cache never keeps it)
+    ...(genres.length ? { genres } : {}), // the item's own genre tags (R-SEL-1): the engine checks a genre selection against these
   };
+}
+
+/** The genre tags an item carries (`Genre: [{ id, tag, filter }]`, a (verify) shape), as titles; anything else is none. */
+function genresOf(m) {
+  return Array.isArray(m.Genre) ? m.Genre.map((g) => g?.tag).filter((t) => typeof t === 'string' && t.trim() !== '') : [];
 }
 
 const yearOf = (y) => (y ? String(y) : '');
@@ -190,19 +200,63 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
     },
 
     /**
-     * Top-rated items in a library section, used as the random pool. With a `maxContentRating` it asks Plex
-     * for the allowed ratings only and oversamples (3x, at most 500) because filtering shrinks the pool.
-     * The server filter is a convenience (its syntax is unverified): the engine re-checks every poster.
+     * Top-rated items in a library section, used as the random pool. With a `maxContentRating`, or a `ratings` subset, it asks Plex
+     * for the allowed ratings only and oversamples (3x, at most 500) because filtering shrinks the pool. `ratings` (R-SEL-1) are
+     * ladder labels: only those the limit allows are asked for, and none left means no request (an empty filter would ask for every
+     * title). `genres` are the filter values Plex lists, joined by commas (OR). The server filters are a convenience (their syntax
+     * is unverified): the engine re-checks every poster against the limit, the rating subset and the item's own genres.
      */
-    async pool({ libraryKey, unwatchedOnly = true, size = 100, maxContentRating = '' }) {
+    async pool({ libraryKey, unwatchedOnly = true, size = 100, maxContentRating = '', genres = [], ratings = [] }) {
+      const values = ratings.length ? ratingValues(ratings, maxContentRating) : allowedValues(maxContentRating);
+      if (ratings.length && !values.length) return [];
       const c = await get(`/library/sections/${encodeURIComponent(libraryKey)}/all`, {
         unwatched: unwatchedOnly ? 1 : '',
         sort: 'rating:desc',
-        contentRating: allowedValues(maxContentRating).join(','),
+        contentRating: values.join(','),
+        genre: genres.join(','),
         'X-Plex-Container-Start': 0,
-        'X-Plex-Container-Size': maxContentRating ? Math.min(size * 3, 500) : size,
+        'X-Plex-Container-Size': maxContentRating || ratings.length ? Math.min(size * 3, 500) : size,
       });
       return (c.Metadata || []).filter((m) => m.thumb).map((m) => toPoster(m, 'random'));
+    },
+
+    /**
+     * The movies of one collection (smart or not) or playlist as a pool (R-SEL-1): its items with art that are not episodes, and,
+     * when `unwatchedOnly`, not watched (`viewCount` is left off an unwatched title, a (verify) shape). Best rated first, at most `size` (3x, at most 500, under a limit or a rating subset, as `pool()` asks for a library).
+     */
+    async sourceItems({ kind, key }, { unwatchedOnly = true, size = 100, maxContentRating = '', ratings = [] } = {}) {
+      const path = kind === 'playlist' ? `/playlists/${encodeURIComponent(key)}/items` : `/library/collections/${encodeURIComponent(key)}/children`;
+      const c = await get(path);
+      const all = c.Metadata || [];
+      const posters = all
+        // What the limit in force or the chosen ratings reject is dropped BEFORE the cut, so many high-scoring rejected titles cannot crowd out the allowed ones.
+        .filter((m) => m.thumb && (!m.type || m.type === 'movie') && !(unwatchedOnly && Number(m.viewCount) > 0) && ratingPasses(maxContentRating, ratings, typeof m.contentRating === 'string' ? m.contentRating : ''))
+        .sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0))
+        .slice(0, maxContentRating || ratings.length ? Math.min(size * 3, 500) : size) // the limit and the rating subset shrink it later, as for a library
+        .map((m) => toPoster(m, 'random'));
+      // `listed`: every rating key the reply held, whatever the filters dropped, so the offline cache can tell which entries left the list.
+      posters.listed = all.filter((m) => m.ratingKey !== undefined && m.ratingKey !== null).map((m) => String(m.ratingKey));
+      return posters;
+    },
+
+    /** The genres a library lists, as `{ key, title }` (`/library/sections/<id>/genre`, a (verify) shape); a title is required. */
+    async genres(libraryKey) {
+      const c = await get(`/library/sections/${encodeURIComponent(libraryKey)}/genre`);
+      return (c.Directory || []).filter((d) => typeof d.title === 'string' && d.title.trim() !== '').map((d) => ({ key: d.key === undefined || d.key === null ? '' : String(d.key), title: d.title.trim() }));
+    },
+
+    /** The collections of a library, as `{ key, title, smart }` (`/library/sections/<id>/collections`, a (verify) shape). */
+    async collections(libraryKey) {
+      const c = await get(`/library/sections/${encodeURIComponent(libraryKey)}/collections`);
+      return (c.Metadata || c.Directory || [])
+        .filter((m) => m.ratingKey !== undefined && typeof m.title === 'string')
+        .map((m) => ({ key: String(m.ratingKey), title: m.title, smart: m.smart === true || m.smart === 1 || m.smart === '1' }));
+    },
+
+    /** The video playlists, as `{ key, title }` (`/playlists?playlistType=video`, a (verify) shape). */
+    async playlists() {
+      const c = await get('/playlists', { playlistType: 'video' });
+      return (c.Metadata || []).filter((m) => m.ratingKey !== undefined && typeof m.title === 'string').map((m) => ({ key: String(m.ratingKey), title: m.title }));
     },
 
     async item(ratingKey) {

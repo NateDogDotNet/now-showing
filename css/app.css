@@ -605,6 +605,17 @@ summary { cursor: pointer; color: var(--muted); }
 /* The clock icon inside a time field is a tab stop of its own, and `:focus-visible` does not match the field while the icon has it: `:focus-within` does (walk M2). */
 input[type="time"]:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .slot-editor #slot-add:disabled { cursor: not-allowed; }
+/* The poster selection in Settings (R-SEL-1): ticked lists. Genres scroll in their own box, so a library with 60 genres does not push the sheet down. */
+.pick-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
+.pick-list label.check { margin: 0; padding: 6px 4px; min-height: 28px; border-radius: 6px; }
+.pick-list label.check:hover { background: rgba(255, 255, 255, 0.06); }
+.pick-list input:disabled + span, .pick-list input:disabled { cursor: not-allowed; }
+.pick-list label.check:has(input:disabled) { color: var(--muted); }
+.pick-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr)); max-height: 11.5rem; overflow-y: auto; padding: 4px; border: 1px solid var(--panel-line); border-radius: 8px; overscroll-behavior: contain; }
+.pick-grid:empty { display: none; }
+.pick-row { grid-template-columns: repeat(auto-fill, minmax(min(100%, 6.5rem), 1fr)); }
+.pick-list label.check span { min-width: 0; overflow-wrap: anywhere; }
+#selection-fieldset > label { margin-top: 14px; }
 .pinned { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-top: 12px; }
 .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; align-items: center; }
 .button-grid label.check { margin: 0; }

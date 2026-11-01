@@ -438,3 +438,137 @@ test('refreshRatings keeps going past an unchanged poster and an uncached one, a
   assert.equal(pc.entries().find((e) => e.ratingKey === '1').contentRating, 'PG');
   assert.equal(storage.counts.writes, 1, 'exactly one index write');
 });
+
+// ---- the poster selection (R-SEL-1, D107): the entry records where it belongs; a narrowing selection draws only what does ----
+
+import { selectionOf } from '../js/selection.js';
+
+const where = (n, extra) => ({ ...poster(n, `/t/${n}`, 'G'), ...extra });
+const two = selectionOf({ libraryKeys: ['1', '3'] });
+const drawn = async (pc, selection, limit = '') => {
+  const keys = new Set();
+  for (let i = 0; i < 40; i++) keys.add((await pc.random(undefined, limit, selection))?.poster.ratingKey ?? null);
+  return [...keys].sort();
+};
+
+test('put records the library, genres and collection or playlist membership of the poster', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '3', genres: ['Comedy'], members: ['collection:101'] }), blob(), size(300));
+  const [entry] = pc.entries();
+  assert.deepEqual([entry.libraryKey, entry.genres, entry.members], ['3', ['Comedy'], ['collection:101']]);
+  await pc.put(where(2), blob(), size(300));
+  const plain = pc.entries().find((e) => e.ratingKey === '2');
+  assert.deepEqual(['libraryKey' in plain, 'genres' in plain, 'members' in plain], [false, false, false], 'nothing recorded when the poster does not say');
+});
+
+test('put keeps what an entry already records when the new poster says nothing, and replaces it when it does', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1', genres: ['Drama'], members: ['playlist:201'] }), blob(), size(300));
+  await pc.put(where(1), blob(), size(300)); // e.g. shown again as the playing title
+  let e = pc.entries()[0];
+  assert.deepEqual([e.libraryKey, e.genres, e.members], ['1', ['Drama'], ['playlist:201']]);
+  await pc.put(where(1, { libraryKey: '3', genres: ['Comedy'], members: ['collection:101'] }), blob(), size(300));
+  e = pc.entries()[0];
+  assert.deepEqual([e.libraryKey, e.genres], ['3', ['Comedy']]);
+  assert.deepEqual(e.members, ['playlist:201', 'collection:101'], 'memberships accumulate (r2 gap 8)');
+});
+
+test('refreshRatings upgrades an old entry with the membership a poster seen online carries, and writes nothing when it already matches', async () => {
+  const storage = memoryStorage();
+  const pc = createPosterCache({ storage, caches: fakeCaches().caches });
+  await pc.put(where(1), blob(), size(300));
+  pc.refreshRatings([where(1, { libraryKey: '1', genres: ['Comedy'] })]);
+  let e = pc.entries()[0];
+  assert.deepEqual([e.libraryKey, e.genres], ['1', ['Comedy']]);
+  const raw = storage.getItem('plexPoster.posterIndex');
+  let writes = 0;
+  const counting = { ...storage, getItem: (k) => storage.getItem(k), setItem: (k, v) => (writes++, storage.setItem(k, v)) };
+  const again = createPosterCache({ storage: counting, caches: fakeCaches().caches });
+  again.refreshRatings([where(1, { libraryKey: '1', genres: ['Comedy'] })]);
+  assert.equal(writes, 0);
+  assert.equal(storage.getItem('plexPoster.posterIndex'), raw);
+  pc.refreshRatings([where(1, { members: ['collection:101'] })]);
+  e = pc.entries()[0];
+  assert.deepEqual([e.libraryKey, e.genres, e.members], ['1', ['Comedy'], ['collection:101']], 'a poster that records only membership leaves the rest');
+});
+
+test('random() with no selection, or the 2.2 selection, draws every entry as before, old ones included', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1), blob(), size(300));
+  await pc.put(where(2, { libraryKey: '1' }), blob(), size(300));
+  assert.deepEqual(await drawn(pc, undefined), ['1', '2']);
+  assert.deepEqual(await drawn(pc, null), ['1', '2']);
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKey: '1' })), ['1', '2']);
+});
+
+test('random() under a narrowing selection never draws an entry without the new fields', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1), blob(), size(300)); // cached before 2.3
+  await pc.put(where(2, { libraryKey: '3' }), blob(), size(300));
+  assert.deepEqual(await drawn(pc, two), ['2']);
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKeys: ['1'], genres: [{ key: '', title: 'Comedy' }] })), [null]);
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKeys: ['1'], ratings: ['G'] })), [null], 'a rating subset narrows too');
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKeys: ['1'], source: { kind: 'playlist', key: '201' } })), [null]);
+});
+
+test('random() under a library, genre and rating selection draws only entries that record membership of it', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1', genres: ['Comedy'] }), blob(), size(300));
+  await pc.put(where(2, { libraryKey: '1', genres: ['Drama'] }), blob(), size(300));
+  await pc.put(where(3, { libraryKey: '3', genres: ['Comedy'] }), blob(), size(300));
+  await pc.put({ ...poster(4, '/t/4', 'PG'), libraryKey: '1', genres: ['Comedy'] }, blob(), size(300));
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKeys: ['1'], genres: [{ key: '', title: 'Comedy' }] })), ['1', '4']);
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKeys: ['1'], genres: [{ key: '', title: 'Comedy' }], ratings: ['PG'] })), ['4']);
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKeys: ['1', '3'] })), ['1', '2', '3', '4']);
+});
+
+test('random() under a collection or playlist draws only members of it', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1', members: ['collection:101'] }), blob(), size(300));
+  await pc.put(where(2, { libraryKey: '1', members: ['playlist:101'] }), blob(), size(300));
+  await pc.put(where(3, { libraryKey: '1' }), blob(), size(300));
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKey: '1', source: { kind: 'collection', key: '101' } })), ['1']);
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKey: '1', source: { kind: 'playlist', key: '101' } })), ['2']);
+});
+
+test('random(): the household limit still applies on top of the selection, and a selection never relaxes it', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put({ ...poster(1, '/t/1', 'R'), libraryKey: '1', genres: ['Comedy'] }, blob(), size(300));
+  await pc.put({ ...poster(2, '/t/2', 'G'), libraryKey: '1', genres: ['Comedy'] }, blob(), size(300));
+  const comedy = selectionOf({ libraryKeys: ['1'], genres: [{ key: '', title: 'Comedy' }] });
+  assert.deepEqual(await drawn(pc, comedy, 'PG'), ['2']);
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKeys: ['1'], ratings: ['R'] }), 'PG'), [null], 'the chosen R is above the limit');
+});
+
+test('r2 gap 8: put and refreshRatings add a membership without losing the others, and never list one twice', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1', members: ['collection:101'] }), blob(), size(300));
+  await pc.put(where(1, { libraryKey: '1', members: ['playlist:201'] }), blob(), size(300));
+  await pc.put(where(1, { libraryKey: '1', members: ['playlist:201'] }), blob(), size(300));
+  assert.deepEqual(pc.entries()[0].members, ['collection:101', 'playlist:201']);
+  pc.refreshRatings([where(1, { members: ['collection:102'] })]);
+  pc.refreshRatings([where(1, { members: ['collection:102', 'collection:101'] })]);
+  assert.deepEqual(pc.entries()[0].members, ['collection:101', 'playlist:201', 'collection:102']);
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKey: '1', source: { kind: 'collection', key: '101' } })), ['1'], 'still a member of the first source');
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKey: '1', source: { kind: 'playlist', key: '201' } })), ['1']);
+});
+
+test('r2 gap 8: a source listing loaded online takes the membership from cached entries that are no longer in it, and touches nothing else', async () => {
+  const storage = memoryStorage();
+  const pc = createPosterCache({ storage, caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1', members: ['collection:101', 'playlist:201'] }), blob(), size(300));
+  await pc.put(where(2, { libraryKey: '1', members: ['collection:101'] }), blob(), size(300));
+  await pc.put(where(3, { libraryKey: '1', genres: ['Drama'] }), blob(), size(300));
+  pc.syncMembers('collection:101', ['1', '9']); // title 2 left the collection
+  const by = Object.fromEntries(pc.entries().map((e) => [e.ratingKey, e]));
+  assert.deepEqual(by[1].members, ['collection:101', 'playlist:201'], 'still listed: kept');
+  assert.equal('members' in by[2], false, 'its only membership went, so the field goes');
+  assert.deepEqual(by[3].genres, ['Drama'], 'an entry with no membership is untouched');
+  pc.syncMembers('playlist:201', []);
+  assert.deepEqual(pc.entries().find((e) => e.ratingKey === '1').members, ['collection:101'], 'another source keeps its own');
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKey: '1', source: { kind: 'collection', key: '101' } })), ['1'], 'the title that left is no longer drawn offline');
+  let writes = 0;
+  const counting = { getItem: (k) => storage.getItem(k), setItem: (k, v) => (writes++, storage.setItem(k, v)) };
+  createPosterCache({ storage: counting, caches: fakeCaches().caches }).syncMembers('collection:101', ['1']);
+  assert.equal(writes, 0, 'nothing to remove: nothing written');
+});

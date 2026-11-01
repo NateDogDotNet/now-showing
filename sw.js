@@ -31,6 +31,7 @@ const SHELL = [
   'js/ratings.js',
   'js/reload.js',
   'js/schedule.js',
+  'js/selection.js',
   'js/settings.js',
   'js/settings-ui.js',
   'js/shortcuts.js',

@@ -802,3 +802,345 @@ test('D103: the online empty-card advice names the time slots while slots exist,
   const plain = scheduled({ limitSlots: [] }, { pool: [rated('r', 'R')] }, new Date(2026, 0, 5, 12, 0));
   await assert.rejects(plain.engine.decide(), (err) => /raise the limit\)/.test(err.message) && !/time slots/.test(err.message));
 });
+
+// ---- the poster selection (R-SEL-1, D107): libraries, genres, ratings, a collection or a playlist ----
+
+const gp = (k, contentRating, genres, over = {}) => ({ ...poster(k), contentRating, genres, ...over });
+const LIB_A = [gp('a1', 'G', ['Comedy']), gp('a2', 'PG', ['Drama']), gp('a3', 'PG-13', ['Comedy', 'Drama']), gp('a4', 'R', ['Comedy']), gp('a5', '', ['Comedy'])];
+const LIB_B = [gp('b1', 'G', ['Animation']), gp('b2', 'PG', ['Comedy']), gp('b3', 'R', ['Animation'])];
+
+/** A client that answers each library from its own list (and ignores the filters, as a server that does not honour them would). */
+function selectionClient({ counts = { 1: 8, 3: 5 }, libs = { 1: LIB_A, 3: LIB_B }, sources = {}, allLibraries } = {}) {
+  const calls = { pool: [], count: [], source: [] };
+  return {
+    calls,
+    ...(allLibraries ? { libraries: async () => allLibraries } : {}),
+    sessions: async () => [],
+    items: async () => [],
+    libraryCount: async (key) => (calls.count.push(key), counts[key] ?? null),
+    pool: async (args) => (calls.pool.push(args), libs[args.libraryKey].map((p) => ({ ...p }))),
+    sourceItems: async (src, opts) => (calls.source.push({ src, opts }), (sources[`${src.kind}:${src.key}`] || []).map((p) => ({ ...p }))),
+  };
+}
+
+function selecting(overrides = {}, clientOpts = {}, random = spread()) {
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryName: 'Movies', ...overrides };
+  const client = selectionClient(clientOpts);
+  const engine = createEngine({ client, getSettings: () => settings, now: () => 1_000_000, random });
+  return { engine, client, settings };
+}
+
+const TWO = { libraryKeys: ['1', '3'], libraryNames: ['Movies', 'Kids Movies'] };
+
+test('a 2.2 selection (one library, nothing else) makes the same single request as before and asks for no count', async () => {
+  const { engine, client } = selecting({ randomPoolSize: 77, unwatchedOnly: false, maxContentRating: 'PG' });
+  await engine.decide();
+  assert.deepEqual(client.calls.pool, [{ libraryKey: '1', unwatchedOnly: false, size: 77, maxContentRating: 'PG' }]);
+  assert.deepEqual(client.calls.count, []);
+});
+
+test('two libraries: one request each, the pool size split by title count, and every poster says which library it came from', async () => {
+  const { engine, client } = selecting({ ...TWO, randomPoolSize: 100 });
+  const d = await engine.decide();
+  assert.deepEqual(client.calls.count.sort(), ['1', '3']);
+  assert.deepEqual(client.calls.pool.map((a) => [a.libraryKey, a.size]), [['1', 62], ['3', 38]]);
+  const seen = new Map();
+  for (let i = 0; i < 120; i++) {
+    const p = (await engine.decide({ force: true })).poster;
+    engine.shown(p);
+    seen.set(p.ratingKey, p.libraryKey);
+  }
+  assert.ok(d);
+  assert.deepEqual(Object.fromEntries([...seen].sort()), { a1: '1', a2: '1', a3: '1', a4: '1', a5: '1', b1: '3', b2: '3', b3: '3' });
+});
+
+test('two libraries: an unknown count splits the pool evenly; a library with no titles is not asked for posters', async () => {
+  const unknown = selecting({ ...TWO, randomPoolSize: 100 }, { counts: { 1: 8 } });
+  await unknown.engine.decide();
+  assert.deepEqual(unknown.client.calls.pool.map((a) => a.size), [50, 50]);
+  const empty = selecting({ ...TWO, randomPoolSize: 100 }, { counts: { 1: 0, 3: 5 } });
+  await empty.engine.decide();
+  assert.deepEqual(empty.client.calls.pool.map((a) => [a.libraryKey, a.size]), [['3', 100]]);
+});
+
+test('a genre set is sent as filter values, and a server that ignores it cannot widen the pool', async () => {
+  const { engine, client } = selecting({ ...TWO, genres: [{ key: '12', title: 'Comedy' }, { key: '', title: 'Fantasy' }] });
+  assert.deepEqual([...(await everyPick(engine, 200))].sort(), ['a1', 'a3', 'a4', 'a5', 'b2']);
+  assert.deepEqual(client.calls.pool.map((a) => a.genres), [['12', 'Fantasy'], ['12', 'Fantasy']]);
+});
+
+test('a genre set drops a reply item that carries no genres', async () => {
+  const { engine } = selecting({ genres: [{ key: '12', title: 'Comedy' }] }, { libs: { 1: [gp('x', 'G', undefined), gp('y', 'G', ['Comedy'])] } });
+  assert.deepEqual([...(await everyPick(engine))], ['y']);
+});
+
+test('no genre chosen: the request carries no genres and titles without genres are fine', async () => {
+  const { engine, client } = selecting({}, { libs: { 1: [gp('x', 'G', undefined)] } });
+  assert.deepEqual([...(await everyPick(engine, 3))], ['x']);
+  assert.ok(!('genres' in client.calls.pool[0]));
+});
+
+test('a rating set is intersected with the limit in force, in the request and in every pick', async () => {
+  const { engine, client } = selecting({ maxContentRating: 'PG-13', ratings: ['G', 'PG-13', 'R'] });
+  assert.deepEqual([...(await everyPick(engine, 100))].sort(), ['a1', 'a3']);
+  assert.deepEqual(client.calls.pool[0].ratings, ['G', 'PG-13'], 'R is above the limit and is not asked for');
+  assert.equal(client.calls.pool[0].maxContentRating, 'PG-13');
+});
+
+test('a rating set can never add an unrated or above-limit title, whatever the server returns', async () => {
+  const { engine } = selecting({ maxContentRating: 'PG', ratings: ['PG', 'R', 'NC-17'] });
+  assert.deepEqual([...(await everyPick(engine, 100))], ['a2']);
+  const none = selecting({ maxContentRating: '', ratings: ['R'] });
+  assert.deepEqual([...(await everyPick(none.engine, 100))], ['a4'], 'no limit: the chosen R, and not the unrated');
+});
+
+test('a rating set follows the slot in force, not the base limit', async () => {
+  const slots = [{ start: '06:00', limit: 'G' }, { start: '15:00', limit: 'PG-13' }];
+  const { engine, client, settings } = selecting({ maxContentRating: 'R', limitSlots: slots, ratings: ['G', 'PG', 'R'] });
+  let at = new Date(2026, 0, 5, 7, 0);
+  const clocked = createEngine({ client, getSettings: () => settings, now: () => at.getTime(), random: spread() });
+  assert.deepEqual([...(await everyPick(clocked, 100))], ['a1'], 'G slot: only G, though the base limit is R');
+  at = new Date(2026, 0, 5, 16, 0);
+  assert.deepEqual([...(await everyPick(clocked, 100))].sort(), ['a1', 'a2'], 'PG-13 slot: G and PG, R still out');
+  assert.deepEqual(client.calls.pool.map((a) => a.ratings), [['G'], ['G', 'PG']]);
+  assert.ok(engine);
+});
+
+test('a rating set that the limit leaves empty asks for no posters and shows the empty card naming the selection', async () => {
+  const { engine, client } = selecting({ maxContentRating: 'PG', ratings: ['R'] });
+  await assert.rejects(engine.decide(), (err) => err.kind === 'empty' && /rated R/.test(err.message) && /at or below PG/.test(err.message));
+  assert.deepEqual(client.calls.pool, []);
+});
+
+test('a collection replaces the libraries and takes no genre filter; its items are tagged with it', async () => {
+  const sources = { 'collection:101': [gp('c1', 'G', ['Drama']), gp('c2', 'PG', ['Horror'])] };
+  const { engine, client } = selecting({ ...TWO, genres: [{ key: '12', title: 'Comedy' }], source: { kind: 'collection', key: '101', title: 'Double Features' }, randomPoolSize: 55, unwatchedOnly: false }, { sources });
+  const seen = new Map();
+  for (let i = 0; i < 20; i++) {
+    const p = (await engine.decide({ force: true })).poster;
+    engine.shown(p);
+    seen.set(p.ratingKey, p.members);
+  }
+  assert.deepEqual([...seen.keys()].sort(), ['c1', 'c2']);
+  assert.deepEqual([...seen.values()], [['collection:101'], ['collection:101']]);
+  assert.deepEqual(client.calls.pool, [], 'no library request');
+  assert.deepEqual(client.calls.count, [], 'no count request');
+  assert.deepEqual(client.calls.source, [{ src: { kind: 'collection', key: '101' }, opts: { unwatchedOnly: false, size: 55 } }]);
+});
+
+test('a playlist is asked for as a playlist, and the limit and the rating set still apply to it', async () => {
+  const sources = { 'playlist:201': [gp('p1', 'G', []), gp('p2', 'PG', []), gp('p3', 'R', []), gp('p4', '', [])] };
+  const { engine, client } = selecting({ source: { kind: 'playlist', key: '201', title: 'Friday' }, maxContentRating: 'PG-13', ratings: ['PG', 'R'] }, { sources });
+  assert.deepEqual([...(await everyPick(engine, 60))], ['p2']);
+  assert.deepEqual(client.calls.source[0].src, { kind: 'playlist', key: '201' });
+  const plain = selecting({ source: { kind: 'playlist', key: '201', title: 'Friday' }, maxContentRating: 'PG-13' }, { sources });
+  assert.deepEqual([...(await everyPick(plain.engine, 60))].sort(), ['p1', 'p2'], 'the limit alone: R and unrated stay out');
+  assert.deepEqual(client.calls.pool, []);
+});
+
+test('a source with no libraries chosen still draws', async () => {
+  const { engine } = selecting({ libraryKey: '', libraryName: '', source: { kind: 'playlist', key: '201', title: 'P' } }, { sources: { 'playlist:201': [gp('p1', 'G', [])] } });
+  assert.equal((await engine.decide()).poster.ratingKey, 'p1');
+});
+
+test('nothing chosen at all draws nothing', async () => {
+  const { engine } = selecting({ libraryKey: '', libraryName: '' });
+  assert.equal(await engine.decide(), null);
+});
+
+test('the pool is reloaded when any selection setting changes, and kept when only a name does', async () => {
+  const sources = { 'collection:101': [gp('c1', 'G', [])], 'playlist:101': [gp('p1', 'G', [])] };
+  const { engine, client, settings } = selecting({}, { sources });
+  const loads = () => client.calls.pool.length + client.calls.source.length;
+  await engine.decide({ force: true });
+  await engine.decide({ force: true });
+  assert.equal(loads(), 1, 'cached');
+  const steps = [
+    ['libraryKeys', ['1', '3']],
+    ['genres', [{ key: '12', title: 'Comedy' }]],
+    ['ratings', ['G']],
+    ['source', { kind: 'collection', key: '101', title: 'x' }],
+    ['source', { kind: 'playlist', key: '101', title: 'x' }],
+  ];
+  let expected = 1;
+  for (const [key, value] of steps) {
+    settings[key] = value;
+    await engine.decide({ force: true });
+    expected += key === 'source' ? 1 : 2; // two libraries are two requests; a source is one
+    assert.equal(loads(), expected, `${key} changed: reloaded`);
+  }
+  const before = loads();
+  settings.libraryNames = ['Renamed', 'Again'];
+  settings.source = { kind: 'playlist', key: '101', title: 'renamed' };
+  await engine.decide({ force: true });
+  assert.equal(loads(), before, 'a rename is the same selection');
+});
+
+test('the empty card names a selection that matches nothing, and keeps "that library" for the 2.2 selection', async () => {
+  const none = selecting({ ...TWO, genres: [{ key: '1', title: 'Western' }], ratings: ['G', 'PG'] }, { libs: { 1: [], 3: [] } });
+  await assert.rejects(none.engine.decide(), (err) => err.kind === 'empty' && /^No posters found in Movies and Kids Movies, genre Western, rated G or PG \(try turning off "unwatched only" or tick fewer genres or ratings\)\.$/.test(err.message));
+  const src = selecting({ source: { kind: 'collection', key: '1', title: 'Top Rated' }, unwatchedOnly: true, maxContentRating: 'PG' }, { sources: {} });
+  await assert.rejects(src.engine.decide(), (err) => /^No posters found in the collection "Top Rated" at or below PG \(try turning off "unwatched only" or raise the limit or use the libraries instead of the collection\)\.$/.test(err.message));
+  const plain = selecting({}, { libs: { 1: [] } });
+  await assert.rejects(plain.engine.decide(), (err) => /^No posters found in that library/.test(err.message));
+});
+
+test('the cached-rating re-check still runs once per pool load under a selection', async () => {
+  const { client, settings } = selecting({ ...TWO, maxContentRating: 'PG-13' });
+  const asked = [];
+  client.items = async (keys) => (asked.push(keys), []);
+  const engine = createEngine({ client, getSettings: () => settings, now: () => 1_000_000, random: () => 0, cachedKeys: () => ['9'], onRatings: () => {} });
+  await engine.decide({ force: true });
+  await engine.decide({ force: true });
+  assert.deepEqual(asked, [['9']]);
+});
+
+// ---- r2: a curated list asks for the same extra items as a library, and the empty card suggests widening a narrowing selection ----
+
+test('r2 gap 9: a collection is asked for under the limit in force and the rating subset the limit leaves, so it can be cut like a library', async () => {
+  const sources = { 'collection:101': [gp('c1', 'G', [])] };
+  const { engine, client } = selecting({ source: { kind: 'collection', key: '101', title: 'x' }, maxContentRating: 'PG-13', ratings: ['G', 'R'], randomPoolSize: 40, unwatchedOnly: false }, { sources });
+  await engine.decide();
+  assert.deepEqual(client.calls.source[0].opts, { unwatchedOnly: false, size: 40, maxContentRating: 'PG-13', ratings: ['G'] });
+  const plain = selecting({ source: { kind: 'playlist', key: '2', title: 'x' }, unwatchedOnly: false, randomPoolSize: 40 }, { sources: { 'playlist:2': [gp('p', 'G', [])] } });
+  await plain.engine.decide();
+  assert.deepEqual(plain.client.calls.source[0].opts, { unwatchedOnly: false, size: 40 }, 'no limit and no subset: nothing extra');
+});
+
+test('r2 D109 item 3 / r3 D110 item 4: the empty card suggests widening only while the selection narrows, in one sentence with no nested brackets, and "add a library" only when a movie library is unticked', async () => {
+  const msg = async (overrides, clientOpts) => {
+    const { engine } = selecting({ unwatchedOnly: false, ...overrides }, clientOpts);
+    try {
+      await engine.decide();
+    } catch (e) {
+      return e.message;
+    }
+    return '';
+  };
+  const all = [{ key: '1', type: 'movie', title: 'Movies' }, { key: '3', type: 'movie', title: 'Kids Movies' }, { key: '2', type: 'artist', title: 'Music' }];
+  assert.equal(await msg({ genres: [{ key: '1', title: 'Western' }] }, { libs: { 1: [] }, allLibraries: all }), 'No posters found in Movies, genre Western (add a library or tick fewer genres).', 'Kids Movies is not ticked');
+  assert.equal(await msg({ ...TWO, genres: [{ key: '1', title: 'Western' }] }, { libs: { 1: [], 3: [] }, allLibraries: all }), 'No posters found in Movies and Kids Movies, genre Western (tick fewer genres).', 'every movie library is ticked: no "add a library"');
+  assert.equal(await msg({ ...TWO, genres: [{ key: '1', title: 'Western' }] }, { libs: { 1: [], 3: [] } }), 'No posters found in Movies and Kids Movies, genre Western (tick fewer genres).', 'a client that cannot list libraries: none suggested');
+  assert.equal(await msg({ genres: [{ key: '1', title: 'Western' }] }, { libs: { 1: [] }, allLibraries: [{ key: '1', type: 'movie', title: 'Movies' }, { key: '2', type: 'artist', title: 'Music' }] }), 'No posters found in Movies, genre Western (tick fewer genres).', 'a Music library is not a movie library');
+  const failing = selecting({ unwatchedOnly: false, genres: [{ key: '1', title: 'Western' }] }, { libs: { 1: [] } });
+  failing.client.libraries = async () => { throw new Error('down'); };
+  await assert.rejects(failing.engine.decide(), { message: 'No posters found in Movies, genre Western (tick fewer genres).' });
+  assert.match(await msg({ ratings: ['R'], maxContentRating: 'PG' }, { allLibraries: all }), /\(raise the limit or add a library or tick fewer ratings\)\.$/);
+  assert.equal(await msg({ ...TWO, genres: [{ key: '1', title: 'Western' }], ratings: ['G'] }, { libs: { 1: [], 3: [] } }), 'No posters found in Movies and Kids Movies, genre Western, rated G (tick fewer genres or ratings).');
+  assert.match(await msg({ source: { kind: 'playlist', key: '9', title: 'P' } }, { sources: {}, allLibraries: all }), /\(use the libraries instead of the playlist\)\.$/);
+  assert.equal(await msg({}, { libs: { 1: [] }, allLibraries: all }), 'No posters found in that library.', 'the 2.2 selection gets no such advice');
+  for (const m of [await msg({ genres: [{ key: '1', title: 'Western' }], ratings: ['R'], maxContentRating: 'PG' }, { allLibraries: all })]) assert.ok(!/\([^)]*\(/.test(m), 'no nested brackets: ' + m);
+});
+
+test('r2 gap 8: loading a collection or playlist online tells the cache which titles the listing held; a library load does not', async () => {
+  const sources = { 'collection:101': Object.assign([gp('c1', 'G', [])], { listed: ['c1', 'c2'] }) };
+  const told = [];
+  const { client, settings } = selecting({ source: { kind: 'collection', key: '101', title: 'x' }, unwatchedOnly: false }, { sources });
+  client.sourceItems = async () => sources['collection:101'];
+  const engine = createEngine({ client, getSettings: () => settings, now: () => 1_000_000, random: () => 0, onMembers: (id, keys) => told.push([id, keys]) });
+  await engine.decide({ force: true });
+  await engine.decide({ force: true });
+  assert.deepEqual(told, [['collection:101', ['c1', 'c2']]], 'once per pool load');
+  const lib = selecting({}, {});
+  const heard = [];
+  const libEngine = createEngine({ client: lib.client, getSettings: () => lib.settings, now: () => 1_000_000, random: () => 0, onMembers: (...a) => heard.push(a) });
+  await libEngine.decide({ force: true });
+  assert.deepEqual(heard, []);
+  const bare = createEngine({ client, getSettings: () => settings, now: () => 1_000_000, random: () => 0 });
+  assert.ok(await bare.decide({ force: true }), 'no callback is fine');
+});
+
+test('r3 gap 3: a rating subset the limit leaves empty requests no collection or playlist, and the empty card says so', async () => {
+  for (const source of [{ kind: 'collection', key: '1', title: 'C' }, { kind: 'playlist', key: '2', title: 'P' }]) {
+    const { engine, client } = selecting({ source, maxContentRating: 'PG', ratings: ['R', 'NC-17'], unwatchedOnly: false }, { sources: { 'collection:1': [gp('c', 'R', [])], 'playlist:2': [gp('p', 'R', [])] } });
+    await assert.rejects(engine.decide(), (err) => err.kind === 'empty' && /rated R or NC-17/.test(err.message));
+    assert.deepEqual(client.calls.source, [], source.kind);
+  }
+  const ok = selecting({ source: { kind: 'collection', key: '1', title: 'C' }, maxContentRating: 'PG', ratings: ['G', 'R'], unwatchedOnly: false }, { sources: { 'collection:1': [gp('c', 'G', [])] } });
+  assert.equal((await ok.engine.decide()).poster.ratingKey, 'c');
+  assert.equal(ok.client.calls.source.length, 1, 'a subset the limit leaves non-empty is still requested');
+});
+
+test('r3 gap 4: with several libraries chosen and one failing the pool comes from the others; only all failing fails', async () => {
+  const { engine, client } = selecting({ ...TWO });
+  const real = client.pool;
+  client.pool = async (args) => {
+    if (args.libraryKey === '3') throw Object.assign(new Error('Plex did not respond in time.'), { kind: 'timeout' });
+    return real(args);
+  };
+  const seen = new Set();
+  for (let i = 0; i < 30; i++) seen.add((await engine.decide({ force: true })).poster.libraryKey);
+  assert.deepEqual([...seen], ['1'], 'Movies only');
+  client.pool = async () => {
+    throw Object.assign(new Error('Could not reach Plex (network or CORS error).'), { kind: 'network' });
+  };
+  engine.invalidate();
+  await assert.rejects(engine.decide({ force: true }), { kind: 'network' });
+  const one = selecting({ libraryKey: '1' });
+  one.client.pool = async () => {
+    throw Object.assign(new Error('boom'), { kind: 'http' });
+  };
+  await assert.rejects(one.engine.decide(), { kind: 'http' }, 'one library failing is all failing');
+});
+
+// ---- r4 (D111): empty-card advice under a source with ratings, and a reduced pool is kept only briefly ----
+
+test('r4 gap 2: under a collection or playlist with ratings ticked the empty card also says to tick fewer ratings', async () => {
+  const msg = async (source, ratings) => {
+    const { engine } = selecting({ source, ratings, unwatchedOnly: false }, { sources: {} });
+    try { await engine.decide(); } catch (e) { return e.message; }
+    return '';
+  };
+  assert.equal(await msg({ kind: 'collection', key: '1', title: 'C' }, ['G']), 'No posters found in the collection "C", rated G (use the libraries instead of the collection or tick fewer ratings).');
+  assert.equal(await msg({ kind: 'playlist', key: '2', title: 'P' }, []), 'No posters found in the playlist "P" (use the libraries instead of the playlist).', 'no ratings ticked: nothing to untick');
+});
+
+test('r4 gap 3: a pool reduced by a failing library is kept for a minute, not 30; the full selection is asked for again then', async () => {
+  let t = 1_000_000;
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', ...TWO, rotateSeconds: 10 };
+  const client = selectionClient();
+  let kidsDown = true;
+  const real = client.pool;
+  client.pool = async (args) => {
+    if (args.libraryKey === '3' && kidsDown) throw Object.assign(new Error('timeout'), { kind: 'timeout' });
+    return real(args);
+  };
+  const engine = createEngine({ client, getSettings: () => settings, now: () => t, random: spread() });
+  const keysOf = async (n) => {
+    const seen = new Set();
+    for (let i = 0; i < n; i++) seen.add((await engine.decide({ force: true })).poster.libraryKey);
+    return [...seen];
+  };
+  assert.deepEqual(await keysOf(20), ['1'], 'Kids Movies failed: the pool is Movies');
+  const loads = () => client.calls.pool.length;
+  const before = loads();
+  t += 30_000;
+  await keysOf(5);
+  assert.equal(loads(), before, 'within a minute the reduced pool is reused, with no new requests');
+  kidsDown = false; // it recovers
+  t += 40_000; // 70 s after the load
+  assert.deepEqual((await keysOf(60)).sort(), ['1', '3'], 'the next pool load asks for the full selection again');
+  const full = loads();
+  t += 5 * 60_000;
+  await keysOf(5);
+  assert.equal(loads(), full, 'a complete pool is kept as before (30 minutes)');
+});
+
+test('r4 gap 3: the "reduced" mark belongs to one pool load; a later complete load (a collection) is kept the full time', async () => {
+  let t = 1_000_000;
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', ...TWO };
+  const client = selectionClient({ sources: { 'collection:1': [gp('c1', 'G', [])] } });
+  const real = client.pool;
+  client.pool = async (args) => {
+    if (args.libraryKey === '3') throw Object.assign(new Error('timeout'), { kind: 'timeout' });
+    return real(args);
+  };
+  const engine = createEngine({ client, getSettings: () => settings, now: () => t, random: () => 0 });
+  await engine.decide({ force: true }); // reduced
+  settings.source = { kind: 'collection', key: '1', title: 'C' };
+  await engine.decide({ force: true }); // a complete pool from the collection
+  const asked = client.calls.source.length;
+  t += 5 * 60_000;
+  await engine.decide({ force: true });
+  assert.equal(client.calls.source.length, asked, 'kept for the full time');
+});

@@ -6,6 +6,8 @@ import { createPin, checkPin, createPlexClient, discoverServers, firstReachable 
 import { describeLimitNow, MAX_SLOTS, NO_LIMIT } from './limit-schedule.js';
 import { createPositionMode } from './position.js';
 import { parseHHMM } from './schedule.js';
+import { LIMITS } from './ratings.js';
+import { genreRequestValue, offeredRatings, selectionOf } from './selection.js';
 import { defaults, fromImport, isConfigured, sanitize, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
@@ -102,6 +104,13 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   let testing = false;
   let keepOriginal = false; // set when the sheet closes FOR position mode: the close event then leaves the preview and `original` alone
   let countRun = 0; // bumped whenever the library list is rebuilt or the sheet closes, so a late count is ignored
+  // The poster selection the sheet would save (R-SEL-1): set by write(), changed by the lists, saved by Save, like pendingPin.
+  // `offered` is what the server listed on the last connection test; a stored choice the server did not list stays shown and ticked.
+  let sel = { libraries: [], genres: [], ratings: [], source: null };
+  let offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
+  let genreRun = 0; // bumped whenever the genre list is asked for again, so a late genre answer is ignored
+  let sourceRun = 0; // the same for the collection and playlist list: its own counter, so ticking a library never throws its answer away
+  let offerClient = null; // the client of the last successful connection test
 
   // Frame options are built from the registry so new frames only need adding there.
   $('frame-select').replaceChildren(
@@ -117,9 +126,13 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     // The household toggle is UI-only: on when a limit is set; off stores ''. The select keeps PG-13 while off.
     $('household-toggle').checked = Boolean(s.maxContentRating);
     field('maxContentRating').value = s.maxContentRating || 'PG-13';
-    ensureLibraryOption(s.libraryKey, s.libraryName);
-    field('libraryKey').value = s.libraryKey;
-    renderSlots(s.limitSlots);
+    renderSlots(s.limitSlots); // before the ratings, which are offered up to the loosest of the limit and the slots
+    sel = selectionOf(s);
+    offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
+    genreRun++;
+    sourceRun++;
+    offerClient = null; // the client of an earlier connection test is not this sheet's: genres and sources come from the server the test finds now
+    renderSelection();
     pendingPin = { key: s.staticRatingKey || '', title: s.staticTitle || '' };
     $('pinned-title').textContent = s.staticRatingKey ? s.staticTitle || `item ${s.staticRatingKey}` : 'none';
     $('unpin-btn').hidden = !s.staticRatingKey;
@@ -139,8 +152,13 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     }
     s.maxContentRating = $('household-toggle').checked ? field('maxContentRating').value : '';
     s.limitSlots = readSlots(); // kept whatever the toggle says: with it off they are saved but not applied
-    const lib = field('libraryKey');
-    s.libraryName = lib.selectedOptions[0]?.dataset.title || s.libraryName;
+    s.libraryKeys = sel.libraries.map((l) => l.key);
+    s.libraryNames = sel.libraries.map((l) => l.name);
+    s.libraryKey = s.libraryKeys[0] || '';
+    s.libraryName = sel.libraries[0]?.name || '';
+    s.genres = sel.source ? [] : sel.genres;
+    s.ratings = sel.ratings; // a tick above the offered range is kept: the engine's intersection with the limit in force decides what is shown (D110 item 6)
+    s.source = sel.source;
     s.staticRatingKey = pendingPin.key;
     s.staticTitle = pendingPin.title;
     s.settingsPinHash = pendingAuth.hash;
@@ -250,6 +268,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     $('slot-empty').hidden = rows > 0;
     $('slot-add').disabled = rows >= MAX_SLOTS;
     $('slot-add').title = rows >= MAX_SLOTS ? `${MAX_SLOTS} time slots is the most` : '';
+    renderRatings(); // a slot added or removed changes which ratings are offered
   }
 
   function renderSlots(slots) {
@@ -364,9 +383,10 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // ---- the "Connected to" card ----
 
   function renderConnected() {
-    const selected = field('libraryKey').selectedOptions[0];
     const server = form.dataset.serverName || getSettings().serverName || 'your Plex server';
-    const library = (selected?.value && selected.dataset.title) || (field('libraryKey').value && getSettings().libraryName) || '';
+    const library = sel.source
+      ? sel.source.title || sel.source.kind // a collection or playlist replaces the libraries: it is what is shown
+      : sel.libraries.map((l) => l.name).filter(Boolean).join(', ') || (sel.libraries.length && getSettings().libraryName) || '';
     $('connected-text').textContent = `Connected to ${server}${library ? ` · ${library}` : ''}`;
   }
 
@@ -394,28 +414,144 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     }
   }
 
-  function ensureLibraryOption(key, title) {
-    const select = field('libraryKey');
-    if (!key || [...select.options].some((o) => o.value === key)) return;
-    const o = new Option(title || `Library ${key}`, key);
-    o.dataset.title = title || '';
-    select.append(o);
+  // ---- the poster selection (R-SEL-1, D107) ----
+
+  /** A ticked row: a checkbox and its text. The text is a span of its own so a count can be written into it later. */
+  function pickRow(value, text, checked, { disabled = false, data = {} } = {}) {
+    const li = document.createElement('li');
+    const label = document.createElement('label');
+    label.className = 'check';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.value = value;
+    box.checked = checked;
+    box.disabled = disabled;
+    Object.assign(box.dataset, data);
+    const span = document.createElement('span');
+    span.textContent = text;
+    label.append(box, span);
+    li.append(label);
+    return li;
   }
 
-  /** Fills the list with the movie and TV libraries (titles only; counts follow lazily) and returns them. */
-  function fillLibraries(libs, selected) {
-    const select = field('libraryKey');
-    const usable = libs.filter((l) => l.type === 'movie' || l.type === 'show');
-    countRun++;
-    select.replaceChildren(new Option('— choose a library —', ''));
-    for (const l of usable) {
-      const o = new Option(l.title, l.key);
-      o.dataset.title = l.title;
+  /** The ratings the sheet offers (D109 item 1): up to the loosest limit of the base and every time slot, all five while the toggle is off. */
+  function shownRatings() {
+    return offeredRatings($('household-toggle').checked ? field('maxContentRating').value : '', readSlots());
+  }
+
+  function renderLibraries() {
+    const chosen = new Map(sel.libraries.map((l) => [l.key, l.name]));
+    const rows = offered.libraries.map((l) => ({ key: l.key, title: l.title }));
+    for (const [key, name] of chosen) if (!rows.some((r) => r.key === key)) rows.push({ key, title: name || `Library ${key}` }); // a stored choice the server did not list
+    const locked = Boolean(sel.source);
+    if (!rows.length) {
+      $('library-list').replaceChildren(Object.assign(document.createElement('li'), { className: 'muted small', textContent: 'Test the connection to load your libraries.' }));
+      return;
+    }
+    $('library-list').replaceChildren(
+      ...rows.map((r) => {
+        const count = offered.counts[r.key];
+        return pickRow(r.key, count === undefined ? r.title : `${r.title} · ${countLabel(count)}`, chosen.has(r.key), { disabled: locked, data: { title: r.title } });
+      }),
+    );
+  }
+
+  function renderGenres() {
+    const chosen = new Set(sel.genres.map((g) => g.title.toLowerCase()));
+    const rows = [...offered.genres];
+    for (const g of sel.genres) if (!rows.some((r) => r.title.toLowerCase() === g.title.toLowerCase())) rows.push(g);
+    rows.sort((a, b) => a.title.localeCompare(b.title));
+    const locked = Boolean(sel.source);
+    $('genre-list').replaceChildren(...rows.map((g) => pickRow(genreRequestValue(g), g.title, chosen.has(g.title.toLowerCase()), { disabled: locked, data: { key: g.key, title: g.title } })));
+    syncGenreText(rows.length);
+  }
+
+  /** The count and the help under the genre box. Ticking a genre updates only these: the rows stay, so focus and scroll stay (walk r1). */
+  function syncGenreText(rowCount = $('genre-list').children.length) {
+    const locked = Boolean(sel.source);
+    $('genre-count').textContent = !locked && sel.genres.length ? `· ${sel.genres.length} chosen` : '';
+    $('genre-help').textContent = locked
+      ? 'A collection or playlist takes no genre.'
+      : offered.genresFailed
+        ? "Couldn't load the genres. Test the connection to try again."
+        : rowCount
+          ? 'None ticked: every genre. A title shows only when it matches a ticked genre and, when ratings are ticked, a ticked rating.'
+          : offerClient
+            ? sel.libraries.length
+              ? 'The ticked libraries list no genres.'
+              : 'Tick a library to see its genres.'
+            : 'Test the connection to load the genres.';
+  }
+
+  function renderRatings() {
+    const shown = shownRatings();
+    // A kept tick above the offered range stays visible and ticked, marked, so a parent can see it and untick it (D111 item 1).
+    const kept = LIMITS.filter((r) => sel.ratings.includes(r) && !shown.includes(r));
+    $('rating-list').replaceChildren(...LIMITS.filter((r) => shown.includes(r) || kept.includes(r)).map((r) => pickRow(r, kept.includes(r) ? `${r} — above the limit now` : r, sel.ratings.includes(r))));
+  }
+
+  function renderSource() {
+    const select = $('source-select');
+    const value = sel.source ? `${sel.source.kind}:${sel.source.key}` : '';
+    const many = offered.libraries.length > 1;
+    const option = (kind, item, suffix = '') => {
+      const o = new Option(`${item.title}${suffix}`, `${kind}:${item.key}`);
+      o.dataset.title = item.title;
+      return o;
+    };
+    const collections = Object.assign(document.createElement('optgroup'), { label: 'Collections' });
+    collections.append(...offered.collections.map((c) => option('collection', c, `${c.smart ? ' (smart)' : ''}${many ? ` · ${c.library}` : ''}`)));
+    const playlists = Object.assign(document.createElement('optgroup'), { label: 'Playlists' });
+    playlists.append(...offered.playlists.map((p) => option('playlist', p)));
+    select.replaceChildren(new Option('The libraries above', ''), ...(collections.children.length ? [collections] : []), ...(playlists.children.length ? [playlists] : []));
+    if (value && ![...select.options].some((o) => o.value === value)) {
+      const o = new Option(sel.source.title || `${sel.source.kind} ${sel.source.key}`, value);
+      o.dataset.title = sel.source.title;
       select.append(o);
     }
-    const movie = usable.find((l) => l.type === 'movie');
-    select.value = usable.some((l) => l.key === selected) ? selected : movie?.key || '';
-    return usable;
+    select.value = value;
+  }
+
+  function renderSelection() {
+    renderLibraries();
+    renderSource();
+    renderGenres();
+    renderRatings();
+    renderConnected();
+  }
+
+  /** The libraries ticked now, in the list's order, as { key, name }. */
+  function readLibraries() {
+    return [...$('library-list').querySelectorAll('input:checked')].map((box) => ({ key: box.value, name: box.dataset.title || '' }));
+  }
+
+  /** Genres are asked for from every ticked library and merged by title. A failed request leaves that library's genres out. Choosing a source does not ask again: the box stays as it was, greyed. */
+  async function loadGenres() {
+    const run = ++genreRun;
+    offered.genres = [];
+    offered.genresFailed = false;
+    if (!offerClient || !sel.libraries.length) return renderGenres();
+    const client = offerClient;
+    const lists = await Promise.all(sel.libraries.map((l) => client.genres(l.key).catch(() => null)));
+    if (run !== genreRun) return;
+    offered.genresFailed = lists.every((l) => l === null);
+    const seen = new Map();
+    for (const g of lists.flat().filter(Boolean)) if (!seen.has(g.title.toLowerCase())) seen.set(g.title.toLowerCase(), g);
+    offered.genres = [...seen.values()];
+    renderGenres();
+  }
+
+  /** The collections of every movie library and the video playlists, for the "Posters from" list. A failed request leaves its part out. */
+  async function loadSources(client, libraries) {
+    const run = sourceRun;
+    const [collections, playlists] = await Promise.all([
+      Promise.all(libraries.map((l) => client.collections(l.key).then((list) => list.map((c) => ({ ...c, library: l.title }))).catch(() => []))),
+      client.playlists().catch(() => []),
+    ]);
+    if (run !== sourceRun) return;
+    offered.collections = collections.flat();
+    offered.playlists = playlists;
+    renderSource();
   }
 
   /** "Movies · 1,240 titles": asked for after the list is on show and never waited for. A count that fails leaves the title alone. */
@@ -424,10 +560,27 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     for (const l of libs) {
       client.libraryCount(l.key).then((n) => {
         if (run !== countRun || n === null) return;
-        const option = [...field('libraryKey').options].find((o) => o.value === l.key);
-        if (option) option.textContent = `${l.title} · ${countLabel(n)}`;
+        offered.counts[l.key] = n;
+        renderLibraries();
       });
     }
+  }
+
+  /** The server's movie libraries are on show: keep the ticked ones the server still has (any type), or tick the first movie library. */
+  function offerLibraries(all, client) {
+    const movies = all.filter((l) => l.type === 'movie');
+    countRun++;
+    offered = { libraries: movies, genres: [], collections: [], playlists: [], counts: {} };
+    const known = new Map(all.filter((l) => l.type === 'movie' || l.type === 'show').map((l) => [l.key, l.title]));
+    sel.libraries = sel.libraries.filter((l) => known.has(l.key)).map((l) => ({ key: l.key, name: known.get(l.key) }));
+    if (!sel.libraries.length && !sel.source && movies.length) sel.libraries = [{ key: movies[0].key, name: movies[0].title }];
+    for (const l of all) if (l.type === 'show' && sel.libraries.some((c) => c.key === l.key) && !offered.libraries.some((o) => o.key === l.key)) offered.libraries.push(l);
+    renderSelection();
+    offerClient = client;
+    sourceRun++;
+    loadGenres();
+    loadSources(client, movies);
+    return offered.libraries;
   }
 
   /** The verdict line under the Test button; a failure carries the buttons that fix it (the same ones the empty card shows). */
@@ -456,7 +609,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       const client = createPlexClient({ serverUrl: s.serverUrl, token: s.plexToken, clientId });
       const id = await client.identity();
       const libs = await client.libraries();
-      const usable = fillLibraries(libs, s.libraryKey);
+      const usable = offerLibraries(libs, client);
       form.dataset.serverName = id.name;
       setResult(`✓ ${id.name || 'Server'}${id.version ? ` (v${id.version.split('-')[0]})` : ''} — ${libs.length} libraries`);
       renderConnected();
@@ -578,7 +731,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       err.textContent = $('household-toggle').checked ? 'A time slot has no start time. Set it or remove the slot.' : 'A time slot has no start time. Turn on Household with children to see it, then set the time or remove the slot.';
       return;
     }
-    if (s.plexToken && s.serverUrl && !s.libraryKey && !s.staticRatingKey) {
+    if (s.plexToken && s.serverUrl && !s.libraryKey && !s.source && !s.staticRatingKey) { // a collection or playlist is enough
       err.textContent = 'Choose a library (test the connection to load them).';
       return;
     }
@@ -661,7 +814,29 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   $('preset-apply').addEventListener('click', applyPreset);
   $('signin-btn').addEventListener('click', () => signIn());
   $('connected-change').addEventListener('click', openConnection);
-  field('libraryKey').addEventListener('change', renderConnected);
+  $('library-list').addEventListener('change', () => {
+    sel.libraries = readLibraries();
+    renderConnected();
+    loadGenres();
+  });
+  $('genre-list').addEventListener('change', () => {
+    sel.genres = [...$('genre-list').querySelectorAll('input:checked')].map((box) => ({ key: box.dataset.key || '', title: box.dataset.title }));
+    syncGenreText(); // not renderGenres(): rebuilding the rows would drop keyboard focus and scroll the box back to the top
+  });
+  $('rating-list').addEventListener('change', () => {
+    sel.ratings = [...$('rating-list').querySelectorAll('input:checked')].map((box) => box.value);
+  });
+  $('source-select').addEventListener('change', () => {
+    const o = $('source-select').selectedOptions[0];
+    const [kind, ...rest] = (o?.value || '').split(':');
+    sel.source = o?.value ? { kind, key: rest.join(':'), title: o.dataset.title || '' } : null;
+    renderLibraries();
+    renderGenres(); // greyed while a source is set, and ticked as it was
+    renderConnected();
+  });
+  // The ratings offered follow the household limit, its toggle and the time slots as they are edited.
+  for (const el of [$('household-toggle'), field('maxContentRating')]) el.addEventListener('change', renderRatings);
+  $('slot-list').addEventListener('change', (e) => e.target.closest('.slot-limit') && renderRatings());
 
   // The preset buttons and the Custom field (UI only) set the stored seconds. A half-typed or junk entry leaves them alone.
   for (const radio of form.querySelectorAll('input[name="rotatePreset"]')) radio.addEventListener('change', () => radio.checked && pickPreset(radio.value));
