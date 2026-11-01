@@ -590,3 +590,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   8. **The household toggle.** With the household limit off ("No limit" base), no limit applies from any slot or profile, as with slots today. A profile's other settings still switch at their slots.
   9. **Export and import.** Profiles are exported and imported with the slots. An imported profile is cleaned like the sheet's own values. PIN material is never exported (D5).
   10. **Carried items.** The brief also carries D106 items 1–5, D114 1 and D116 1–2.
+
+## Conductor rulings — 2026-11-01 (viewer-profiles Output; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D118
+
+- **D118 viewer-profiles' Output gains the files its carried items need.** D106 items 2–4 change the status line that tests/e2e/rating-schedule.spec.mjs checks. D116 2 changes when js/weighting.js's record is cleared, which tests/engine.test.js, tests/weighting.test.js and tests/e2e/weighting.spec.mjs cover. The resolver (D117 4) changes what the engine reads. The Output list therefore gains `js/weighting.js`, `tests/engine.test.js`, `tests/weighting.test.js`, `tests/e2e/rating-schedule.spec.mjs` and `tests/e2e/weighting.spec.mjs`. Criterion 1 also runs the engine and weighting unit files, and criterion 5 lists the five new paths. This is a criterion change under D44, as D112 was.
