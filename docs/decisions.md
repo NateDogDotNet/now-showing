@@ -638,3 +638,13 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
      - A profiles e2e case checks that an open profile's frame is not previewed while it is open: it runs at a time with no profile slot in force and moves a live control before Done.
   7. **Spec (walk Minor 5, anchored Minor 5).** docs/spec.md:309 reads "names cut to 24; a later duplicate (ignoring case) is dropped". R-PROF-1 gains the wording in item 5.
   No criterion changes. Re-dispatch 2 of 5.
+
+## Conductor rulings — 2026-11-01 (viewer-profiles r3 question and reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D123
+
+- **D123 viewer-profiles lands on round 3; Q19 is ruled as proposed; three r3 Minors become follow-ups.** All three r3 reviews APPROVE, and the Step 7 band is COMPLETE 95/95.
+  1. **Q19.** The preview that Done and Discard send stays as D122 4 ruled. No test can tell it from its absence. The anchored review notes one effect: a household control that does not preview live, changed while a profile is open, is previewed at Done or Discard. No limit, selection or pin value is involved.
+  2. **The pinned poster above a profile's limit stays (cold review question).** This is D5 and D32 as written: an owner-pinned poster is exempt. Nothing changes.
+  3. **Follow-ups (owner: Nathan). None of these changes the limit in force. No later phase of run 8 may change js/settings-ui.js.**
+     - While an opened profile's genres load, the household's genres stay tickable for that moment (cold r3 Minor). The fix: clear the list when the load starts.
+     - The "<name> kept" notice outlives Cancel and Save (walk r3 Minor 1). The fix: clear it when the sheet or a profile opens.
+     - Nothing on screen says why a pinned poster stays up under a stricter profile (walk r3 Minor 2).
