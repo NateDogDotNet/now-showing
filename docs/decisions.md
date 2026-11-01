@@ -561,3 +561,12 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 - **D114 The builder's Q11 and Q12 are ruled as proposed.**
   1. **Q11, the live preview.** `weighting` and `noRepeatDays` are plain form fields, so another live control's preview carries their unsaved values to the engine, as `unwatchedOnly` and `randomPoolSize` do today. Cancel restores them. The fix needs js/main.js, which is outside this phase's Output. It goes to `viewer-profiles`, whose Output holds js/main.js: both keys join the preview carve-out there, with the D106 items.
   2. **Q12, recording at window 0.** Nothing is stored while the window is 0 (D101 ruling 5: a default adds no storage key). Raising the window starts with an empty record.
+
+## Conductor rulings — 2026-11-01 (weighting-no-repeats r1 reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D115
+
+- **D115 The weighting wording says "reviews" and says the limit still decides, and a window set to 0 clears the record.** The UX walk r1 asks for a revision (Important, spec-gap); the anchored review r1 approves with one Minor (code-bug against D114 2). No criterion changes.
+  1. **The option's name.** "Highest rated first" becomes "Best reviewed first (audience score)", so it cannot be read as the content rating (G … R) a few rows above. The weight is unchanged (D113 1). The spec and the code comments use the same words. (walk r1 Important 1)
+  2. **The help says the limit still decides.** The help paragraph gains one sentence: favouring a title never lets in one the household limit, a time slot or the poster selection leaves out. (walk r1 Important 1)
+  3. **The help is read with the controls.** Both controls name `#weighting-help` with `aria-describedby`, as the source menu does with its help. (walk r1 Minor 2)
+  4. **A window set to 0 clears the record.** When the saved window is 0, the shown-titles record is removed from storage if it is there, so raising the window again starts empty, as D114 2 says. R-SEL-2's sentence states this; one unit test covers it. (anchored r1 Minor 1)
+  5. **Dismissed.** The walk's other notes need no change: typed days are cleaned silently like the other number fields; the 19 px sideways scroll on a phone is the pre-existing owner follow-up; the live preview is D114 1.
