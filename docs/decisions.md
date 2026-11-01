@@ -614,3 +614,10 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   7. **Small fixes.** The boundary watch reads the clock once per check (cold Minor 6). After a rename, focus goes to the renamed row, and a click on another row's button is not lost (walk Minor 4). Name boxes read "Profile name", and the profile help is linked to the editor's fields (walk Minor 5). The one-line summary adds the weighting when it is on.
   8. **Tests (anchored Minors 1–4, cold Minor 5, the conductor's surviving mutant).** Add cases for: the offline fallback under a profile slot; a pinned poster across a profile boundary; `limitNowPlaying` defaulting to on when a profile omits it; a carried profile whose limit equals the base still applies its bundle; the first of two equally strict slots supplies the bundle; profile cases 3 and 3b check that the poster comes off before the next request; and a Save that changes only the in-force profile's now-playing rule redraws at once.
   9. **Spec (anchored Minor 5).** R-PROF-1 says duplicate names are dropped, not "made unique". The fit check it names, at 1920×1080, a phone and rotation 90, is added to the profiles spec.
+
+## Conductor rulings — 2026-11-01 (viewer-profiles r2 questions; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D121
+
+- **D121 The profile builder's Q16–Q18 are ruled as proposed.**
+  1. **Q16.** A new profile starts from the household's current values, so it begins as a copy to change. Nothing is saved until Done.
+  2. **Q17.** While a profile is open, only the bundled values are set aside. The slots, the connection and the controls outside the bundle stay editable. The household toggle, position mode, the profile rows, Save and Cancel are off. A whole-sheet Cancel (Escape) still restores everything.
+  3. **Q18.** The selection check after a poster's decode is kept beside the check before it, as the limit's own two checks are. No test can isolate the second one, because a held image request ends before the decode starts.
