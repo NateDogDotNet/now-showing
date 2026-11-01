@@ -5,6 +5,7 @@ import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { createPin, checkPin, createPlexClient, discoverServers, firstReachable } from './plex.js';
 import { describeLimitNow, MAX_SLOTS, NO_LIMIT } from './limit-schedule.js';
 import { createPositionMode } from './position.js';
+import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describeProfile, MAX_PROFILES, removeProfile, renameProfile, updateProfile } from './profiles.js';
 import { parseHHMM } from './schedule.js';
 import { LIMITS } from './ratings.js';
 import { genreRequestValue, offeredRatings, selectionOf } from './selection.js';
@@ -107,6 +108,11 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // The poster selection the sheet would save (R-SEL-1): set by write(), changed by the lists, saved by Save, like pendingPin.
   // `offered` is what the server listed on the last connection test; a stored choice the server did not list stays shown and ticked.
   let sel = { libraries: [], genres: [], ratings: [], source: null };
+  // The profiles the dialog would save (R-PROF-1): set by write(), changed by the profile editor, saved by Save, like pendingPin.
+  let pendingProfiles = [];
+  // The profile open in the sheet (D120 1), or null: { id (null for a new one), name, household } where `household` holds the household's own
+  // values, set aside while the controls show the profile's.
+  let editing = null;
   let offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
   let genreRun = 0; // bumped whenever the genre list is asked for again, so a late genre answer is ignored
   let sourceRun = 0; // the same for the collection and playlist list: its own counter, so ticking a library never throws its answer away
@@ -126,6 +132,11 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     // The household toggle is UI-only: on when a limit is set; off stores ''. The select keeps PG-13 while off.
     $('household-toggle').checked = Boolean(s.maxContentRating);
     field('maxContentRating').value = s.maxContentRating || 'PG-13';
+    resetEditingUI(); // an import (or a fresh open) ends an open profile: the controls are about to be set from `s`
+    pendingProfiles = s.profiles.map((p) => ({ ...p }));
+    $('profile-error').hidden = true;
+    $('profile-name').value = '';
+    renderProfiles();
     renderSlots(s.limitSlots); // before the ratings, which are offered up to the loosest of the limit and the slots
     sel = selectionOf(s);
     offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
@@ -144,14 +155,25 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     renderConnection();
   }
 
+  /** The sheet's settings as it would save them. While a profile is open that is the household's own values, set aside (D120 1). */
   function read() {
+    if (!editing) return readControls();
+    // While a profile is open the bundled keys are the set-aside household values (nothing a profile holds is previewed, D120 1); every
+    // other key comes from the controls, so the household's live controls keep previewing (D122 4).
+    const household = Object.fromEntries([...BUNDLE_KEYS, 'libraryKey', 'libraryName'].map((k) => [k, editing.household[k]]));
+    return { ...readControls(), ...household, profiles: pendingProfiles };
+  }
+
+  /** What the controls show now: the household's values, or, while a profile is open, that profile's (its limit may be "No limit"). */
+  function readControls() {
     const s = { ...getSettings() };
     for (const el of form.elements) {
       if (!el.name || !(el.name in s)) continue;
       s[el.name] = el.type === 'checkbox' ? el.checked : el.value;
     }
-    s.maxContentRating = $('household-toggle').checked ? field('maxContentRating').value : '';
+    s.maxContentRating = editing || $('household-toggle').checked ? field('maxContentRating').value : '';
     s.limitSlots = readSlots(); // kept whatever the toggle says: with it off they are saved but not applied
+    s.profiles = pendingProfiles;
     s.libraryKeys = sel.libraries.map((l) => l.key);
     s.libraryNames = sel.libraries.map((l) => l.name);
     s.libraryKey = s.libraryKeys[0] || '';
@@ -182,9 +204,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     start.value = slot.start;
     const limit = document.createElement('select');
     limit.className = 'slot-limit';
-    // The same labels as the main limit select ("PG-13 (TV-14)"), then "No limit".
-    limit.append(...[...field('maxContentRating').options].map((o) => new Option(o.textContent.trim(), o.value)), new Option('No limit', NO_LIMIT));
-    limit.value = slot.limit;
+    fillSlotChoices(limit, slot.profile === undefined ? slot.limit : `${PROFILE_PREFIX}${slot.profile}`);
     const days = document.createElement('select');
     days.className = 'slot-days';
     days.append(new Option('Every day', 'all'), new Option('Weekdays', 'weekdays'), new Option('Weekends', 'weekends'));
@@ -223,6 +243,222 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   let slotRowCount = 0;
 
+  const PROFILE_PREFIX = 'profile:';
+
+  /**
+   * The choices of a slot: the same labels as the main limit select ("PG-13 (TV-14)"), "No limit", then the profiles (R-PROF-1). A slot that
+   * names a profile no longer in the list keeps that choice, marked missing, so it is not lost silently (it fails closed in force).
+   */
+  function fillSlotChoices(select, value) {
+    select.replaceChildren(...[...field('maxContentRating').options].filter((o) => o.value !== NO_LIMIT).map((o) => new Option(o.textContent.trim(), o.value)), new Option('No limit', NO_LIMIT));
+    const missing = value.startsWith(PROFILE_PREFIX) && !pendingProfiles.some((p) => PROFILE_PREFIX + p.id === value);
+    if (pendingProfiles.length > 0 || missing) {
+      const group = document.createElement('optgroup');
+      group.label = 'Use a profile instead';
+      group.append(...pendingProfiles.map((p) => new Option(`Profile: ${p.name}`, PROFILE_PREFIX + p.id)));
+      if (missing) group.append(new Option('Profile: missing', value));
+      select.append(group);
+    }
+    select.value = value;
+  }
+
+  /** Rebuilds every slot's choices after the profiles changed, keeping each slot's choice. */
+  function refreshSlotChoices() {
+    for (const select of $('slot-list').querySelectorAll('.slot-limit')) fillSlotChoices(select, select.value);
+    renderRatings();
+  }
+
+  // ---- the profiles (R-PROF-1, D117, D120): rows of name, summary and two buttons, held in pendingProfiles until Save ----
+
+  const frameNames = new Map([...FRAMES, NO_FRAME, { id: CUSTOM_FRAME_ID, name: 'Custom image' }].map((f) => [f.id, f.name]));
+
+  function showProfileError(message) {
+    $('profile-error').textContent = message;
+    $('profile-error').hidden = !message;
+  }
+
+  function profileRow(profile) {
+    const li = document.createElement('li');
+    li.className = 'profile-row';
+    li.dataset.id = profile.id;
+    const label = document.createElement('label');
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.className = 'profile-rename';
+    name.maxLength = 24;
+    name.autocomplete = 'off';
+    name.value = profile.name;
+    name.setAttribute('aria-describedby', 'profile-error profile-help');
+    label.append('Profile name', name);
+    const summary = document.createElement('p');
+    summary.className = 'profile-summary muted small';
+    summary.textContent = describeProfile(profile, (id) => frameNames.get(id) || id);
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'btn small profile-edit';
+    edit.textContent = 'Edit';
+    edit.setAttribute('aria-label', `Edit ${profile.name}`);
+    edit.setAttribute('aria-describedby', 'profile-help');
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn small profile-remove';
+    remove.textContent = 'Delete';
+    remove.setAttribute('aria-label', `Delete ${profile.name}`);
+    const actions = document.createElement('div');
+    actions.className = 'profile-actions';
+    actions.append(edit, remove);
+    // A rename is committed in place: the rows are not rebuilt, so focus stays where the person put it and a click on another row's
+    // button that began this change is not lost (D120 7). Enter commits and keeps focus in the renamed box; it never saves the sheet.
+    const commit = () => {
+      const current = pendingProfiles.find((p) => p.id === profile.id);
+      if (!current || name.value.trim() === current.name) return;
+      const done = renameProfile(pendingProfiles, profile.id, name.value);
+      if (done.error) {
+        showProfileError(done.error);
+        name.value = current.name;
+        return;
+      }
+      showProfileError('');
+      pendingProfiles = done.profiles;
+      name.value = done.profiles.find((p) => p.id === profile.id).name;
+      edit.setAttribute('aria-label', `Edit ${name.value}`);
+      remove.setAttribute('aria-label', `Delete ${name.value}`);
+      refreshSlotChoices();
+    };
+    name.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commit();
+      }
+    });
+    name.addEventListener('change', commit);
+    edit.addEventListener('click', () => {
+      commit();
+      const now = pendingProfiles.find((p) => p.id === profile.id) ?? profile; // the profile as it is now, after a rename in this row
+      startEditing({ id: now.id, name: now.name, bundle: now });
+    });
+    remove.addEventListener('click', () => {
+      const done = removeProfile(pendingProfiles, profile.id, readSlots());
+      if (done.error) return showProfileError(done.error);
+      showProfileError('');
+      pendingProfiles = done.profiles;
+      renderProfiles();
+      refreshSlotChoices();
+      $('profile-name').focus();
+    });
+    li.append(label, summary, actions);
+    return li;
+  }
+
+  /** Redraws the list and the add control. */
+  function renderProfiles() {
+    $('profile-list').replaceChildren(...pendingProfiles.map(profileRow));
+    $('profile-empty').hidden = pendingProfiles.length > 0;
+    const full = pendingProfiles.length >= MAX_PROFILES;
+    $('profile-add').disabled = full;
+    $('profile-add').title = full ? `${MAX_PROFILES} profiles is the most` : '';
+  }
+
+  // ---- editing one profile apart from the household's own values (D120 1) ----
+
+  /** Puts a bundle's values into the bundled controls: the limit, the now-playing rule, the selection, the weighting and window, the frame. */
+  function showBundle(b) {
+    field('maxContentRating').value = b.maxContentRating;
+    field('limitNowPlaying').checked = Boolean(b.limitNowPlaying);
+    field('weighting').value = b.weighting;
+    field('noRepeatDays').value = String(b.noRepeatDays);
+    field('frameId').value = b.frameId;
+    sel = selectionOf(b);
+    renderSelection();
+    syncDependent();
+  }
+
+  /** Opens a profile in the sheet: a banner names it, the controls show its values, the household's own are set aside. */
+  function startEditing({ id, name, bundle }) {
+    if (editing) return;
+    const household = readControls();
+    editing = { id, name, household };
+    const none = new Option('No limit', NO_LIMIT);
+    field('maxContentRating').append(none); // a profile may have no limit, as a slot may
+    showBundle(bundleOf(bundle));
+    loadGenres(); // the genre list follows the libraries now shown; a load in flight for the household's is dropped (D122 3)
+    $('profile-banner-text').textContent = `Editing the profile \u201c${name}\u201d. The limit, the now-playing rule, the selection, the weighting and days, and the frame below are this profile's. Your own household values are set aside until you press Done or Discard.`;
+    $('profile-banner-error').hidden = true;
+    $('profile-banner').hidden = false;
+    $('profile-editor').inert = true;
+    $('household-toggle').disabled = true;
+    $('position-btn').disabled = true;
+    $('settings-save').hidden = true;
+    $('settings-cancel').hidden = true;
+    $('profile-banner').scrollIntoView({ block: 'start' });
+    $('profile-banner').focus();
+  }
+
+  /** Back to the household's own values, with the controls as the sheet has them. Does not set the controls itself when `restore` is false. */
+  function resetEditingUI(restore = false) {
+    const was = editing;
+    editing = null;
+    for (const o of [...field('maxContentRating').options]) if (o.value === NO_LIMIT) o.remove();
+    $('profile-banner').hidden = true;
+    $('profile-editor').inert = false;
+    $('household-toggle').disabled = false;
+    $('settings-save').hidden = false;
+    $('settings-cancel').hidden = false;
+    syncPositionButton();
+    if (restore && was) {
+      showBundle({ ...bundleOf(was.household), maxContentRating: was.household.maxContentRating || 'PG-13' });
+      loadGenres();
+      onPreview(read()); // one preview, as the household's own values return (D122 4)
+    }
+  }
+
+  function finishEditing(commit) {
+    if (!editing) return;
+    const { id, name } = editing;
+    let done = null;
+    if (commit) {
+      const bundle = bundleOf(readControls());
+      if (!bundleHasSource(bundle)) {
+        $('profile-banner-error').textContent = 'Choose at least one library, or a collection or playlist, for this profile.';
+        $('profile-banner-error').hidden = false;
+        return;
+      }
+      done = id === null ? addProfile(pendingProfiles, name, bundle) : updateProfile(pendingProfiles, id, bundle);
+      if (done.error) {
+        $('profile-banner-error').textContent = done.error;
+        $('profile-banner-error').hidden = false;
+        return;
+      }
+      pendingProfiles = done.profiles;
+    }
+    resetEditingUI(true);
+    if (id === null && commit) $('profile-name').value = '';
+    showProfileError('');
+    $('profile-notice').textContent = commit ? `${name} kept; it applies when you press Save.` : '';
+    renderProfiles();
+    refreshSlotChoices();
+    const target = id === null && commit ? $('profile-name') : id === null ? $('profile-name') : $('profile-list').querySelector(`[data-id="${CSS.escape(id)}"] .profile-edit`);
+    target?.focus();
+  }
+  $('profile-done').addEventListener('click', () => finishEditing(true));
+  $('profile-discard').addEventListener('click', () => finishEditing(false));
+
+  function addNewProfile() {
+    if (pendingProfiles.length >= MAX_PROFILES) return showProfileError(`${MAX_PROFILES} profiles is the most. Delete one to add another.`);
+    const checked = checkName(pendingProfiles, $('profile-name').value);
+    if (checked.error) return showProfileError(checked.error);
+    showProfileError('');
+    startEditing({ id: null, name: checked.name, bundle: bundleOf(readControls()) });
+  }
+  $('profile-add').addEventListener('click', addNewProfile);
+  $('profile-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault(); // Enter here opens the new profile; it must not save the whole sheet
+      addNewProfile();
+    }
+  });
+  $('profile-name').addEventListener('input', () => showProfileError(''));
+
   function clearSlotError(li) {
     li.querySelector('.slot-error').hidden = true;
     li.querySelector('.slot-start').removeAttribute('aria-invalid');
@@ -251,7 +487,8 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
    */
   function syncSlotStatus() {
     const text = describeLimitNow(getSettings(), new Date());
-    $('slot-status').textContent = `Saved: ${text[0].toLowerCase()}${text.slice(1)}`;
+    const line = `Saved: ${text[0].toLowerCase()}${text.slice(1)}`;
+    if ($('slot-status').textContent !== line) $('slot-status').textContent = line; // a live region is written only when its words change, or a screen reader says it again every second (D106 3)
   }
 
   let slotRefusal = false; // the footer shows the missing-start-time message
@@ -281,7 +518,8 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     return [...$('slot-list').children].map((li) => {
       const choice = li.querySelector('.slot-days').value;
       const days = choice === 'custom' ? JSON.parse(li.dataset.days) : DAY_SETS[choice];
-      const slot = { start: li.querySelector('.slot-start').value, limit: li.querySelector('.slot-limit').value };
+      const chosen = li.querySelector('.slot-limit').value;
+      const slot = { start: li.querySelector('.slot-start').value, ...(chosen.startsWith(PROFILE_PREFIX) ? { profile: chosen.slice(PROFILE_PREFIX.length) } : { limit: chosen }) };
       return days ? { ...slot, days: [...days] } : slot;
     });
   }
@@ -436,7 +674,8 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   /** The ratings the sheet offers (D109 item 1): up to the loosest limit of the base and every time slot, all five while the toggle is off. */
   function shownRatings() {
-    return offeredRatings($('household-toggle').checked ? field('maxContentRating').value : '', readSlots());
+    const limits = readSlots().map((slot) => (slot.profile === undefined ? slot : { limit: pendingProfiles.find((p) => p.id === slot.profile)?.maxContentRating ?? NO_LIMIT }));
+    return offeredRatings(editing || $('household-toggle').checked ? field('maxContentRating').value : '', limits);
   }
 
   function renderLibraries() {
@@ -714,7 +953,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   form.addEventListener('input', (e) => {
     syncDependent();
-    if (e.target.closest('[data-live]')) onPreview(read());
+    if (e.target.closest('[data-live]')) onPreview(read()); // while a profile is open read() is the household's own values, so a profile's are never previewed (D120 1)
   });
   form.addEventListener('change', (e) => {
     syncDependent();
@@ -723,6 +962,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (editing) return; // Enter in a field must not save the sheet while a profile is open
     const s = read();
     s.serverName = form.dataset.serverName || s.serverName;
     const err = $('form-error');
@@ -794,7 +1034,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // Nothing to position while the empty or sign-in card is up (the same signal main.js uses: the card's own hidden flag).
   function syncPositionButton() {
     const noPoster = !$('empty').hidden;
-    $('position-btn').disabled = noPoster;
+    $('position-btn').disabled = noPoster || Boolean(editing);
     $('position-reason').hidden = !noPoster;
     // A hidden element that aria-describedby names still supplies the description, so the link exists only while the reason shows.
     if (noPoster) $('position-btn').setAttribute('aria-describedby', 'position-reason');

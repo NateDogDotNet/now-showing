@@ -2,6 +2,7 @@
 // Everything is stored as one JSON blob so it can be exported and validated as a unit.
 
 import { sanitizeSlots } from './limit-schedule.js';
+import { cleanProfiles } from './profiles.js';
 import { parseHHMM } from './schedule.js';
 import { cleanGenres, cleanKeys, cleanNames, cleanRatings, cleanSource } from './selection.js';
 import { cleanDays, cleanWeighting } from './weighting.js';
@@ -94,6 +95,8 @@ const SCHEMA = {
   limitNowPlaying: [true, bool],
   // The limit by time of day (R-FILT-2, D101): applied only while a household limit is set; no slots = the limit above all day.
   limitSlots: [[], (v) => sanitizeSlots(v)],
+  // Viewer profiles (R-PROF-1, D117): named bundles of limit, now-playing rule, selection, weighting and frame, at most 6. A slot may name one. Applied on Save, never live-previewed.
+  profiles: [[], (v) => cleanProfiles(v)],
 
   // Display protection
   sleepEnabled: [false, bool],

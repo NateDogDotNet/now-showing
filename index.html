@@ -95,6 +95,14 @@
 
   <dialog id="settings" class="sheet" aria-labelledby="settings-title">
     <form id="settings-form" method="dialog" novalidate>
+        <div id="profile-banner" class="profile-banner" role="group" aria-labelledby="profile-banner-text" tabindex="-1" hidden>
+          <p id="profile-banner-text"></p>
+          <p id="profile-banner-error" class="error" role="alert" hidden></p>
+          <div class="profile-banner-actions">
+            <button type="button" class="btn primary" id="profile-done">Done</button>
+            <button type="button" class="btn" id="profile-discard">Discard</button>
+          </div>
+        </div>
       <header class="sheet-head">
         <h2 id="settings-title">Settings</h2>
         <p class="muted" id="first-run-hint" hidden>Welcome! Sign in with Plex (or enter a token and server URL), choose a library, then save.</p>
@@ -214,7 +222,22 @@
               <ul id="slot-list" class="slot-list"></ul>
               <p id="slot-empty" class="muted small">No time slots: the limit above applies all day.</p>
               <button type="button" class="btn small" id="slot-add">Add a time slot</button>
-              <p id="slot-help" class="muted small">A slot sets the limit from its start until the next slot starts, on the days you choose; where no slot applies, the limit above does. Slots apply when you press Save, and the line below describes the saved ones. If the clock is not set, the strictest limit applies. If you turn Household with children off, the slots are kept but not applied.</p>
+              <p id="slot-help" class="muted small">A slot sets the limit from its start until the next slot starts, on the days you choose; where no slot applies, the limit above does. Slots apply when you press Save, and the line below describes the saved ones. If the clock is not set, the strictest limit applies. If you turn Household with children off, the slots and profiles are kept but not applied.</p>
+            </div>
+
+            <div id="profile-editor" class="profile-editor" role="group" aria-labelledby="profile-label">
+              <span id="profile-label" class="field-label">Profiles</span>
+              <ul id="profile-list" class="profile-list"></ul>
+              <p id="profile-empty" class="muted small">No profiles yet.</p>
+              <div class="profile-new">
+                <label>Profile name
+                  <input id="profile-name" type="text" maxlength="24" autocomplete="off" aria-describedby="profile-error profile-help" />
+                </label>
+                <button type="button" class="btn small" id="profile-add">New profile</button>
+              </div>
+              <p id="profile-error" class="error" role="alert" hidden></p>
+              <p id="profile-notice" class="muted small" role="status" aria-live="polite"></p>
+              <p id="profile-help" class="muted small">A profile keeps a limit (or no limit), the “Apply the limit to what’s playing right now” choice, a poster selection, the weighting and days, and a frame. “New profile” and “Edit” open the profile in this sheet: the controls show its values, your own household values are set aside, and “Done” saves the profile and puts them back. A time slot can use a profile instead of a limit, and while that slot is in force the profile’s settings replace the household’s, its limit too, even when the profile’s limit is looser; the status line under the slots says which limit is in force. Up to 6 profiles. Profiles apply only while “Household with children” is on, and everything here applies when you press Save.</p>
             </div>
           </div>
           <p id="slot-status" class="slot-status" aria-live="polite"></p>

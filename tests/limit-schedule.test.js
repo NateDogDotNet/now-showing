@@ -1,7 +1,7 @@
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { createLimitWatch, describeLimitNow, limitInForce, MAX_SLOTS, nextLimitChange, sanitizeSlots, STRICTEST } from '../js/limit-schedule.js';
+import { createLimitWatch, describeLimitNow, limitInForce, MAX_SLOTS, nextLimitChange, sanitizeSlots, slotInForce, STRICTEST } from '../js/limit-schedule.js';
 import { defaults, sanitize } from '../js/settings.js';
 
 // 2026-01-05 is a Monday. `at(h, m, day)` is local time, so the cases hold in any timezone.
@@ -364,4 +364,170 @@ test('describeLimitNow: in a zone that skips midnight (America/Santiago) a slot 
   `;
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, TZ: 'America/Santiago' }, timeout: 8000 }).toString().trim();
   assert.equal(out, 'In force now: G until tomorrow 01:00.');
+});
+
+// ---- viewer-profiles: slots that name a profile (R-PROF-1, D117), and the carried D106 items ----
+
+const kidsP = { id: 'k', name: 'Kids', maxContentRating: 'G' };
+const adultsP = { id: 'a', name: 'Adults', maxContentRating: '' };
+const teensP = { id: 't', name: 'Teens', maxContentRating: 'PG-13' };
+const pslot = (start, profile, days) => (days ? { start, profile, days } : { start, profile });
+const withP = (limitSlots, maxContentRating = 'PG-13', profiles = [kidsP, adultsP, teensP]) => ({ maxContentRating, limitSlots, profiles });
+
+test('sanitizeSlots keeps a profile slot as { start, profile, days? } with no limit; a slot gives a limit OR a profile', () => {
+  assert.deepEqual(sanitizeSlots([pslot('06:00', 'k'), pslot('07:00', 'a', [1, 2])]), [pslot('06:00', 'k'), pslot('07:00', 'a', [1, 2])]);
+  assert.deepEqual(sanitizeSlots([{ start: '06:00', limit: 'R', profile: 'k' }]), [pslot('06:00', 'k')], 'both given: the profile wins and the limit is dropped');
+  assert.deepEqual(sanitizeSlots([{ start: '06:00', profile: 7 }]), [pslot('06:00', '')], 'a profile that is not text names no profile');
+  assert.deepEqual(sanitizeSlots([{ start: '06:00', profile: 'k', days: [] }]), [{ start: '06:00', limit: 'G' }], 'unreadable days: every day at the strictest limit, and the profile is not used');
+  assert.deepEqual(sanitizeSlots([{ start: '06:00', limit: 'PG', profile: null }]), [{ start: '06:00', limit: 'PG' }], 'a null profile is no profile');
+});
+
+test('a profile slot gives its profile\'s limit; carry-over, ties and the base floor work as for a limit', () => {
+  const s = withP([pslot('06:00', 'k'), pslot('15:00', 't'), pslot('22:00', 'a')]);
+  assert.equal(limitInForce(s, at(7, 0)), 'G');
+  assert.equal(limitInForce(s, at(16, 0)), 'PG-13');
+  assert.equal(limitInForce(s, at(23, 0)), '');
+  assert.equal(limitInForce(s, at(3, 0)), '', 'the 22:00 slot runs past midnight');
+  assert.equal(limitInForce(withP([pslot('08:00', 'a'), pslot('08:00', 'k')]), at(9, 0)), 'G', 'the stricter of two at the same start');
+  assert.equal(limitInForce(withP([pslot('20:00', 'a', [0])], 'G'), at(3, 0, MON)), 'G', 'carry-over is never looser than the base (D105)');
+  assert.equal(limitInForce(withP([pslot('20:00', 'a')], 'G'), at(3, 0, MON)), '', 'a slot that runs on from yesterday may be');
+});
+
+test('slotInForce names the slot that gives the limit, or null', async () => {
+  const { slotInForce } = await import('../js/limit-schedule.js');
+  const s = withP([pslot('06:00', 'k'), slot('15:00', 'PG')]);
+  assert.deepEqual(slotInForce(s, at(7, 0)), { limit: 'G', slot: pslot('06:00', 'k') });
+  assert.deepEqual(slotInForce(s, at(16, 0)), { limit: 'PG', slot: slot('15:00', 'PG') });
+  assert.deepEqual(slotInForce(withP([pslot('06:00', 'k', [1])], 'R'), at(7, 0, 6)), { limit: 'R', slot: null }, 'no slot: the base');
+  assert.deepEqual(slotInForce(withP([pslot('06:00', 'a')], ''), at(7, 0)), { limit: '', slot: null }, 'toggle off: no slot is in force, nothing is applied (D120 4)');
+  assert.deepEqual(slotInForce(null, at(7, 0)), { limit: STRICTEST, slot: null });
+});
+
+test('a slot naming a missing profile gives G while it is in force (D120 2), like an unreadable slot', () => {
+  const s = withP([pslot('06:00', 'gone'), slot('15:00', 'R')], 'R', [adultsP, teensP]);
+  assert.equal(limitInForce(s, at(7, 0)), 'G', 'in force: G, whatever the other profiles hold');
+  assert.equal(limitInForce(s, at(16, 0)), 'R', 'not in force: the slot that is');
+  assert.equal(limitInForce(s, at(3, 0)), 'R', 'carried over from the 15:00 slot');
+  assert.equal(limitInForce(withP([pslot('06:00', 'gone')], 'R', []), at(7, 0)), 'G', 'with no profile at all');
+  assert.equal(limitInForce(withP([pslot('06:00', 'gone')], 'R', undefined), at(7, 0)), 'G');
+  assert.equal(limitInForce({ ...s, profiles: 'junk' }, at(7, 0)), 'G');
+  assert.equal(limitInForce(withP([pslot('06:00', '')], 'PG', [adultsP]), at(7, 0)), 'G', 'an empty id names no profile');
+  // The cold review's import repro: Kids (G) from 07:00, base PG-13, the profile gone: G at 08:00, never the looser base.
+  assert.equal(limitInForce(withP([pslot('07:00', 'k')], 'PG-13', []), at(8, 0)), 'G');
+  assert.equal(limitInForce(withP([pslot('07:00', 'k')], 'PG-13', [kidsP]), at(8, 0)), 'G');
+  assert.equal(limitInForce(withP([pslot('07:00', 'k')], 'R', [{ ...kidsP, maxContentRating: 'PG' }]), at(8, 0)), 'PG', 'the profile present: its own limit');
+  assert.equal(limitInForce(withP([pslot('07:00', 'k')], 'R', []), at(8, 0)), 'G', 'removed: G, not the PG it held');
+});
+
+test('an implausible clock counts every profile only when a slot names one', () => {
+  const d = new Date(1970, 0, 1);
+  assert.equal(limitInForce(withP([pslot('06:00', 'a')], 'R'), d), 'G', 'Kids (G) is a profile, so it counts');
+  assert.equal(limitInForce(withP([slot('06:00', 'PG-13')], 'R'), d), 'PG-13', 'no slot names a profile: the profiles do not count');
+});
+
+test('the household toggle off is no limit even with profile slots', () => {
+  assert.equal(limitInForce(withP([pslot('06:00', 'k'), pslot('07:00', 'gone')], ''), at(6, 30)), '');
+});
+
+test('anyLimitSet and hasMissingProfile', async () => {
+  const { anyLimitSet, hasMissingProfile } = await import('../js/limit-schedule.js');
+  assert.equal(anyLimitSet(withP([pslot('06:00', 'k')], '')), true, 'a profile with a limit');
+  assert.equal(anyLimitSet(withP([pslot('06:00', 'a')], '')), false, 'a profile with no limit');
+  assert.equal(anyLimitSet(withP([pslot('06:00', 'gone')], '')), true, 'a missing profile gives G');
+  assert.equal(anyLimitSet(withP([slot('06:00', 'G')], '')), true);
+  assert.equal(anyLimitSet(withP([slot('06:00', '')], '')), false);
+  assert.equal(anyLimitSet(null), true);
+  assert.equal(hasMissingProfile(withP([pslot('06:00', 'gone')]), at(7, 0)), true);
+  assert.equal(hasMissingProfile(withP([pslot('06:00', 'gone'), slot('15:00', 'G')]), at(16, 0)), false, 'only while that slot is in force');
+  assert.equal(hasMissingProfile(withP([pslot('06:00', 'k'), slot('07:00', 'G')]), at(8, 0)), false);
+  assert.equal(hasMissingProfile(withP([pslot('06:00', 'gone')], ''), at(7, 0)), false, 'toggle off: nothing applies');
+});
+
+test('describeLimitNow names the profile in force; the toggle-off and missing-profile lines say what applies', () => {
+  const s = withP([pslot('06:00', 'k'), pslot('21:00', 'a')]);
+  assert.equal(describeLimitNow(s, at(7, 0)), 'In force now: G (Kids profile) until 21:00.');
+  assert.equal(describeLimitNow(s, at(22, 0)), 'In force now: No limit (Adults profile) until tomorrow 06:00.');
+  assert.equal(describeLimitNow(withP([pslot('06:00', 'k')]), at(7, 0)), 'In force now: G (Kids profile) all day.');
+  assert.equal(describeLimitNow(withP([pslot('06:00', 'k')], ''), at(7, 0)), 'No limit applies: the household limit is off (the slots and profiles are kept, not applied).');
+  assert.equal(describeLimitNow(withP([slot('06:00', 'G')], ''), at(7, 0)), 'No limit applies: the household limit is off (the slots are kept, not applied).');
+  assert.equal(describeLimitNow(withP([pslot('06:00', 'gone')], 'R'), at(7, 0)), 'The slot in force names a profile that does not exist, so G applies. Choose another profile or a limit for that slot.');
+  assert.match(describeLimitNow(withP([pslot('06:00', 'gone'), slot('15:00', 'R')], 'R'), at(16, 0)), /^In force now: R until/, 'not in force: no complaint');
+});
+
+test('nextLimitChange sees a change of profile that leaves the limit as it was', () => {
+  const s = withP([pslot('06:00', 'k'), pslot('15:00', 'k2')], 'PG-13', [kidsP, { ...kidsP, id: 'k2', name: 'Tots' }]);
+  assert.deepEqual(nextLimitChange(s, at(7, 0)), { limit: 'G', until: at(15, 0) });
+  assert.equal(describeLimitNow(s, at(16, 0)), 'In force now: G (Tots profile) until tomorrow 06:00.');
+});
+
+test('createLimitWatch calls onChange when only the profile changes; with the toggle off no profile switches anything', () => {
+  let now = at(6, 30);
+  const seen = [];
+  const s = withP([pslot('06:00', 'k'), pslot('07:00', 'k2')], 'PG-13', [kidsP, { ...kidsP, id: 'k2', name: 'Tots' }]);
+  const watch = createLimitWatch({ getSettings: () => s, now: () => now, onChange: (n, p) => seen.push([n, p]) });
+  assert.equal(watch.profile, 'k');
+  now = at(7, 0);
+  watch.check();
+  watch.check();
+  assert.deepEqual(seen, [['G', 'G']], 'same limit, other profile: one call');
+  assert.equal(watch.profile, 'k2');
+  const off = { ...s, maxContentRating: '' };
+  now = at(5, 59);
+  const seenOff = [];
+  const w2 = createLimitWatch({ getSettings: () => off, now: () => now, onChange: (n, p) => seenOff.push([n, p]) });
+  now = at(6, 0);
+  w2.check();
+  now = at(7, 0);
+  w2.check();
+  assert.deepEqual(seenOff, [], 'toggle off: nothing is applied, so nothing changes');
+  assert.equal(w2.profile, null);
+});
+
+test('createLimitWatch reads the settings and the clock once per check', () => {
+  let clock = 0;
+  let reads = 0;
+  const s = withP([pslot('06:00', 'k'), slot('06:00', 'PG')], 'PG-13');
+  const watch = createLimitWatch({ getSettings: () => (reads++, s), now: () => (clock++, at(7, 0)), onChange: () => {} });
+  [clock, reads] = [0, 0];
+  watch.check();
+  assert.deepEqual([clock, reads], [1, 1]);
+  watch.sync();
+  assert.deepEqual([clock, reads], [2, 2]);
+});
+
+test('a carried profile whose limit equals the base still applies its bundle (D105 floor ties go to the slot)', () => {
+  const s = withP([pslot('20:00', 'k')], 'G');
+  assert.equal(slotInForce(s, at(3, 0, MON)).slot?.profile, 'k', 'Monday 03:00: Kids (G) carries over past midnight and the base is G: the slot, not the bare base');
+});
+
+test('two equally strict slots at the same start: the first listed supplies the profile', () => {
+  const twin = { ...kidsP, id: 'k2', name: 'Twin' };
+  const a = slotInForce(withP([pslot('06:00', 'k2'), pslot('06:00', 'k')], 'PG-13', [kidsP, twin]), at(7, 0));
+  assert.equal(a.slot.profile, 'k2');
+  const b = slotInForce(withP([pslot('06:00', 'k'), pslot('06:00', 'k2')], 'PG-13', [kidsP, twin]), at(7, 0));
+  assert.equal(b.slot.profile, 'k');
+});
+
+test('D106 2: in the repeated autumn hour the status line never names a time already past', () => {
+  const script = `
+    import { describeLimitNow, nextLimitChange } from ${JSON.stringify(new URL('../js/limit-schedule.js', import.meta.url).href)};
+    const s = { maxContentRating: 'R', limitSlots: [{ start: '00:30', limit: '' }, { start: '01:20', limit: 'R' }, { start: '01:30', limit: 'G' }, { start: '02:00', limit: 'PG' }] };
+    // 2026-11-01 America/New_York: 01:00-01:59 happens twice. 06:10Z is 01:10 EST, the second pass.
+    const d = new Date('2026-11-01T06:10:00Z');
+    console.log(JSON.stringify([describeLimitNow(s, d), nextLimitChange(s, d).until.toISOString()]));
+  `;
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, TZ: 'America/New_York' } }).toString();
+  assert.deepEqual(JSON.parse(out), ['In force now: G until 02:00.', '2026-11-01T07:00:00.000Z']);
+});
+
+test('D106 4: a change a week away says "next <weekday>"', () => {
+  const s = withSlots([slot('08:00', 'G', [1]), slot('09:00', 'R', [1])], 'R');
+  assert.equal(describeLimitNow(s, at(9, 30, MON)), 'In force now: R until next Mon 08:00.');
+  assert.equal(describeLimitNow(s, at(9, 30, 6)), 'In force now: R until Mon 08:00.', 'six days away is still the bare weekday');
+});
+
+test('D106 5: the slots in force at the end of yesterday run on only when every one of them applies today (base G, PG-13 every day, no limit Sundays)', () => {
+  const s = withSlots([slot('22:00', 'PG-13'), slot('22:00', '', [0])], 'G');
+  assert.equal(limitInForce(s, at(3, 0, MON)), 'G', 'Sunday\'s no-limit slot does not apply on Monday, so the pair does not run on: the carrying PG-13 is capped at the base');
+  assert.equal(limitInForce(s, at(23, 0, SUN)), 'PG-13', 'Sunday 23:00: both slots started at 22:00 and the stricter wins');
 });

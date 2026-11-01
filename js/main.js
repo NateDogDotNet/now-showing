@@ -13,7 +13,8 @@ import { createPosterPin } from './poster-pin.js';
 import { allows } from './ratings.js';
 import { createReload, takeCarriedPlayback } from './reload.js';
 import { requestSize } from './layout.js';
-import { createLimitWatch, limitInForce } from './limit-schedule.js';
+import { createLimitWatch } from './limit-schedule.js';
+import { anyWindow, resolveSettings } from './profiles.js';
 import { isPlausibleClock } from './schedule.js';
 import { posterMatches, selectionKey, selectionOf } from './selection.js';
 import { createSettingsUI, pinSignIn } from './settings-ui.js';
@@ -106,17 +107,27 @@ const cachedBlobs = new WeakSet(); // blobs served from the poster cache (not fr
 // ---------- Household limit on what is already on screen ----------
 
 /**
- * The household limit in force now: the time-of-day slot, or the base limit (R-FILT-2, js/limit-schedule.js). Every reader
- * of the limit in this file calls this; `state.settings.maxContentRating` is only the base limit and is not read for a decision.
+ * The settings in force now (R-FILT-2, R-PROF-1, js/profiles.js): the stored settings with the household limit in force and, while a
+ * slot names a profile, that profile's selection, weighting, now-playing rule and frame. Every reader of the limit, the selection or the
+ * frame in this file calls this; `state.settings.maxContentRating` is only the base limit and is not read for a decision.
  */
-const limitNow = () => limitInForce(state.settings, new Date());
+const inForceSettings = () => resolveSettings(state.settings, new Date());
+const limitNow = () => inForceSettings().maxContentRating;
 
 /** May this poster stay on screen under the current settings? A pinned poster is exempt (D5), and so is a now-playing one unless `limitNowPlaying` is on. */
 function allowedOnScreen(poster) {
   const s = state.settings;
-  if (allows(limitNow(), poster.contentRating)) return true;
+  const inForce = inForceSettings();
+  if (allows(inForce.maxContentRating, poster.contentRating)) return true;
   if (s.staticRatingKey && poster.ratingKey === s.staticRatingKey) return true;
-  return poster.source === 'now-playing' && s.limitNowPlaying === false;
+  return poster.source === 'now-playing' && inForce.limitNowPlaying === false;
+}
+
+/** Does the poster still belong to the selection in force? Only a random or cached poster is the selection's to judge: the pinned one (a random poster that was pinned in place) and a now-playing one are not (D5). */
+function inSelectionNow(poster) {
+  if (state.settings.staticRatingKey && poster.ratingKey === state.settings.staticRatingKey) return true; // the poster pinned with the Pin button stays, whatever its source (D5, D122 1)
+  const inForce = inForceSettings();
+  return posterMatches(selectionOf(inForce), inForce.maxContentRating, poster);
 }
 
 // The poster that the last crossfade replaced: its layer may still be fading out when the limit changes (C7M1).
@@ -164,6 +175,10 @@ const limitWatch = createLimitWatch({
   getSettings: () => state.settings,
   onChange: () => {
     enforceOnScreen();
+    // A boundary that changes the profile (D117 7): a poster the new profile's selection does not allow comes off at once, as one above
+    // the limit does; an allowed one stays. This comes before the frame is applied, which may wait on a custom image.
+    if (display.currentPoster && !inSelectionNow(display.currentPoster)) blockPoster();
+    display.apply(inForceSettings()).catch((err) => log.warn(err.message)); // a new frame applies without a reload; weighting and the pool follow at the next draw
     // A boundary replaces the poster on screen only when it is no longer allowed (D105): an allowed poster stays, paused or not,
     // and a looser limit takes effect at the next rotation (the pool key already follows the limit in force).
     if (display.currentPoster) return;
@@ -190,13 +205,13 @@ function updateNowPlaying() {
  * must then not mark it shown (the next tick picks another). A successful draw ends a block.
  */
 async function showPoster(poster, image) {
-  if (!allowedOnScreen(poster)) return false;
+  if (!allowedOnScreen(poster) || !inSelectionNow(poster)) return false; // a draw that finishes after a boundary meets the selection in force now (D120 6)
   document.querySelectorAll('.poster-layer.cut').forEach((img) => img.classList.remove('cut'));
   const outgoing = display.currentPoster;
   await display.show(poster, image);
   lastDrawAt = performance.now();
-  if (!allowedOnScreen(poster)) {
-    blockPoster(); // the limit was tightened during the decode
+  if (!allowedOnScreen(poster) || !inSelectionNow(poster)) {
+    blockPoster(); // the limit was tightened, or the selection changed, during the decode
     return false;
   }
   outgoingPoster = outgoing;
@@ -319,7 +334,7 @@ async function handleFailure(err, { notify = false } = {}) {
   const due = !current || Date.now() - (current.shownAt || 0) >= state.settings.rotateSeconds * 1000;
   if (due && !fatal && !state.asleep) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const cached = await cache.random(current?.ratingKey, limitNow(), selectionOf(state.settings)).catch(() => null);
+      const cached = await cache.random(current?.ratingKey, limitNow(), selectionOf(inForceSettings())).catch(() => null);
       if (!cached) break;
       try {
         if (!(await showPoster(cached.poster, cached.blob))) continue; // no longer allowed: not drawn, not shown
@@ -335,7 +350,7 @@ async function handleFailure(err, { notify = false } = {}) {
   }
   // A saved selection that draws nothing takes a poster that no longer belongs to it off, so the empty card can name the selection;
   // a poster that still matches stays (D110 item 1).
-  if (err.kind === 'empty' && display.currentPoster && !posterMatches(selectionOf(state.settings), limitNow(), display.currentPoster)) blockPoster();
+  if (err.kind === 'empty' && display.currentPoster && !posterMatches(selectionOf(inForceSettings()), limitNow(), display.currentPoster)) blockPoster();
   if (!display.currentPoster) {
     // The limit is the reason only when it emptied the cache: posters are cached, and none of them passes it (D73).
     const stored = cache.entries();
@@ -472,21 +487,24 @@ function setPaused(paused) {
 
 async function applySettings(next, { persist = true, preview = false, restartIdle = true } = {}) {
   const prev = state.settings;
-  // A live preview shows layout only. The household limit, its time slots, the poster selection and the pin are never previewed (CCI1, C6I1): while the
+  const before = resolveSettings(prev, new Date()); // what was in force before this apply, at the same instant
+  // A live preview shows layout only. The household limit, its time slots, the profiles, the poster selection and the pin are never previewed (CCI1, C6I1): while the
   // dialog is open the previous, saved values keep applying, so only Save changes them and Cancel has nothing to undo
   // (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the
   // kiosk switches, the settings PIN and the device helper: an unsaved change to any of them is never in force. The Display
   // protection fieldset is not live either (K30): a pixel-shift or daily-reload change waits for Save, even when a live
   // layout field moves while it is unsaved. The brightness controls are their own live block and are not listed here.
   if (preview) {
-    const { maxContentRating, limitSlots, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
+    const { maxContentRating, limitSlots, profiles, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
     const { pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime } = prev;
     const { libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source } = prev; // the selection (R-SEL-1, D101 ruling 6)
+    const { weighting, noRepeatDays } = prev; // an unsaved window of 0 must not reach the engine, which would clear the saved record (D114 1, D116 1)
     next = {
       ...next,
-      ...{ maxContentRating, limitSlots, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper },
+      ...{ maxContentRating, limitSlots, profiles, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper },
       ...{ pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime },
       ...{ libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source },
+      ...{ weighting, noRepeatDays },
     };
   }
   state.settings = persist ? save(storage, next) : next;
@@ -497,7 +515,7 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   // timeout and must not keep an above-limit poster on screen.
   enforceOnScreen();
   try {
-    await display.apply(state.settings);
+    await display.apply(inForceSettings()); // the frame in force: the profile's while a slot names one
   } catch (err) {
     log.warn(err.message);
     if (!preview) toast(err.message);
@@ -509,8 +527,9 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   // The poster selection compares by what it draws, not by object: every Save makes new lists.
   const connectionChanged =
     ['plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some((k) => prev[k] !== state.settings[k]) ||
-    selectionKey(selectionOf(prev)) !== selectionKey(selectionOf(state.settings));
+    selectionKey(selectionOf(before)) !== selectionKey(selectionOf(inForceSettings())); // what is drawn: the profile's selection while a slot names one
   if (connectionChanged || !engine) rebuildClient();
+  if (!anyWindow(state.settings)) engine?.clearShown(); // no window anywhere keeps no record, so raising one later starts empty (D116 2); one profile's 0 clears nothing (D120 5)
 
   document.body.classList.toggle('hide-cursor', state.settings.hideCursor);
   if (prev.kioskMode !== state.settings.kioskMode) {
@@ -535,9 +554,10 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   // allowed cached poster or the empty card.
   // Slots are compared by what they do now: the limit in force before and after this Save (the same instant). When it differs the
   // watch adopts it here, so the next check does not report the same change again with a second forced draw.
-  const inForceChanged = limitInForce(prev, new Date()) !== limitNow();
+  const after = inForceSettings();
+  const inForceChanged = before.maxContentRating !== after.maxContentRating;
   if (inForceChanged) limitWatch.sync();
-  const limitChanged = inForceChanged || ['maxContentRating', 'limitNowPlaying'].some((k) => prev[k] !== state.settings[k]);
+  const limitChanged = inForceChanged || ['maxContentRating', 'limitNowPlaying'].some((k) => prev[k] !== state.settings[k] || before[k] !== after[k]);
   // A tick already running began before this save and may not honour it, so a forced tick is queued for when it ends.
   const force = connectionChanged || limitChanged;
   if (force && state.busy) state.forceAfter = true;

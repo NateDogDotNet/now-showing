@@ -28,6 +28,7 @@ const SHELL = [
   'js/position.js',
   'js/poster-cache.js',
   'js/poster-pin.js',
+  'js/profiles.js',
   'js/ratings.js',
   'js/reload.js',
   'js/schedule.js',

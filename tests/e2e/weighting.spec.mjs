@@ -186,6 +186,66 @@ wCase('5 a window saved in Settings applies to the next draws, and the record st
   check('a window saved in Settings applies at once');
 });
 
+// 6. D114 1 / D116 1: the two keys are not live-previewed. An unsaved window of 0, seen through another control's preview, does not
+//    clear the saved record, and Cancel leaves it intact.
+wCase('6 an unsaved window of 0 seen through another control\'s preview does not clear the saved record; Cancel leaves it', { settings: seed({ noRepeatDays: 3 }), clock: { time: START } }, async ({ page, app }) => {
+  await seedRandom(page, 5);
+  await page.goto(app.url);
+  await posterShown(page);
+  await picks(page, 3);
+  const before = Object.keys((await record(page)) || {}).sort();
+  assert.ok(before.length >= 3, `the record holds the titles shown: ${before}`);
+  await openSettings(page);
+  await page.fill('[name="noRepeatDays"]', '0'); // unsaved
+  await page.selectOption('[name="weighting"]', 'rated'); // unsaved
+  await page.fill('[name="posterScale"]', '90'); // a live control: its preview applies the sheet's values to the engine's settings
+  await next(page); // a draw while the sheet is open, waited for by the poster changing
+  const during = Object.keys((await record(page)) || {}).sort();
+  for (const k of before) assert.ok(during.includes(k), `the saved record survived the unsaved 0: ${before} -> ${during}`);
+  await page.click('#settings-cancel');
+  await page.waitForFunction(() => !document.getElementById('settings').open);
+  const after = Object.keys((await record(page)) || {}).sort();
+  for (const k of before) assert.ok(after.includes(k), 'Cancel left the record intact');
+  assert.deepEqual([(await stored(page)).noRepeatDays, (await stored(page)).weighting ?? 'off'], [3, 'off']);
+  check('an unsaved window of 0 and weighting never reach the engine; the record survives and Cancel keeps it');
+});
+
+// 7. D116 2: a window saved as 0 clears the record at Save, so 0 -> Save -> 3 -> Save before any poster shows starts empty.
+wCase('7 a window saved as 0 clears the record at Save; raising it again starts empty', { settings: seed({ noRepeatDays: 3 }), clock: { time: START } }, async ({ page, app }) => {
+  await seedRandom(page, 6);
+  await page.goto(app.url);
+  await posterShown(page);
+  await picks(page, 3);
+  assert.ok(Object.keys((await record(page)) || {}).length >= 3);
+  await openSettings(page);
+  await page.fill('[name="noRepeatDays"]', '0');
+  await saveSettings(page);
+  await page.waitForFunction(() => localStorage.getItem('plexPoster.shownAt') === null, null, { timeout: 10000 });
+  await openSettings(page);
+  await page.fill('[name="noRepeatDays"]', '3');
+  await saveSettings(page);
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.shownAt')), null, 'nothing was shown in between: the record starts empty');
+  check('Save with 0 clears the record; 0 then 3 starts empty');
+});
+
+// 8. D120 5: one record serves every profile. A Save with the household's own window at 0 clears nothing while a profile has a window above 0.
+wCase('8 a Save with the household window at 0 keeps the record while a profile has a window above 0', {
+  settings: seed({ noRepeatDays: 0, profiles: [{ id: 'k', name: 'Kids', maxContentRating: '', limitNowPlaying: true, libraryKeys: ['1'], libraryNames: ['Movies'], genres: [], ratings: [], source: null, weighting: 'off', noRepeatDays: 3, frameId: 'marquee' }], limitSlots: [{ start: '23:00', profile: 'k' }] }),
+  clock: { time: START },
+  localStorage: { 'plexPoster.shownAt': JSON.stringify({ 2: new Date(START).getTime() - 1000 }) },
+}, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await page.fill('[name="posterScale"]', '95'); // a change to save; the window stays 0
+  await saveSettings(page);
+  await openSettings(page); // a second Save: the first one's own work is finished before this one's starts, so the check below cannot run early
+  await saveSettings(page);
+  await posterShown(page);
+  assert.ok('2' in ((await record(page)) || {}), 'the record is kept: a profile has a window above 0');
+  check('one record serves every profile: the household 0 alone does not clear it');
+});
+
 // ---------- run ----------
 
 const WORKERS = Number(process.env.E2E_WEIGHTING_WORKERS || 4);

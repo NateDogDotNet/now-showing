@@ -1428,3 +1428,135 @@ test('D112 item 1: libraries that all answer with nothing are still the empty ca
   client.pool = async () => [];
   await assert.rejects(engine.decide({ force: true }), { kind: 'empty' });
 });
+
+// ---- viewer-profiles: the engine reads the settings in force (R-PROF-1, D117 4) ----
+
+const PROFILE_KIDS = { id: 'k', name: 'Kids', maxContentRating: 'G', limitNowPlaying: true, libraryKeys: ['3'], libraryNames: ['Kids Movies'], genres: [], ratings: [], source: null, weighting: 'off', noRepeatDays: 3, frameId: 'marquee' };
+const PROFILE_ADULTS = { id: 'a', name: 'Adults', maxContentRating: '', limitNowPlaying: false, libraryKeys: ['1'], libraryNames: ['Movies'], genres: [], ratings: [], source: null, weighting: 'off', noRepeatDays: 0, frameId: 'none' };
+
+const eraseable = () => {
+  const m = memStorage();
+  m.removeItem = (k) => void delete m.data[k];
+  return m;
+};
+
+function profiled(overrides = {}, { clientOpts = {}, storage = eraseable(), sessions = [] } = {}) {
+  const clock = { at: new Date(2026, 0, 5, 7, 0).getTime() }; // Monday 07:00 local
+  const settings = {
+    ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryKeys: ['1'], libraryNames: ['Movies'], maxContentRating: 'PG-13', unwatchedOnly: false,
+    profiles: [PROFILE_KIDS, PROFILE_ADULTS], limitSlots: [{ start: '06:00', profile: 'k' }, { start: '21:00', profile: 'a' }], ...overrides,
+  };
+  const client = selectionClient(clientOpts);
+  client.sessions = async () => sessions;
+  const engine = createEngine({ client, getSettings: () => settings, now: () => clock.at, random: () => 0, storage });
+  return { engine, client, settings, clock, storage };
+}
+
+test('a slot naming a profile: the pool request carries that profile\'s library and limit; the next slot\'s profile changes both', async () => {
+  const w = profiled();
+  const d = await w.engine.decide();
+  assert.deepEqual(w.client.calls.pool, [{ libraryKey: '3', unwatchedOnly: false, size: 100, maxContentRating: 'G' }]);
+  assert.equal(d.poster.libraryKey, '3');
+  w.clock.at = new Date(2026, 0, 5, 22, 0).getTime();
+  const e = await w.engine.decide({ force: true });
+  assert.equal(w.client.calls.pool.at(-1).libraryKey, '1', 'the Adults profile reads the Movies library');
+  assert.equal(w.client.calls.pool.at(-1).maxContentRating, '', 'and no limit');
+  assert.equal(e.poster.libraryKey, '1');
+});
+
+test('with no profiles and no profile slots the engine draws exactly as before', async () => {
+  const a = profiled({ profiles: [], limitSlots: [] });
+  const b = selecting({ libraryKey: '1', libraryKeys: ['1'], libraryNames: ['Movies'], maxContentRating: 'PG-13', unwatchedOnly: false }, {}, () => 0);
+  await a.engine.decide();
+  await b.engine.decide();
+  assert.deepEqual(a.client.calls.pool, b.client.calls.pool);
+});
+
+test('a missing profile: the strictest limit among all decides the request, and the sheet\'s library is read', async () => {
+  const w = profiled({ limitSlots: [{ start: '06:00', profile: 'gone' }], maxContentRating: 'R' });
+  await w.engine.decide();
+  assert.deepEqual(w.client.calls.pool.map((a) => [a.libraryKey, a.maxContentRating]), [['1', 'G']], 'Kids (G) is the strictest profile; the library is the sheet\'s');
+});
+
+test('the profile\'s now-playing rule decides whether the limit hides what is playing', async () => {
+  const session = [{ type: 'movie', ratingKey: 'np', title: 'Playing', thumb: '/t/np', contentRating: 'R', User: { title: 'me' }, Player: { state: 'playing' } }];
+  const kids = profiled({}, { sessions: session });
+  const hidden = await kids.engine.decide();
+  assert.notEqual(hidden.poster.source, 'now-playing', 'Kids applies the limit to what is playing');
+  const loose = profiled({ profiles: [{ ...PROFILE_KIDS, limitNowPlaying: false }, PROFILE_ADULTS] }, { sessions: session });
+  assert.equal((await loose.engine.decide()).poster.source, 'now-playing', 'this profile does not: the title playing is shown');
+  const none = profiled({ profiles: [], limitSlots: [], limitNowPlaying: true }, { sessions: session });
+  assert.notEqual((await none.engine.decide()).poster.source, 'now-playing');
+});
+
+test('one shown-titles record serves every profile: a profile with window 0 records nothing and clears nothing (D120 5)', async () => {
+  const w = profiled();
+  w.engine.shown((await w.engine.decide()).poster); // Kids: window 3, recorded
+  const kept = w.storage.data['plexPoster.shownAt'];
+  assert.ok(kept, 'Kids has a 3 day window');
+  w.clock.at = new Date(2026, 0, 5, 22, 0).getTime();
+  await w.engine.decide({ force: true }); // a draw under Adults (window 0)
+  w.engine.shown((await w.engine.decide({ force: true })).poster);
+  assert.equal(w.storage.data['plexPoster.shownAt'], kept, 'Adults (window 0) neither recorded nor cleared');
+});
+
+test('the record is cleared when the household\'s own window is 0 and no profile has a window above 0', async () => {
+  const w = profiled({ profiles: [{ ...PROFILE_KIDS, noRepeatDays: 0 }, PROFILE_ADULTS] });
+  w.storage.data['plexPoster.shownAt'] = JSON.stringify({ x: w.clock.at - 1000 });
+  w.engine.shown((await w.engine.decide()).poster);
+  assert.ok(!('plexPoster.shownAt' in w.storage.data), 'no window anywhere: a shown poster clears it');
+  w.storage.data['plexPoster.shownAt'] = JSON.stringify({ x: w.clock.at - 1000 });
+  await w.engine.decide({ force: true });
+  assert.ok(!('plexPoster.shownAt' in w.storage.data), 'and so does a draw');
+  const house = profiled({ noRepeatDays: 2, profiles: [{ ...PROFILE_KIDS, noRepeatDays: 0 }, PROFILE_ADULTS] });
+  house.storage.data['plexPoster.shownAt'] = JSON.stringify({ x: house.clock.at - 1000 });
+  await house.engine.decide({ force: true });
+  assert.ok('plexPoster.shownAt' in house.storage.data, 'the household window is above 0: kept');
+});
+
+test('the household toggle off: no profile switches anything, and no limit applies (D120 4)', async () => {
+  const w = profiled({ maxContentRating: '' });
+  await w.engine.decide();
+  assert.deepEqual(w.client.calls.pool, [{ libraryKey: '1', unwatchedOnly: false, size: 100, maxContentRating: '' }], 'the sheet\'s library, no limit');
+});
+
+test('a profile in force that ticks no library and has no source reports an empty card naming it, never a silent blank (D120 3)', async () => {
+  const w = profiled({ profiles: [{ ...PROFILE_KIDS, libraryKeys: [], libraryNames: [] }, PROFILE_ADULTS] });
+  await assert.rejects(w.engine.decide(), (err) => err.kind === 'empty' && /Kids/.test(err.message));
+  assert.equal(w.client.calls.pool.length, 0, 'nothing was asked of the server');
+  const plain = selecting({ libraryKey: '', libraryKeys: [] });
+  assert.equal(await plain.engine.decide(), null, 'the household\'s own empty selection still returns null, as before');
+});
+
+test('the profile\'s weighting is the one drawn with', async () => {
+  const pool = [{ ...poster('w'), viewCount: 1 }, { ...poster('u'), viewCount: 0 }];
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', unwatchedOnly: false, profiles: [{ ...PROFILE_KIDS, weighting: 'unwatched', libraryKeys: ['1'], maxContentRating: '' }], limitSlots: [{ start: '06:00', profile: 'k' }] };
+  const at7 = new Date(2026, 0, 5, 7, 0).getTime();
+  const picks = [];
+  for (const r of [0.1, 0.5, 0.7, 0.99]) {
+    const engine = createEngine({ client: fakeClient({ pool }), getSettings: () => settings, now: () => at7, random: () => r, storage: memStorage() });
+    picks.push((await engine.decide()).poster.ratingKey);
+  }
+  assert.deepEqual(picks, ['w', 'u', 'u', 'u'], 'weights w:1 u:3 over [0,4): 0.1 -> w, the rest -> u');
+});
+
+test('D116 2: clearShown forgets the record', async () => {
+  const w = profiled();
+  w.engine.shown((await w.engine.decide()).poster);
+  assert.ok('plexPoster.shownAt' in w.storage.data);
+  w.engine.clearShown();
+  assert.ok(!('plexPoster.shownAt' in w.storage.data));
+});
+
+test('limitSet is true when only a profile slot sets a limit (the D37 re-check still runs)', async () => {
+  const w = profiled({ maxContentRating: '' });
+  let rechecks = 0;
+  const client = selectionClient();
+  client.items = async () => (rechecks++, []);
+  const engine = createEngine({ client, getSettings: () => w.settings, now: () => w.clock.at, random: () => 0, cachedKeys: () => ['x'], onRatings: () => {}, storage: memStorage() });
+  await engine.decide();
+  assert.equal(rechecks, 1);
+  const off = createEngine({ client, getSettings: () => ({ ...w.settings, limitSlots: [{ start: '06:00', profile: 'a' }] }), now: () => w.clock.at, random: () => 0, cachedKeys: () => ['x'], onRatings: () => {}, storage: memStorage() });
+  await off.decide();
+  assert.equal(rechecks, 1, 'a profile with no limit: no re-check');
+});

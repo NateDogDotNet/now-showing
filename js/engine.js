@@ -2,7 +2,8 @@
 // main.js calls `decide()` on a timer and renders whatever it returns.
 
 import { pickNowPlaying } from './plex.js';
-import { limitInForce, sanitizeSlots } from './limit-schedule.js';
+import { anyLimitSet, sanitizeSlots } from './limit-schedule.js';
+import { anyWindow, resolveSettings } from './profiles.js';
 import { allows } from './ratings.js';
 import { describeSelection, genreRequestValue, libraryShares, memberId, narrows, posterAllowed, selectionKey, selectionOf } from './selection.js';
 import { chooseTitle, cleanDays, cleanWeighting, createShownStore } from './weighting.js';
@@ -40,14 +41,15 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
   const recent = [];
   const shownStore = createShownStore({ storage });
 
-  // The settings as decide() reads them: `maxContentRating` is replaced by the limit in force at this moment (R-FILT-2), so
-  // the pool key, the Plex request, the re-check, the permit test and the empty-card advice below all follow the time-of-day
-  // slot, and none of them can read the base limit by mistake. `limitSet` says whether the base limit or any slot sets a limit
-  // (the D37 re-check runs then, even in a slot that sets no limit, so the cache's ratings are fresh when a stricter slot starts).
+  // The settings as decide() reads them: the resolver's (R-FILT-2, R-PROF-1). `maxContentRating` is the limit in force at this moment
+  // and, while a slot names a profile, that profile's selection, weighting, window, now-playing rule and frame are laid over the
+  // sheet's, so the pool key, the Plex request, the re-check, the permit test and the empty-card advice below all follow the
+  // time-of-day slot, and none of them can read the base limit by mistake. `limitSet` says whether the base limit or any slot (or its
+  // profile) sets a limit (the D37 re-check runs then, even in a slot that sets no limit, so the cache's ratings are fresh when a
+  // stricter slot starts).
   const inForce = () => {
     const s = getSettings();
-    const limitSet = Boolean(s.maxContentRating) || sanitizeSlots(s.limitSlots).some((slot) => slot.limit !== '');
-    return { ...s, maxContentRating: limitInForce(s, new Date(now())), limitSet };
+    return { ...resolveSettings(s, new Date(now())), limitSet: anyLimitSet(s) };
   };
 
   /**
@@ -169,7 +171,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
   function pickRandom(items, s) {
     const mode = cleanWeighting(s.weighting);
     const days = cleanDays(s.noRepeatDays);
-    if (days === 0) shownStore.clear(); // a window of 0 keeps no record (D115 4)
+    if (days === 0 && !anyWindow(getSettings())) shownStore.clear(); // no window anywhere keeps no record (D115 4); one profile's 0 clears nothing (D120 5)
     if (mode === 'off' && days === 0) return pickAvoidingRecent(items);
     const others = items.filter((p) => p.ratingKey !== current?.ratingKey);
     return chooseTitle(others.length ? others : items, { mode, days, shownAt: days > 0 ? shownStore.windowed(days, now()) : new Map(), now: now(), random });
@@ -203,15 +205,20 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
         lastRotateAt = now();
         recent.unshift(poster.ratingKey);
         recent.length = Math.min(recent.length, HISTORY);
-        const days = cleanDays(getSettings().noRepeatDays);
+        const days = cleanDays(inForce().noRepeatDays);
         if (days > 0) shownStore.record(poster.ratingKey, now(), days); // a poster from the offline cache counts too
-        else shownStore.clear();
+        else if (!anyWindow(getSettings())) shownStore.clear();
       }
     },
 
     invalidate() {
       pool = [];
       poolKey = '';
+    },
+
+    /** Forgets every title shown. A Save with the no-repeat window at 0 calls it, so raising the window later starts empty (D116 2). */
+    clearShown() {
+      shownStore.clear();
     },
 
     /**
@@ -251,7 +258,11 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
       }
 
       const sel = selectionOf(s);
-      if (!sel.libraries.length && !sel.source) return null;
+      if (!sel.libraries.length && !sel.source) {
+        // A profile in force that chooses nothing is said, not left blank (D120 3); the household's own empty selection is as it was.
+        if (s.profileName) throw Object.assign(new Error(`The profile \u201c${s.profileName}\u201d has no library or collection chosen. Edit it in Settings.`), { kind: 'empty' });
+        return null;
+      }
       const playbackEnded = current?.source === 'now-playing';
       const due = now() - lastRotateAt >= s.rotateSeconds * 1000;
       if (!force && !playbackEnded && !due && current) return null;

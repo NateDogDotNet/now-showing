@@ -605,6 +605,28 @@ summary { cursor: pointer; color: var(--muted); }
 /* The clock icon inside a time field is a tab stop of its own, and `:focus-visible` does not match the field while the icon has it: `:focus-within` does (walk M2). */
 input[type="time"]:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .slot-editor #slot-add:disabled { cursor: not-allowed; }
+/* The banner that stays at the top of the sheet while a profile is open (D120 1). */
+.profile-banner { position: sticky; top: 0; z-index: 2; margin: 0 0 12px; padding: 10px 12px; background: var(--panel, #1b1b1f); border: 2px solid var(--accent); border-radius: 8px; }
+.profile-banner p { margin: 0 0 8px; }
+.profile-banner:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.profile-banner-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-banner-actions .btn { height: 40px; justify-content: center; }
+.profile-editor[inert] { opacity: 0.5; }
+.sheet-foot [hidden] { display: none; }
+/* Profiles in Settings > Household (R-PROF-1): the same bordered rows as the slots; the buttons wrap on a phone. */
+.profile-editor { margin-top: 18px; }
+.profile-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
+.profile-row { display: grid; gap: 6px; padding: 8px 10px 10px; border: 1px solid var(--panel-line); border-radius: 8px; }
+.profile-row label { margin-top: 0; min-width: 0; font-size: 13px; color: var(--muted); }
+.profile-row input { min-width: 0; box-sizing: border-box; height: 40px; width: 100%; color: var(--text); font-size: 1rem; }
+.profile-row .profile-summary { margin: 0; overflow-wrap: anywhere; }
+.profile-row .profile-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-row .profile-actions .btn { height: 40px; justify-content: center; font-size: 14px; }
+.profile-new { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 10px; }
+.profile-new label { flex: 1 1 12rem; margin-top: 0; min-width: 0; font-size: 13px; color: var(--muted); }
+.profile-new input { min-width: 0; box-sizing: border-box; height: 40px; width: 100%; color: var(--text); font-size: 1rem; }
+.profile-new .btn { height: 40px; justify-content: center; }
+.profile-editor #profile-add:disabled { cursor: not-allowed; }
 /* The poster selection in Settings (R-SEL-1): ticked lists. Genres scroll in their own box, so a library with 60 genres does not push the sheet down. */
 .pick-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
 .pick-list label.check { margin: 0; padding: 6px 4px; min-height: 28px; border-radius: 6px; }

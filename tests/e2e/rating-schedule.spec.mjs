@@ -159,21 +159,34 @@ slotCase('3 the clock crosses 06:00 with an R poster up: it comes off, the next 
   await posterShown(page);
   await refreshUntil(page, R_TITLES); // 05:58 is in the 22:00 "no limit" slot, carried past midnight
   const pools = poolRequests(page);
+  // The events are stamped with the PAGE's clock (Date.now() in the page is the fake clock), never with the test's wall time: how long the
+  // removal takes is read off the page's own clock, which moves only when this spec runs it, so machine load cannot change the reading.
   await page.evaluate(() => {
     window.__alts = [];
     window.__blocked = false;
+    window.__events = []; // { kind: 'off' | 'fetch', t }: the poster-blocked class appearing, and any request the page makes
     new MutationObserver(() => {
       const on = document.querySelector('.poster-layer.active')?.alt || '';
       if (window.__alts.at(-1) !== on) window.__alts.push(on);
+      if (document.body.classList.contains('poster-blocked') && !window.__blocked) window.__events.push({ kind: 'off', t: Date.now() });
       if (document.body.classList.contains('poster-blocked')) window.__blocked = true;
     }).observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class', 'alt'] });
+    const realFetch = window.fetch.bind(window);
+    window.fetch = (...args) => (window.__events.push({ kind: 'fetch', t: Date.now() }), realFetch(...args));
   });
   await advance(page, 60_000); // 05:59:00
   assert.ok(R_TITLES.includes(titleNo(await activeAlt(page))), 'still up before 06:00');
   await advance(page, 62_000); // 06:00:02
-  await waitForTitle(page, (n) => !R_TITLES.includes(n), 'the R poster coming off', 2000);
+  // The wait is on the state with a generous bound; "within 2 s" is read on the page's clock below (D104).
+  await waitForTitle(page, (n) => !R_TITLES.includes(n), 'the R poster coming off');
   await waitForTitle(page, (n) => n === 1, 'the next poster (G)');
   assert.equal(await page.evaluate(() => window.__blocked), true, 'the poster was taken off at once (poster-blocked), not only replaced by the next draw');
+  const boundary = new Date('2026-01-05T06:00:00').getTime();
+  const events = await page.evaluate(() => window.__events);
+  const off = events.find((e) => e.kind === 'off');
+  assert.ok(off.t >= boundary && off.t - boundary <= 2000, `the poster came off ${off.t - boundary} ms after 06:00 on the page clock (at most 2000)`);
+  const firstFetchAfter = events.find((e) => e.kind === 'fetch' && e.t >= boundary);
+  assert.ok(firstFetchAfter && events.indexOf(off) < events.indexOf(firstFetchAfter), 'the poster came off BEFORE the page asked for anything: remove first, then reload (D104)');
   assert.ok(pools.some((p) => p.filtered), 'the boundary alone reloaded the pool with the rating filter');
   const seen = await sample(page, 12);
   assert.deepEqual(asSorted(seen), [1], `after 06:00: ${asSorted(seen)}`);
@@ -668,7 +681,7 @@ slotCase('19 slot editor labels, names and help', { settings: seed(), clock: { t
   );
   await page.fill('#slot-list .slot-row:first-child .slot-start', '07:15');
   assert.equal(await page.getAttribute('#slot-list .slot-row:first-child .slot-remove', 'aria-label'), 'Remove the 07:15 slot', 'the name follows the time');
-  assert.match(await page.textContent('#slot-help'), /slots are kept but not applied/);
+  assert.match(await page.textContent('#slot-help'), /slots and profiles are kept but not applied/);
   assert.match(await page.textContent('#slot-help'), /the line below describes the saved ones/, 'the help points to the status line, which is below it');
   assert.equal(await page.evaluate(() => Boolean(document.getElementById('slot-help').compareDocumentPosition(document.getElementById('slot-status')) & Node.DOCUMENT_POSITION_FOLLOWING)), true, 'and the status line really is below the help');
   check('limit labels match the main select; Remove buttons name their slot; the help says the slots are kept but not applied');
@@ -726,6 +739,24 @@ slotCase('21 a paused display keeps its poster across a boundary', { settings: s
   assert.equal(await page.evaluate(() => window.__draws), 0, 'nothing was drawn');
   assert.equal(pools.length, asked, 'no pool was loaded');
   check('paused with a G poster at 21:59: across the 22:00 "no limit" boundary the same poster stays, nothing is drawn');
+});
+
+// 22. D106 3: the status line is a live region and is written only when its words change, so a screen reader does not say it again every second.
+slotCase('22 the status line is written only when its words change', { settings: seed(), clock: { time: '2026-01-05T14:58:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  assert.match(await page.textContent('#slot-status'), /^Saved: in force now: G until 15:00\.$/);
+  await page.evaluate(() => {
+    window.__writes = 0;
+    new MutationObserver((records) => (window.__writes += records.length)).observe(document.getElementById('slot-status'), { childList: true, characterData: true, subtree: true });
+  });
+  await advance(page, 10_000); // ten one-second checks with the same words
+  assert.equal(await page.evaluate(() => window.__writes), 0, 'ten seconds with the same words: the live region was not written');
+  await advance(page, 130_000); // well past 15:00:00: the words change
+  assert.match(await page.textContent('#slot-status'), /^Saved: in force now: PG-13 until 22:00\.$/);
+  assert.ok((await page.evaluate(() => window.__writes)) >= 1, 'a change of words is written (the observer is live)');
+  check('the status line is written only when its words change');
 });
 
 // ---------- run ----------
