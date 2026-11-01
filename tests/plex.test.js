@@ -695,3 +695,31 @@ test('r3 gap 2: what the limit in force or the chosen ratings reject is dropped 
   const unrated = poolCalls([{ ratingKey: '1', type: 'movie', title: 'u', thumb: '/t/1' }, { ratingKey: '2', type: 'movie', title: 'g', thumb: '/t/2', contentRating: 'gb/U' }]);
   assert.deepEqual((await unrated.client.sourceItems({ kind: 'playlist', key: '1' }, { unwatchedOnly: false, maxContentRating: 'G' })).map((p) => p.ratingKey), ['2'], 'an unrated title is dropped under a limit; a prefixed rating on the ladder stays');
 });
+
+// ---- the fields weighting reads (R-SEL-2, D113) ----
+
+test('toPoster carries viewCount (only when watched), audienceRating and rating, for the weights', () => {
+  const base = { type: 'movie', ratingKey: '1', title: 'A', thumb: '/t' };
+  const p = toPoster({ ...base, viewCount: 2, audienceRating: 8.4, rating: 7.1 }, 'random');
+  assert.equal(p.viewCount, 2);
+  assert.equal(p.audienceRating, 8.4);
+  assert.equal(p.rating, 7.1);
+  const bare = toPoster(base, 'random');
+  for (const k of ['viewCount', 'audienceRating', 'rating']) assert.ok(!(k in bare), `${k} is left off when the server sent none`);
+  assert.ok(!('viewCount' in toPoster({ ...base, viewCount: 0 }, 'random')), 'viewCount 0 is unwatched: left off');
+  const xml = toPoster({ ...base, viewCount: '3', audienceRating: '9.1', rating: '6' }, 'random');
+  assert.deepEqual([xml.viewCount, xml.audienceRating, xml.rating], [3, 9.1, 6], 'an XML attribute is a string');
+  const junk = toPoster({ ...base, viewCount: 'x', audienceRating: 'high', rating: null }, 'random');
+  for (const k of ['viewCount', 'audienceRating', 'rating']) assert.ok(!(k in junk), `junk ${k} is left off`);
+});
+
+test('the pool and a collection or playlist hand the weights their fields', async () => {
+  const items = [{ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t/1', viewCount: 1, audienceRating: 8, rating: 7 }, { type: 'movie', ratingKey: '2', title: 'B', thumb: '/t/2' }];
+  const fetchImpl = async () => jsonResponse({ MediaContainer: { Metadata: items } });
+  const client = createPlexClient({ serverUrl: 'http://h:32400', token: 'tok', clientId: 'c', fetchImpl });
+  const [a, b] = await client.pool({ libraryKey: '1', unwatchedOnly: false });
+  assert.deepEqual([a.viewCount, a.audienceRating, a.rating], [1, 8, 7]);
+  assert.ok(!('viewCount' in b));
+  const [c] = await client.sourceItems({ kind: 'collection', key: '9' }, { unwatchedOnly: false });
+  assert.deepEqual([c.viewCount, c.audienceRating, c.rating], [1, 8, 7]);
+});

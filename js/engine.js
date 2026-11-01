@@ -5,6 +5,7 @@ import { pickNowPlaying } from './plex.js';
 import { limitInForce, sanitizeSlots } from './limit-schedule.js';
 import { allows } from './ratings.js';
 import { describeSelection, genreRequestValue, libraryShares, memberId, narrows, posterAllowed, selectionKey, selectionOf } from './selection.js';
+import { chooseTitle, cleanDays, cleanWeighting, createShownStore } from './weighting.js';
 
 const POOL_TTL_MS = 30 * 60 * 1000;
 const PARTIAL_POOL_TTL_MS = 60 * 1000; // a pool built without a library that failed is kept for a minute, then the full selection is asked for again (D111 item 3)
@@ -12,12 +13,22 @@ const HISTORY = 10;
 const RECHECK_BATCH = 100; // cached titles asked about per re-rating request (D37)
 const RECHECK_REQUESTS = 3; // the poster cache holds at most 300 titles, so one pool load makes at most 3 requests
 
+/** The display's own localStorage, or null where there is none (a unit test, a blocked browser). */
+function defaultStorage() {
+  try {
+    return globalThis.window?.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * `cachedKeys()` lists the rating keys in the offline poster cache and `onRatings(posters)` receives their current
  * ratings (D37). Both are optional: without them nothing is re-checked. `onMembers(id, keys)` hears the rating keys a collection or
- * playlist listed when it is loaded online (R-SEL-1), for the offline cache.
+ * playlist listed when it is loaded online (R-SEL-1), for the offline cache. `storage` keeps when each title was last shown, for the
+ * no-repeat window (R-SEL-2): without one the display's localStorage is used, and failing that the record lives in memory.
  */
-export function createEngine({ client, getSettings, now = () => Date.now(), random = Math.random, cachedKeys = () => [], onRatings = () => {}, onMembers = () => {} }) {
+export function createEngine({ client, getSettings, now = () => Date.now(), random = Math.random, cachedKeys = () => [], onRatings = () => {}, onMembers = () => {}, storage = defaultStorage() }) {
   let current = null;
   let session = null; // the latest now-playing snapshot (what the last decide() saw), null when none
   let lastRotateAt = 0;
@@ -27,6 +38,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
   let poolPartial = false; // the pool is missing a library whose request failed
   let partialNow = false; // set by fetchSelection while it builds the pool
   const recent = [];
+  const shownStore = createShownStore({ storage });
 
   // The settings as decide() reads them: `maxContentRating` is replaced by the limit in force at this moment (R-FILT-2), so
   // the pool key, the Plex request, the re-check, the permit test and the empty-card advice below all follow the time-of-day
@@ -70,11 +82,13 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
         return (await client.pool(request)).map((p) => ({ ...p, libraryKey }));
       }),
     );
-    // One library failing leaves the pool to the others; only all of them failing is a failure (D110 item 3).
+    // One library failing leaves the pool to the others (D110 item 3). When the ones that answered gave nothing, that is a connection
+    // problem too, not an empty selection to loosen (D112 item 1): the first rejection is reported, as when every library fails.
     const failed = settled.find((r) => r.status === 'rejected');
-    if (failed && settled.every((r) => r.status === 'rejected')) throw failed.reason;
+    const posters = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+    if (failed && !posters.length) throw failed.reason;
     partialNow = Boolean(failed);
-    return settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+    return posters;
   }
 
   /** Does the server have a movie library the selection does not tick? A failed or missing answer says no: the advice is only given when it could help. */
@@ -147,7 +161,21 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
   // A random pick also has to be in the selection's rating subset and genre set, read from the poster's own fields (D107 ruling 6).
   const pickable = (s, sel, poster) => posterAllowed(sel, s.maxContentRating, poster);
 
-  function pickRandom(items) {
+  /**
+   * One poster from the permitted pool. With weighting off and no window it is the draw the engine always made, with the last 10 shown
+   * avoided. Otherwise (R-SEL-2, D113) the last-10 rule gives way: the draw is weighted over the pool minus the poster on screen and
+   * minus the titles inside the no-repeat window.
+   */
+  function pickRandom(items, s) {
+    const mode = cleanWeighting(s.weighting);
+    const days = cleanDays(s.noRepeatDays);
+    if (days === 0) shownStore.clear(); // a window of 0 keeps no record (D115 4)
+    if (mode === 'off' && days === 0) return pickAvoidingRecent(items);
+    const others = items.filter((p) => p.ratingKey !== current?.ratingKey);
+    return chooseTitle(others.length ? others : items, { mode, days, shownAt: days > 0 ? shownStore.windowed(days, now()) : new Map(), now: now(), random });
+  }
+
+  function pickAvoidingRecent(items) {
     const fresh = items.filter((p) => !recent.includes(p.ratingKey) && p.ratingKey !== current?.ratingKey);
     const from = fresh.length ? fresh : items.filter((p) => p.ratingKey !== current?.ratingKey);
     const list = from.length ? from : items;
@@ -175,6 +203,9 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
         lastRotateAt = now();
         recent.unshift(poster.ratingKey);
         recent.length = Math.min(recent.length, HISTORY);
+        const days = cleanDays(getSettings().noRepeatDays);
+        if (days > 0) shownStore.record(poster.ratingKey, now(), days); // a poster from the offline cache counts too
+        else shownStore.clear();
       }
     },
 
@@ -225,7 +256,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
       const due = now() - lastRotateAt >= s.rotateSeconds * 1000;
       if (!force && !playbackEnded && !due && current) return null;
 
-      const next = pickRandom((await loadPool(s, sel)).filter((p) => pickable(s, sel, p)));
+      const next = pickRandom((await loadPool(s, sel)).filter((p) => pickable(s, sel, p)), s);
       if (!next) {
         // Each piece of advice is given only when it could help: "unwatched only" must be on, a limit must be set (K54).
         // While the selection narrows, the advice also says how to widen it, in the same one sentence (D109 item 3, D110 item 4): "add a

@@ -4,6 +4,7 @@
 import { sanitizeSlots } from './limit-schedule.js';
 import { parseHHMM } from './schedule.js';
 import { cleanGenres, cleanKeys, cleanNames, cleanRatings, cleanSource } from './selection.js';
+import { cleanDays, cleanWeighting } from './weighting.js';
 
 export const STORAGE_KEY = 'plexPoster.settings';
 export const EXPORT_FORMAT = 'plex-poster-display/settings';
@@ -52,6 +53,9 @@ const SCHEMA = {
   includeEpisodes: [true, bool],
   unwatchedOnly: [true, bool],
   randomPoolSize: [100, num(1, 1000)],
+  // Weighting and the no-repeat window (R-SEL-2, D113): which titles the pool leans toward, and how many whole days a shown title stays away. Applied on Save.
+  weighting: ['off', cleanWeighting],
+  noRepeatDays: [0, cleanDays],
   staticRatingKey: ['', (v, d) => str(String(v ?? ''), d)],
   staticTitle: ['', str],
 

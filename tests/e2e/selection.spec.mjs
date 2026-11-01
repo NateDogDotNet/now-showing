@@ -273,10 +273,15 @@ selCase('9b Settings: choosing a collection replaces the libraries and the genre
   await saveSettings(page);
   const s = await stored(page);
   assert.deepEqual(s.source, { kind: 'collection', key: '101', title: 'Double Features' });
-  assert.deepEqual(s.genres, []);
+  assert.deepEqual(s.genres.map((g) => g.title), ['Comedy'], 'Save keeps the genre tick the sheet shows under a collection (D112 item 3); the engine ignores it there');
   // Double Features: titles 2, 4, 6 (limit R now allows them all except nothing above R).
   assert.deepEqual(asSorted(new Set(await picks(page, 30))), [2, 4, 6]);
-  check('collection chosen in Settings: saved and applied');
+  await openSettings(page);
+  await page.selectOption('#source-select', '');
+  assert.equal(await page.isChecked('#genre-list input[data-title="Comedy"]'), true, 'back to the libraries, the Comedy tick is there again');
+  await page.click('#settings-cancel');
+  await page.waitForFunction(() => !document.getElementById('settings').open);
+  check('collection chosen in Settings: saved and applied, the genre tick kept');
 });
 
 selCase('10 a library with many genres scrolls in its own box on a phone, and the sheet does not overflow sideways', {

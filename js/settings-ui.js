@@ -156,7 +156,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     s.libraryNames = sel.libraries.map((l) => l.name);
     s.libraryKey = s.libraryKeys[0] || '';
     s.libraryName = sel.libraries[0]?.name || '';
-    s.genres = sel.source ? [] : sel.genres;
+    s.genres = sel.genres; // kept while a collection or playlist is the source: the engine ignores them there, and the libraries again restore them (D112 item 3)
     s.ratings = sel.ratings; // a tick above the offered range is kept: the engine's intersection with the limit in force decides what is shown (D110 item 6)
     s.source = sel.source;
     s.staticRatingKey = pendingPin.key;

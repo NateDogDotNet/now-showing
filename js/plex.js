@@ -140,6 +140,9 @@ export function toPoster(m, source) {
   const seriesRating = isEpisode && typeof m.grandparentContentRating === 'string' ? m.grandparentContentRating : '';
   const ownRating = typeof m.contentRating === 'string' ? m.contentRating : '';
   const genres = genresOf(m);
+  const viewCount = countOf(m.viewCount);
+  const audienceRating = ratingOf(m.audienceRating);
+  const rating = ratingOf(m.rating);
   return {
     ratingKey: String(isEpisode ? m.grandparentRatingKey || m.ratingKey : m.ratingKey),
     title: isEpisode ? m.grandparentTitle || m.title : m.title,
@@ -152,7 +155,20 @@ export function toPoster(m, source) {
     duration: toMs(m.duration), // ms; the playing item's own length for an episode; 0 = unknown
     summary: trimSummary(m.summary, SUMMARY_MAX), // trimmed here, before it reaches any stored descriptor; '' = none sent (the offline cache never keeps it)
     ...(genres.length ? { genres } : {}), // the item's own genre tags (R-SEL-1): the engine checks a genre selection against these
+    // What weighting reads (R-SEL-2): left off when the server sent nothing usable. An unwatched title has no viewCount (a (verify) shape).
+    ...(viewCount ? { viewCount } : {}),
+    ...(audienceRating !== null ? { audienceRating } : {}),
+    ...(rating !== null ? { rating } : {}),
   };
+}
+
+/** A positive whole count from a JSON number or an XML attribute string; anything else is 0. */
+const countOf = (v) => Math.floor(toMs(v));
+
+/** A rating from a JSON number or an XML attribute string, or null when there is none to read. */
+function ratingOf(v) {
+  const n = typeof v === 'number' || (typeof v === 'string' && v.trim() !== '') ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : null;
 }
 
 /** The genre tags an item carries (`Genre: [{ id, tag, filter }]`, a (verify) shape), as titles; anything else is none. */

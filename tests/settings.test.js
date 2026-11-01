@@ -381,3 +381,41 @@ test('r2 gap 7: a collection or playlist is enough to be configured, a library o
   assert.equal(isConfigured({ ...base, source: { kind: 'collection', key: '' } }), false, 'no key: not a source');
   assert.equal(isConfigured({ plexToken: '', serverUrl: 'http://s', source: { kind: 'collection', key: '1' } }), false, 'still needs the connection');
 });
+
+// ---- weighting and the no-repeat window (R-SEL-2, D113) ----
+
+test('weighting defaults to off and the no-repeat window to 0 days, and a 2.2 object loads with exactly those', () => {
+  const d = defaults();
+  assert.equal(d.weighting, 'off');
+  assert.equal(d.noRepeatDays, 0);
+  const old = sanitize({ plexToken: 't', serverUrl: 'http://x', libraryKey: '1' });
+  assert.equal(old.weighting, 'off');
+  assert.equal(old.noRepeatDays, 0);
+});
+
+test('weighting is one of off / unwatched / rated; anything else is off', () => {
+  for (const v of ['off', 'unwatched', 'rated']) assert.equal(sanitize({ weighting: v }).weighting, v);
+  for (const v of ['Rated', 'on', '', 3, true, ['rated'], {}]) assert.equal(sanitize({ weighting: v }).weighting, 'off', JSON.stringify(v));
+});
+
+test('the no-repeat window is whole days, clamped to 0 to 30; junk is 0', () => {
+  assert.equal(sanitize({ noRepeatDays: 3 }).noRepeatDays, 3);
+  assert.equal(sanitize({ noRepeatDays: '14' }).noRepeatDays, 14);
+  assert.equal(sanitize({ noRepeatDays: 2.5 }).noRepeatDays, 3);
+  assert.equal(sanitize({ noRepeatDays: -1 }).noRepeatDays, 0);
+  assert.equal(sanitize({ noRepeatDays: 99 }).noRepeatDays, 30);
+  for (const v of ['', 'soon', true, [], {}, NaN]) assert.equal(sanitize({ noRepeatDays: v }).noRepeatDays, 0, JSON.stringify(v));
+});
+
+test('the two keys are saved, loaded, exported and imported with the other settings; the shown record is not a setting', () => {
+  const storage = memoryStorage();
+  save(storage, { ...defaults(), weighting: 'rated', noRepeatDays: 7 });
+  const { settings } = load(storage);
+  assert.deepEqual([settings.weighting, settings.noRepeatDays], ['rated', 7]);
+  const exported = toExport(settings);
+  assert.deepEqual([exported.settings.weighting, exported.settings.noRepeatDays], ['rated', 7]);
+  const back = fromImport(JSON.stringify(exported), defaults());
+  assert.deepEqual([back.weighting, back.noRepeatDays], ['rated', 7]);
+  assert.ok(!/shownAt/.test(JSON.stringify(exported)), 'the last-shown record is never exported');
+  assert.ok(!Object.keys(settings).some((k) => /shownAt|history/i.test(k)));
+});

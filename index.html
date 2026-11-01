@@ -176,6 +176,17 @@
           </label>
           <label class="check"><input name="includeEpisodes" type="checkbox" /> Include TV episodes (shows the series poster)</label>
           <label class="check"><input name="unwatchedOnly" type="checkbox" /> Random posters: unwatched only</label>
+          <label>Favour in random posters
+            <select name="weighting" aria-describedby="weighting-help">
+              <option value="off">Nothing: every title equally</option>
+              <option value="unwatched">Unwatched titles first</option>
+              <option value="rated">Best reviewed first (audience score)</option>
+            </select>
+          </label>
+          <label>Keep a shown poster away for
+            <span class="input-row"><input name="noRepeatDays" type="number" min="0" max="30" step="1" aria-describedby="weighting-help" /> <span class="muted">days (0 = off)</span></span>
+          </label>
+          <p id="weighting-help" class="muted small">A favoured title is drawn more often, never certain, and favouring a title never lets in one that the household limit, a time slot or the poster selection leaves out. “Unwatched titles first” changes nothing while “unwatched only” above is ticked, because no watched title is in the pool. The days apply to this display only, and are remembered across reloads. When every title was shown within the days, the one shown longest ago comes back. Both apply when you press Save.</p>
           <div class="pinned">
             <span>Pinned poster: <strong id="pinned-title">none</strong></span>
             <button type="button" class="btn small" id="unpin-btn" hidden>Unpin</button>

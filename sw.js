@@ -39,6 +39,7 @@ const SHELL = [
   'js/sleep-control.js',
   'js/tv-power.js',
   'js/util.js',
+  'js/weighting.js',
   'assets/frames/marquee.png',
   'assets/frames/marquee-narrow.png',
   'assets/frames/marquee-glow.png',

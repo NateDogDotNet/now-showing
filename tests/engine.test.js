@@ -1144,3 +1144,287 @@ test('r4 gap 3: the "reduced" mark belongs to one pool load; a later complete lo
   await engine.decide({ force: true });
   assert.equal(client.calls.source.length, asked, 'kept for the full time');
 });
+
+// ---- weighting and the no-repeat window (R-SEL-2, D113) and the last poster-selection gaps (D112) ----
+
+const DAY = 24 * 60 * 60 * 1000;
+const memStorage = (initial = {}) => {
+  const data = { ...initial };
+  return { data, getItem: (k) => (k in data ? data[k] : null), setItem: (k, v) => void (data[k] = String(v)) };
+};
+function seededRandom(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const wp = (k, extra = {}) => ({ ...poster(k), ...extra });
+const wPool = (n, extra = () => ({})) => Array.from({ length: n }, (_, i) => wp(`t${i + 1}`, extra(i + 1)));
+
+/** An engine over a pool, with its own clock and storage; `reload()` is a second engine on the same storage and clock (a page reload). */
+function weighed(overrides = {}, pool = wPool(8), { random = () => 0, storage = memStorage() } = {}) {
+  const clock = { at: 1_000_000_000 };
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', unwatchedOnly: false, ...overrides };
+  const make = () => createEngine({ client: fakeClient({ pool }), getSettings: () => settings, now: () => clock.at, random, storage });
+  const out = { engine: make(), settings, clock, storage, reload() { out.engine = make(); return out.engine; } };
+  out.draw = async () => {
+    const d = await out.engine.decide({ force: true });
+    out.engine.shown(d.poster);
+    clock.at += 1000; // a second passes between draws, so no two titles are shown at the same instant
+    return d.poster.ratingKey;
+  };
+  return out;
+}
+const draws = async (w, n) => {
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(await w.draw());
+  return out;
+};
+
+test('weighting off and window 0 draw exactly as the engine always did (the last 10 are avoided), for the same random numbers', async () => {
+  // The reference: the engine's draw before weighting existed, written out here.
+  const keys = 'abcdefghijkl'.split('');
+  const numbers = seededRandom(11);
+  const script = Array.from({ length: 60 }, () => numbers());
+  const reference = [];
+  const recent = [];
+  let current = null;
+  for (const r of script) {
+    const fresh = keys.filter((k) => !recent.includes(k) && k !== current);
+    const from = fresh.length ? fresh : keys.filter((k) => k !== current);
+    const pick = from[Math.floor(r * from.length)];
+    reference.push(pick);
+    recent.unshift(pick);
+    recent.length = Math.min(recent.length, 10);
+    current = pick;
+  }
+  let i = 0;
+  const w = weighed({}, keys.map((k) => wp(k)), { random: () => script[i++] });
+  assert.deepEqual(await draws(w, 60), reference);
+  assert.deepEqual(w.storage.data, {}, 'and nothing is stored: the no-repeat record is only kept while the window is above 0');
+});
+
+test('weighting off and window 0 change nothing on a settings object that has neither key (an upgrade)', async () => {
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1' };
+  delete settings.weighting;
+  delete settings.noRepeatDays;
+  const engine = createEngine({ client: fakeClient({ pool: wPool(3) }), getSettings: () => settings, now: () => 1, random: () => 0 });
+  const seen = [];
+  for (let i = 0; i < 3; i++) {
+    const d = await engine.decide({ force: true });
+    engine.shown(d.poster);
+    seen.push(d.poster.ratingKey);
+  }
+  assert.deepEqual(seen, ['t1', 't2', 't3']);
+});
+
+test('unwatched first: over 2,000 picks an unwatched title is drawn at least twice as often as a watched one', async () => {
+  const pool = wPool(8, (n) => (n % 2 ? {} : { viewCount: 2 }));
+  const w = weighed({ weighting: 'unwatched' }, pool, { random: seededRandom(5) });
+  const count = {};
+  for (const k of await draws(w, 2000)) count[k] = (count[k] || 0) + 1;
+  const unwatched = ['t1', 't3', 't5', 't7'].map((k) => count[k]);
+  const watched = ['t2', 't4', 't6', 't8'].map((k) => count[k]);
+  assert.ok(Math.min(...unwatched) >= 2 * Math.max(...watched), JSON.stringify(count));
+});
+
+test('best reviewed first: the draw frequency rises with audienceRating, and with rating when audienceRating is absent', async () => {
+  const run = async (extra) => {
+    const w = weighed({ weighting: 'rated' }, [2, 4, 6, 8].map((r) => wp(`r${r}`, extra(r))), { random: seededRandom(9) });
+    const count = { r2: 0, r4: 0, r6: 0, r8: 0 };
+    for (const k of await draws(w, 2000)) count[k]++;
+    return count;
+  };
+  for (const extra of [(r) => ({ audienceRating: r }), (r) => ({ rating: r })]) {
+    const c = await run(extra);
+    assert.ok(c.r2 < c.r4 && c.r4 < c.r6 && c.r6 < c.r8, JSON.stringify(c));
+  }
+});
+
+test('with weighting on the last-10 rule does not apply: only the poster on screen is left out', async () => {
+  const on = weighed({ weighting: 'unwatched' }, wPool(3));
+  assert.deepEqual(await draws(on, 4), ['t1', 't2', 't1', 't2'], 'random 0 takes the first title that is not on screen');
+  const off = weighed({}, wPool(3));
+  assert.deepEqual(await draws(off, 4), ['t1', 't2', 't3', 't1'], 'weighting off keeps the last-10 rule');
+});
+
+test('the poster on screen is never drawn again by a weighted draw while another title is in the pool', async () => {
+  const w = weighed({ weighting: 'rated' }, [wp('big', { audienceRating: 10 }), wp('small', { audienceRating: 1 })], { random: seededRandom(2) });
+  const seen = await draws(w, 40);
+  for (let i = 1; i < seen.length; i++) assert.notEqual(seen[i], seen[i - 1]);
+});
+
+test('a one-title pool still draws its title, weighted or windowed', async () => {
+  for (const over of [{ weighting: 'unwatched' }, { noRepeatDays: 3 }, { weighting: 'rated', noRepeatDays: 3 }]) {
+    const w = weighed(over, wPool(1));
+    assert.deepEqual(await draws(w, 3), ['t1', 't1', 't1'], JSON.stringify(over));
+  }
+});
+
+test('weighting never lets in a title the limit, the rating subset or the genres exclude (D5)', async () => {
+  const pool = [
+    wp('g', { contentRating: 'G', audienceRating: 1, genres: ['Comedy'] }),
+    wp('r', { contentRating: 'R', audienceRating: 10, genres: ['Comedy'] }),
+    wp('pg', { contentRating: 'PG', audienceRating: 2, genres: ['Drama'] }),
+    wp('un', { contentRating: '', audienceRating: 10, genres: ['Comedy'] }),
+  ];
+  const limited = weighed({ weighting: 'rated', maxContentRating: 'PG' }, pool, { random: seededRandom(4) });
+  assert.deepEqual([...new Set(await draws(limited, 200))].sort(), ['g', 'pg'], 'R and unrated stay out under a PG limit');
+  const genre = weighed({ weighting: 'rated', genres: [{ key: '', title: 'Drama' }] }, pool, { random: seededRandom(4) });
+  assert.deepEqual([...new Set(await draws(genre, 40))], ['pg'], 'a genre selection holds');
+  const subset = weighed({ weighting: 'rated', ratings: ['G'] }, pool, { random: seededRandom(4) });
+  assert.deepEqual([...new Set(await draws(subset, 40))], ['g'], 'a rating subset holds');
+});
+
+test('the window: the first eight draws from eight titles are eight different titles, even when the random numbers want the same one', async () => {
+  const w = weighed({ noRepeatDays: 3 }, wPool(8), { random: () => 0 });
+  assert.deepEqual(await draws(w, 8), ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't8']);
+});
+
+test('the window survives a reload: a new engine on the same storage keeps the shown titles out', async () => {
+  const w = weighed({ noRepeatDays: 3 }, wPool(8), { random: () => 0 });
+  assert.deepEqual(await draws(w, 4), ['t1', 't2', 't3', 't4']);
+  w.reload();
+  assert.deepEqual(await draws(w, 4), ['t5', 't6', 't7', 't8']);
+});
+
+test('the window with weighting off or on keeps a shown title out for N days, then lets it back', async () => {
+  for (const weighting of ['off', 'unwatched']) {
+    const w = weighed({ noRepeatDays: 3, weighting }, wPool(3), { random: () => 0 });
+    await draws(w, 3);
+    w.clock.at += 3 * DAY - 1;
+    assert.equal(await w.draw(), 't1', `${weighting}: all three are inside the window, so the least recently shown (the first) comes back`);
+    w.clock.at += 1;
+    w.reload();
+    w.clock.at += 3 * DAY;
+    assert.equal(await w.draw(), 't1', weighting);
+  }
+});
+
+test('the window replaces the last-10 rule: an old, outside-the-window title in the in-memory history is drawn', async () => {
+  const w = weighed({ noRepeatDays: 1 }, wPool(3), { random: () => 0 });
+  await w.draw(); // t1 at day 0
+  w.clock.at += 2 * DAY;
+  assert.equal(await w.draw(), 't2', 't1 is outside the window but is the poster on screen, so t2');
+  w.clock.at += 2 * DAY;
+  // t1 was shown 4 days ago and is among the last 10 in memory; t2 is on screen. Random 0 takes t1.
+  assert.equal(await w.draw(), 't1');
+});
+
+test('when every permitted title is inside the window, the one shown least recently is drawn', async () => {
+  const w = weighed({ noRepeatDays: 5 }, wPool(3), { random: () => 0.99 });
+  assert.deepEqual(await draws(w, 3), ['t3', 't2', 't1']);
+  w.clock.at += 1000;
+  // shown order: t3 (oldest), t2, t1 (on screen). The fallback skips the poster on screen.
+  assert.equal(await w.draw(), 't3');
+  assert.equal(await w.draw(), 't2');
+});
+
+test('the shown record is pruned past the window as new titles are recorded', async () => {
+  const w = weighed({ noRepeatDays: 2 }, wPool(4), { random: () => 0 });
+  await draws(w, 2);
+  assert.deepEqual(Object.keys(JSON.parse(w.storage.data['plexPoster.shownAt'])).sort(), ['t1', 't2']);
+  w.clock.at += 3 * DAY;
+  await w.draw();
+  assert.deepEqual(Object.keys(JSON.parse(w.storage.data['plexPoster.shownAt'])), ['t1'], 't1 and t2 were 3 days old, past the 2 day window; only the title just shown is kept');
+});
+
+test('a corrupt shown record starts empty and the draw carries on', async () => {
+  for (const bad of ['{nope', '[1]', 'null', '"x"']) {
+    const w = weighed({ noRepeatDays: 3 }, wPool(3), { random: () => 0, storage: memStorage({ 'plexPoster.shownAt': bad }) });
+    assert.deepEqual(await draws(w, 3), ['t1', 't2', 't3'], bad);
+    assert.deepEqual(Object.keys(JSON.parse(w.storage.data['plexPoster.shownAt'])).sort(), ['t1', 't2', 't3'], `${bad}: replaced by a good record`);
+  }
+});
+
+test('a poster drawn from the offline cache is recorded as shown; a now-playing or pinned one is not', async () => {
+  const w = weighed({ noRepeatDays: 3 }, wPool(3));
+  w.engine.shown({ ratingKey: 'c1', source: 'cache' });
+  w.engine.shown({ ratingKey: 'np', source: 'now-playing' });
+  w.engine.shown({ ratingKey: 'st', source: 'static' });
+  assert.deepEqual(Object.keys(JSON.parse(w.storage.data['plexPoster.shownAt'])), ['c1']);
+});
+
+test('D115 4: a window set to 0 clears the shown record, so raising it again starts empty', async () => {
+  const w = weighed({ noRepeatDays: 3 }, wPool(2), { random: () => 0 });
+  w.storage.removeItem = (k) => delete w.storage.data[k];
+  assert.equal(await w.draw(), 't1');
+  assert.ok('plexPoster.shownAt' in w.storage.data);
+  w.settings.noRepeatDays = 0;
+  assert.equal(await w.draw(), 't2');
+  assert.ok(!('plexPoster.shownAt' in w.storage.data), 'the record is gone once a poster is shown with the window at 0');
+  w.settings.noRepeatDays = 3;
+  assert.equal(await w.draw(), 't1', 't1 was shown before the window was set to 0: it is drawable again (t2 is on screen)');
+  w.settings.noRepeatDays = 0;
+  await w.engine.decide({ force: true });
+  assert.ok(!('plexPoster.shownAt' in w.storage.data), 'and a draw with the window at 0 clears it too');
+});
+
+test('D115 4: a poster shown (a cached one, say) with the window at 0 clears the record without a draw', async () => {
+  const w = weighed({ noRepeatDays: 3 }, wPool(2));
+  w.storage.removeItem = (k) => delete w.storage.data[k];
+  await w.draw();
+  assert.ok('plexPoster.shownAt' in w.storage.data);
+  w.settings.noRepeatDays = 0;
+  w.engine.shown({ ratingKey: 'c1', source: 'cache' });
+  assert.ok(!('plexPoster.shownAt' in w.storage.data));
+});
+
+test('nothing is recorded while the window is 0, whatever the weighting', async () => {
+  const w = weighed({ weighting: 'rated', noRepeatDays: 0 }, wPool(3));
+  await draws(w, 3);
+  assert.deepEqual(w.storage.data, {});
+});
+
+test('the window never shows a title the limit excludes, even when it is the only one outside the window', async () => {
+  const pool = [wp('g', { contentRating: 'G' }), wp('r', { contentRating: 'R' })];
+  const w = weighed({ noRepeatDays: 3, maxContentRating: 'PG' }, pool, { random: () => 0 });
+  assert.deepEqual(await draws(w, 4), ['g', 'g', 'g', 'g']);
+});
+
+test('weighting and the window read the settings live: a changed setting applies to the next draw', async () => {
+  const w = weighed({}, wPool(3), { random: () => 0 });
+  assert.deepEqual(await draws(w, 2), ['t1', 't2']);
+  w.settings.weighting = 'unwatched';
+  assert.equal(await w.draw(), 't1', 'the last-10 rule has stopped: t1 is not on screen');
+  w.settings.weighting = 'off';
+  w.settings.noRepeatDays = 3;
+  assert.deepEqual(await draws(w, 3), ['t2', 't1', 't3'], 'the window is on: what was shown before it was set is not in the record, what is shown now is');
+  assert.deepEqual(Object.keys(JSON.parse(w.storage.data['plexPoster.shownAt'])).sort(), ['t1', 't2', 't3']);
+});
+
+test('D112 item 1: a library that fails while the others answer with nothing is a connection failure, not the empty card', async () => {
+  const { engine, client } = selecting({ ...TWO });
+  const real = client.pool;
+  client.pool = async (args) => {
+    if (args.libraryKey === '3') throw Object.assign(new Error('Plex did not respond in time.'), { kind: 'timeout' });
+    return args.libraryKey === '1' ? [] : real(args);
+  };
+  await assert.rejects(engine.decide({ force: true }), (err) => err.kind === 'timeout' && err.message === 'Plex did not respond in time.');
+});
+
+test('D112 item 1: the first rejection is the one reported, and a failure beside posters still leaves the pool to the others', async () => {
+  const { engine, client } = selecting({ ...TWO, libraryKeys: ['1', '3', '5'], libraryNames: ['A', 'B', 'C'] }, { counts: { 1: 4, 3: 4, 5: 4 }, libs: { 1: [], 3: [], 5: [] } });
+  client.pool = async (args) => {
+    if (args.libraryKey === '1') return [];
+    throw Object.assign(new Error(`down ${args.libraryKey}`), { kind: 'network' });
+  };
+  await assert.rejects(engine.decide({ force: true }), { message: 'down 3' });
+  const ok = selecting({ ...TWO });
+  const real = ok.client.pool;
+  ok.client.pool = async (args) => {
+    if (args.libraryKey === '3') throw Object.assign(new Error('timeout'), { kind: 'timeout' });
+    return real(args);
+  };
+  assert.equal((await ok.engine.decide({ force: true })).poster.libraryKey, '1');
+});
+
+test('D112 item 1: libraries that all answer with nothing are still the empty card', async () => {
+  const { engine, client } = selecting({ ...TWO });
+  client.pool = async () => [];
+  await assert.rejects(engine.decide({ force: true }), { kind: 'empty' });
+});

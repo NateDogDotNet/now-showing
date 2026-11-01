@@ -89,7 +89,8 @@ export function selectionKey(sel) {
 
 /**
  * Splits `total` posters across libraries in proportion to `counts` (their title counts), largest remainder, so the sizes always
- * add up to `total` (D107 ruling 3). A count that is unknown (null), or counts that are all zero, split evenly instead.
+ * add up to `total` (D107 ruling 3). A count that is unknown (null), or counts that are all zero, split evenly instead. A library with
+ * titles never gets nothing: one that would is given a slot taken from the largest share (D112 item 2), as far as the total allows.
  */
 export function libraryShares(total, counts) {
   const n = counts.length;
@@ -100,6 +101,13 @@ export function libraryShares(total, counts) {
   const sizes = weights.map((w) => Math.floor((total * w) / sum));
   const order = weights.map((w, i) => [i, (total * w) % sum]).sort((a, b) => b[1] - a[1] || a[0] - b[0]);
   for (let left = total - sizes.reduce((a, b) => a + b, 0), k = 0; left > 0; left--, k++) sizes[order[k][0]]++;
+  for (let i = 0; i < n; i++) {
+    if (weights[i] <= 0 || sizes[i] > 0) continue;
+    const donor = sizes.indexOf(Math.max(...sizes));
+    if (sizes[donor] < 2) break; // nothing can spare a slot
+    sizes[donor]--;
+    sizes[i]++;
+  }
   return sizes;
 }
 

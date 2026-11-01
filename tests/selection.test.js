@@ -299,3 +299,19 @@ test('r4 gap 4: the R-SEL-1 "Empty result" bullet gives the wording the engine p
   const bullet = spec.split('\n').find((l) => l.startsWith('- **Empty result'));
   for (const text of ['add a library', 'only when the server lists a movie library that is not ticked', 'tick fewer genres or ratings', 'use the libraries instead of the collection', 'then `tick fewer ratings` when ratings are ticked', 'No posters found in Movies, genre Western (add a library or tick fewer genres).']) assert.ok(bullet.includes(text), text);
 });
+
+test('D112 item 2: every library with titles gets at least one slot of the pool, and the shares stay proportional otherwise', () => {
+  assert.deepEqual(libraryShares(100, [10000, 10]), [99, 1]);
+  assert.deepEqual(libraryShares(100, [100000, 10]), [99, 1], 'a share that rounds to nothing is lifted to one, taken from the largest');
+  assert.deepEqual(libraryShares(100, [10, 10000]), [1, 99]);
+  assert.deepEqual(libraryShares(100, [10000, 10, 10]), [98, 1, 1]);
+  assert.deepEqual(libraryShares(100, [10000, 0, 10]), [99, 0, 1], 'an empty library still gets nothing');
+  assert.deepEqual(libraryShares(2, [10000, 10, 10]), [1, 1, 0], 'when the pool is too small for every library, the lift stops at the pool size');
+  for (const counts of [[100000, 3], [5000, 1, 1, 1], [1, 100000], [7, 7, 7], [123456, 2, 55]]) {
+    for (const total of [3, 10, 100, 1000]) {
+      const sizes = libraryShares(total, counts);
+      assert.equal(sizes.reduce((a, b) => a + b, 0), total, `${total} over ${counts}`);
+      if (total >= counts.length) assert.ok(sizes.every((n, i) => counts[i] === 0 || n >= 1), `${total} over ${counts}: ${sizes}`);
+    }
+  }
+});
