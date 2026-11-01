@@ -621,3 +621,20 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   1. **Q16.** A new profile starts from the household's current values, so it begins as a copy to change. Nothing is saved until Done.
   2. **Q17.** While a profile is open, only the bundled values are set aside. The slots, the connection and the controls outside the bundle stay editable. The household toggle, position mode, the profile rows, Save and Cancel are off. A whole-sheet Cancel (Escape) still restores everything.
   3. **Q18.** The selection check after a poster's decode is kept beside the check before it, as the limit's own two checks are. No test can isolate the second one, because a held image request ends before the decode starts.
+
+## Conductor rulings — 2026-11-01 (viewer-profiles r2 reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D122
+
+- **D122 viewer-profiles takes a short round 3 for the r2 reviews' Minors.** All three r2 reviews APPROVE, but the Step 7 band is RE-DISPATCH 85/95: docs/spec.md:309 contradicts D120 9. No later phase of run 8 may change js/settings-ui.js or js/main.js, so the code Minors are fixed here, not carried.
+  1. **The Pin button's poster stays at a profile boundary (anchored Minor 1).** `inSelectionNow` exempts the pinned poster (`staticRatingKey`) again, as R-PROF-1 and D5 say. This errs strict, never wide, but offline it put the empty card in place of the owner's pin. Add case 14b: pin with the button, cross 06:00 online and offline, and check that no poster is taken off.
+  2. **The banner names the profile as it is now (walk Minor 1, cold Minor 1, anchored Minor 4).** The Edit handler reads the name and bundle from `pendingProfiles` by id. Case 5b checks the banner after a rename in the same row.
+  3. **The genre list follows the open profile's libraries (cold Minor 2).** Opening a profile, Done and Discard each cancel a genre load already in flight and load the genres for the libraries now shown. A Kids profile is never offered the household library's genres.
+  4. **The household's live controls keep previewing while a profile is open (walk Minor 2; the anchored review's declined item).** This keeps D121 2. While a profile is open, `read()` takes the bundled keys from the set-aside household values and every other key from the controls. Done and Discard send one preview. Nothing a profile holds is previewed (D120 1).
+  5. **Wording (walk Minors 3 and 4).**
+     - The profile help says that while a slot is in force the profile's settings replace the household's, its limit too, even when the profile's limit is looser, and that the status line says which limit is in force.
+     - The banner names everything the bundle holds: the limit, the now-playing rule, the selection, weighting and days, and the frame.
+     - Done writes "<name> kept; it applies when you press Save." to a polite live region.
+  6. **Tests (anchored Minors 2 and 3, cold Minor 3).**
+     - A unit case reaches the floor compare at js/limit-schedule.js:159: base G; Kids (G) from 20:00 every day; R from 22:00 on Sundays; Monday 03:00 gives the Kids bundle.
+     - A profiles e2e case checks that an open profile's frame is not previewed while it is open: it runs at a time with no profile slot in force and moves a live control before Done.
+  7. **Spec (walk Minor 5, anchored Minor 5).** docs/spec.md:309 reads "names cut to 24; a later duplicate (ignoring case) is dropped". R-PROF-1 gains the wording in item 5.
+  No criterion changes. Re-dispatch 2 of 5.
