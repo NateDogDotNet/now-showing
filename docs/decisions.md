@@ -465,3 +465,15 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
     - the slot limit select does not clip at 1920×1080 or rotation 90, and the fit test allows for the arrow
     - a test pins the same-day guard of the spring-forward text, so a zone that skips midnight (America/Santiago) cannot loop
   - **Process.** The carry-over drew a loosening finding in rounds 1, 2 and 3 (the Recurring pattern). The next re-dispatch therefore branches: two candidates in separate worktrees, and only the better by the computed Step 4 band is reviewed (re-dispatches 3 and 4 of 5).
+
+## Conductor record — 2026-11-01 (rating-schedule closes on candidate r4; non-blocking findings, under D44): D106
+
+- **D106 rating-schedule lands as candidate r4. Its remaining Minor findings are routed, not re-dispatched.** All three round-4 reviews APPROVE with no Critical or Important finding. Four re-dispatches were used, including the branched round r4/r5, where r4 won a tied pick. The Minors go where their files are next edited, so the fifth re-dispatch is not spent on them.
+  - **Routed to `viewer-profiles`.** Its Output already holds js/limit-schedule.js, js/settings-ui.js and docs/spec.md. The `viewer-profiles` brief carries these items:
+    1. The comments on `limitInForce` and `MAX_SLOTS` are brought up to D105 (anchored r4 Minor 2).
+    2. The status line never names a time already past in the repeated autumn hour (anchored r4 Minor 3).
+    3. The status line is written only when its text changes, so a screen reader does not re-announce it every second (cold r4 Minor 2).
+    4. "until <weekday> HH:MM" says "next" when the change is a week away (cold r4 Minor 3).
+    5. R-FILT-2's carry-over sentence says the slots in force at the end of yesterday run on only when every one of them applies today, which is what the code does. This is the stricter reading of D105 in the corner anchored r4 Minor 1 names: base G, "PG-13 from 22:00 every day" and "No limit from 22:00 Sundays" give Monday 03:00 = G.
+  - **Owner follow-up.** One unreadable slot time in an import or a stored value replaces the whole schedule with "G all day" without telling the user, and a Save then keeps it (cold r4 Minor 1). This fails safe; whether to show a notice is the owner's call.
+  - **Unpicked candidate.** Candidate r5 (one `opening()` rule and a week-long brute-force test) also scored COMPLETE 75/75. Its work stays on branch `orch/rating-schedule-r5`, which the hook does not let the conductor delete.
