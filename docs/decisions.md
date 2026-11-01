@@ -505,3 +505,12 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   2. **Traceability.** R-SEL-1's traceability row sits after R-FILT-1's E14 row.
   3. **Validation status.** `docs/validation/real-server-extended.md` ends `Overall: PENDING` while its new section H (verify) rows, V1-E28 to V1-E34, are unrun.
   4. **Curated lists.** A collection's or playlist's items are kept to movies and cut to the pool size, best rated first. "Unwatched only" drops titles with a viewCount.
+
+## Conductor rulings — 2026-11-01 (poster-selection r1 reviews, spec-gaps; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D109
+
+- **D109 What the poster-selection r1 reviews left open.** These amend D107; no criterion changes.
+  1. **Which ratings Settings offers.** Settings offers every rating up to the loosest limit the base limit or any time slot sets, so a household can narrow a looser evening slot to its own higher ratings. The engine still intersects the choice with the limit in force at draw time (D107 item 1), so nothing above the limit in force is shown. Ticks are no longer dropped on Save. (cold Minor 5, walk Minor 4)
+  2. **Genre help text.** The genre help says a title shows only when it matches a ticked genre and, when ratings are ticked, a ticked rating. (walk Minor 5)
+  3. **Empty-card advice.** While the selection narrows the pool, the empty card's advice also suggests widening the selection: more libraries, fewer genres or ratings, or the libraries instead of a collection or playlist. This adds to D107 item 7. (walk Minor 6)
+  4. **New (verify) row.** A (verify) row asks whether a library list reply carries every `Genre` tag of an item. If Plex trims tags in list replies, the client's own genre check could drop titles. (anchored Minor 3)
+  5. **Follow-up, outside run 8's phases.** A "Can't reach Plex" status message shows beside the empty card although the server answered. It does the same on the 2.2 path. This is a FOLLOW-UP for the owner. (walk, declined to judge)
