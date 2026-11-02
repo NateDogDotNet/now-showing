@@ -701,3 +701,11 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
      - **r5:** a fresh builder closes the same items with the least code it finds that reads cleanly, keeping every rule in 1–3.
      Both cost a re-dispatch (3 and 4 of 5). Each must pass a cheap gate: `npm test` and `node tests/e2e/run.mjs release preset smoke rating-schedule`. The Step 4 records follow, then `closer pick`. Only the winner goes to review.
   Output: css/app.css returns to its tip state (it leaves the Output's changed files). Everything else stays as D124–D126 set it.
+
+## Owner answer and ruling — 2026-11-02 (release-2.3.0 r4 reviews): D129
+
+- **D129 release-2.3.0 uses its last re-dispatch (5 of 5) for the r4 review's three small items.** Nathan was asked before the last round. His answer: "Use the last round (Recommended)". The UX walk r4 approves; the anchored review r4 asks for revision. The round makes these three changes and nothing else:
+  1. **tests/e2e/rating-schedule.spec.mjs case 25 (around :825–827).** Before the "closed: the timer is given back" check, wait until the one-second timer count drops back. The close event stops the timer a moment after `dialog.open` turns false. The app code does not change. The case must still fail when the `=== null` guard is removed, and it must pass repeatedly under load.
+  2. **README.md:43 and :366, Roadmap.md:88 and :158.** The implausible-clock sentence says the strictest of the base, every slot "and, when any slot names a profile, every profile", as js/limit-schedule.js:131 and docs/spec.md:267 do.
+  3. **tests/e2e/preset.spec.mjs:186–188.** The comment no longer describes the removed hold.
+  If this round does not pass review, the phase stops and goes to Nathan; there is no sixth round.
