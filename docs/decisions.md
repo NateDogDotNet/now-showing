@@ -709,3 +709,9 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   2. **README.md:43 and :366, Roadmap.md:88 and :158.** The implausible-clock sentence says the strictest of the base, every slot "and, when any slot names a profile, every profile", as js/limit-schedule.js:131 and docs/spec.md:267 do.
   3. **tests/e2e/preset.spec.mjs:186–188.** The comment no longer describes the removed hold.
   If this round does not pass review, the phase stops and goes to Nathan; there is no sixth round.
+
+## Decision checkpoint — 2026-11-02 (run 8 close; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D130
+
+- **D130 Two session decisions not yet in the log.**
+  1. **The orchestration gate checks a correction, not the tally it supersedes.** Nathan approved this with "Change the gate (Recommended)" when viewer-profiles' gate refused. Two of that phase's tallies had been derived while a cited sweep file was still being written, then re-derived as `-c1` corrections. `closer gate` now skips a tally that a correction names in `_correction.supersedes`, and checks the correction instead. The change is in the kernel repository (~/.claude 4a4ef566), with a test that fails on the old gate, and `closer evalguard` passed with Nathan's words. Reversibility: high (one kernel commit). Release r6 used it again.
+  2. **A review verdict carries forward when its lens is untouched.** For release-2.3.0 r6, criterion 6 counted the UX walk's r4 APPROVE. The r4→r6 delta changed only README.md, Roadmap.md and two e2e specs, and no app, CSS or HTML file, so the screens walked were the same. The phase file records the delta's file list. A later round that touches a walked file needs a fresh walk.
