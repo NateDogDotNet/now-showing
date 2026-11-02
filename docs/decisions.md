@@ -681,3 +681,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
      - focus after Open settings;
      - the 15 px toast text on a TV.
   Output gains `css/app.css` (that one declaration) and `tests/e2e/rating-schedule.spec.mjs` (that one case). index.html gains the hint line beside the D124 id. No criterion changes beyond criterion 5's list. Re-dispatch 2 of 5.
+
+## Conductor rulings — 2026-11-02 (release-2.3.0 r3 deviation; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D127
+
+- **D127 The builder's Household hold is kept as proposed.** D126 2's `overflow-anchor: none` undid the Open settings scroll to Household (D124). The connection, library and genre lists above Household fill in after the scroll and pushed it down, and the "opens at Household" case failed. The builder added `holdAtTop()` in js/settings-ui.js, used only by the Household branch. It keeps Household at the top while those lists grow, and lets go at the first wheel turn, touch move or key press, when the sheet closes, or after 8 s. A spec fails when the hold's observer, its plain-scroll fallback or the CSS line is deleted, and preset passed 7 of 7 runs under load. The reviews judge it. A mouse drag on the scrollbar is not among its release events; the walk checks whether that matters.
