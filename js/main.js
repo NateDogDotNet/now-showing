@@ -24,7 +24,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.3.0';
+export const VERSION = '2.3.1';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -322,8 +322,10 @@ async function tick({ force = false, notify = false } = {}) {
 async function handleFailure(err, { notify = false } = {}) {
   display.setNowPlaying(null); // what Plex last said about playback is no longer known
   state.lastError = err.message;
-  if (!state.offlineSince) state.offlineSince = Date.now();
   const fatal = err.kind === 'auth' || err.kind === 'empty';
+  // "Can't reach Plex" is for a server that did not answer. An auth or empty result is an answer: the empty card says what is wrong.
+  if (fatal) state.offlineSince = 0;
+  else if (!state.offlineSince) state.offlineSince = Date.now();
   log[fatal ? 'error' : 'warn'](err.message);
 
   // Keep the screen interesting while Plex is unavailable: rotate through cached posters. Under a content
@@ -416,6 +418,11 @@ async function runFix(id) {
 }
 
 // ---------- UI state ----------
+
+// The toast sits above the control bar, which wraps to two rows of labelled buttons on a phone: CSS reads its height from here.
+new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty('--controls-h', `${Math.round(entry.borderBoxSize?.[0]?.blockSize ?? $('controls').offsetHeight)}px`);
+}).observe($('controls'));
 
 /** The empty card: `message` says what is wrong and `kind` (a PlexError kind, or 'empty') picks the fix buttons under it. */
 function showEmpty(show, message, kind) {

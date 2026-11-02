@@ -199,7 +199,7 @@
             <span>Pinned poster: <strong id="pinned-title">none</strong></span>
             <button type="button" class="btn small" id="unpin-btn" hidden>Unpin</button>
           </div>
-          <p class="muted small">Pin the poster on screen with the pin button. A pinned poster stays up until unpinned (now playing still takes over if enabled).</p>
+          <p class="muted small">Pin the poster on screen with the pin button. A pinned poster stays up until unpinned, whatever the household limit, time slot or profile (now playing still takes over if enabled).</p>
         </fieldset>
 
         <fieldset id="household-fieldset">
@@ -220,6 +220,7 @@
 
             <div id="slot-editor" class="slot-editor" role="group" aria-labelledby="slot-label">
               <span id="slot-label" class="field-label">Change the limit during the day</span>
+              <p id="slot-unreadable" class="error" role="status" hidden>A start time in the loaded schedule could not be read, so the whole schedule was replaced with G all day, the strictest limit. Check the slots below and press Save.</p>
               <ul id="slot-list" class="slot-list"></ul>
               <p id="slot-empty" class="muted small">No time slots: the limit above applies all day.</p>
               <button type="button" class="btn small" id="slot-add">Add a time slot</button>

@@ -3,7 +3,7 @@
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { createPin, checkPin, createPlexClient, discoverServers, firstReachable } from './plex.js';
-import { describeLimitNow, MAX_SLOTS, NO_LIMIT } from './limit-schedule.js';
+import { describeLimitNow, MAX_SLOTS, NO_LIMIT, wasUnreadable } from './limit-schedule.js';
 import { createPositionMode } from './position.js';
 import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describeProfile, MAX_PROFILES, removeProfile, renameProfile, updateProfile } from './profiles.js';
 import { parseHHMM } from './schedule.js';
@@ -136,6 +136,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     pendingProfiles = s.profiles.map((p) => ({ ...p }));
     $('profile-error').hidden = true;
     $('profile-name').value = '';
+    $('profile-notice').textContent = ''; // "<name> kept" belongs to the last open of the sheet: a Save or Cancel ended it
     renderProfiles();
     renderSlots(s.limitSlots); // before the ratings, which are offered up to the loosest of the limit and the slots
     sel = selectionOf(s);
@@ -380,6 +381,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     editing = { id, name, household };
     const none = new Option('No limit', NO_LIMIT);
     field('maxContentRating').append(none); // a profile may have no limit, as a slot may
+    $('profile-notice').textContent = ''; // the notice about the last profile kept does not belong to this one
     showBundle(bundleOf(bundle));
     loadGenres(); // the genre list follows the libraries now shown; a load in flight for the household's is dropped (D122 3)
     $('profile-banner-text').textContent = `Editing the profile \u201c${name}\u201d. The limit, the now-playing rule, the selection, the weighting and days, and the frame below are this profile's. Your own household values are set aside until you press Done or Discard.`;
@@ -487,7 +489,10 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
    */
   function syncSlotStatus() {
     const text = describeLimitNow(getSettings(), new Date());
-    const line = `Saved: ${text[0].toLowerCase()}${text.slice(1)}`;
+    const saved = getSettings();
+    // A pinned poster is exempt from every limit (D5, D32), so a stricter slot or profile leaves it up: the line says why.
+    const pinned = saved.staticRatingKey && saved.maxContentRating ? ' The pinned poster stays up whatever the limit; unpin it to apply the limit to it.' : '';
+    const line = `Saved: ${text[0].toLowerCase()}${text.slice(1)}${pinned}`;
     if ($('slot-status').textContent !== line) $('slot-status').textContent = line; // a live region is written only when its words change, or a screen reader says it again every second (D106 3)
   }
 
@@ -509,6 +514,8 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   }
 
   function renderSlots(slots) {
+    // A stored or imported schedule with a time that could not be read became G all day: say so, until the slots are edited.
+    $('slot-unreadable').hidden = !wasUnreadable(slots);
     $('slot-list').replaceChildren(...slots.map(slotRow));
     syncSlots();
   }
@@ -725,7 +732,9 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     $('genre-count').textContent = !locked && sel.genres.length ? `· ${sel.genres.length} chosen` : '';
     $('genre-help').textContent = locked
       ? 'A collection or playlist takes no genre.'
-      : offered.genresFailed
+      : offered.genresLoading
+        ? 'Loading the genres…'
+        : offered.genresFailed
         ? "Couldn't load the genres. Test the connection to try again."
         : rowCount
           ? 'None ticked: every genre. A title shows only when it matches a ticked genre and, when ratings are ticked, a ticked rating.'
@@ -783,10 +792,15 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     const run = ++genreRun;
     offered.genres = [];
     offered.genresFailed = false;
+    offered.genresLoading = false;
     if (!offerClient || !sel.libraries.length) return renderGenres();
+    // The list shown until now belongs to other libraries (the household's, while a profile opens): it goes now, not when the answer comes.
+    offered.genresLoading = true;
+    renderGenres();
     const client = offerClient;
     const lists = await Promise.all(sel.libraries.map((l) => client.genres(l.key).catch(() => null)));
     if (run !== genreRun) return;
+    offered.genresLoading = false;
     offered.genresFailed = lists.every((l) => l === null);
     const seen = new Map();
     for (const g of lists.flat().filter(Boolean)) if (!seen.has(g.title.toLowerCase())) seen.set(g.title.toLowerCase(), g);
@@ -1034,7 +1048,11 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   function runOpenOptions({ wantSignIn, token, test, section }, auto) {
     if (section === 'protection') $('protection-fieldset').scrollIntoView({ block: 'start' });
     else if (section === 'layout') $('layout-fieldset').scrollIntoView({ block: 'start' });
-    else if (section === 'household') $('household-fieldset').scrollIntoView({ block: 'start' });
+    else if (section === 'household') {
+      $('household-fieldset').scrollIntoView({ block: 'start' });
+      // Focus starts in Household too, so the first Tab or arrow press stays where the reader was sent, not back at Plex connection.
+      $('household-toggle').focus({ preventScroll: true });
+    }
     if (token) signIn({ token });
     else if (wantSignIn) signIn();
     else if (test || (auto && original.plexToken && original.serverUrl)) testConnection();
@@ -1094,6 +1112,11 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // The ratings offered follow the household limit, its toggle and the time slots as they are edited.
   for (const el of [$('household-toggle'), field('maxContentRating')]) el.addEventListener('change', renderRatings);
   $('slot-list').addEventListener('change', (e) => e.target.closest('.slot-limit') && renderRatings());
+  // Any edit of the slots (a time, a limit, days, Add or Remove) is the owner taking the schedule in hand: the unreadable notice goes.
+  const slotsEdited = () => ($('slot-unreadable').hidden = true);
+  $('slot-editor').addEventListener('input', slotsEdited);
+  $('slot-editor').addEventListener('change', slotsEdited);
+  $('slot-editor').addEventListener('click', (e) => e.target.closest('button') && slotsEdited());
 
   // The preset buttons and the Custom field (UI only) set the stored seconds. A half-typed or junk entry leaves them alone.
   for (const radio of form.querySelectorAll('input[name="rotatePreset"]')) radio.addEventListener('change', () => radio.checked && pickPreset(radio.value));

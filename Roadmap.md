@@ -95,6 +95,18 @@ Four 2.3 features and the upgrade notice are built and tested (D101). Version 2.
 - **Version**: 2.3.0 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`.
 - **Still to check on a real server** (carried into `docs/validation/real-server-extended.md`): the Plex `genre` filter and the collection and playlist endpoints are (verify) items; nothing in 2.3 was run against a real Plex Media Server.
 
+## ✅ Done in 2.3.1 (on the branch `2.3.1`, not merged)
+
+The run-8 follow-ups (D132). Version 2.3.1 has no tag and no GitHub release, and it is tested against the mock Plex server only.
+
+- **Profile editor**: opening a profile clears the household's genres at once ("Loading the genres…"), and the "<name> kept" notice goes when the sheet or a profile opens.
+- **Pinned poster**: the status line under the slots, and the pin help, say a pinned poster stays up whatever the limit, time slot or profile.
+- **Unreadable schedule**: it still reads as G all day, and the editor now says so until the slots are edited or saved.
+- **"Can't reach Plex"** shows only when Plex did not answer, not beside an empty card for a rejected token or a selection that matches nothing.
+- **The toast**: as wide as its text allows on a phone, clear of the control bar, a 44 px button, and text readable on a TV; Open settings puts focus on the Household toggle.
+- **The settings sheet** no longer scrolls sideways on a 390 px phone.
+- **Version**: 2.3.1 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new in 2.3" notice is unchanged.
+
 ## 🧭 Suggested order
 
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
@@ -109,7 +121,7 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Next
 
-2.2.0 to 2.3.0 are on `main` (see the "Done in 2.2" and "Done in 2.3" sections above); nothing is in progress. The next features follow the suggested order:
+2.2.0 to 2.3.0 are on `main` (see the "Done in 2.2" and "Done in 2.3" sections above), and 2.3.1 (the 2.3 follow-ups) is on the branch `2.3.1`, waiting for the owner to ask for a merge. The next features follow the suggested order:
 
 1. **2.4, the source adapters:** the adapter refactor with Plex as the first adapter, then Jellyfin and Emby, with multiple servers in poster selection. See "Sources other than Plex" under Ideas.
 2. **2.5, the no-server mode:** the TMDB adapter, after the adapter layer exists.
@@ -349,10 +361,6 @@ Left over when 2.1.1 closed.
 Nothing is left: the three items carried from 2.2 are fixed in 2.2.1 (see "Done in 2.2.1").
 
 ### Carried from 2.3
-Left over when 2.3.0 was built (owner: Nathan). None of these changes the limit in force.
+Left over when 2.3.0 was built (owner: Nathan). None of these changes the limit in force. The other follow-ups are fixed in 2.3.1 (D132).
 
-- **Genres stay tickable while a profile's genres load (D123 3).** While an opened profile's genres load, the household's genres can still be ticked for that moment. The fix: clear the list when the load starts. It lives in `js/settings-ui.js`.
-- **The "<name> kept" notice outlives Cancel and Save (D123 3).** The fix: clear it when the sheet or a profile opens.
-- **Nothing says why a pinned poster stays up under a stricter profile (D123 3).** This is the owner-pin exemption (D5, D32) as written; the screen gives no sign of it.
-- **The settings sheet scrolls sideways on a 390 px phone.** It did so before 2.3 (noted at the rating-schedule review) and 2.3 did not fix it; the sheet needs a width check on a narrow touch screen.
 - **Done and Discard preview the household's controls that do not preview live (D123 1).** A control changed while a profile is open is previewed at Done or Discard. No limit, selection or pin value is involved.
