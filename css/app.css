@@ -403,15 +403,29 @@ body:not(.idle) .status-dot, body.asleep .status-dot { visibility: hidden; }
   left: 50%;
   top: 50%;
   transform-origin: 0 0;
-  transform: rotate(var(--ui-rotation)) translate(-50%, calc(var(--vh) / 2 - 88px - 100%));
-  max-width: min(calc(var(--vw) * 0.92), 520px);
+  /* 88px above the viewer's bottom, or 12px above the control bar when it is taller (labelled buttons wrap to two rows on a
+     phone); main.js keeps --controls-h at the bar's height. */
+  transform: rotate(var(--ui-rotation))
+    translate(-50%, calc(var(--vh) / 2 - max(88px, var(--controls-h, 0px) + max(12px, env(safe-area-inset-bottom)) + 12px) - 100%));
+  /* max-content: anchored at the centre, a shrink-to-fit box would get only the right half of the screen to wrap in. */
+  width: max-content;
+  max-width: min(calc(var(--vw) * 0.92), 34em);
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
   padding: 10px 16px;
   border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-line);
+  /* Readable from across the room on a TV, as the poster info is; 15px on a phone. */
+  font-size: clamp(15px, 2.4vmin, 32px);
+  line-height: 1.35;
   z-index: 30;
 }
-.toast button { margin-left: 12px; }
+/* A full-size touch target (44px), in the toast's own text size. */
+.toast .btn, .toast .btn.small { min-height: 44px; padding: 8px 16px; font-size: inherit; }
 
 /* ---------- Sleep ---------- */
 
@@ -639,7 +653,9 @@ input[type="time"]:focus-within { outline: 2px solid var(--accent); outline-offs
 .pick-list label.check span { min-width: 0; overflow-wrap: anywhere; }
 #selection-fieldset > label { margin-top: 14px; }
 .pinned { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-top: 12px; }
-.button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; align-items: center; }
+/* minmax(0, 1fr) and wrapping labels: on a 390px phone "Clear poster cache" on one line made the sheet scroll sideways. */
+.button-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; align-items: center; }
+.button-grid .btn { white-space: normal; justify-content: center; text-align: center; }
 .button-grid label.check { margin: 0; }
 
 .muted { color: var(--muted); }

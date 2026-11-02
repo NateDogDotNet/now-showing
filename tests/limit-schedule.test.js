@@ -1,7 +1,7 @@
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { createLimitWatch, describeLimitNow, limitInForce, MAX_SLOTS, nextLimitChange, sanitizeSlots, slotInForce, STRICTEST } from '../js/limit-schedule.js';
+import { createLimitWatch, describeLimitNow, limitInForce, MAX_SLOTS, nextLimitChange, sanitizeSlots, slotInForce, STRICTEST, wasUnreadable } from '../js/limit-schedule.js';
 import { defaults, sanitize } from '../js/settings.js';
 
 // 2026-01-05 is a Monday. `at(h, m, day)` is local time, so the cases hold in any timezone.
@@ -530,4 +530,21 @@ test('D106 5: the slots in force at the end of yesterday run on only when every 
   const s = withSlots([slot('22:00', 'PG-13'), slot('22:00', '', [0])], 'G');
   assert.equal(limitInForce(s, at(3, 0, MON)), 'G', 'Sunday\'s no-limit slot does not apply on Monday, so the pair does not run on: the carrying PG-13 is capped at the base');
   assert.equal(limitInForce(s, at(23, 0, SUN)), 'PG-13', 'Sunday 23:00: both slots started at 22:00 and the stricter wins');
+});
+
+test('wasUnreadable: marks the G-all-day stand-in for an unreadable schedule until it is saved (2.3.1)', () => {
+  for (const bad of [[{ start: '24:00', limit: 'R' }], 'x', Array.from({ length: MAX_SLOTS + 1 }, () => ({ start: '08:00', limit: 'R' }))]) {
+    assert.equal(wasUnreadable(sanitizeSlots(bad)), true, JSON.stringify(bad));
+  }
+  for (const ok of [undefined, null, [], [{ start: '08:00', limit: 'R' }], [{ start: '00:00', limit: 'G' }]]) {
+    assert.equal(wasUnreadable(sanitizeSlots(ok)), false, `${JSON.stringify(ok)} is readable: no notice`);
+  }
+  // Settings are sanitised more than once (load, then a save of the same object): the mark stays while in memory.
+  const loaded = sanitize({ ...defaults(), limitSlots: [{ start: 'nope', limit: 'R' }] });
+  assert.equal(wasUnreadable(loaded.limitSlots), true);
+  assert.equal(wasUnreadable(sanitize(loaded).limitSlots), true, 'sanitised again: still marked');
+  // Once written, it is an ordinary one-slot schedule (the owner's to keep): JSON drops the mark.
+  const stored = JSON.parse(JSON.stringify(loaded));
+  assert.deepEqual(stored.limitSlots, [{ start: '00:00', limit: 'G' }]);
+  assert.equal(wasUnreadable(sanitize(stored).limitSlots), false);
 });

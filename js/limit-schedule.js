@@ -29,8 +29,17 @@ const strictest = (a, b) => (rank(a) <= rank(b) ? a : b);
 export const cleanLimit = (v) => (typeof v === 'string' && (v === NO_LIMIT || LIMITS.includes(v)) ? v : STRICTEST);
 const slotLimit = cleanLimit;
 
+/**
+ * Marks the schedule that stands for an unreadable one, so the editor can say why it shows G all day. A symbol is never written
+ * by JSON.stringify: once that schedule is saved it is an ordinary one-slot schedule, the owner's own choice.
+ */
+const UNREADABLE = Symbol('unreadable schedule');
+
 /** The schedule that stands for an unreadable one: the strictest limit, all day, every day. */
-const unreadable = () => [{ start: '00:00', limit: STRICTEST }];
+const unreadable = () => Object.defineProperty([{ start: '00:00', limit: STRICTEST }], UNREADABLE, { value: true }); // not enumerable: the value equals [{ 00:00, G }]
+
+/** True when `slots` is the G-all-day schedule that sanitizeSlots put in place of an unreadable one (it is not yet saved). */
+export const wasUnreadable = (slots) => Boolean(slots?.[UNREADABLE]);
 
 /**
  * One raw slot as `{ start, limit, days? }` or, when it names a profile, `{ start, profile, days? }`; null when its time is unreadable
@@ -62,7 +71,7 @@ function cleanSlot(raw) {
  */
 export function sanitizeSlots(raw) {
   if (raw === undefined || raw === null) return [];
-  if (!Array.isArray(raw)) return unreadable();
+  if (!Array.isArray(raw) || wasUnreadable(raw)) return unreadable(); // a stand-in read again (settings are sanitised more than once) stays marked
   if (raw.length === 0) return [];
   const clean = raw.map(cleanSlot);
   if (clean.some((slot) => slot === null)) return unreadable();
