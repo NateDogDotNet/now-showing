@@ -648,3 +648,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
      - While an opened profile's genres load, the household's genres stay tickable for that moment (cold r3 Minor). The fix: clear the list when the load starts.
      - The "<name> kept" notice outlives Cancel and Save (walk r3 Minor 1). The fix: clear it when the sheet or a profile opens.
      - Nothing on screen says why a pinned poster stays up under a stricter profile (walk r3 Minor 2).
+
+## Conductor rulings — 2026-11-02 (release-2.3.0 pre-flight; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D124
+
+- **D124 release-2.3.0's Output gains `index.html` and `js/settings-ui.js`, for the Household section only.** Criterion 2 asks the notice's Open settings action to open Settings "at Household". The sheet can scroll only to the `protection` and `layout` sections (js/settings-ui.js `runOpenOptions`), and the Household fieldset has no id (index.html:204). The phase may give that fieldset an id and add a `household` branch beside the other two. It may change nothing else in either file. The D123 follow-ups stay follow-ups. Criterion 5's list gains the two paths. No other criterion changes.
