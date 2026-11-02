@@ -95,6 +95,14 @@
 
   <dialog id="settings" class="sheet" aria-labelledby="settings-title">
     <form id="settings-form" method="dialog" novalidate>
+        <div id="profile-banner" class="profile-banner" role="group" aria-labelledby="profile-banner-text" tabindex="-1" hidden>
+          <p id="profile-banner-text"></p>
+          <p id="profile-banner-error" class="error" role="alert" hidden></p>
+          <div class="profile-banner-actions">
+            <button type="button" class="btn primary" id="profile-done">Done</button>
+            <button type="button" class="btn" id="profile-discard">Discard</button>
+          </div>
+        </div>
       <header class="sheet-head">
         <h2 id="settings-title">Settings</h2>
         <p class="muted" id="first-run-hint" hidden>Welcome! Sign in with Plex (or enter a token and server URL), choose a library, then save.</p>
@@ -139,12 +147,33 @@
             <button type="button" class="btn" id="test-btn">Test connection</button>
           </div>
           <p id="test-result" class="test-result muted small" aria-live="polite"></p>
+        </fieldset>
 
-          <label>Library
-            <select name="libraryKey" id="library-select">
-              <option value="">— test the connection to load libraries —</option>
+        <fieldset id="selection-fieldset">
+          <legend>Poster selection</legend>
+          <div id="library-group" role="group" aria-labelledby="library-label">
+            <span id="library-label" class="field-label">Movie libraries</span>
+            <ul id="library-list" class="pick-list">
+              <li class="muted small">Test the connection to load your libraries.</li>
+            </ul>
+          </div>
+          <label>Posters from
+            <select id="source-select" aria-describedby="source-help">
+              <option value="">The libraries above</option>
             </select>
           </label>
+          <p id="source-help" class="muted small">A collection (smart or not) or a playlist replaces the libraries above and takes no genre.</p>
+          <div id="genre-group" role="group" aria-labelledby="genre-label">
+            <span id="genre-label" class="field-label">Genres <span id="genre-count" class="muted"></span></span>
+            <ul id="genre-list" class="pick-list pick-grid"></ul>
+            <p id="genre-help" class="muted small">None ticked: every genre.</p>
+          </div>
+          <div id="rating-group" role="group" aria-labelledby="rating-label">
+            <span id="rating-label" class="field-label">Ratings</span>
+            <ul id="rating-list" class="pick-list pick-row"></ul>
+            <p id="rating-help" class="muted small">None ticked: every rating the household limit allows. Ratings are offered up to the loosest of the limit and the time slots, and the limit in force always wins.</p>
+          </div>
+          <p class="muted small">The selection applies when you press Save.</p>
         </fieldset>
 
         <fieldset>
@@ -155,6 +184,17 @@
           </label>
           <label class="check"><input name="includeEpisodes" type="checkbox" /> Include TV episodes (shows the series poster)</label>
           <label class="check"><input name="unwatchedOnly" type="checkbox" /> Random posters: unwatched only</label>
+          <label>Favour in random posters
+            <select name="weighting" aria-describedby="weighting-help">
+              <option value="off">Nothing: every title equally</option>
+              <option value="unwatched">Unwatched titles first</option>
+              <option value="rated">Best reviewed first (audience score)</option>
+            </select>
+          </label>
+          <label>Keep a shown poster away for
+            <span class="input-row"><input name="noRepeatDays" type="number" min="0" max="30" step="1" aria-describedby="weighting-help" /> <span class="muted">days (0 = off)</span></span>
+          </label>
+          <p id="weighting-help" class="muted small">A favoured title is drawn more often, never certain, and favouring a title never lets in one that the household limit, a time slot or the poster selection leaves out. “Unwatched titles first” changes nothing while “unwatched only” above is ticked, because no watched title is in the pool. The days apply to this display only, and are remembered across reloads. When every title was shown within the days, the one shown longest ago comes back. Both apply when you press Save.</p>
           <div class="pinned">
             <span>Pinned poster: <strong id="pinned-title">none</strong></span>
             <button type="button" class="btn small" id="unpin-btn" hidden>Unpin</button>
@@ -162,9 +202,10 @@
           <p class="muted small">Pin the poster on screen with the pin button. A pinned poster stays up until unpinned (now playing still takes over if enabled).</p>
         </fieldset>
 
-        <fieldset>
+        <fieldset id="household-fieldset">
           <legend>Household</legend>
           <label class="check"><input id="household-toggle" type="checkbox" /> Household with children</label>
+          <p class="muted small">The rating limit, the times it changes during the day, and viewer profiles are set here.</p>
           <div id="household-options" hidden>
             <label>Show posters rated up to
               <select name="maxContentRating">
@@ -176,7 +217,31 @@
               </select>
             </label>
             <label class="check"><input name="limitNowPlaying" type="checkbox" /> Apply the limit to what's playing right now</label>
+
+            <div id="slot-editor" class="slot-editor" role="group" aria-labelledby="slot-label">
+              <span id="slot-label" class="field-label">Change the limit during the day</span>
+              <ul id="slot-list" class="slot-list"></ul>
+              <p id="slot-empty" class="muted small">No time slots: the limit above applies all day.</p>
+              <button type="button" class="btn small" id="slot-add">Add a time slot</button>
+              <p id="slot-help" class="muted small">A slot sets the limit from its start until the next slot starts, on the days you choose; where no slot applies, the limit above does. Slots apply when you press Save, and the line below describes the saved ones. If the clock is not set, the strictest limit applies. If you turn Household with children off, the slots and profiles are kept but not applied.</p>
+            </div>
+
+            <div id="profile-editor" class="profile-editor" role="group" aria-labelledby="profile-label">
+              <span id="profile-label" class="field-label">Profiles</span>
+              <ul id="profile-list" class="profile-list"></ul>
+              <p id="profile-empty" class="muted small">No profiles yet.</p>
+              <div class="profile-new">
+                <label>Profile name
+                  <input id="profile-name" type="text" maxlength="24" autocomplete="off" aria-describedby="profile-error profile-help" />
+                </label>
+                <button type="button" class="btn small" id="profile-add">New profile</button>
+              </div>
+              <p id="profile-error" class="error" role="alert" hidden></p>
+              <p id="profile-notice" class="muted small" role="status" aria-live="polite"></p>
+              <p id="profile-help" class="muted small">A profile keeps a limit (or no limit), the “Apply the limit to what’s playing right now” choice, a poster selection, the weighting and days, and a frame. “New profile” and “Edit” open the profile in this sheet: the controls show its values, your own household values are set aside, and “Done” saves the profile and puts them back. A time slot can use a profile instead of a limit, and while that slot is in force the profile’s settings replace the household’s, its limit too, even when the profile’s limit is looser; the status line under the slots says which limit is in force. Up to 6 profiles. Profiles apply only while “Household with children” is on, and everything here applies when you press Save.</p>
+            </div>
           </div>
+          <p id="slot-status" class="slot-status" aria-live="polite"></p>
           <p id="household-help" class="muted small">Posters above the limit are never shown, online or from the offline cache, and unrated titles are hidden too. The exceptions are a poster you pinned and saved, and the title playing right now when "Apply the limit to what's playing right now" is off.</p>
         </fieldset>
 

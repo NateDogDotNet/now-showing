@@ -1,7 +1,11 @@
 // Settings schema, persistence, legacy migration and import/export.
 // Everything is stored as one JSON blob so it can be exported and validated as a unit.
 
+import { sanitizeSlots } from './limit-schedule.js';
+import { cleanProfiles } from './profiles.js';
 import { parseHHMM } from './schedule.js';
+import { cleanGenres, cleanKeys, cleanNames, cleanRatings, cleanSource } from './selection.js';
+import { cleanDays, cleanWeighting } from './weighting.js';
 
 export const STORAGE_KEY = 'plexPoster.settings';
 export const EXPORT_FORMAT = 'plex-poster-display/settings';
@@ -36,6 +40,13 @@ const SCHEMA = {
   serverName: ['', str],
   libraryKey: ['', (v, d) => str(String(v ?? ''), d)],
   libraryName: ['', str],
+  // The poster selection (R-SEL-1, D107): the chosen movie libraries (libraryKey/libraryName always mirror the first), the genres and
+  // ratings that narrow them, or one collection/playlist that replaces them. Applied on Save, never live-previewed.
+  libraryKeys: [[], (v) => cleanKeys(v)],
+  libraryNames: [[], (v) => cleanNames(v)],
+  genres: [[], (v) => cleanGenres(v)],
+  ratings: [[], (v) => cleanRatings(v)],
+  source: [null, (v) => cleanSource(v)],
   username: ['', str],
 
   // What to show
@@ -43,6 +54,9 @@ const SCHEMA = {
   includeEpisodes: [true, bool],
   unwatchedOnly: [true, bool],
   randomPoolSize: [100, num(1, 1000)],
+  // Weighting and the no-repeat window (R-SEL-2, D113): which titles the pool leans toward, and how many whole days a shown title stays away. Applied on Save.
+  weighting: ['off', cleanWeighting],
+  noRepeatDays: [0, cleanDays],
   staticRatingKey: ['', (v, d) => str(String(v ?? ''), d)],
   staticTitle: ['', str],
 
@@ -79,6 +93,10 @@ const SCHEMA = {
   // An unknown limit (a typo, a hand-edited file) fails closed to PG-13, never to "no limit" (K21, D31). Absent stays ''.
   maxContentRating: ['', (v) => (['', 'G', 'PG', 'PG-13', 'R', 'NC-17'].includes(v) ? v : 'PG-13')],
   limitNowPlaying: [true, bool],
+  // The limit by time of day (R-FILT-2, D101): applied only while a household limit is set; no slots = the limit above all day.
+  limitSlots: [[], (v) => sanitizeSlots(v)],
+  // Viewer profiles (R-PROF-1, D117): named bundles of limit, now-playing rule, selection, weighting and frame, at most 6. A slot may name one. Applied on Save, never live-previewed.
+  profiles: [[], (v) => cleanProfiles(v)],
 
   // Display protection
   sleepEnabled: [false, bool],
@@ -116,21 +134,46 @@ export const SECRET_KEYS = ['plexToken'];
 /** PIN material: never written to an export and never accepted from an import file. */
 export const NEVER_EXPORT_KEYS = ['settingsPinHash', 'settingsPinSalt'];
 
+/** A default that is a list is copied, so no caller can change the schema's own. */
+const copyOf = (d) => (Array.isArray(d) ? [...d] : d);
+
 export function defaults() {
-  return Object.fromEntries(Object.entries(SCHEMA).map(([k, [d]]) => [k, d]));
+  return Object.fromEntries(Object.entries(SCHEMA).map(([k, [d]]) => [k, copyOf(d)]));
 }
 
 /** Returns a complete, valid settings object; unknown keys are dropped. */
 export function sanitize(input = {}) {
   const out = {};
   for (const [key, [def, fix]] of Object.entries(SCHEMA)) {
-    out[key] = key in input && input[key] !== undefined && input[key] !== null ? fix(input[key], def) : def;
+    out[key] = key in input && input[key] !== undefined && input[key] !== null ? fix(input[key], def) : copyOf(def);
   }
+  return reconcileLibraries(out);
+}
+
+/**
+ * libraryKey and libraryName are the first chosen library, so everything that reads one library (isConfigured, the Connected card,
+ * diagnostics) keeps working. A 2.2 object, with only libraryKey, becomes that one library in the list (D107 ruling 2). The names line
+ * up with the keys.
+ */
+function reconcileLibraries(out) {
+  if (!out.libraryKeys.length) {
+    if (out.libraryKey) {
+      out.libraryKeys = [out.libraryKey];
+      out.libraryNames = [out.libraryName];
+    } else {
+      out.libraryNames = [];
+    }
+    return out;
+  }
+  out.libraryNames = out.libraryKeys.map((_, i) => out.libraryNames[i] || '');
+  if (out.libraryKey && out.libraryKey !== out.libraryKeys[0]) out.libraryName = ''; // that name belonged to another library
+  out.libraryKey = out.libraryKeys[0];
+  out.libraryName = out.libraryNames[0] || out.libraryName;
   return out;
 }
 
 export function isConfigured(s) {
-  return Boolean(s.plexToken && s.serverUrl && (s.libraryKey || s.staticRatingKey));
+  return Boolean(s.plexToken && s.serverUrl && (s.libraryKey || s.staticRatingKey || s.source?.key)); // a collection or playlist is a source of its own
 }
 
 /**
@@ -227,6 +270,8 @@ export function fromImport(text, current = defaults()) {
   const known = Object.keys(incoming).filter((k) => k in SCHEMA && !NEVER_EXPORT_KEYS.includes(k));
   if (known.length === 0) throw new Error('No recognised settings in file.');
   const merged = { ...current };
+  // A 2.2-shaped file names one library: it replaces the whole selection (that library, no genres, no rating subset, no source), not just the list.
+  if (known.includes('libraryKey') && !known.includes('libraryKeys')) Object.assign(merged, { libraryKeys: [], libraryNames: [], genres: [], ratings: [], source: null });
   for (const k of known) merged[k] = incoming[k];
   return sanitize(merged);
 }

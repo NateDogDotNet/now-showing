@@ -8,7 +8,7 @@ There's no build step, no backend and no dependencies: just static files that ta
 
 ![Poster inside the marquee frame](assets/screenshots/portrait.png)
 
-> **Status of versions 2.1 and 2.2: 2.2.3 is the newest version, on `main` (the remote's arrow keys move between the control buttons; no tag, no GitHub release). 2.2.2 added the 30 s timeout of keyboard focus on the controls and made the mouse wheel count as activity. 2.2.1 was merged on 2026-10-18 through pull request #4. 2.2.0 was merged on 2026-10-18 through pull request #3. 2.1.0 was validated against a real Plex server; 2.1.1 and 2.2.x are tested against a mock Plex server only. Nothing has been run on a Raspberry Pi (D79).** Version 2.2.0 adds drag-and-nudge positioning (`js/position.js`), the landscape fill (`js/fill.js`) and the gap fill inside the frame (`js/layout.js` and `js/fill.js`). The code and its tests (`npm test`, `npm run test:e2e`) run against a mock Plex server, and on 2026-10-14 the app was also checked against a real Plex Media Server: all 17 core rows and the 15 extended rows that need no Pi passed. The 12 Raspberry Pi rows (V1-E11 to V1-E22) were skipped because no Pi was available, and the release was closed without them. Version 2.1.1 (merged on 2026-10-15 through pull request #2) added the 2.1.x fixes and split `js/main.js` into modules; the validation above was done on 2.1.0, not on 2.1.1 or 2.2.x. Anything below that nobody has checked on a Pi is tagged **(verify)**, which means "not yet verified": on a Raspberry Pi or, for one item, with data the test server lacks (the country-prefixed ratings, V1-E04). That covers every Chromium flag, policy and package name, and every OS and helper command. The checklists are in [`docs/validation/real-server-core.md`](docs/validation/real-server-core.md) and [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md). If a Pi row is ever run and passes, its tag comes off here.
+> **Status of versions 2.1 to 2.3: 2.3.0 is the newest version, on the branch `2.3`: it is not merged, has no tag and no GitHub release, and is tested against a mock Plex server only. It adds the rating schedule, poster selection, weighting with no repeats, and viewer profiles (see "Done in 2.3" in [`Roadmap.md`](Roadmap.md)). 2.2.3 is the newest version on `main` (the remote's arrow keys move between the control buttons; no tag, no GitHub release). 2.2.2 added the 30 s timeout of keyboard focus on the controls and made the mouse wheel count as activity. 2.2.1 was merged on 2026-10-18 through pull request #4. 2.2.0 was merged on 2026-10-18 through pull request #3. 2.1.0 was validated against a real Plex server; 2.1.1 and 2.2.x are tested against a mock Plex server only. Nothing has been run on a Raspberry Pi (D79).** Version 2.2.0 adds drag-and-nudge positioning (`js/position.js`), the landscape fill (`js/fill.js`) and the gap fill inside the frame (`js/layout.js` and `js/fill.js`). The code and its tests (`npm test`, `npm run test:e2e`) run against a mock Plex server, and on 2026-10-14 the app was also checked against a real Plex Media Server: all 17 core rows and the 15 extended rows that need no Pi passed. The 12 Raspberry Pi rows (V1-E11 to V1-E22) were skipped because no Pi was available, and the release was closed without them. Version 2.1.1 (merged on 2026-10-15 through pull request #2) added the 2.1.x fixes and split `js/main.js` into modules; the validation above was done on 2.1.0, not on 2.1.1 or 2.2.x. Anything below that nobody has checked on a Pi is tagged **(verify)**, which means "not yet verified": on a Raspberry Pi or, for one item, with data the test server lacks (the country-prefixed ratings, V1-E04). That covers every Chromium flag, policy and package name, and every OS and helper command. The checklists are in [`docs/validation/real-server-core.md`](docs/validation/real-server-core.md) and [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md). If a Pi row is ever run and passes, its tag comes off here.
 
 ---
 
@@ -37,7 +37,11 @@ There's no build step, no backend and no dependencies: just static files that ta
 | | |
 |---|---|
 | **Now playing** | Shows the poster of whatever is playing, optionally only for one Plex user. TV episodes show the series poster. |
-| **Random rotation** | When nothing is playing, cycles through the top-rated (optionally unwatched) titles of a library, avoiding recent repeats. |
+| **Random rotation** | When nothing is playing, cycles through the top-rated (optionally unwatched) titles of the libraries you choose, and avoids the last 10 shown by default (a number of days can be set instead). |
+| **Poster selection** | Settings > Poster selection: tick several movie libraries, narrow them to chosen genres and ratings, or show one Plex collection or playlist instead. The household limit stays a ceiling. (2.3.0) |
+| **Favour and no repeats** | Settings > What to show: favour unwatched titles or the best reviewed, and keep a shown poster away for 0 to 30 days, remembered across reloads. The household limit still decides what can show. (2.3.0) |
+| **Rating schedule** | Settings > Household > Change the limit during the day: up to 8 time slots, each with its own rating limit (for example G from 06:00, PG-13 from 15:00, no limit from 22:00), every day, weekdays or weekends. If the clock cannot be trusted, the strictest limit you have set applies (the base limit, every slot, and, when any slot names a profile, every profile). (2.3.0) |
+| **Viewer profiles** | Settings > Household: named profiles (for example Kids, Teens, Adults), each a limit, the now-playing rule, a poster selection, weighting and a frame. A time slot can switch to a profile. The limit in force stays a ceiling. (2.3.0) |
 | **Pin a poster** | Keeps one poster on screen until you unpin it. |
 | **Sign in with Plex** | Enter a 4-character code at [plex.tv/link](https://plex.tv/link) from your phone. The app finds your servers and picks a working address. A manual token and URL are still supported. |
 | **Code on the empty screen** | A display that is not set up yet asks plex.tv for a code by itself and shows it large on the empty screen. No keyboard needed. |
@@ -64,7 +68,7 @@ There's no build step, no backend and no dependencies: just static files that ta
 | **Import / export** | Settings as JSON (token optional), or drop a `config.json` beside the app to provision a device. |
 | **Diagnostics** | Connection state, cache, service worker, wake lock, sleep, daily reload and clock status, the CPU temperature when the helper is on, plus a log of recent events. |
 
-Position poster, Landscape fill and Gap fill are new in 2.2 (2.2.0, on `main`). See "Done in 2.2" in [`Roadmap.md`](Roadmap.md).
+Position poster, Landscape fill and Gap fill are new in 2.2 (2.2.0, on `main`). The poster selection, favouring and no repeats, the rating schedule and viewer profiles are new in 2.3 (2.3.0, on the branch `2.3`, not merged). See "Done in 2.2" and "Done in 2.3" in [`Roadmap.md`](Roadmap.md).
 
 ### Keyboard shortcuts
 
@@ -213,7 +217,7 @@ Settings > Display protection > **Recommended protection** lists what it will ch
 
 It **does not** turn on idle sleep, set a content limit, or change the connection, kiosk mode, the PIN or the helper. Use [Household with children](#accounts) and the [PIN](#kiosk) separately.
 
-After you upgrade a configured display to 2.2 (2.2.0), a toast "What's new in 2.2" with an **Open settings** button shows once; the button opens Settings at Frame & layout.
+After you upgrade a configured display to 2.3 (2.3.0), a toast "What's new in 2.3: rating limits by time of day, viewer profiles, and choosing which posters show, favouring unwatched ones." with an **Open settings** button shows once; the button opens Settings at Household, where the rating schedule and the profiles are. A new, unconfigured display shows nothing.
 
 #### Sleep
 
@@ -359,6 +363,8 @@ Plex's local network discovery does not cross VLANs and this app doesn't use it.
   - A playing TV episode is judged on the rating Plex sends for the episode itself.
   - While a limit is set the app re-checks the cached titles' ratings against Plex whenever it reloads the pool online (at most every 30 minutes), so a title Plex has since rated higher can't come back from the cache. A title Plex does not confirm is treated as unrated.
   - An unknown value in `maxContentRating` (a typo in `config.json`) becomes PG-13, never "no limit".
+  - **Rating schedule (2.3.0).** Under the limit, **Change the limit during the day** lists time slots (a start time, a limit or "No limit", and every day, weekdays or weekends). The slot in force replaces the limit above for as long as it lasts. A stricter slot takes a poster above it off the screen at once, and the offline cache follows the slot too. If the clock is not plausible, the strictest limit you have set applies (the base limit and every slot, and, when any slot names a profile, every profile); if the schedule cannot be read, G applies all day; unrated titles stay hidden in any slot that sets a limit. Only Settings, behind the PIN, changes the slots.
+  - **Viewer profiles (2.3.0).** A profile bundles a limit, the now-playing rule, a poster selection, weighting and a frame under a name. A time slot can name a profile instead of a limit. A profile's limit is a ceiling, with two exceptions that hold for the household limit too: a poster you pinned and saved stays up, and the title playing now shows when the profile's "apply the limit to what's playing" rule is off. A missing profile gives the strictest limit (G). Turning "Household with children" off keeps the slots and the profiles and applies neither.
 
   The app filters by itself, which is the guarantee. It also asks Plex to filter the pool; the parameter name and its comma-separated syntax (V1-E03) and the batched rating re-check (V1-E27) were checked against a real server. The country-prefixed values could not be: the test server stores none (V1-E04), so how Plex writes them is still **(verify)**. Recommended protection does not turn the limit on. Set a [PIN](#the-pin) so a child can't turn it off.
 
@@ -468,6 +474,10 @@ js/
   ratings.js            the content-rating ladder and country table; the one rule that allows or hides a rating (pure)
   settings.js           schema, validation, migration, import/export
   settings-ui.js        settings panel, Recommended protection, the plex.tv code flow
+  limit-schedule.js     which limit applies at a moment: the time slots, failing closed (pure) (2.3.0)
+  selection.js          poster selection: libraries, genres, ratings, a collection or playlist (pure) (2.3.0)
+  weighting.js          favouring unwatched or best reviewed titles, and the no-repeat window (pure) (2.3.0)
+  profiles.js           viewer profiles and the one resolver for the settings in force (pure) (2.3.0)
   position.js           position mode: drag or nudge the poster, the small bar (2.2.0)
   schedule.js           local-time helpers: windows across midnight, DST, plausible clock (pure)
   sleep.js              the sleep decision: schedule, idle, playback wake, manual wake (pure)

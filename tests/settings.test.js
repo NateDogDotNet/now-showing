@@ -104,7 +104,7 @@ const NEW_DEFAULTS = {
   pixelShift: true, pixelShiftMinutes: 3, frameBrightness: 100, nightDim: false, nightDimStart: '22:00',
   nightDimEnd: '07:00', nightDimLevel: 60, nightDimTarget: 'frame', dailyReload: true, dailyReloadTime: '04:00',
   kioskMode: false, disableShortcuts: false, settingsPinHash: '', settingsPinSalt: '', deviceHelper: false,
-  controlLabels: 'auto', showMeta: false, showProgress: true, showPlayer: false, fillMode: 'none', gapFill: 'none',
+  controlLabels: 'auto', limitSlots: [], showMeta: false, showProgress: true, showPlayer: false, fillMode: 'none', gapFill: 'none',
 };
 
 test('defaults table for the new keys', () => {
@@ -246,4 +246,176 @@ test('gapFill migrates: stored settings without it load as none; one saved with 
   assert.equal(fromImport(JSON.stringify(exported)).gapFill, 'blur');
   const bad = { format: 'plex-poster-display/settings', version: 1, settings: { rotateSeconds: 60, gapFill: 'sepia' } };
   assert.equal(fromImport(JSON.stringify(bad)).gapFill, 'none');
+});
+
+// ---- R-FILT-2 (D101): the time slots ----
+
+test('limitSlots survives save and load, an export and an import', () => {
+  const slots = [{ start: '06:00', limit: 'G' }, { start: '15:00', limit: 'PG-13', days: [1, 2, 3, 4, 5] }, { start: '22:00', limit: '' }];
+  const storage = memoryStorage();
+  save(storage, { ...defaults(), maxContentRating: 'PG-13', limitSlots: slots });
+  assert.deepEqual(load(storage).settings.limitSlots, slots);
+  const file = toExport({ ...defaults(), limitSlots: slots });
+  assert.deepEqual(file.settings.limitSlots, slots);
+  assert.deepEqual(fromImport(JSON.stringify(file), defaults()).limitSlots, slots);
+});
+
+test('limitSlots from storage written before 2.3 (no key) is no slots, which changes nothing', () => {
+  const storage = memoryStorage({ [STORAGE_KEY]: JSON.stringify({ maxContentRating: 'PG' }) });
+  const s = load(storage).settings;
+  assert.deepEqual(s.limitSlots, []);
+  assert.equal(s.maxContentRating, 'PG');
+});
+
+test('limitSlots from a hand-edited or corrupt file fails closed through the sanitiser', () => {
+  const bad = (limitSlots) => fromImport({ limitSlots }, defaults()).limitSlots;
+  assert.deepEqual(bad('06:00'), [{ start: '00:00', limit: 'G' }], 'not a list: the strictest limit all day');
+  assert.deepEqual(bad([{ start: '06:00', limit: 'bogus' }]), [{ start: '06:00', limit: 'G' }], 'unknown limit -> G');
+  assert.deepEqual(bad([{ start: '06:00', limit: 'R' }, { start: '25:00', limit: '' }]), [{ start: '00:00', limit: 'G' }], 'an unreadable time: the whole schedule is G all day, no slot dropped');
+  assert.deepEqual(bad(Array.from({ length: 20 }, (_, i) => ({ start: `${String(i).padStart(2, '0')}:00`, limit: 'PG' }))), [{ start: '00:00', limit: 'G' }], 'more than 8 slots: G all day');
+  const storage = memoryStorage({ [STORAGE_KEY]: JSON.stringify({ maxContentRating: 'R', limitSlots: { start: '06:00' } }) });
+  assert.deepEqual(load(storage).settings.limitSlots, [{ start: '00:00', limit: 'G' }]);
+});
+
+test('limitSlots: the default list is not shared between callers', () => {
+  const a = defaults();
+  a.limitSlots.push({ start: '06:00', limit: 'G' });
+  assert.deepEqual(defaults().limitSlots, []);
+  const b = sanitize({});
+  b.limitSlots.push({ start: '06:00', limit: 'G' });
+  assert.deepEqual(sanitize({}).limitSlots, []);
+});
+
+// ---- the poster selection (R-SEL-1, D107) ----
+
+import { selectionOf } from '../js/selection.js';
+
+test('the selection keys default to nothing chosen', () => {
+  const d = defaults();
+  assert.deepEqual([d.libraryKeys, d.libraryNames, d.genres, d.ratings, d.source], [[], [], [], [], null]);
+});
+
+test('settings saved before 2.3 with only libraryKey load as that one library and nothing else changes', () => {
+  const storage = memoryStorage({ 'plexPoster.settings': JSON.stringify({ plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryName: 'Movies', maxContentRating: 'PG' }) });
+  const { settings, source } = load(storage);
+  assert.equal(source, 'storage');
+  assert.deepEqual([settings.libraryKeys, settings.libraryNames, settings.libraryKey, settings.libraryName], [['1'], ['Movies'], '1', 'Movies']);
+  assert.deepEqual([settings.genres, settings.ratings, settings.source], [[], [], null]);
+  const before = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryName: 'Movies', maxContentRating: 'PG' };
+  for (const k of Object.keys(before)) if (!['libraryKeys', 'libraryNames'].includes(k)) assert.deepEqual(settings[k], before[k], `${k} unchanged`);
+  assert.deepEqual(selectionOf(settings), { libraries: [{ key: '1', name: 'Movies' }], genres: [], ratings: [], source: null });
+});
+
+test('a library list sets libraryKey and libraryName to its first library, and the names line up with the keys', () => {
+  const s = sanitize({ libraryKeys: ['3', '1'], libraryNames: ['Kids Movies', 'Movies'], libraryKey: '9', libraryName: 'Old' });
+  assert.deepEqual([s.libraryKey, s.libraryName], ['3', 'Kids Movies']);
+  assert.deepEqual(sanitize({ libraryKeys: ['1', '3'], libraryNames: ['A'] }).libraryNames, ['A', '']);
+  assert.deepEqual(sanitize({ libraryKeys: ['1'], libraryNames: ['A', 'B', 'C'] }).libraryNames, ['A']);
+  const unnamed = sanitize({ libraryKeys: ['1'], libraryName: 'Movies' });
+  assert.equal(unnamed.libraryName, 'Movies', 'a first library with no recorded name keeps the stored name');
+  assert.deepEqual(sanitize({ libraryKeys: ['', ' '] }).libraryKeys, []);
+});
+
+test('an empty library list leaves libraryKey alone (that is a 2.2 file)', () => {
+  const s = sanitize({ libraryKeys: [], libraryKey: '4', libraryName: 'Four' });
+  assert.deepEqual([s.libraryKeys, s.libraryNames, s.libraryKey], [['4'], ['Four'], '4']);
+});
+
+test('genres, ratings and a source survive save and load, an export and an import', () => {
+  const chosen = {
+    libraryKeys: ['1', '3'], libraryNames: ['Movies', 'Kids Movies'],
+    genres: [{ key: '12', title: 'Comedy' }], ratings: ['G', 'PG'], source: { kind: 'collection', key: '102', title: 'Top Rated' },
+  };
+  const storage = memoryStorage();
+  save(storage, { ...defaults(), ...chosen });
+  const back = load(storage).settings;
+  for (const [k, v] of Object.entries(chosen)) assert.deepEqual(back[k], v, k);
+  const file = toExport({ ...defaults(), ...chosen });
+  for (const [k, v] of Object.entries(chosen)) assert.deepEqual(file.settings[k], v, `export ${k}`);
+  const imported = fromImport(JSON.stringify(file), defaults());
+  for (const [k, v] of Object.entries(chosen)) assert.deepEqual(imported[k], v, `import ${k}`);
+});
+
+test('junk in the selection keys is nothing chosen', () => {
+  const s = sanitize({ libraryKeys: 'x', libraryNames: 4, genres: 'Comedy', ratings: ['XX', 3], source: { kind: 'album', key: '1' } });
+  assert.deepEqual([s.libraryKeys, s.libraryNames, s.genres, s.ratings, s.source], [[], [], [], [], null]);
+  assert.deepEqual(sanitize({ ratings: ['R', 'G', 'G'] }).ratings, ['G', 'R']);
+});
+
+test('a hand-written 2.2 file that sets libraryKey replaces a chosen library list instead of being overruled by it', () => {
+  const current = sanitize({ ...defaults(), libraryKeys: ['1', '3'], libraryNames: ['Movies', 'Kids Movies'] });
+  const s = fromImport(JSON.stringify({ libraryKey: '3' }), current);
+  assert.deepEqual([s.libraryKey, s.libraryKeys], ['3', ['3']]);
+  const both = fromImport(JSON.stringify({ libraryKey: '9', libraryKeys: ['1'] }), current);
+  assert.deepEqual(both.libraryKeys, ['1'], 'a file that sends the list is the list');
+  const other = fromImport(JSON.stringify({ rotateSeconds: 60 }), current);
+  assert.deepEqual(other.libraryKeys, ['1', '3'], 'a file that says nothing about the library leaves it');
+});
+
+test('library names with no library are dropped, and a stale libraryName never labels another library', () => {
+  assert.deepEqual(sanitize({ libraryNames: ['Orphan'] }).libraryNames, []);
+  const s = sanitize({ libraryKey: '9', libraryName: 'Old nine', libraryKeys: ['1'] });
+  assert.deepEqual([s.libraryKey, s.libraryName, s.libraryNames], ['1', '', ['']]);
+});
+
+test('r2 gap 3: a 2.2 file that sets only libraryKey replaces the whole selection: that library, no genres, no rating subset, no source', () => {
+  const current = sanitize({
+    ...defaults(), libraryKeys: ['1', '3'], libraryNames: ['Movies', 'Kids Movies'], genres: [{ key: '12', title: 'Comedy' }], ratings: ['G'], source: { kind: 'collection', key: '102', title: 'Top Rated' },
+  });
+  const s = fromImport(JSON.stringify({ libraryKey: '3', libraryName: 'Kids Movies' }), current);
+  assert.deepEqual([s.libraryKey, s.libraryKeys, s.libraryNames, s.genres, s.ratings, s.source], ['3', ['3'], ['Kids Movies'], [], [], null]);
+  // The legacy per-key shape is a 2.2 file too.
+  const legacy = fromImport(JSON.stringify({ LIBRARY_KEY: '1' }), current);
+  assert.deepEqual([legacy.libraryKeys, legacy.genres, legacy.ratings, legacy.source], [['1'], [], [], null]);
+  // A file that sends any selection key keeps what it does not send, and one that says nothing about the library changes nothing.
+  assert.deepEqual(fromImport(JSON.stringify({ libraryKey: '3', genres: [{ key: '', title: 'Drama' }] }), current).genres, [{ key: '', title: 'Drama' }]);
+  const other = fromImport(JSON.stringify({ rotateSeconds: 60 }), current);
+  assert.deepEqual([other.genres, other.ratings, other.source.key], [[{ key: '12', title: 'Comedy' }], ['G'], '102']);
+});
+
+test('r2 gap 7: a collection or playlist is enough to be configured, a library or a pin is not needed', () => {
+  const base = { ...defaults(), plexToken: 't', serverUrl: 'http://s' };
+  assert.equal(isConfigured({ ...base, source: { kind: 'collection', key: '102', title: 'Top Rated' } }), true);
+  assert.equal(isConfigured(sanitize({ ...base, source: { kind: 'playlist', key: '201' } })), true);
+  assert.equal(isConfigured({ ...base, source: null }), false);
+  assert.equal(isConfigured({ ...base, source: { kind: 'collection', key: '' } }), false, 'no key: not a source');
+  assert.equal(isConfigured({ plexToken: '', serverUrl: 'http://s', source: { kind: 'collection', key: '1' } }), false, 'still needs the connection');
+});
+
+// ---- weighting and the no-repeat window (R-SEL-2, D113) ----
+
+test('weighting defaults to off and the no-repeat window to 0 days, and a 2.2 object loads with exactly those', () => {
+  const d = defaults();
+  assert.equal(d.weighting, 'off');
+  assert.equal(d.noRepeatDays, 0);
+  const old = sanitize({ plexToken: 't', serverUrl: 'http://x', libraryKey: '1' });
+  assert.equal(old.weighting, 'off');
+  assert.equal(old.noRepeatDays, 0);
+});
+
+test('weighting is one of off / unwatched / rated; anything else is off', () => {
+  for (const v of ['off', 'unwatched', 'rated']) assert.equal(sanitize({ weighting: v }).weighting, v);
+  for (const v of ['Rated', 'on', '', 3, true, ['rated'], {}]) assert.equal(sanitize({ weighting: v }).weighting, 'off', JSON.stringify(v));
+});
+
+test('the no-repeat window is whole days, clamped to 0 to 30; junk is 0', () => {
+  assert.equal(sanitize({ noRepeatDays: 3 }).noRepeatDays, 3);
+  assert.equal(sanitize({ noRepeatDays: '14' }).noRepeatDays, 14);
+  assert.equal(sanitize({ noRepeatDays: 2.5 }).noRepeatDays, 3);
+  assert.equal(sanitize({ noRepeatDays: -1 }).noRepeatDays, 0);
+  assert.equal(sanitize({ noRepeatDays: 99 }).noRepeatDays, 30);
+  for (const v of ['', 'soon', true, [], {}, NaN]) assert.equal(sanitize({ noRepeatDays: v }).noRepeatDays, 0, JSON.stringify(v));
+});
+
+test('the two keys are saved, loaded, exported and imported with the other settings; the shown record is not a setting', () => {
+  const storage = memoryStorage();
+  save(storage, { ...defaults(), weighting: 'rated', noRepeatDays: 7 });
+  const { settings } = load(storage);
+  assert.deepEqual([settings.weighting, settings.noRepeatDays], ['rated', 7]);
+  const exported = toExport(settings);
+  assert.deepEqual([exported.settings.weighting, exported.settings.noRepeatDays], ['rated', 7]);
+  const back = fromImport(JSON.stringify(exported), defaults());
+  assert.deepEqual([back.weighting, back.noRepeatDays], ['rated', 7]);
+  assert.ok(!/shownAt/.test(JSON.stringify(exported)), 'the last-shown record is never exported');
+  assert.ok(!Object.keys(settings).some((k) => /shownAt|history/i.test(k)));
 });

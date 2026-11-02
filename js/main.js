@@ -13,7 +13,10 @@ import { createPosterPin } from './poster-pin.js';
 import { allows } from './ratings.js';
 import { createReload, takeCarriedPlayback } from './reload.js';
 import { requestSize } from './layout.js';
+import { createLimitWatch } from './limit-schedule.js';
+import { anyWindow, resolveSettings } from './profiles.js';
 import { isPlausibleClock } from './schedule.js';
+import { posterMatches, selectionKey, selectionOf } from './selection.js';
 import { createSettingsUI, pinSignIn } from './settings-ui.js';
 import { fromImport, isConfigured, load, save, STORAGE_KEY } from './settings.js';
 import { keyMap, listShortcuts, normalizeKey } from './shortcuts.js';
@@ -21,7 +24,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.2.3';
+export const VERSION = '2.3.0';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -76,6 +79,7 @@ function rebuildClient() {
         // D37: while a limit is set, each online pool load re-confirms the cached titles' ratings.
         cachedKeys: () => cache.entries().map((e) => e.ratingKey),
         onRatings: (posters) => cache.refreshRatings(posters),
+        onMembers: (id, keys) => cache.syncMembers(id, keys), // a collection or playlist listed online: entries that left it lose the membership
       })
     : null;
   state.directImages = false;
@@ -102,12 +106,28 @@ const cachedBlobs = new WeakSet(); // blobs served from the poster cache (not fr
 
 // ---------- Household limit on what is already on screen ----------
 
+/**
+ * The settings in force now (R-FILT-2, R-PROF-1, js/profiles.js): the stored settings with the household limit in force and, while a
+ * slot names a profile, that profile's selection, weighting, now-playing rule and frame. Every reader of the limit, the selection or the
+ * frame in this file calls this; `state.settings.maxContentRating` is only the base limit and is not read for a decision.
+ */
+const inForceSettings = () => resolveSettings(state.settings, new Date());
+const limitNow = () => inForceSettings().maxContentRating;
+
 /** May this poster stay on screen under the current settings? A pinned poster is exempt (D5), and so is a now-playing one unless `limitNowPlaying` is on. */
 function allowedOnScreen(poster) {
   const s = state.settings;
-  if (allows(s.maxContentRating, poster.contentRating)) return true;
+  const inForce = inForceSettings();
+  if (allows(inForce.maxContentRating, poster.contentRating)) return true;
   if (s.staticRatingKey && poster.ratingKey === s.staticRatingKey) return true;
-  return poster.source === 'now-playing' && s.limitNowPlaying === false;
+  return poster.source === 'now-playing' && inForce.limitNowPlaying === false;
+}
+
+/** Does the poster still belong to the selection in force? Only a random or cached poster is the selection's to judge: the pinned one (a random poster that was pinned in place) and a now-playing one are not (D5). */
+function inSelectionNow(poster) {
+  if (state.settings.staticRatingKey && poster.ratingKey === state.settings.staticRatingKey) return true; // the poster pinned with the Pin button stays, whatever its source (D5, D122 1)
+  const inForce = inForceSettings();
+  return posterMatches(selectionOf(inForce), inForce.maxContentRating, poster);
 }
 
 // The poster that the last crossfade replaced: its layer may still be fading out when the limit changes (C7M1).
@@ -142,6 +162,31 @@ function blockPoster() {
   display.setNowPlaying(null);
 }
 
+/** Whatever is on screen is checked against the limit in force now: a poster that is not allowed comes off at once, a fading one is cut. */
+function enforceOnScreen() {
+  if (display.currentPoster && !allowedOnScreen(display.currentPoster)) blockPoster();
+  else cutOutgoing(); // a poster still fading out under a crossfade is not allowed to finish its fade (C7M1)
+}
+
+// The slot in force changes at a slot boundary with no Save and no reload. A one second check (as sleep and the daily reload
+// use) follows the clock through sleep, wake, a tab left hidden and a clock that jumps; it needs no timer to re-arm. A stricter
+// limit takes the poster off at once, exactly as a Save does, and a forced tick draws its replacement; a looser one waits for the next rotation.
+const limitWatch = createLimitWatch({
+  getSettings: () => state.settings,
+  onChange: () => {
+    enforceOnScreen();
+    // A boundary that changes the profile (D117 7): a poster the new profile's selection does not allow comes off at once, as one above
+    // the limit does; an allowed one stays. This comes before the frame is applied, which may wait on a custom image.
+    if (display.currentPoster && !inSelectionNow(display.currentPoster)) blockPoster();
+    display.apply(inForceSettings()).catch((err) => log.warn(err.message)); // a new frame applies without a reload; weighting and the pool follow at the next draw
+    // A boundary replaces the poster on screen only when it is no longer allowed (D105): an allowed poster stays, paused or not,
+    // and a looser limit takes effect at the next rotation (the pool key already follows the limit in force).
+    if (display.currentPoster) return;
+    if (state.busy) state.forceAfter = true; // a tick already running began under the old limit
+    tick({ force: true });
+  },
+});
+
 /**
  * The progress bar and player label follow the session the engine saw this tick, but only while that very
  * session's poster is on screen and allowed there (the engine already drops a title the limit hides).
@@ -159,13 +204,13 @@ function updateNowPlaying() {
  * must then not mark it shown (the next tick picks another). A successful draw ends a block.
  */
 async function showPoster(poster, image) {
-  if (!allowedOnScreen(poster)) return false;
+  if (!allowedOnScreen(poster) || !inSelectionNow(poster)) return false; // a draw that finishes after a boundary meets the selection in force now (D120 6)
   document.querySelectorAll('.poster-layer.cut').forEach((img) => img.classList.remove('cut'));
   const outgoing = display.currentPoster;
   await display.show(poster, image);
   lastDrawAt = performance.now();
-  if (!allowedOnScreen(poster)) {
-    blockPoster(); // the limit was tightened during the decode
+  if (!allowedOnScreen(poster) || !inSelectionNow(poster)) {
+    blockPoster(); // the limit was tightened, or the selection changed, during the decode
     return false;
   }
   outgoingPoster = outgoing;
@@ -288,7 +333,7 @@ async function handleFailure(err, { notify = false } = {}) {
   const due = !current || Date.now() - (current.shownAt || 0) >= state.settings.rotateSeconds * 1000;
   if (due && !fatal && !state.asleep) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const cached = await cache.random(current?.ratingKey, state.settings.maxContentRating).catch(() => null);
+      const cached = await cache.random(current?.ratingKey, limitNow(), selectionOf(inForceSettings())).catch(() => null);
       if (!cached) break;
       try {
         if (!(await showPoster(cached.poster, cached.blob))) continue; // no longer allowed: not drawn, not shown
@@ -302,10 +347,14 @@ async function handleFailure(err, { notify = false } = {}) {
       break;
     }
   }
+  // A saved selection that draws nothing takes a poster that no longer belongs to it off, so the empty card can name the selection;
+  // a poster that still matches stays (D110 item 1).
+  if (err.kind === 'empty' && display.currentPoster && !posterMatches(selectionOf(inForceSettings()), limitNow(), display.currentPoster)) blockPoster();
   if (!display.currentPoster) {
     // The limit is the reason only when it emptied the cache: posters are cached, and none of them passes it (D73).
     const stored = cache.entries();
-    const limited = state.settings.maxContentRating && !fatal && stored.length > 0 && !stored.some((e) => allows(state.settings.maxContentRating, e.contentRating));
+    const limit = limitNow();
+    const limited = limit && !fatal && stored.length > 0 && !stored.some((e) => allows(limit, e.contentRating));
     showEmpty(true, limited ? 'No posters within the household limit are available while Plex is unreachable.' : err.message, err.kind);
   }
   // A refresh somebody asked for that fails with a poster still on screen has nothing else to say so: the toast carries the fixes.
@@ -325,7 +374,16 @@ const reload = createReload({ state, storage, log, getLastDrawAt: () => lastDraw
 setInterval(reload.dailyReloadTick, 1000);
 const tv = createTvPower({ state, helper, tick, diagnosticsOpen: () => $('diagnostics').open, renderDiagnostics });
 const sleepControl = createSleepControl({ state, log, $, tick, syncFirstRun, tv, reload, brightness, getClient: () => client, getEngine: () => engine });
-setInterval(sleepControl.evaluateSleep, 1000);
+// One timer serves both once-a-second checks (the page has no more one-second timers than it had before the limit watch). The limit watch
+// runs first, in its own try/catch, so an error in either can never skip the other.
+setInterval(() => {
+  try {
+    limitWatch.check();
+  } catch (err) {
+    log.warn(`Limit check failed: ${err.message}`);
+  }
+  sleepControl.evaluateSleep();
+}, 1000);
 sleepControl.listenForManualWake();
 
 // ---------- Errors carry their fix (R-SET-6) ----------
@@ -437,19 +495,24 @@ function setPaused(paused) {
 
 async function applySettings(next, { persist = true, preview = false, restartIdle = true } = {}) {
   const prev = state.settings;
-  // A live preview shows layout only. The household limit and the pin are never previewed (CCI1, C6I1): while the
+  const before = resolveSettings(prev, new Date()); // what was in force before this apply, at the same instant
+  // A live preview shows layout only. The household limit, its time slots, the profiles, the poster selection and the pin are never previewed (CCI1, C6I1): while the
   // dialog is open the previous, saved values keep applying, so only Save changes them and Cancel has nothing to undo
   // (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the
   // kiosk switches, the settings PIN and the device helper: an unsaved change to any of them is never in force. The Display
   // protection fieldset is not live either (K30): a pixel-shift or daily-reload change waits for Save, even when a live
   // layout field moves while it is unsaved. The brightness controls are their own live block and are not listed here.
   if (preview) {
-    const { maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
+    const { maxContentRating, limitSlots, profiles, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
     const { pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime } = prev;
+    const { libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source } = prev; // the selection (R-SEL-1, D101 ruling 6)
+    const { weighting, noRepeatDays } = prev; // an unsaved window of 0 must not reach the engine, which would clear the saved record (D114 1, D116 1)
     next = {
       ...next,
-      ...{ maxContentRating, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper },
+      ...{ maxContentRating, limitSlots, profiles, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper },
       ...{ pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime },
+      ...{ libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source },
+      ...{ weighting, noRepeatDays },
     };
   }
   state.settings = persist ? save(storage, next) : next;
@@ -458,10 +521,9 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   // Whatever is on screen is re-checked against the settings now in force on EVERY apply, previews and Cancel
   // included, even offline (K20, D29). This comes BEFORE the frame is applied, because a custom frame's load has no
   // timeout and must not keep an above-limit poster on screen.
-  if (display.currentPoster && !allowedOnScreen(display.currentPoster)) blockPoster();
-  else cutOutgoing(); // a poster still fading out under a crossfade is not allowed to finish its fade (C7M1)
+  enforceOnScreen();
   try {
-    await display.apply(state.settings);
+    await display.apply(inForceSettings()); // the frame in force: the profile's while a slot names one
   } catch (err) {
     log.warn(err.message);
     if (!preview) toast(err.message);
@@ -470,10 +532,12 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
 
   // The Plex client is rebuilt BEFORE evaluateSleep() below (C8M2, D28): when this Save is what wakes the display, the
   // wake tick must already use the new connection, not read a session or a pool from the old one.
-  const connectionChanged = ['plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some(
-    (k) => prev[k] !== state.settings[k],
-  );
+  // The poster selection compares by what it draws, not by object: every Save makes new lists.
+  const connectionChanged =
+    ['plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some((k) => prev[k] !== state.settings[k]) ||
+    selectionKey(selectionOf(before)) !== selectionKey(selectionOf(inForceSettings())); // what is drawn: the profile's selection while a slot names one
   if (connectionChanged || !engine) rebuildClient();
+  if (!anyWindow(state.settings)) engine?.clearShown(); // no window anywhere keeps no record, so raising one later starts empty (D116 2); one profile's 0 clears nothing (D120 5)
 
   document.body.classList.toggle('hide-cursor', state.settings.hideCursor);
   if (prev.kioskMode !== state.settings.kioskMode) {
@@ -496,7 +560,12 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   }
   // Online, the forced tick below picks the replacement for a blocked poster; offline, handleFailure shows an
   // allowed cached poster or the empty card.
-  const limitChanged = ['maxContentRating', 'limitNowPlaying'].some((k) => prev[k] !== state.settings[k]);
+  // Slots are compared by what they do now: the limit in force before and after this Save (the same instant). When it differs the
+  // watch adopts it here, so the next check does not report the same change again with a second forced draw.
+  const after = inForceSettings();
+  const inForceChanged = before.maxContentRating !== after.maxContentRating;
+  if (inForceChanged) limitWatch.sync();
+  const limitChanged = inForceChanged || ['maxContentRating', 'limitNowPlaying'].some((k) => prev[k] !== state.settings[k] || before[k] !== after[k]);
   // A tick already running began before this save and may not honour it, so a forced tick is queued for when it ends.
   const force = connectionChanged || limitChanged;
   if (force && state.busy) state.forceAfter = true;
@@ -968,6 +1037,7 @@ async function updateWakeLock() {
 document.addEventListener('visibilitychange', () => {
   updateWakeLock();
   if (document.visibilityState === 'visible') brightness.evaluate();
+  if (document.visibilityState === 'visible') limitWatch.check(); // a hidden tab's timers are slowed: catch up with the clock now
   if (document.visibilityState === 'visible' && !state.paused && state.nextAt && Date.now() >= state.nextAt - 1000) tick();
 });
 window.addEventListener('online', () => {
@@ -1177,23 +1247,24 @@ async function boot() {
   announceWhatsNew();
 }
 
-// ---------- The upgrade notice (R-UPG-2) ----------
+// ---------- The upgrade notice (R-UPG-3) ----------
 
 const WHATS_NEW_KEY = 'plexPoster.whatsNew';
-const WHATS_NEW_VERSION = '2.2';
+const WHATS_NEW_VERSION = '2.3';
 
 /**
  * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new
- * and pointed at the Frame & layout fieldset (through the normal PIN gate). An unconfigured one is a fresh install, not an
- * upgrade, so it shows nothing. Either way the marker is written, so it never shows again. The 2.1 notice is retired.
+ * and pointed at the Household fieldset (through the normal PIN gate), where the rating schedule and viewer profiles live.
+ * An unconfigured one is a fresh install, not an upgrade, so it shows nothing. Either way the marker is written, so it
+ * never shows again. The 2.2 notice is retired.
  */
 function announceWhatsNew() {
   if (storage.getItem(WHATS_NEW_KEY) === WHATS_NEW_VERSION) return;
   storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION);
   if (!isConfigured(state.settings)) return;
-  toast("What's new in 2.2: drag the poster into place, and fill the empty space around it.", {
+  toast("What's new in 2.3: rating limits by time of day, viewer profiles, and choosing which posters show, favouring unwatched ones.", {
     action: 'Open settings',
-    onAction: () => requestSettings({ section: 'layout' }),
+    onAction: () => requestSettings({ section: 'household' }),
     ms: 20_000,
   });
 }

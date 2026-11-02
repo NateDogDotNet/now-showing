@@ -83,37 +83,49 @@ The three polish items carried from 2.2 are fixed, and the controls now hide aga
 - **Controls hide again (D96)**: the owner reported "They work until I go into settings and come out again then the controls always show and never go away". The controls now hide about 3.5 s after Settings, Diagnostics or the shortcuts overlay closes, and after a touch tap on any control. Focus inside the controls holds them only for a keyboard user (a Tab outside a dialog; a pointer press or a real mouse move ends it).
 - **Version**: 2.2.1 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new in 2.2" notice is unchanged.
 
+## ✅ Done in 2.3 (2.3.0, on `2.3`)
+
+Four 2.3 features and the upgrade notice are built and tested (D101). Version 2.3.0 is on the branch `2.3`. It is **not merged**, has **no tag** and no GitHub release, and nothing was made public (D13, D79). It is tested against the mock Plex server only, and nothing has been run on a Raspberry Pi. In every feature below, the household limit in force (the base limit, or the slot or profile in force) stays a ceiling and always wins (D5): nothing here lets in a title that limit hides, an implausible clock gives the strictest limit the household has set (the base limit and every slot, and, when any slot names a profile, every profile), and an unreadable schedule or a missing profile gives G. Two things stay outside a profile's limit, as they are outside the household limit: an owner-pinned poster (D5, D32), and the title playing now when the profile's now-playing rule is off.
+
+- **Rating schedule (D102–D106)**: Settings > Household > **Change the limit during the day**. A household sets up to 8 time slots, each with a start time, a limit (or "No limit") and Every day, Weekdays or Weekends, for example G from 06:00, PG-13 from 15:00 and no limit from 22:00. The slot in force replaces the base limit while it lasts; a day with no slot yet takes the carry-over from yesterday's slots, never looser than the base limit unless a slot runs on from yesterday. At a change to a stricter limit a poster above it leaves the screen at once, and the offline cache is filtered by the slot in force. The editor says what applies now.
+- **Poster selection (D107–D112)**: Settings > Poster selection. Tick several movie libraries (each library's share of the pool follows its title count), narrow them to chosen genres and ratings, or take one Plex collection (smart or not) or one playlist as the source. Settings saved before 2.3 with one library load as that one library. This is Step 1 only; the in-app rule builder (Step 2) and multiple servers are not in 2.3.
+- **Weighting and no repeats (D113–D116)**: Settings > What to show. **Favour in random posters** leans the draw toward unwatched titles or the best reviewed (by audience score), never to certainty; **Keep a shown poster away for** N days (0 to 30, 0 = off) is remembered across reloads, and when every title was shown within the days, the one shown longest ago comes back. Favouring never lets in a title that the limit, a slot or the selection leaves out.
+- **Viewer profiles (D117–D123)**: Settings > Household. A profile (for example Kids, Teens, Adults) bundles a limit, the now-playing rule, a poster selection, weighting and a frame. It is edited apart from the household's own values, and a time slot can name a profile instead of a bare limit. A missing profile gives G. With "Household with children" off, slots and profiles are kept and not applied. A profile that follows the Plex Home user now playing, and music and captions in a profile, are not in 2.3.
+- **Upgrade notice (R-UPG-3)**: a configured display upgraded to 2.3 shows a one-time "What's new in 2.3" toast whose **Open settings** button opens Settings (behind the PIN when one is set) at Household. A new, unconfigured display shows nothing. It replaces the 2.2 notice.
+- **Version**: 2.3.0 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`.
+- **Still to check on a real server** (carried into `docs/validation/real-server-extended.md`): the Plex `genre` filter and the collection and playlist endpoints are (verify) items; nothing in 2.3 was run against a real Plex Media Server.
+
 ## 🧭 Suggested order
 
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
 
 1. **2.1.x:** done (2.1.1), including the `js/main.js` split that the source-adapter work needed first.
-2. **2.2:** drag-and-nudge positioning, the landscape fill and the gap fill are done (2.2.0), and so are the point releases 2.2.1 to 2.2.3 (polish, and the controls on mouse, keyboard and TV remote), all on `main`; next, roughly in this order: the rating schedule, poster selection (libraries, genres, ratings) with weighting and no repeats, viewer profiles (a profile bundles a selection and a limit), "On this day", the playlist and Find a poster (they share the list storage), frame and marquee styles with the marquee captions and info captions, poster transitions, touch gestures (which reuse the transitions' slide and the styles), and theme music. The playlist stores each entry as source plus item ID, never a Plex-only key, so it keeps working once other sources exist.
-3. **2.3:** the source-adapter refactor with Plex as the first adapter and no change in behaviour, then Jellyfin, then Emby (close to Jellyfin's API); multiple servers in poster selection; Play now; the movie-night countdown; birthday and occasion mode; and the Picture frame sources (Plex Photos first, then a folder and Immich, then museum art). Every adapter maps its own ratings for the household limit and fails closed, with its own adversarial review.
-4. **2.4:** the no-server mode as a TMDB adapter. It needs the adapter layer, a TMDB key the user supplies (stored like the Plex token), TMDB's attribution, a certification mapping for the household limit, and it has no now-playing. Clear-logo marquees, poster artwork sources and the filter on any production house come with it; Coming Soon for titles not in the library comes after 2.4.
-5. **3.0:** Browse first mode (with the Browse button in poster mode), the main-screen choice (Posters, Browse first, Picture frame, Home controls) and Home controls. It is built from Find a poster, the gestures and Play now, so it comes after them.
-6. **Later:** the rest of the Ideas. Multiple displays comes last among the large features, lowest risk first (Change together and Mirror, then Chain, then Controller), because Controller opens the largest attack surface. It needs the source adapters' item IDs first (the `js/main.js` split is done in 2.1.1).
+2. **2.2:** done: drag-and-nudge positioning, the landscape fill and the gap fill (2.2.0), and the point releases 2.2.1 to 2.2.3 (polish, and the controls on mouse, keyboard and TV remote), all on `main`.
+3. **2.3:** done, on the branch `2.3` and not merged: the rating schedule, poster selection (Step 1), weighting and no repeats, and viewer profiles, with the "What's new in 2.3" notice. What the 2.2 plan listed after these ("On this day", the playlist and Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music) was not part of 2.3 and is still ahead, with no release number yet.
+4. **2.4:** the source-adapter refactor with Plex as the first adapter and no change in behaviour, then Jellyfin, then Emby (close to Jellyfin's API); multiple servers in poster selection; Play now; the movie-night countdown; birthday and occasion mode; and the Picture frame sources (Plex Photos first, then a folder and Immich, then museum art). Every adapter maps its own ratings for the household limit and fails closed, with its own adversarial review.
+5. **2.5:** the no-server mode as a TMDB adapter. It needs the adapter layer, a TMDB key the user supplies (stored like the Plex token), TMDB's attribution, a certification mapping for the household limit, and it has no now-playing. Clear-logo marquees, poster artwork sources and the filter on any production house come with it; Coming Soon for titles not in the library comes after 2.5.
+6. **3.0:** Browse first mode (with the Browse button in poster mode), the main-screen choice (Posters, Browse first, Picture frame, Home controls) and Home controls. It is built from Find a poster, the gestures and Play now, so it comes after them.
+7. **Later:** the rest of the Ideas. Multiple displays comes last among the large features, lowest risk first (Change together and Mirror, then Chain, then Controller), because Controller opens the largest attack surface. It needs the source adapters' item IDs first (the `js/main.js` split is done in 2.1.1).
 
 ## ⏭ Next
 
-2.2.0 to 2.2.3 are on `main` (see the "Done in 2.2" sections above), and nothing is in progress. The next features follow the suggested order:
+2.2.0 to 2.2.3 are on `main` (see the "Done in 2.2" sections above). 2.3.0 is built and tested on the branch `2.3` and waits for the owner to ask for a merge (see "Done in 2.3"); nothing else is in progress. The next features follow the suggested order:
 
-1. **Rating schedule**: time slots, each with its own household limit. It comes first because it is small and needs nothing new: it reuses the schedule helpers in `js/schedule.js` and the 2.1 content filter, and fails closed. See "Rating schedule" under Ideas.
-2. **Poster selection with weighting and no repeats**: libraries, genres and ratings, starting with a Plex smart collection or playlist as a source (Step 1). Both share the pool request. The Plex `genre` filter and the other metadata filter parameters are (verify) items to check on the real server first. See "Poster selection" and "Weighting and no repeats".
-3. **Viewer profiles**: after the two above, because a profile bundles a selection and a limit.
+1. **2.4, the source adapters:** the adapter refactor with Plex as the first adapter, then Jellyfin and Emby, with multiple servers in poster selection. See "Sources other than Plex" under Ideas.
+2. **2.5, the no-server mode:** the TMDB adapter, after the adapter layer exists.
 
-After those, still in 2.2: "On this day", the playlist with Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music.
+Still ahead with no release number: "On this day", the playlist with Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music.
 
-- **Small items that can ride along** with any of these: the six tidy-ups under "Carried from 2.1.1" in the engineering backlog.
+- **Small items that can ride along** with any of these: the six tidy-ups under "Carried from 2.1.1" and the follow-ups under "Carried from 2.3" in the engineering backlog.
 - **Optional:** "Validate on a Raspberry Pi", whenever a Pi is at hand (D79).
-- **Not decided:** whether these features ship as 2.2.x releases or as a 2.3. The suggested order keeps them under 2.2 and puts the source adapters in 2.3.
+- **Not decided:** whether 2.3 is merged to `main`, tagged or released. It is the owner's call (D13, D79).
 
 ### Gap fill inside the frame: the deferred styles
 Still deferred from 2.2 (D88), and not part of the next steps above. The Gap fill setting ships with **Off**, **Dimmed blurred poster** and **Colour matte**. D67 specifies more choices for the same gap (when the poster does not match the frame window's shape: "Fit inside window", or a poster scaled or offset smaller than the window):
 
 - **Backdrop art:** the title's background art from the server.
 - **Smart crop:** fill the window by cropping, but keep the title and faces in view instead of a plain centre crop. Smart crop never crops away the title text when the poster has one, and how well face and text detection run on a Pi is (verify); otherwise the crop stays a simple centre crop.
-- **Better-fitting artwork:** pick an alternate poster closer to the window's shape, with the poster artwork sources entry; it waits for the TMDB sources (2.4).
+- **Better-fitting artwork:** pick an alternate poster closer to the window's shape, with the poster artwork sources entry; it waits for the TMDB sources (2.5).
 - **Constraints that carry over:** a fill is dimmer than the poster and does not light more of an OLED than the poster would; it moves with pixel shift and changes with the poster's transition.
 
 ## 🔜 Ideas
@@ -135,82 +147,90 @@ A user-chosen list of posters shown in a fixed order, instead of the random pool
 
 - **Why:** the random pool cannot show "this week's picks" or a themed run in a set order, and Favourites (see Touch gestures) is a playlist the user fills by tapping.
 - **How:** each entry is stored as source plus item ID, never a Plex-only key, so a playlist keeps working once other sources exist. Settings builds the list (Find a poster is how it gets filled); the display cycles through it in order and loops. Plex's own playlists can be read as a source too.
-- **Constraints:** every poster still obeys the household limit and the rating schedule slot in force, so a playlist cannot show a title the limit hides. Order: 2.2, with Find a poster.
+- **Constraints:** every poster still obeys the household limit and the rating schedule slot in force, so a playlist cannot show a title the limit hides. Order: no release yet, with Find a poster.
 
 ### Rating schedule
+Shipped in 2.3 (see "Done in 2.3"); what follows is the original idea. A slot can already give a different library or collection by naming a profile; a slot of its own with a library setting is not built.
+
 Time slots, each with its own household limit, for example G from 06:00 when the children get up, PG-13 from 15:00 when the teenagers are home, and no limit from 22:00 (D59).
 
 - **How:** optionally per weekday, set in Settings next to the household limit, and the library or collection allowed can change per slot too. It reuses what 2.1 ships: the schedule helpers that sleep and night dim use (`js/schedule.js`: `inWindow`, `msUntilNext`) and the content filter that already holds random, cached and now-playing posters to one limit.
-- **Constraints:** it fails closed, as the 2.1 limit does: when the clock is not plausible (`isPlausibleClock`) or a slot cannot be read, the strictest slot applies. At a slot change to a stricter limit, a poster above it leaves the screen at once instead of at the next rotation, and the offline cache is filtered by the slot in force. Unrated titles stay hidden in any slot that sets a limit, so "R or above" means a slot with no limit. Changing the schedule asks for the PIN.
-- **Order:** first of the 2.2 features, since it is small and needs nothing new. The "Seasonal schedules" idea shares its schedule editor and follows it.
+- **Constraints:** it fails closed, as the 2.1 limit does: when the clock is not plausible (`isPlausibleClock`) it gives the strictest limit the household has set (the base limit and every slot, and, when any slot names a profile, every profile), and an unreadable schedule gives G all day. At a slot change to a stricter limit, a poster above it leaves the screen at once instead of at the next rotation, and the offline cache is filtered by the slot in force. Unrated titles stay hidden in any slot that sets a limit, so "R or above" means a slot with no limit. Changing the schedule asks for the PIN.
+- **Order:** first of the 2.3 features (done), since it was small and needed nothing new. The "Seasonal schedules" idea shares its schedule editor and follows it.
 
 ### Viewer profiles
+Shipped in 2.3 with a limit, the now-playing rule, a selection, weighting and a frame (see "Done in 2.3"); what follows is the original idea. Still open: music and captions in a profile, and following the Plex Home user of the session now playing.
+
 Named bundles (Kids, Teens, Adults) of household limit, poster selection, frame style, music and captions (D64).
 
 - **How:** the Rating schedule switches profiles instead of single settings, and a profile can follow the Plex Home user of the session now playing.
-- **Constraints:** the household ceiling of a profile can only be changed behind the PIN. Order: 2.2, after the Rating schedule and Poster selection, because a profile bundles a selection and a limit.
+- **Constraints:** the household ceiling of a profile can only be changed behind the PIN. Order: after the Rating schedule and Poster selection, because a profile bundles a selection and a limit (done in 2.3).
 
 ### Poster selection
+Step 1 shipped in 2.3 (libraries, genres, ratings, one collection or playlist; see "Done in 2.3"). Step 2 and multiple servers are still open.
+
 Choose posters by multi-select servers, libraries, genres and ratings, not just one library and one rating (D60, D63). This merges the earlier ideas "Multiple libraries" (mix movies and TV in the pool) and "Collections & filters" (limit the pool to a collection, genre or decade).
 
 - **How:** the pool is every chosen library on every chosen server, narrowed to titles in any chosen genre (none chosen: all genres) and any chosen rating. Collections and decades stay as further filters.
-  - **Step 1 (2.2):** choose a Plex **smart collection** or playlist as a source. Plex builds those from any field it filters on (actor, director, writer, studio, country, year, critic or audience rating, resolution, label and more), so "movies with this actor rated 7 or higher" is made once in Plex and the display only reads it.
-  - **Step 2 (later in 2.2 or 2.3):** an in-app rule builder for the common fields (actor, director, writer, studio, genre, decade, critic and audience rating, label), each rule a field, a comparison and a value, combined with all-of or any-of, and saved per Rating schedule slot. With source adapters each adapter maps the fields it supports and says which it does not.
+  - **Step 1 (2.3, done):** choose a Plex **smart collection** or playlist as a source. Plex builds those from any field it filters on (actor, director, writer, studio, country, year, critic or audience rating, resolution, label and more), so "movies with this actor rated 7 or higher" is made once in Plex and the display only reads it.
+  - **Step 2 (not in 2.3, D101; later):** an in-app rule builder for the common fields (actor, director, writer, studio, genre, decade, critic and audience rating, label), each rule a field, a comparison and a value, combined with all-of or any-of, and saved per Rating schedule slot. With source adapters each adapter maps the fields it supports and says which it does not.
 - **Constraints:** the household limit stays a ceiling and wins: the rating multi-select only picks among ratings at or under the limit in force, and it can never let in an unrated or above-limit title. A multi-library pool samples each library in proportion to its title count, so one large library does not crowd out a small one unless the user says so. The Plex `genre` filter parameter and its multi-value form, and the exact filter parameter for each metadata field, are (verify) items checked on the real server like `contentRating` was. "Movie score from" is read two ways: a critic or audience rating threshold, which Plex stores and filters on; or the score's composer, which Plex does not usually store, so that one depends on the metadata agent and is checked before it is promised. Studio is one value per title (for example "Pixar"); a title's full list of production companies is not in Plex's metadata as usually stored, so filtering on any production house comes with the TMDB source or a TMDB lookup by the title's TMDB ID.
-- **Order:** libraries, genres and ratings in 2.2 right after the Rating schedule and before Viewer profiles (they share the Settings section and the pool request); multiple servers in 2.3 with the source adapters.
+- **Order:** libraries, genres and ratings (done in 2.3) right after the Rating schedule and before Viewer profiles (they share the Settings section and the pool request); multiple servers in 2.4 with the source adapters.
 
 ### Weighting and no repeats
-Weight the pool toward unwatched or highly rated titles, and keep a no-repeat window (for example 3 days) remembered across reloads (D64). Order: 2.2, with Poster selection (same pool request).
+Shipped in 2.3 (see "Done in 2.3"); what follows is the original idea.
+
+Weight the pool toward unwatched or highly rated titles, and keep a no-repeat window (for example 3 days) remembered across reloads (D64). Order: with Poster selection (same pool request); done in 2.3.
 
 ### On this day
-Titles from the user's own libraries released on today's date, or round-number anniversaries (D64). Uses the server's release dates, a (verify) field. Order: 2.2.
+Titles from the user's own libraries released on today's date, or round-number anniversaries (D64). Uses the server's release dates, a (verify) field. Order: no release yet.
 
 ### Marquee captions: Now Showing, Now Playing, Coming Soon
 One marquee caption feature with three captions (D54). It absorbs the earlier ideas "Now showing theatre mode", "Coming soon mode" and "Frame per poster source" and keeps their names here.
 
 - **How:** a caption on the marquee frame says **Now Showing** for a poster from the library, **Now Playing** while something plays (optionally "in the Living Room"), and **Coming Soon** for a title that is not watchable yet. Frame per poster source also lets the frame follow where the poster comes from (now playing, random, or a title that is not in the library yet), including new "Coming Attractions" artwork.
 - **Constraints:** the captions follow the household content limit like every poster. The caption artwork (the "Coming Attractions" frame) is the owner's to supply; until then the caption is drawn as text. It stays inert for a title not in the library until the TMDB source exists.
-- **Order:** the marquee with Now Showing and Now Playing, plus Coming Soon fed by the server's recently added titles, needs no new source and goes in 2.2. Coming Soon for titles not in the library at all needs the TMDB adapter (or a Radarr/Sonarr calendar) and comes after 2.4.
+- **Order:** the marquee with Now Showing and Now Playing, plus Coming Soon fed by the server's recently added titles, needs no new source and has no release yet. Coming Soon for titles not in the library at all needs the TMDB adapter (or a Radarr/Sonarr calendar) and comes after 2.5.
 
 ### Info captions
-An optional caption style with the tagline, top-billed cast or a critic score badge (D64). It obeys the caption layout of the marquee captions and the poster transitions, and stays inside the poster window. Order: 2.2, with the marquee captions.
+An optional caption style with the tagline, top-billed cast or a critic score badge (D64). It obeys the caption layout of the marquee captions and the poster transitions, and stays inside the poster window. Order: no release yet, with the marquee captions.
 
 ### Frame and marquee styles
 Several built-in styles of clearly different looks, in addition to the user's own uploaded frame and marquee (D58). Today the app ships three frames, all marquee variants (`js/frames.js`: marquee, marquee-glow, marquee-narrow, PNGs in `assets/frames/`), plus no frame and a custom image URL.
 
 - **How:** for example classic theatre marquee, art deco, modern minimal, retro neon, drive-in and a plain gallery mat, each with a matching caption style for the marquee captions, chosen in Settings and by the swipe in Touch gestures. This also revives "Frame rotation" (swap the frame daily or weekly to spread wear): the Ideas shelved it because the three marquee frames put their bulbs within about 1.5 points of each other, which styles with different geometry no longer do.
 - **Constraints:** every style is original or openly licensed artwork with its licence recorded beside it in the repo, never a studio's or chain's trademarked design. Each style declares its poster window the way the built-in frames do now. Dark, low-light styles are preferred for OLED, and a style with large bright areas says so (frame brightness and night dim still apply). Styles stay small enough for the precache budget on a Pi, or load on demand.
-- **Order:** 2.2, built with the marquee captions and before the frame swipe in Touch gestures, which needs more than one look to swipe through.
+- **Order:** no release yet, built with the marquee captions and before the frame swipe in Touch gestures, which needs more than one look to swipe through.
 
 ### Poster transitions
 A choice of style, with length and easing controls (D62). 2.1 has one transition, a crossfade whose length is set in Settings (`crossfadeMs`, 0 to 10000 ms, default 1200; 0 is a cut).
 
 - **How:** crossfade, cut, fade through black, slide, push, zoom, and a random mix of the chosen ones. The slide direction follows the swipe in Touch gestures and the Chain mode of Multiple displays.
 - **Constraints:** the frame never moves, only the poster inside its window. Every style animates only opacity and transform so a Pi's compositor runs it smoothly, and each is checked for dropped frames on a Pi (verify). Slides and pushes follow the viewer's rotation. The user's reduced-motion preference turns every style into a crossfade. A pixel-shift glide and a transition should not overlap; whether 2.1 already keeps them apart is checked when the entry is planned.
-- **Order:** 2.2, before Touch gestures, which reuse the slide.
+- **Order:** no release yet, before Touch gestures, which reuse the slide.
 
 ### Touch gestures
 Swipes and taps on the poster (D56).
 
 - **How:** swipe left or right for the previous or next poster (the previous one comes from a short history of shown posters, shared with Recently shown in Find a poster); swipe up or down to change the frame (the built-in frames and a custom frame, `frameId`); double tap or long press on the poster to add it to a **Favourites** list or to the owner's **Watch later** (Plex's Watchlist on plex.tv). Favourites is a playlist the user fills by tapping, stored the same way (source plus item ID).
 - **Constraints:** gestures follow the viewer's rotation like the controls do. In kiosk mode they are off unless the PIN is entered, and the 3 s bottom-right hold that reveals the controls keeps priority over any long press. The first tap that only wakes the controls is kept, so a double tap must not also wake them. A swipe never changes a protective setting. A favourite or watch-later item obeys the household limit. On a display shared with children, adding to Watch later (which writes to the owner's plex.tv account) asks for the PIN. The Plex Watchlist API has to be checked on the real account first (verify).
-- **Order:** 2.2, with the playlist. Watch later comes later for Jellyfin, Emby and TMDB with each adapter.
+- **Order:** no release yet, with the playlist. Watch later comes later for Jellyfin, Emby and TMDB with each adapter.
 
 ### Theme music
 When a poster appears, play part of that title's theme from the server, with Settings for on/off, volume, how long it plays, and fade-in and fade-out lengths (D61). Plex exposes a `theme` on items that have one: TV shows usually do, movies only when a theme was added.
 
 - **Constraints:** off by default. Silent while anything plays on a Plex client (now playing) and while the display sleeps, and never during the sleep schedule or the night-dim window unless the user allows it. A play length longer than the rotation is cut at the poster change with the fade-out. A title with no theme stays silent rather than playing something else. The theme follows the poster, so the household limit and the Rating schedule slot already apply. The browser's autoplay rule blocks sound until a user gesture, so a kiosk needs a Chromium flag (`--autoplay-policy=no-user-gesture-required`). The Plex theme path, the movie-theme coverage and the flag are (verify) items for the real server and a Pi.
-- **Order:** 2.2, after Poster selection. It pairs with "Trailer on demand", which shares the audio controls.
+- **Order:** no release yet, after Poster selection (done in 2.3). It pairs with "Trailer on demand", which shares the audio controls.
 
 ### Find a poster
 Easy ways to find particular posters (D66): a search box (type a title, or an actor or director once Poster selection's fields exist) with results as a poster grid, and browse lists for Favourites, playlists, recently added and **Recently shown** (the posters this display has shown, so "that one from a minute ago" is one tap, sharing the swipe history of Touch gestures).
 
 - **How:** from any result, one tap to show it now (2.1's pin), add it to a playlist or Favourites, or Play now. Built for every input the display has: touch, mouse, a keyboard, and a D-pad remote with an on-screen keyboard. Searching uses the server's own search, a (verify) endpoint.
 - **Constraints:** results show only titles the household limit and the Rating schedule slot allow, so search cannot reach a hidden title. In kiosk mode search sits behind the controls' reveal hold and, if the owner chooses, the PIN. Searching never sends the token anywhere else.
-- **Order:** 2.2, with the playlist and Favourites, since search is how a playlist gets filled.
+- **Order:** no release yet, with the playlist and Favourites, since search is how a playlist gets filled.
 
 ### QR code to the title
-A small optional QR code that opens the title in the Plex app or its trailer on a phone (D64). Read-only, carries no token, hidden in kiosk mode unless allowed. Order: 2.2 or 2.3.
+A small optional QR code that opens the title in the Plex app or its trailer on a phone (D64). Read-only, carries no token, hidden in kiosk mode unless allowed. Order: any release after 2.3 (2.2 and 2.3 shipped without it).
 
 ### Play now
 Play the title on screen from a control button, or from the double tap or long press of Touch gestures (which then opens a small menu: Favourites, Watch later, Play now) (D65).
@@ -218,26 +238,26 @@ Play the title on screen from a control button, or from the double tap or long p
 - **How:** play either **here** (in the display's own browser, through the server's transcoder) or **on a chosen device** (a Plex player on the account, such as the living-room TV, picked from a list the display gets from plex.tv), with "resume where I left off" when there is a saved position.
 - **Allowed devices:** a per-display list of the players it may start playback on, set in Settings behind the PIN and stored only on that display. It starts empty, so a new display can play nowhere until the owner allows a device; with exactly one allowed device, Play now goes straight to it without a menu. Players are matched by their Plex client identifier, not their name, so renaming a TV does not widen or break the list; a player that has disappeared from the account shows as unavailable. "Here" is its own entry in the list. No other display, the Controller mode of Multiple displays included, can change this list or play on a device it does not allow.
 - **Constraints:** asking the TV to play is the display controlling another device, so it is off by default and, on a display shared with children, asks for the PIN each time. Only titles the household limit and the Rating schedule slot allow can be played, and the target list shows only players that advertise remote control. Local playback is opt-in per display, since a Pi may not play every format smoothly (verify on a Pi); it pauses the poster rotation and returns to posters when playback ends. The Plex remote-control (companion) call and the transcoder path are (verify) items for the real server. Nothing sends the token to a player except through plex.tv's own flow.
-- **Order:** 2.3, after Touch gestures (2.2) whose menu it joins and alongside the source adapters; Jellyfin and Emby get it per adapter.
+- **Order:** 2.4, after Touch gestures, whose menu it joins, and alongside the source adapters; Jellyfin and Emby get it per adapter.
 
 ### Movie-night countdown
-A showtime switches the display to that film with a "Feature presentation begins in mm:ss" marquee, plus an optional "Tonight's lineup" board from a playlist (D64). Needs the Poster playlist and the marquee captions. Order: 2.3.
+A showtime switches the display to that film with a "Feature presentation begins in mm:ss" marquee, plus an optional "Tonight's lineup" board from a playlist (D64). Needs the Poster playlist and the marquee captions. Order: 2.4.
 
 ### Clear-logo marquees
-The title's logo art (fanart.tv or TMDB) in the marquee instead of text (D64). Needs a user-supplied API key and the source's attribution. Order: with the TMDB work, 2.4.
+The title's logo art (fanart.tv or TMDB) in the marquee instead of text (D64). Needs a user-supplied API key and the source's attribution. Order: with the TMDB work, 2.5.
 
 ### Poster artwork sources
-Prefer textless posters, pick the artwork language, or take higher-resolution or alternate art from TMDB or fanart.tv when the server's art is poor (D64). Downloaded art goes through the same cache-first path and cache limit as 2.1's posters. Order: 2.4.
+Prefer textless posters, pick the artwork language, or take higher-resolution or alternate art from TMDB or fanart.tv when the server's art is poor (D64). Downloaded art goes through the same cache-first path and cache limit as 2.1's posters. Order: 2.5.
 
 ### Birthday and occasion mode
-On a set date, a poster with a family member's name ("Starring Emma") or their favourite films, and holiday takeovers (D64). Names and dates are personal data: kept only in the display's own settings, never sent anywhere, left out of exports unless chosen, like the token. Needs the Frame and marquee styles. Order: 2.3.
+On a set date, a poster with a family member's name ("Starring Emma") or their favourite films, and holiday takeovers (D64). Names and dates are personal data: kept only in the display's own settings, never sent anywhere, left out of exports unless chosen, like the token. Needs the Frame and marquee styles. Order: 2.4.
 
 ### Picture frame mode
 A third main-screen choice: personal photos or art shown in picture-frame styles instead of posters in a marquee frame (D70). Each display picks its main screen: **Posters** (today), **Browse first** or **Picture frame**, and Home controls is a fourth choice; the browse screens and Home controls open over any of them the same way.
 
 - **How:** photos in frames (wood, metal, gallery mat; the Frame and marquee styles pack gains photo frames, and the marquee and captions are off by default), with the poster transitions plus a slow pan and zoom, the gap fill for photos whose shape does not match, and optional captions (date, place, album, or artist and title for art). Photo sources, each a source adapter: a **Plex Photos library**; a **folder on the display or the network**, read through the local device helper; **Immich** and other self-hosted photo servers; **open-access art collections** from museums that publish public-domain images with an API (for example The Met, the Art Institute of Chicago, the Rijksmuseum), with each work's credit shown as their terms require. **Google Photos and iCloud** are (verify) and unconfirmed: Google limited what its Photos API lets other apps read, and iCloud has no general public photo API, so both are researched before they are promised.
 - **Constraints:** personal photos never leave the home network and are never uploaded or sent to another service. Photo location data is shown only if the owner turns it on. Photos follow the image's orientation data. The household content limit does not apply to photos (they have no rating), so a display shared with children shows only albums the owner picks, behind the PIN. All 2.1 protections (sleep, pixel shift, dimming, cache-first downloads, cache limit) apply unchanged.
-- **Order:** with the source adapters in 2.3 (Plex Photos first, since it reuses the Plex adapter, then the folder and Immich, then museum art); the main-screen choice itself ships with Browse first mode (3.0).
+- **Order:** with the source adapters in 2.4 (Plex Photos first, since it reuses the Plex adapter, then the folder and Immich, then museum art); the main-screen choice itself ships with Browse first mode (3.0).
 
 ### Browse first mode
 Make picking and playing the main screen, not displaying posters, like a cinema lobby kiosk (D68). A per-display choice.
@@ -245,7 +265,7 @@ Make picking and playing the main screen, not displaying posters, like a cinema 
 - **How:** a poster wall to browse (by library, genre, playlist, Favourites, recently added, and the Poster selection filters), search (Find a poster), a title page with synopsis, cast, trailer (the "Trailer on demand" entry) and Play now to an allowed device or here. The rotating poster display becomes the attract screen it returns to after a set idle time.
 - **Browse button:** the browse screens can also be opened from poster mode, from a **Browse button** in the controls, a gesture, or a remote key; the display returns to posters after the idle time. The gesture must not collide with Touch gestures: swipes and the double tap and long press are taken, so the entry proposes a swipe in from the screen's bottom edge (as the viewer sees it, following rotation) or a two-finger tap, chosen in Settings, and the Menu or a long OK press on a D-pad remote. The first tap still only wakes the controls (2.1). In kiosk mode the gesture is off unless the owner allows it, the controls' 3 s reveal hold reaches the Browse button, and the owner can require the PIN.
 - **Constraints:** every list and search obeys the household limit and the Rating schedule slot (or the Viewer profile). Playing goes only to the display's Allowed devices. In kiosk mode the browse screens are reachable but Settings stays behind the PIN. The attract screen keeps every 2.1 protection (sleep, pixel shift, dimming), while the browse screens, which are bright and static, time out back to it so they never sit lit for hours. It works by touch, mouse, keyboard and D-pad remote.
-- **Order:** after Find a poster (2.2), the gestures and Play now (2.3) and the source adapters, since it is built from them. It is large enough to be its own major release (3.0) and comes before Multiple displays, whose Controller mode can reuse its screens on a phone.
+- **Order:** after Find a poster (no release yet), the gestures and Play now (2.4) and the source adapters, since it is built from them. It is large enough to be its own major release (3.0) and comes before Multiple displays, whose Controller mode can reuse its screens on a phone.
 
 ### Home controls
 A panel of home-automation controls, Home Assistant first (D69, D71). Research done on 2026-10-14 from the official Home Assistant, openHAB and Zigbee2MQTT documentation (recorded as D69 in `docs/decisions.md`) confirmed that Home Assistant's WebSocket API lets a client read states, follow `state_changed` events and call actions with an access token, and its http integration has a cross-origin allow-list; openHAB has a REST API with API tokens and pushed events; Zigbee2MQTT's frontend uses WebSockets with an optional token. Hubitat, Homey, SmartThings and HomeKit could not be confirmed from their docs and stay unconfirmed.
@@ -262,7 +282,7 @@ Show posters from other media servers (Jellyfin first, Emby close behind), and m
 - **Why:** many self-hosters run Jellyfin or Emby instead of Plex, some people have no media server and just want a poster wall, and a "Coming Soon" caption is better with films that aren't in the library yet.
 - **How:** turn `js/plex.js` into the first *source adapter*. Each adapter provides a random pool, what's playing now, poster images and a content rating, in the shape `toPoster` already produces. Two Plex leaks need cleaning up first: the engine imports `pickNowPlaying` from `plex.js`, and some settings and UI text say "Plex". Then add Jellyfin with its own mock server and real-server checklist rows, then Emby. The **no-server mode** is its own adapter: posters from TMDB, which has a free API (a key the user supplies, stored like the Plex token) and requires attribution under its terms. IMDb offers no free public API, so it would only work through a licensed data source and is not promised. TMDB and Radarr/Sonarr calendars can also mix in as extras (for example, one "Coming Soon" poster in every ten) beside a main source. Radarr/Sonarr are self-hosted, so they probably go through the device helper. The TMDB adapter has no now-playing and needs a certification mapping for the household limit.
 - **Constraints:** every adapter maps its own ratings for the household limit and fails closed (unknown is hidden while a limit is set), with its own adversarial review like `content-rating-filter` had. Jellyfin may need cross-origin requests allowed on the server. TMDB's terms are to be checked before it is promised (unconfirmed). Streaming services are out: no public APIs, and scraping breaks their terms.
-- **Order:** the adapter refactor, Jellyfin and Emby in 2.3; the TMDB no-server mode in 2.4.
+- **Order:** the adapter refactor, Jellyfin and Emby in 2.4; the TMDB no-server mode in 2.5.
 
 ### Multiple displays
 Displays that know about each other, in four modes (D57). This merges the earlier ideas "Synchronised displays", "Remote control" and "Shared settings for several displays" and keeps their names here.
@@ -327,3 +347,12 @@ Left over when 2.1.1 closed.
 
 ### Carried from 2.2
 Nothing is left: the three items carried from 2.2 are fixed in 2.2.1 (see "Done in 2.2.1").
+
+### Carried from 2.3
+Left over when 2.3.0 was built (owner: Nathan). None of these changes the limit in force.
+
+- **Genres stay tickable while a profile's genres load (D123 3).** While an opened profile's genres load, the household's genres can still be ticked for that moment. The fix: clear the list when the load starts. It lives in `js/settings-ui.js`.
+- **The "<name> kept" notice outlives Cancel and Save (D123 3).** The fix: clear it when the sheet or a profile opens.
+- **Nothing says why a pinned poster stays up under a stricter profile (D123 3).** This is the owner-pin exemption (D5, D32) as written; the screen gives no sign of it.
+- **The settings sheet scrolls sideways on a 390 px phone.** It did so before 2.3 (noted at the rating-schedule review) and 2.3 did not fix it; the sheet needs a width check on a narrow touch screen.
+- **Done and Discard preview the household's controls that do not preview live (D123 1).** A control changed while a profile is open is previewed at Done or Discard. No limit, selection or pin value is involved.

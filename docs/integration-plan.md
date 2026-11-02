@@ -1118,3 +1118,120 @@ Added after the close of run 6 (2026-10-18, conductor-5) on the owner's word ("c
   - Probe (`controls-autohide--probe-r1b.out`): after Settings closes by Cancel, Esc or Save, focus is back on the Settings control button (`<button data-action="settings">`), `#controls:focus-within` is true, and the controls stay visible with `body.idle` absent 6 s later and 6 s after a mouse move. `wake()` (js/main.js:741–747) re-arms itself while `#controls` matches `:hover, :focus-within`.
   - A closing dialog returns focus to the button that opened it; that is the browser's behaviour and keeps keyboard users in place — the fix must not move a keyboard user's focus elsewhere or drop the keyboard rule.
   - Kiosk mode (`revealControls`, `applyKiosk`), R-CTRL-2's first-tap rule and the status pill (body.idle) are unchanged.
+
+## Run 8 — 2.3: rating schedule, poster selection, weighting and no repeats, viewer profiles (D101)
+
+Added on the owner's word (2026-10-31, verbatim: "write the run 8 plan and orchestrate it as 2.3"; D101). Starting commit: `main` 22c11fa3, on a new branch `2.3`. Conventions as runs 3–7, with one change: convention 10 (settings keys added once) does not hold in this run — each feature phase adds its own keys to `js/settings.js`, and that is why those phases run one after another (D101 ruling 3). Order: `mock-selection-data` and `rating-schedule` (concurrent, disjoint Outputs), then `poster-selection`, then `weighting-no-repeats`, then `viewer-profiles`, then `release-2.3.0`. The branch is pushed; no pull request, merge or tag unless the owner asks (D13, D79). Tested against the mock Plex server only; every Plex parameter the mock cannot prove is marked (verify) and carried into `docs/validation/real-server-extended.md` (convention 9).
+
+### 46. `mock-selection-data` — The mock Plex server has what selection and weighting need
+
+- **Goal:** The mock Plex server can serve every request the run's features make: more than one movie library, genres, collections, a smart collection, a playlist, audience ratings and watch history, so the later phases test against data, not assumptions.
+- **Rulings:** D101 · **Mode:** afk · **Tags:** none (test tooling) · **Blocked by:** none
+- **Output:** `scripts/mock-plex.mjs`, `tests/mock-plex.test.js`
+- **Acceptance criteria:**
+  1. `test -f tests/mock-plex.test.js && node --test tests/mock-plex.test.js`  (cases against a started mock on a free port: `/library/sections` lists `1 Movies` and `2 Music` first, as today, then a third movie library `3 Kids Movies` with at least 4 titles; every movie in both movie libraries carries genre tags (`Genre` array of `{tag}`), `audienceRating`, `viewCount`, `lastViewedAt` for the watched ones, and `originallyAvailableAt`; `/library/sections/<id>/genre` lists that library's genres; `/library/sections/<id>/all?genre=<id or tag>` returns only titles of that genre; `/library/sections/<id>/collections` lists one regular collection and one smart collection (`smart="1"`), and `/library/collections/<id>/children` returns their items; `/playlists?playlistType=video` lists one playlist and `/playlists/<id>/items` returns its items; `POST /__mock/watch?ratingKey=<k>&viewCount=<n>` sets watch state; `X-Plex-Container-Size=0` still answers `totalSize` per library)
+  2. `node tests/e2e/run.mjs content-rating cache-first first-run settings-sheet smoke metadata now-playing status`  (library 1 keeps exactly its 8 titles, their keys, ratings and order, so every existing count holds)
+  3. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(scripts/mock-plex.mjs|tests/mock-plex.test.js)')"`
+  4. narrated: the anchored review APPROVE on disk, and the request and reply shapes match the Plex API as documented (a research note on the shapes is in the brief; the shapes the mock invents are named as (verify) in the review).
+- **Notes/hazards:**
+  - Library 1's eight titles are the fixture of about 30 existing specs: append, never reorder or re-rate.
+  - New mock data never carries a real token or real title metadata; every title is invented.
+
+### 47. `rating-schedule` — Time slots, each with its own household limit
+
+- **Goal:** A household can set time slots, each with its own content-rating limit (for example G from 06:00, PG-13 from 15:00, no limit from 22:00), and the display holds every poster — random, cached and now playing — to the slot in force, failing closed.
+- **Requirements:** R-FILT-1 (extended), new R-FILT-2 · **Rulings:** D5, D37, D59, D101 · **Mode:** afk · **Tags:** ui, risk:high · **Blocked by:** none
+- **Output:** `js/limit-schedule.js` (new), `js/settings.js`, `js/settings-ui.js`, `index.html`, `css/app.css`, `js/engine.js`, `js/main.js`, `sw.js`, `tests/limit-schedule.test.js`, `tests/settings.test.js`, `tests/engine.test.js`, `tests/e2e/rating-schedule.spec.mjs`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `test -f tests/limit-schedule.test.js && node --test tests/limit-schedule.test.js tests/settings.test.js tests/engine.test.js tests/schedule.test.js`  (unit cases for one function that returns the limit in force for a settings object and a date: no slots → `maxContentRating` as today; slots → on each day, the latest start at or before the time among the slots that apply that day; before a day's first applicable slot, the slot in force at the end of the previous day carries over when it also applies today (a slot runs until the next one starts); otherwise the latest-starting of the previous day's slots that also apply today carries over (the stricter of two at the same start) but never looser than the base limit, and when there is none the base limit applies; in the repeated hour of a fall-back clock change a slot that has started does not stop applying; optional weekday sets; an implausible clock (`isPlausibleClock` false) → the strictest of every slot and the base limit; the sanitiser turns a slot with an unknown limit into the strictest value, and a schedule with any slot whose time is unreadable reads as the strictest limit all day; "no limit" is a valid slot value and is the least strict; at most 8 slots, and a schedule with more than 8 reads as the strictest limit all day)
+  2. `test -f tests/e2e/rating-schedule.spec.mjs && node tests/e2e/run.mjs rating-schedule`  (fake clock; slots G 06:00, PG-13 15:00, none 22:00: at 07:00 30 picks show only G titles; the clock run from 21:59 across 22:00 lets an R title appear without a reload; the clock run from 05:59 across 06:00 with an R poster on screen takes it off within 2 s and the next drawn poster is G; offline (mock down) at a G slot, no cached poster above G is ever drawn; now playing an R title at a G slot is hidden when `limitNowPlaying` is on; the clock at 1970 → only G titles; the slot editor adds, edits and removes slots, Save persists them, Cancel restores them, and slots are never live-previewed; Save is refused, with a message, while a slot's time is empty or unreadable; a weekend-only slot does not apply on a Monday (the base limit does); the editor shows the limit in force now and until when; a slot boundary replaces the poster on screen only when it is no longer allowed (a paused display keeps an allowed poster); the editor fits at 1920×1080, a phone and rotation 90)
+  3. `npm test && node tests/e2e/run.mjs rating-schedule content-rating settings-sheet preset now-playing sleep kiosk`
+  4. `grep -q '^\*\*R-FILT-2' docs/spec.md && grep '^\*\*R-FILT-2' docs/spec.md | grep -qi 'slot'`
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/limit-schedule.js|js/settings.js|js/settings-ui.js|index.html|css/app.css|js/engine.js|js/main.js|sw.js|tests/limit-schedule.test.js|tests/settings.test.js|tests/engine.test.js|tests/e2e/rating-schedule.spec.mjs|docs/spec.md)')"`
+  6. narrated: the anchored review, an independent cold review (risk:high) and a UX walk (the slot editor in Settings > Household at 1920×1080, a phone and rotation 90; a slot change on screen) APPROVE on disk.
+- **Notes/hazards:**
+  - Every reader of `maxContentRating` reads the limit in force instead: the engine (pool request, pool key, `permitted`), `allowedOnScreen`, the offline fallback and the empty-card wording in `js/main.js`. A missed reader is a child-safety hole.
+  - A slot change is clock-driven: nothing in the app today changes the limit without a Save. The change must reach the screen at the boundary (a timer to the next slot start, re-armed after sleep and clock jumps), and a stricter change takes the poster off at once as a Save does today (`blockPoster`).
+  - Slots, like the limit, are applied on Save only and never live-previewed (the preview carve-out in `applySettings`).
+  - The PIN gate on opening Settings is the gate on the schedule (D101 ruling 6); no per-field gate.
+  - Unrated titles stay hidden in every slot that sets a limit (R-FILT-1).
+
+### 48. `poster-selection` — Choose libraries, genres and ratings, or a collection or playlist
+
+- **Goal:** The pool can be any chosen movie libraries, narrowed to chosen genres and chosen ratings, or a single Plex collection (smart or not) or playlist, with the household limit (or the slot in force) still the ceiling.
+- **Requirements:** new R-SEL-1 · **Rulings:** D5, D60, D63, D101 · **Mode:** afk · **Tags:** ui, risk:high · **Blocked by:** `mock-selection-data`, `rating-schedule` (shared Output files)
+- **Output:** `js/selection.js` (new), `js/plex.js`, `js/engine.js`, `js/settings.js`, `js/settings-ui.js`, `index.html`, `css/app.css`, `js/main.js`, `js/poster-cache.js`, `sw.js`, `tests/selection.test.js`, `tests/plex.test.js`, `tests/engine.test.js`, `tests/settings.test.js`, `tests/poster-cache.test.js`, `tests/e2e/selection.spec.mjs`, `tests/e2e/settings-sheet.spec.mjs`, `tests/e2e/first-run.spec.mjs`, `docs/spec.md`, `docs/validation/real-server-extended.md`
+- **Acceptance criteria:**
+  1. `test -f tests/selection.test.js && node --test tests/selection.test.js tests/plex.test.js tests/engine.test.js tests/settings.test.js tests/poster-cache.test.js`  (unit cases: the requests built for one library, two libraries, a genre set, a rating set, a collection and a playlist; a two-library pool samples each library in proportion to its title count; a rating set is intersected with the limit in force and can never add an unrated or above-limit value; settings saved before 2.3 with only `libraryKey` load as that one library and nothing else changes; a cached entry without the new fields is never chosen while a narrowing selection is set)
+  2. `test -f tests/e2e/selection.spec.mjs && node tests/e2e/run.mjs selection`  (against the mock: Movies + Kids Movies chosen → 200 picks draw from both within ±10 percentage points of their title shares; a genre chosen → only titles of that genre; ratings G and PG chosen under a PG-13 limit → only G and PG; the smart collection as the source → only its items; the playlist as the source → only its items; stored 2.2 settings (only `libraryKey: '1'`) → the same eight-title pool as before; offline with a selection → no cached poster outside it; a selection that matches nothing → the empty card names the selection; Settings lists the movie libraries as checkboxes with counts, loads the genres from the server, and offers only ratings at or under the limit)
+  3. `npm test && node tests/e2e/run.mjs selection rating-schedule content-rating settings-sheet first-run cache-first preset smoke`
+  4. `grep -q '^\*\*R-SEL-1' docs/spec.md && grep -qi 'genre' docs/validation/real-server-extended.md && grep -qi 'collection' docs/validation/real-server-extended.md`
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/selection.js|js/plex.js|js/engine.js|js/settings.js|js/settings-ui.js|index.html|css/app.css|js/main.js|js/poster-cache.js|sw.js|tests/selection.test.js|tests/plex.test.js|tests/engine.test.js|tests/settings.test.js|tests/poster-cache.test.js|tests/e2e/selection.spec.mjs|tests/e2e/settings-sheet.spec.mjs|tests/e2e/first-run.spec.mjs|docs/spec.md|docs/validation/real-server-extended.md)')"`
+  6. narrated: the anchored review, an independent cold review (risk:high) and a UX walk (the selection controls in Settings at 1920×1080, a phone and rotation 90; a library with many genres) APPROVE on disk.
+- **Notes/hazards:**
+  - The limit (or the slot in force) is a ceiling and always wins (D5): a selection narrows the pool and never widens it.
+  - The Plex `genre` filter, its multi-value form and the collection and playlist endpoints are (verify) items (convention 9). The client filters on the reply as well, so a server that ignores a parameter cannot widen the pool.
+  - Step 2 of the Roadmap's poster selection (the in-app rule builder) and multiple servers are out of scope (D101 ruling 2).
+  - The offline cache gains the fields a selection needs; an old entry without them fails closed under a narrowing selection.
+
+### 49. `weighting-no-repeats` — Favour unwatched or well-rated titles, and keep a no-repeat window
+
+- **Goal:** The pool can lean toward unwatched or highly rated titles, and a title once shown stays away for a chosen number of days, remembered across reloads.
+- **Requirements:** new R-SEL-2 · **Rulings:** D64, D101, D112, D113 · **Mode:** afk · **Tags:** ui · **Blocked by:** `poster-selection`
+- **Output:** `js/weighting.js` (new), `js/engine.js`, `js/plex.js`, `js/settings.js`, `js/settings-ui.js`, `js/selection.js`, `index.html`, `sw.js`, `tests/weighting.test.js`, `tests/selection.test.js`, `tests/engine.test.js`, `tests/plex.test.js`, `tests/settings.test.js`, `tests/e2e/weighting.spec.mjs`, `tests/e2e/selection.spec.mjs`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `test -f tests/weighting.test.js && node --test tests/weighting.test.js tests/selection.test.js tests/engine.test.js tests/plex.test.js tests/settings.test.js`  (unit cases with a seeded random: weighting off → picks as today; "unwatched first" → over 2,000 picks an unwatched title is drawn at least twice as often as a watched one; "highest rated first" → draw frequency rises with `audienceRating` (or `rating` when absent); the no-repeat window keeps a shown title out for N days across a simulated reload, falls back to the least recently shown title when every title is inside the window, and prunes entries older than the window; the history store survives a corrupt value by starting empty)
+  2. `test -f tests/e2e/weighting.spec.mjs && node tests/e2e/run.mjs weighting`  (fake clock: no-repeat 3 days with the eight-title pool → the first eight draws are eight different titles, a reload keeps the window, and after 3 days the titles return; "unwatched first" with four of the eight titles marked watched in the mock, `unwatchedOnly` off, the window 0 and a seeded random → at least 36 of 60 draws are unwatched (D113); defaults (weighting off, window 0) → behaviour as before)
+  3. `npm test && node tests/e2e/run.mjs weighting selection rating-schedule content-rating cache-first settings-sheet`
+  4. `grep -q '^\*\*R-SEL-2' docs/spec.md`
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/weighting.js|js/engine.js|js/plex.js|js/settings.js|js/settings-ui.js|js/selection.js|index.html|sw.js|tests/weighting.test.js|tests/selection.test.js|tests/engine.test.js|tests/plex.test.js|tests/settings.test.js|tests/e2e/weighting.spec.mjs|tests/e2e/selection.spec.mjs|docs/spec.md)')"`
+  6. narrated: the anchored review and a UX walk (the two controls in Settings) APPROVE on disk.
+- **Notes/hazards:**
+  - Defaults change nothing on upgrade: weighting off, window 0 days (D101 ruling 5). The existing in-memory history of 10 stays.
+  - Weighting never lets in a title the limit or the selection excludes; it reorders chances inside the permitted pool only.
+  - D112 adds three poster-selection items, each with its own test: a failed library beside an empty one reports a connection problem, every ticked library with titles gets at least one pool slot, and Save keeps genre ticks under a collection or playlist.
+
+### 50. `viewer-profiles` — Named bundles the schedule can switch
+
+- **Goal:** A household can save named profiles (for example Kids, Teens, Adults), each a bundle of a household limit, the now-playing rule, a poster selection, weighting and a frame, and a schedule slot can name a profile instead of a bare limit.
+- **Requirements:** new R-PROF-1 · **Rulings:** D5, D64, D101, D117, D118 · **Mode:** afk · **Tags:** ui, risk:high · **Blocked by:** `rating-schedule`, `poster-selection`, `weighting-no-repeats`
+- **Output:** `js/profiles.js` (new), `js/limit-schedule.js`, `js/settings.js`, `js/settings-ui.js`, `index.html`, `css/app.css`, `js/engine.js`, `js/main.js`, `js/weighting.js`, `sw.js`, `tests/profiles.test.js`, `tests/limit-schedule.test.js`, `tests/settings.test.js`, `tests/engine.test.js`, `tests/weighting.test.js`, `tests/e2e/profiles.spec.mjs`, `tests/e2e/rating-schedule.spec.mjs`, `tests/e2e/weighting.spec.mjs`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `test -f tests/profiles.test.js && node --test tests/profiles.test.js tests/limit-schedule.test.js tests/settings.test.js tests/engine.test.js tests/weighting.test.js`  (unit cases: settings with no profiles resolve exactly as before; a slot naming a profile yields that profile's limit, selection, weighting and frame; a slot naming a missing profile, or an implausible clock, yields the strictest limit among all profiles, slots and the base limit (fail closed); export and import carry profiles and never PIN material; at most 6 profiles)
+  2. `test -f tests/e2e/profiles.spec.mjs && node tests/e2e/run.mjs profiles`  (fake clock; Kids (G, Kids Movies, marquee frame) from 06:00 and Adults (no limit, Movies, plain frame) from 21:00: at 07:00 only Kids Movies titles rated G and the Kids frame; across 21:00 the Adults bundle applies without a reload; across 06:00 an Adults-only poster on screen leaves within 2 s; the profile editor creates, renames and deletes profiles, Save persists, Cancel restores, nothing is live-previewed; an upgrade with no profiles changes nothing)
+  3. `npm test && node tests/e2e/run.mjs profiles weighting selection rating-schedule content-rating settings-sheet preset`
+  4. `grep -q '^\*\*R-PROF-1' docs/spec.md`
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/profiles.js|js/limit-schedule.js|js/settings.js|js/settings-ui.js|index.html|css/app.css|js/engine.js|js/main.js|js/weighting.js|sw.js|tests/profiles.test.js|tests/limit-schedule.test.js|tests/settings.test.js|tests/engine.test.js|tests/weighting.test.js|tests/e2e/profiles.spec.mjs|tests/e2e/rating-schedule.spec.mjs|tests/e2e/weighting.spec.mjs|docs/spec.md)')"`
+  6. narrated: the anchored review, an independent cold review (risk:high) and a UX walk (the profile editor and the slot's profile choice at 1920×1080, a phone and rotation 90) APPROVE on disk.
+- **Notes/hazards:**
+  - A profile's limit is still a ceiling (D5); changing any profile is behind the Settings PIN gate.
+  - Music and captions are not in a profile: neither feature exists yet (D101 ruling 4). A profile that follows the Plex Home user now playing is out of scope (D101 ruling 4).
+
+### 51. `release-2.3.0` — Version 2.3.0, its upgrade notice and the docs
+
+- **Goal:** `VERSION` is 2.3.0, a configured display shows a one-time "What's new in 2.3" notice, and the README, Roadmap and spec describe what 2.3 shipped, with the Roadmap's later releases renumbered.
+- **Requirements:** new R-UPG-3 (supersedes R-UPG-2) · **Rulings:** D13, D79, D93, D101 · **Mode:** afk · **Tags:** docs, ui · **Blocked by:** `viewer-profiles`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/preset.spec.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/lib.mjs`, `Roadmap.md`, `README.md`, `docs/spec.md`, and (D124) `index.html` and `js/settings-ui.js` for the Household section only, and (D125) `tests/e2e/metadata.spec.mjs` and the two one-second timers in `js/main.js` and `js/settings-ui.js`, and (D126) `css/app.css` (one declaration), `tests/e2e/rating-schedule.spec.mjs` (one case) and a hint line in `index.html`
+- **Acceptance criteria:**
+  1. `grep -q "VERSION = '2.3.0'" sw.js && grep -q "VERSION = '2.3.0'" js/main.js && test "$(grep -c '"version": "2.3.0"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
+  2. `node tests/e2e/run.mjs release preset smoke`  (the notice: marker `'2.3'`; a configured display upgraded from 2.2 shows "What's new in 2.3" once with an Open settings action that opens Settings at Household; a fresh install shows nothing but gets the marker; the harness seeds `'2.3'`)
+  3. `grep -qE '^## .*Done in 2\.3' Roadmap.md && grep -qE '^[0-9]+\. \*\*2\.4:\*\* the source-adapter' Roadmap.md && grep -qE '^[0-9]+\. \*\*2\.5:\*\* the no-server mode' Roadmap.md && grep -qi 'rating schedule' README.md && grep -q '^\*\*R-UPG-3' docs/spec.md`
+  4. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, by the conductor, after the memory gate)
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|tests/e2e/preset.spec.mjs|tests/e2e/smoke.spec.mjs|tests/e2e/lib.mjs|Roadmap.md|README.md|docs/spec.md|index.html|js/settings-ui.js|tests/e2e/metadata.spec.mjs|css/app.css|tests/e2e/rating-schedule.spec.mjs)')"`  (D124 adds `index.html` and `js/settings-ui.js`; D125 adds `tests/e2e/metadata.spec.mjs`; D126 adds `css/app.css` and `tests/e2e/rating-schedule.spec.mjs`)
+  6. narrated: keep-docs-current over `22c11fa3..HEAD` inside the phase; the anchored documentation review and a UX walk of the notice APPROVE on disk.
+- **Notes/hazards:**
+  - The Roadmap renumbers (D101 ruling 1): the source adapters become 2.4, the no-server TMDB mode 2.5, and 3.0 stays.
+  - No tag, no GitHub release, no pull request (D13, D79). Mock-tested only; nothing on a Raspberry Pi.
+
+### Run 8 graph, tags and ports
+
+| Phase | Blocked by | Tags | Builder ports |
+|---|---|---|---|
+| `mock-selection-data` | — | — | 18480/18801 |
+| `rating-schedule` | — | ui, risk:high | 18580/18901 |
+| `poster-selection` | `mock-selection-data`, `rating-schedule` | ui, risk:high | 18480/18801 |
+| `weighting-no-repeats` | `poster-selection` | ui | 18480/18801 |
+| `viewer-profiles` | `rating-schedule`, `poster-selection`, `weighting-no-repeats` | ui, risk:high | 18480/18801 |
+| `release-2.3.0` | `viewer-profiles` | docs, ui | 18480/18801 |
+
+Reviewers use 18680/19001 and 18780/19101. `mock-selection-data` and `rating-schedule` are the only concurrent pair (disjoint Outputs).

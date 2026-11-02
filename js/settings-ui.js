@@ -3,7 +3,12 @@
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { createPin, checkPin, createPlexClient, discoverServers, firstReachable } from './plex.js';
+import { describeLimitNow, MAX_SLOTS, NO_LIMIT } from './limit-schedule.js';
 import { createPositionMode } from './position.js';
+import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describeProfile, MAX_PROFILES, removeProfile, renameProfile, updateProfile } from './profiles.js';
+import { parseHHMM } from './schedule.js';
+import { LIMITS } from './ratings.js';
+import { genreRequestValue, offeredRatings, selectionOf } from './selection.js';
 import { defaults, fromImport, isConfigured, sanitize, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
@@ -67,6 +72,14 @@ export async function pinSignIn(clientId, { signal, onCode, fetchImpl, pollMs = 
   return null;
 }
 
+// ---- the time slots (R-FILT-2): rows of start time, limit and days, held in the list itself until Save ----
+
+const DAY_SETS = { all: undefined, weekdays: [1, 2, 3, 4, 5], weekends: [0, 6] };
+const sameDays = (a, b) => a.length === b.length && a.every((d, i) => d === b[i]);
+
+/** The `days` select value for a stored weekday set; anything that is not a preset is 'custom' (kept as it is, shown as "Selected days"). */
+const daysChoice = (days) => (days ? Object.keys(DAY_SETS).find((k) => DAY_SETS[k] && sameDays(DAY_SETS[k], days)) || 'custom' : 'all');
+
 const countLabel = (n) => `${n.toLocaleString('en-US')} ${n === 1 ? 'title' : 'titles'}`;
 
 /**
@@ -92,6 +105,18 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   let testing = false;
   let keepOriginal = false; // set when the sheet closes FOR position mode: the close event then leaves the preview and `original` alone
   let countRun = 0; // bumped whenever the library list is rebuilt or the sheet closes, so a late count is ignored
+  // The poster selection the sheet would save (R-SEL-1): set by write(), changed by the lists, saved by Save, like pendingPin.
+  // `offered` is what the server listed on the last connection test; a stored choice the server did not list stays shown and ticked.
+  let sel = { libraries: [], genres: [], ratings: [], source: null };
+  // The profiles the dialog would save (R-PROF-1): set by write(), changed by the profile editor, saved by Save, like pendingPin.
+  let pendingProfiles = [];
+  // The profile open in the sheet (D120 1), or null: { id (null for a new one), name, household } where `household` holds the household's own
+  // values, set aside while the controls show the profile's.
+  let editing = null;
+  let offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
+  let genreRun = 0; // bumped whenever the genre list is asked for again, so a late genre answer is ignored
+  let sourceRun = 0; // the same for the collection and playlist list: its own counter, so ticking a library never throws its answer away
+  let offerClient = null; // the client of the last successful connection test
 
   // Frame options are built from the registry so new frames only need adding there.
   $('frame-select').replaceChildren(
@@ -107,8 +132,18 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     // The household toggle is UI-only: on when a limit is set; off stores ''. The select keeps PG-13 while off.
     $('household-toggle').checked = Boolean(s.maxContentRating);
     field('maxContentRating').value = s.maxContentRating || 'PG-13';
-    ensureLibraryOption(s.libraryKey, s.libraryName);
-    field('libraryKey').value = s.libraryKey;
+    resetEditingUI(); // an import (or a fresh open) ends an open profile: the controls are about to be set from `s`
+    pendingProfiles = s.profiles.map((p) => ({ ...p }));
+    $('profile-error').hidden = true;
+    $('profile-name').value = '';
+    renderProfiles();
+    renderSlots(s.limitSlots); // before the ratings, which are offered up to the loosest of the limit and the slots
+    sel = selectionOf(s);
+    offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
+    genreRun++;
+    sourceRun++;
+    offerClient = null; // the client of an earlier connection test is not this sheet's: genres and sources come from the server the test finds now
+    renderSelection();
     pendingPin = { key: s.staticRatingKey || '', title: s.staticTitle || '' };
     $('pinned-title').textContent = s.staticRatingKey ? s.staticTitle || `item ${s.staticRatingKey}` : 'none';
     $('unpin-btn').hidden = !s.staticRatingKey;
@@ -120,21 +155,392 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     renderConnection();
   }
 
+  /** The sheet's settings as it would save them. While a profile is open that is the household's own values, set aside (D120 1). */
   function read() {
+    if (!editing) return readControls();
+    // While a profile is open the bundled keys are the set-aside household values (nothing a profile holds is previewed, D120 1); every
+    // other key comes from the controls, so the household's live controls keep previewing (D122 4).
+    const household = Object.fromEntries([...BUNDLE_KEYS, 'libraryKey', 'libraryName'].map((k) => [k, editing.household[k]]));
+    return { ...readControls(), ...household, profiles: pendingProfiles };
+  }
+
+  /** What the controls show now: the household's values, or, while a profile is open, that profile's (its limit may be "No limit"). */
+  function readControls() {
     const s = { ...getSettings() };
     for (const el of form.elements) {
       if (!el.name || !(el.name in s)) continue;
       s[el.name] = el.type === 'checkbox' ? el.checked : el.value;
     }
-    s.maxContentRating = $('household-toggle').checked ? field('maxContentRating').value : '';
-    const lib = field('libraryKey');
-    s.libraryName = lib.selectedOptions[0]?.dataset.title || s.libraryName;
+    s.maxContentRating = editing || $('household-toggle').checked ? field('maxContentRating').value : '';
+    s.limitSlots = readSlots(); // kept whatever the toggle says: with it off they are saved but not applied
+    s.profiles = pendingProfiles;
+    s.libraryKeys = sel.libraries.map((l) => l.key);
+    s.libraryNames = sel.libraries.map((l) => l.name);
+    s.libraryKey = s.libraryKeys[0] || '';
+    s.libraryName = sel.libraries[0]?.name || '';
+    s.genres = sel.genres; // kept while a collection or playlist is the source: the engine ignores them there, and the libraries again restore them (D112 item 3)
+    s.ratings = sel.ratings; // a tick above the offered range is kept: the engine's intersection with the limit in force decides what is shown (D110 item 6)
+    s.source = sel.source;
     s.staticRatingKey = pendingPin.key;
     s.staticTitle = pendingPin.title;
     s.settingsPinHash = pendingAuth.hash;
     s.settingsPinSalt = pendingAuth.salt;
     return sanitize(s);
   }
+
+  // ---- the time slots ----
+
+  function slotRow(slot) {
+    const li = document.createElement('li');
+    li.className = 'slot-row';
+    const labelled = (text, control) => {
+      const label = document.createElement('label');
+      label.append(text, control);
+      return label;
+    };
+    const start = document.createElement('input');
+    start.type = 'time';
+    start.className = 'slot-start';
+    start.value = slot.start;
+    const limit = document.createElement('select');
+    limit.className = 'slot-limit';
+    fillSlotChoices(limit, slot.profile === undefined ? slot.limit : `${PROFILE_PREFIX}${slot.profile}`);
+    const days = document.createElement('select');
+    days.className = 'slot-days';
+    days.append(new Option('Every day', 'all'), new Option('Weekdays', 'weekdays'), new Option('Weekends', 'weekends'));
+    const choice = daysChoice(slot.days);
+    if (choice === 'custom') {
+      days.append(new Option('Selected days', 'custom'));
+      li.dataset.days = JSON.stringify(slot.days);
+    }
+    days.value = choice;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn small slot-remove';
+    remove.textContent = 'Remove';
+    const name = () => (parseHHMM(start.value) === null ? 'Remove this slot' : `Remove the ${start.value} slot`);
+    remove.setAttribute('aria-label', name());
+    start.addEventListener('input', () => {
+      remove.setAttribute('aria-label', name());
+      clearSlotError(li);
+      clearSlotRefusal();
+    });
+    const error = document.createElement('p');
+    error.className = 'slot-error error';
+    error.id = `slot-error-${++slotRowCount}`;
+    error.hidden = true;
+    error.setAttribute('role', 'alert');
+    start.setAttribute('aria-describedby', error.id);
+    remove.addEventListener('click', () => {
+      li.remove();
+      clearSlotRefusal();
+      syncSlots();
+      $('slot-add').focus();
+    });
+    li.append(labelled('From', start), labelled('Show up to', limit), labelled('Days', days), remove, error);
+    return li;
+  }
+
+  let slotRowCount = 0;
+
+  const PROFILE_PREFIX = 'profile:';
+
+  /**
+   * The choices of a slot: the same labels as the main limit select ("PG-13 (TV-14)"), "No limit", then the profiles (R-PROF-1). A slot that
+   * names a profile no longer in the list keeps that choice, marked missing, so it is not lost silently (it fails closed in force).
+   */
+  function fillSlotChoices(select, value) {
+    select.replaceChildren(...[...field('maxContentRating').options].filter((o) => o.value !== NO_LIMIT).map((o) => new Option(o.textContent.trim(), o.value)), new Option('No limit', NO_LIMIT));
+    const missing = value.startsWith(PROFILE_PREFIX) && !pendingProfiles.some((p) => PROFILE_PREFIX + p.id === value);
+    if (pendingProfiles.length > 0 || missing) {
+      const group = document.createElement('optgroup');
+      group.label = 'Use a profile instead';
+      group.append(...pendingProfiles.map((p) => new Option(`Profile: ${p.name}`, PROFILE_PREFIX + p.id)));
+      if (missing) group.append(new Option('Profile: missing', value));
+      select.append(group);
+    }
+    select.value = value;
+  }
+
+  /** Rebuilds every slot's choices after the profiles changed, keeping each slot's choice. */
+  function refreshSlotChoices() {
+    for (const select of $('slot-list').querySelectorAll('.slot-limit')) fillSlotChoices(select, select.value);
+    renderRatings();
+  }
+
+  // ---- the profiles (R-PROF-1, D117, D120): rows of name, summary and two buttons, held in pendingProfiles until Save ----
+
+  const frameNames = new Map([...FRAMES, NO_FRAME, { id: CUSTOM_FRAME_ID, name: 'Custom image' }].map((f) => [f.id, f.name]));
+
+  function showProfileError(message) {
+    $('profile-error').textContent = message;
+    $('profile-error').hidden = !message;
+  }
+
+  function profileRow(profile) {
+    const li = document.createElement('li');
+    li.className = 'profile-row';
+    li.dataset.id = profile.id;
+    const label = document.createElement('label');
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.className = 'profile-rename';
+    name.maxLength = 24;
+    name.autocomplete = 'off';
+    name.value = profile.name;
+    name.setAttribute('aria-describedby', 'profile-error profile-help');
+    label.append('Profile name', name);
+    const summary = document.createElement('p');
+    summary.className = 'profile-summary muted small';
+    summary.textContent = describeProfile(profile, (id) => frameNames.get(id) || id);
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'btn small profile-edit';
+    edit.textContent = 'Edit';
+    edit.setAttribute('aria-label', `Edit ${profile.name}`);
+    edit.setAttribute('aria-describedby', 'profile-help');
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn small profile-remove';
+    remove.textContent = 'Delete';
+    remove.setAttribute('aria-label', `Delete ${profile.name}`);
+    const actions = document.createElement('div');
+    actions.className = 'profile-actions';
+    actions.append(edit, remove);
+    // A rename is committed in place: the rows are not rebuilt, so focus stays where the person put it and a click on another row's
+    // button that began this change is not lost (D120 7). Enter commits and keeps focus in the renamed box; it never saves the sheet.
+    const commit = () => {
+      const current = pendingProfiles.find((p) => p.id === profile.id);
+      if (!current || name.value.trim() === current.name) return;
+      const done = renameProfile(pendingProfiles, profile.id, name.value);
+      if (done.error) {
+        showProfileError(done.error);
+        name.value = current.name;
+        return;
+      }
+      showProfileError('');
+      pendingProfiles = done.profiles;
+      name.value = done.profiles.find((p) => p.id === profile.id).name;
+      edit.setAttribute('aria-label', `Edit ${name.value}`);
+      remove.setAttribute('aria-label', `Delete ${name.value}`);
+      refreshSlotChoices();
+    };
+    name.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commit();
+      }
+    });
+    name.addEventListener('change', commit);
+    edit.addEventListener('click', () => {
+      commit();
+      const now = pendingProfiles.find((p) => p.id === profile.id) ?? profile; // the profile as it is now, after a rename in this row
+      startEditing({ id: now.id, name: now.name, bundle: now });
+    });
+    remove.addEventListener('click', () => {
+      const done = removeProfile(pendingProfiles, profile.id, readSlots());
+      if (done.error) return showProfileError(done.error);
+      showProfileError('');
+      pendingProfiles = done.profiles;
+      renderProfiles();
+      refreshSlotChoices();
+      $('profile-name').focus();
+    });
+    li.append(label, summary, actions);
+    return li;
+  }
+
+  /** Redraws the list and the add control. */
+  function renderProfiles() {
+    $('profile-list').replaceChildren(...pendingProfiles.map(profileRow));
+    $('profile-empty').hidden = pendingProfiles.length > 0;
+    const full = pendingProfiles.length >= MAX_PROFILES;
+    $('profile-add').disabled = full;
+    $('profile-add').title = full ? `${MAX_PROFILES} profiles is the most` : '';
+  }
+
+  // ---- editing one profile apart from the household's own values (D120 1) ----
+
+  /** Puts a bundle's values into the bundled controls: the limit, the now-playing rule, the selection, the weighting and window, the frame. */
+  function showBundle(b) {
+    field('maxContentRating').value = b.maxContentRating;
+    field('limitNowPlaying').checked = Boolean(b.limitNowPlaying);
+    field('weighting').value = b.weighting;
+    field('noRepeatDays').value = String(b.noRepeatDays);
+    field('frameId').value = b.frameId;
+    sel = selectionOf(b);
+    renderSelection();
+    syncDependent();
+  }
+
+  /** Opens a profile in the sheet: a banner names it, the controls show its values, the household's own are set aside. */
+  function startEditing({ id, name, bundle }) {
+    if (editing) return;
+    const household = readControls();
+    editing = { id, name, household };
+    const none = new Option('No limit', NO_LIMIT);
+    field('maxContentRating').append(none); // a profile may have no limit, as a slot may
+    showBundle(bundleOf(bundle));
+    loadGenres(); // the genre list follows the libraries now shown; a load in flight for the household's is dropped (D122 3)
+    $('profile-banner-text').textContent = `Editing the profile \u201c${name}\u201d. The limit, the now-playing rule, the selection, the weighting and days, and the frame below are this profile's. Your own household values are set aside until you press Done or Discard.`;
+    $('profile-banner-error').hidden = true;
+    $('profile-banner').hidden = false;
+    $('profile-editor').inert = true;
+    $('household-toggle').disabled = true;
+    $('position-btn').disabled = true;
+    $('settings-save').hidden = true;
+    $('settings-cancel').hidden = true;
+    $('profile-banner').scrollIntoView({ block: 'start' });
+    $('profile-banner').focus();
+  }
+
+  /** Back to the household's own values, with the controls as the sheet has them. Does not set the controls itself when `restore` is false. */
+  function resetEditingUI(restore = false) {
+    const was = editing;
+    editing = null;
+    for (const o of [...field('maxContentRating').options]) if (o.value === NO_LIMIT) o.remove();
+    $('profile-banner').hidden = true;
+    $('profile-editor').inert = false;
+    $('household-toggle').disabled = false;
+    $('settings-save').hidden = false;
+    $('settings-cancel').hidden = false;
+    syncPositionButton();
+    if (restore && was) {
+      showBundle({ ...bundleOf(was.household), maxContentRating: was.household.maxContentRating || 'PG-13' });
+      loadGenres();
+      onPreview(read()); // one preview, as the household's own values return (D122 4)
+    }
+  }
+
+  function finishEditing(commit) {
+    if (!editing) return;
+    const { id, name } = editing;
+    let done = null;
+    if (commit) {
+      const bundle = bundleOf(readControls());
+      if (!bundleHasSource(bundle)) {
+        $('profile-banner-error').textContent = 'Choose at least one library, or a collection or playlist, for this profile.';
+        $('profile-banner-error').hidden = false;
+        return;
+      }
+      done = id === null ? addProfile(pendingProfiles, name, bundle) : updateProfile(pendingProfiles, id, bundle);
+      if (done.error) {
+        $('profile-banner-error').textContent = done.error;
+        $('profile-banner-error').hidden = false;
+        return;
+      }
+      pendingProfiles = done.profiles;
+    }
+    resetEditingUI(true);
+    if (id === null && commit) $('profile-name').value = '';
+    showProfileError('');
+    $('profile-notice').textContent = commit ? `${name} kept; it applies when you press Save.` : '';
+    renderProfiles();
+    refreshSlotChoices();
+    const target = id === null && commit ? $('profile-name') : id === null ? $('profile-name') : $('profile-list').querySelector(`[data-id="${CSS.escape(id)}"] .profile-edit`);
+    target?.focus();
+  }
+  $('profile-done').addEventListener('click', () => finishEditing(true));
+  $('profile-discard').addEventListener('click', () => finishEditing(false));
+
+  function addNewProfile() {
+    if (pendingProfiles.length >= MAX_PROFILES) return showProfileError(`${MAX_PROFILES} profiles is the most. Delete one to add another.`);
+    const checked = checkName(pendingProfiles, $('profile-name').value);
+    if (checked.error) return showProfileError(checked.error);
+    showProfileError('');
+    startEditing({ id: null, name: checked.name, bundle: bundleOf(readControls()) });
+  }
+  $('profile-add').addEventListener('click', addNewProfile);
+  $('profile-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault(); // Enter here opens the new profile; it must not save the whole sheet
+      addNewProfile();
+    }
+  });
+  $('profile-name').addEventListener('input', () => showProfileError(''));
+
+  function clearSlotError(li) {
+    li.querySelector('.slot-error').hidden = true;
+    li.querySelector('.slot-start').removeAttribute('aria-invalid');
+  }
+
+  /** Marks every row whose time is empty or unreadable, beside the row; true when there is one. Save is refused then (D103). */
+  function markBadSlotTimes() {
+    let first = null;
+    for (const li of $('slot-list').children) {
+      const start = li.querySelector('.slot-start');
+      if (parseHHMM(start.value) !== null) continue;
+      const error = li.querySelector('.slot-error');
+      error.textContent = 'Set a start time for this slot, or remove it.';
+      error.hidden = false;
+      start.setAttribute('aria-invalid', 'true');
+      first ??= start;
+    }
+    first?.focus();
+    slotRefusal = Boolean(first);
+    return slotRefusal;
+  }
+
+  /**
+   * The line under the household options (visible with the toggle off too): the limit in force now and until when, for the SAVED
+   * settings (unsaved edits count after Save), so it starts "Saved:".
+   */
+  function syncSlotStatus() {
+    const text = describeLimitNow(getSettings(), new Date());
+    const line = `Saved: ${text[0].toLowerCase()}${text.slice(1)}`;
+    if ($('slot-status').textContent !== line) $('slot-status').textContent = line; // a live region is written only when its words change, or a screen reader says it again every second (D106 3)
+  }
+
+  let slotRefusal = false; // the footer shows the missing-start-time message
+
+  /** The footer message goes when no row is left with a bad time (the time was fixed, or the row removed). */
+  function clearSlotRefusal() {
+    if (!slotRefusal || $('slot-list').querySelector('[aria-invalid]')) return;
+    $('form-error').textContent = '';
+    slotRefusal = false;
+  }
+
+  function syncSlots() {
+    const rows = $('slot-list').children.length;
+    $('slot-empty').hidden = rows > 0;
+    $('slot-add').disabled = rows >= MAX_SLOTS;
+    $('slot-add').title = rows >= MAX_SLOTS ? `${MAX_SLOTS} time slots is the most` : '';
+    renderRatings(); // a slot added or removed changes which ratings are offered
+  }
+
+  function renderSlots(slots) {
+    $('slot-list').replaceChildren(...slots.map(slotRow));
+    syncSlots();
+  }
+
+  /** The slots as the list shows them now. One unreadable time makes the whole schedule G all day (no row is dropped); Save refuses it first. */
+  function readSlots() {
+    return [...$('slot-list').children].map((li) => {
+      const choice = li.querySelector('.slot-days').value;
+      const days = choice === 'custom' ? JSON.parse(li.dataset.days) : DAY_SETS[choice];
+      const chosen = li.querySelector('.slot-limit').value;
+      const slot = { start: li.querySelector('.slot-start').value, ...(chosen.startsWith(PROFILE_PREFIX) ? { profile: chosen.slice(PROFILE_PREFIX.length) } : { limit: chosen }) };
+      return days ? { ...slot, days: [...days] } : slot;
+    });
+  }
+
+  // The slot in force changes at its boundary while the sheet is open, so the status line is re-read once a second, only while it is open
+  // (a timer that runs with the sheet closed has nothing to do). Started where the sheet opens, cleared when it closes; never twice.
+  let slotStatusTimer = null;
+  function startSlotStatusTimer() {
+    if (slotStatusTimer === null) slotStatusTimer = setInterval(() => dialog.open && syncSlotStatus(), 1000);
+  }
+  function stopSlotStatusTimer() {
+    clearInterval(slotStatusTimer);
+    slotStatusTimer = null;
+  }
+
+  $('slot-add').addEventListener('click', () => {
+    const row = slotRow({ start: '08:00', limit: field('maxContentRating').value });
+    $('slot-list').append(row);
+    syncSlots();
+    row.querySelector('.slot-start').focus();
+  });
 
   function syncPin() {
     const set = Boolean(pendingAuth.hash);
@@ -224,9 +630,10 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // ---- the "Connected to" card ----
 
   function renderConnected() {
-    const selected = field('libraryKey').selectedOptions[0];
     const server = form.dataset.serverName || getSettings().serverName || 'your Plex server';
-    const library = (selected?.value && selected.dataset.title) || (field('libraryKey').value && getSettings().libraryName) || '';
+    const library = sel.source
+      ? sel.source.title || sel.source.kind // a collection or playlist replaces the libraries: it is what is shown
+      : sel.libraries.map((l) => l.name).filter(Boolean).join(', ') || (sel.libraries.length && getSettings().libraryName) || '';
     $('connected-text').textContent = `Connected to ${server}${library ? ` · ${library}` : ''}`;
   }
 
@@ -244,7 +651,12 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   function syncDependent() {
     $('custom-frame-row').hidden = field('frameId').value !== CUSTOM_FRAME_ID;
+    // Showing or hiding the Household options keeps the toggle where it was on screen, so the schedule and the profiles come into view
+    // below it instead of the sheet's scroll position moving the toggle away.
+    const toggleTop = $('household-toggle').getBoundingClientRect().top;
     $('household-options').hidden = !$('household-toggle').checked;
+    const moved = $('household-toggle').getBoundingClientRect().top - toggleTop;
+    if (moved) dialog.querySelector('.sheet-body').scrollTop += moved;
     field('username').disabled = !field('showNowPlaying').checked;
     field('includeEpisodes').disabled = !field('showNowPlaying').checked;
     for (const out of form.querySelectorAll('output[data-for]')) {
@@ -254,28 +666,145 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     }
   }
 
-  function ensureLibraryOption(key, title) {
-    const select = field('libraryKey');
-    if (!key || [...select.options].some((o) => o.value === key)) return;
-    const o = new Option(title || `Library ${key}`, key);
-    o.dataset.title = title || '';
-    select.append(o);
+  // ---- the poster selection (R-SEL-1, D107) ----
+
+  /** A ticked row: a checkbox and its text. The text is a span of its own so a count can be written into it later. */
+  function pickRow(value, text, checked, { disabled = false, data = {} } = {}) {
+    const li = document.createElement('li');
+    const label = document.createElement('label');
+    label.className = 'check';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.value = value;
+    box.checked = checked;
+    box.disabled = disabled;
+    Object.assign(box.dataset, data);
+    const span = document.createElement('span');
+    span.textContent = text;
+    label.append(box, span);
+    li.append(label);
+    return li;
   }
 
-  /** Fills the list with the movie and TV libraries (titles only; counts follow lazily) and returns them. */
-  function fillLibraries(libs, selected) {
-    const select = field('libraryKey');
-    const usable = libs.filter((l) => l.type === 'movie' || l.type === 'show');
-    countRun++;
-    select.replaceChildren(new Option('— choose a library —', ''));
-    for (const l of usable) {
-      const o = new Option(l.title, l.key);
-      o.dataset.title = l.title;
+  /** The ratings the sheet offers (D109 item 1): up to the loosest limit of the base and every time slot, all five while the toggle is off. */
+  function shownRatings() {
+    const limits = readSlots().map((slot) => (slot.profile === undefined ? slot : { limit: pendingProfiles.find((p) => p.id === slot.profile)?.maxContentRating ?? NO_LIMIT }));
+    return offeredRatings(editing || $('household-toggle').checked ? field('maxContentRating').value : '', limits);
+  }
+
+  function renderLibraries() {
+    const chosen = new Map(sel.libraries.map((l) => [l.key, l.name]));
+    const rows = offered.libraries.map((l) => ({ key: l.key, title: l.title }));
+    for (const [key, name] of chosen) if (!rows.some((r) => r.key === key)) rows.push({ key, title: name || `Library ${key}` }); // a stored choice the server did not list
+    const locked = Boolean(sel.source);
+    if (!rows.length) {
+      $('library-list').replaceChildren(Object.assign(document.createElement('li'), { className: 'muted small', textContent: 'Test the connection to load your libraries.' }));
+      return;
+    }
+    $('library-list').replaceChildren(
+      ...rows.map((r) => {
+        const count = offered.counts[r.key];
+        return pickRow(r.key, count === undefined ? r.title : `${r.title} · ${countLabel(count)}`, chosen.has(r.key), { disabled: locked, data: { title: r.title } });
+      }),
+    );
+  }
+
+  function renderGenres() {
+    const chosen = new Set(sel.genres.map((g) => g.title.toLowerCase()));
+    const rows = [...offered.genres];
+    for (const g of sel.genres) if (!rows.some((r) => r.title.toLowerCase() === g.title.toLowerCase())) rows.push(g);
+    rows.sort((a, b) => a.title.localeCompare(b.title));
+    const locked = Boolean(sel.source);
+    $('genre-list').replaceChildren(...rows.map((g) => pickRow(genreRequestValue(g), g.title, chosen.has(g.title.toLowerCase()), { disabled: locked, data: { key: g.key, title: g.title } })));
+    syncGenreText(rows.length);
+  }
+
+  /** The count and the help under the genre box. Ticking a genre updates only these: the rows stay, so focus and scroll stay (walk r1). */
+  function syncGenreText(rowCount = $('genre-list').children.length) {
+    const locked = Boolean(sel.source);
+    $('genre-count').textContent = !locked && sel.genres.length ? `· ${sel.genres.length} chosen` : '';
+    $('genre-help').textContent = locked
+      ? 'A collection or playlist takes no genre.'
+      : offered.genresFailed
+        ? "Couldn't load the genres. Test the connection to try again."
+        : rowCount
+          ? 'None ticked: every genre. A title shows only when it matches a ticked genre and, when ratings are ticked, a ticked rating.'
+          : offerClient
+            ? sel.libraries.length
+              ? 'The ticked libraries list no genres.'
+              : 'Tick a library to see its genres.'
+            : 'Test the connection to load the genres.';
+  }
+
+  function renderRatings() {
+    const shown = shownRatings();
+    // A kept tick above the offered range stays visible and ticked, marked, so a parent can see it and untick it (D111 item 1).
+    const kept = LIMITS.filter((r) => sel.ratings.includes(r) && !shown.includes(r));
+    $('rating-list').replaceChildren(...LIMITS.filter((r) => shown.includes(r) || kept.includes(r)).map((r) => pickRow(r, kept.includes(r) ? `${r} — above the limit now` : r, sel.ratings.includes(r))));
+  }
+
+  function renderSource() {
+    const select = $('source-select');
+    const value = sel.source ? `${sel.source.kind}:${sel.source.key}` : '';
+    const many = offered.libraries.length > 1;
+    const option = (kind, item, suffix = '') => {
+      const o = new Option(`${item.title}${suffix}`, `${kind}:${item.key}`);
+      o.dataset.title = item.title;
+      return o;
+    };
+    const collections = Object.assign(document.createElement('optgroup'), { label: 'Collections' });
+    collections.append(...offered.collections.map((c) => option('collection', c, `${c.smart ? ' (smart)' : ''}${many ? ` · ${c.library}` : ''}`)));
+    const playlists = Object.assign(document.createElement('optgroup'), { label: 'Playlists' });
+    playlists.append(...offered.playlists.map((p) => option('playlist', p)));
+    select.replaceChildren(new Option('The libraries above', ''), ...(collections.children.length ? [collections] : []), ...(playlists.children.length ? [playlists] : []));
+    if (value && ![...select.options].some((o) => o.value === value)) {
+      const o = new Option(sel.source.title || `${sel.source.kind} ${sel.source.key}`, value);
+      o.dataset.title = sel.source.title;
       select.append(o);
     }
-    const movie = usable.find((l) => l.type === 'movie');
-    select.value = usable.some((l) => l.key === selected) ? selected : movie?.key || '';
-    return usable;
+    select.value = value;
+  }
+
+  function renderSelection() {
+    renderLibraries();
+    renderSource();
+    renderGenres();
+    renderRatings();
+    renderConnected();
+  }
+
+  /** The libraries ticked now, in the list's order, as { key, name }. */
+  function readLibraries() {
+    return [...$('library-list').querySelectorAll('input:checked')].map((box) => ({ key: box.value, name: box.dataset.title || '' }));
+  }
+
+  /** Genres are asked for from every ticked library and merged by title. A failed request leaves that library's genres out. Choosing a source does not ask again: the box stays as it was, greyed. */
+  async function loadGenres() {
+    const run = ++genreRun;
+    offered.genres = [];
+    offered.genresFailed = false;
+    if (!offerClient || !sel.libraries.length) return renderGenres();
+    const client = offerClient;
+    const lists = await Promise.all(sel.libraries.map((l) => client.genres(l.key).catch(() => null)));
+    if (run !== genreRun) return;
+    offered.genresFailed = lists.every((l) => l === null);
+    const seen = new Map();
+    for (const g of lists.flat().filter(Boolean)) if (!seen.has(g.title.toLowerCase())) seen.set(g.title.toLowerCase(), g);
+    offered.genres = [...seen.values()];
+    renderGenres();
+  }
+
+  /** The collections of every movie library and the video playlists, for the "Posters from" list. A failed request leaves its part out. */
+  async function loadSources(client, libraries) {
+    const run = sourceRun;
+    const [collections, playlists] = await Promise.all([
+      Promise.all(libraries.map((l) => client.collections(l.key).then((list) => list.map((c) => ({ ...c, library: l.title }))).catch(() => []))),
+      client.playlists().catch(() => []),
+    ]);
+    if (run !== sourceRun) return;
+    offered.collections = collections.flat();
+    offered.playlists = playlists;
+    renderSource();
   }
 
   /** "Movies · 1,240 titles": asked for after the list is on show and never waited for. A count that fails leaves the title alone. */
@@ -284,10 +813,27 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     for (const l of libs) {
       client.libraryCount(l.key).then((n) => {
         if (run !== countRun || n === null) return;
-        const option = [...field('libraryKey').options].find((o) => o.value === l.key);
-        if (option) option.textContent = `${l.title} · ${countLabel(n)}`;
+        offered.counts[l.key] = n;
+        renderLibraries();
       });
     }
+  }
+
+  /** The server's movie libraries are on show: keep the ticked ones the server still has (any type), or tick the first movie library. */
+  function offerLibraries(all, client) {
+    const movies = all.filter((l) => l.type === 'movie');
+    countRun++;
+    offered = { libraries: movies, genres: [], collections: [], playlists: [], counts: {} };
+    const known = new Map(all.filter((l) => l.type === 'movie' || l.type === 'show').map((l) => [l.key, l.title]));
+    sel.libraries = sel.libraries.filter((l) => known.has(l.key)).map((l) => ({ key: l.key, name: known.get(l.key) }));
+    if (!sel.libraries.length && !sel.source && movies.length) sel.libraries = [{ key: movies[0].key, name: movies[0].title }];
+    for (const l of all) if (l.type === 'show' && sel.libraries.some((c) => c.key === l.key) && !offered.libraries.some((o) => o.key === l.key)) offered.libraries.push(l);
+    renderSelection();
+    offerClient = client;
+    sourceRun++;
+    loadGenres();
+    loadSources(client, movies);
+    return offered.libraries;
   }
 
   /** The verdict line under the Test button; a failure carries the buttons that fix it (the same ones the empty card shows). */
@@ -316,7 +862,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       const client = createPlexClient({ serverUrl: s.serverUrl, token: s.plexToken, clientId });
       const id = await client.identity();
       const libs = await client.libraries();
-      const usable = fillLibraries(libs, s.libraryKey);
+      const usable = offerLibraries(libs, client);
       form.dataset.serverName = id.name;
       setResult(`✓ ${id.name || 'Server'}${id.version ? ` (v${id.version.split('-')[0]})` : ''} — ${libs.length} libraries`);
       renderConnected();
@@ -421,7 +967,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   form.addEventListener('input', (e) => {
     syncDependent();
-    if (e.target.closest('[data-live]')) onPreview(read());
+    if (e.target.closest('[data-live]')) onPreview(read()); // while a profile is open read() is the household's own values, so a profile's are never previewed (D120 1)
   });
   form.addEventListener('change', (e) => {
     syncDependent();
@@ -430,14 +976,21 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (editing) return; // Enter in a field must not save the sheet while a profile is open
     const s = read();
     s.serverName = form.dataset.serverName || s.serverName;
     const err = $('form-error');
-    if (s.plexToken && s.serverUrl && !s.libraryKey && !s.staticRatingKey) {
+    if (markBadSlotTimes()) {
+      // Refused: a slot with no readable time would make the whole schedule the strictest limit (D103). The rows are hidden while the toggle is off.
+      err.textContent = $('household-toggle').checked ? 'A time slot has no start time. Set it or remove the slot.' : 'A time slot has no start time. Turn on Household with children to see it, then set the time or remove the slot.';
+      return;
+    }
+    if (s.plexToken && s.serverUrl && !s.libraryKey && !s.source && !s.staticRatingKey) { // a collection or playlist is enough
       err.textContent = 'Choose a library (test the connection to load them).';
       return;
     }
     err.textContent = '';
+    slotRefusal = false;
     original = null;
     cancelSignIn();
     closeSheet();
@@ -446,6 +999,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   $('settings-cancel').addEventListener('click', closeSheet);
   dialog.addEventListener('close', () => {
+    if (!dialog.open) stopSlotStatusTimer(); // a close queued before a reopen (position mode's Done) must not stop the open sheet's timer
     closePreset();
     setTokenShown(false); // the token is hidden again whenever the sheet closes
     cancelSignIn();
@@ -480,6 +1034,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   function runOpenOptions({ wantSignIn, token, test, section }, auto) {
     if (section === 'protection') $('protection-fieldset').scrollIntoView({ block: 'start' });
     else if (section === 'layout') $('layout-fieldset').scrollIntoView({ block: 'start' });
+    else if (section === 'household') $('household-fieldset').scrollIntoView({ block: 'start' });
     if (token) signIn({ token });
     else if (wantSignIn) signIn();
     else if (test || (auto && original.plexToken && original.serverUrl)) testConnection();
@@ -488,6 +1043,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   /** Done or Escape: the sheet comes back with the values just set and the SAME `original`, so Cancel still reverts. */
   function resumeSheet() {
     if (!dialog.open) dialog.showModal();
+    startSlotStatusTimer(); // the sheet comes back from position mode, which closed it
     syncDependent();
     $('position-btn').focus();
   }
@@ -495,7 +1051,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // Nothing to position while the empty or sign-in card is up (the same signal main.js uses: the card's own hidden flag).
   function syncPositionButton() {
     const noPoster = !$('empty').hidden;
-    $('position-btn').disabled = noPoster;
+    $('position-btn').disabled = noPoster || Boolean(editing);
     $('position-reason').hidden = !noPoster;
     // A hidden element that aria-describedby names still supplies the description, so the link exists only while the reason shows.
     if (noPoster) $('position-btn').setAttribute('aria-describedby', 'position-reason');
@@ -515,7 +1071,29 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   $('preset-apply').addEventListener('click', applyPreset);
   $('signin-btn').addEventListener('click', () => signIn());
   $('connected-change').addEventListener('click', openConnection);
-  field('libraryKey').addEventListener('change', renderConnected);
+  $('library-list').addEventListener('change', () => {
+    sel.libraries = readLibraries();
+    renderConnected();
+    loadGenres();
+  });
+  $('genre-list').addEventListener('change', () => {
+    sel.genres = [...$('genre-list').querySelectorAll('input:checked')].map((box) => ({ key: box.dataset.key || '', title: box.dataset.title }));
+    syncGenreText(); // not renderGenres(): rebuilding the rows would drop keyboard focus and scroll the box back to the top
+  });
+  $('rating-list').addEventListener('change', () => {
+    sel.ratings = [...$('rating-list').querySelectorAll('input:checked')].map((box) => box.value);
+  });
+  $('source-select').addEventListener('change', () => {
+    const o = $('source-select').selectedOptions[0];
+    const [kind, ...rest] = (o?.value || '').split(':');
+    sel.source = o?.value ? { kind, key: rest.join(':'), title: o.dataset.title || '' } : null;
+    renderLibraries();
+    renderGenres(); // greyed while a source is set, and ticked as it was
+    renderConnected();
+  });
+  // The ratings offered follow the household limit, its toggle and the time slots as they are edited.
+  for (const el of [$('household-toggle'), field('maxContentRating')]) el.addEventListener('change', renderRatings);
+  $('slot-list').addEventListener('change', (e) => e.target.closest('.slot-limit') && renderRatings());
 
   // The preset buttons and the Custom field (UI only) set the stored seconds. A half-typed or junk entry leaves them alone.
   for (const radio of form.querySelectorAll('input[name="rotatePreset"]')) radio.addEventListener('change', () => radio.checked && pickPreset(radio.value));
@@ -616,15 +1194,18 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       if (dialog.open) return;
       original = getSettings();
       $('form-error').textContent = '';
+      slotRefusal = false;
       $('test-result').replaceChildren();
       $('first-run-hint').hidden = isConfigured(original);
       form.dataset.serverName = original.serverName;
       write(original);
+      syncSlotStatus();
       setTokenShown(false);
       $('advanced').open = false;
       $('manual-connection').open = Boolean(original.plexToken && !original.serverName);
       closePreset();
       dialog.showModal();
+      startSlotStatusTimer();
       runOpenOptions({ wantSignIn, token, test, section }, true);
     },
     /** For the fix buttons, while the sheet is already open. */

@@ -380,3 +380,338 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   Builder rulings accepted: Ctrl, Meta or Alt with an arrow is ignored; the "nearest" score is along-axis distance plus twice the cross-axis distance; an arrow with the controls visible but focus elsewhere only puts focus on a control.
 
   Before the commit, conductor mutants covered: arrows not marking keyboard use, arrows acting in dialogs, the first arrow on hidden controls also moving, and the direction filter dropped. Each failed a D100 case. Dropping the position-mode guard is equivalent, because `.controls` is `display: none` there and no button is navigable; the guard stays as defence in depth. The touch-controls (64 cases), position, settings-sheet, kiosk and release specs, 443 unit tests and the precache check passed. Committed straight to `main`, with no tag and no GitHub release (D79).
+
+## Owner decision — 2026-10-31 (verbatim: "write the run 8 plan and orchestrate it as 2.3"): D101
+
+- **D101 Run 8 builds the Roadmap's next features as 2.3 on branch `2.3`.** Conductor's rulings under D44 (defaults, recorded at the policy stop):
+  1. **Release and branch.** The release is 2.3.0, on a new branch `2.3` from `main` 22c11fa3, which is pushed. No pull request, merge or tag unless the owner asks (D13, D79). The Roadmap renumbers: the source adapters move from 2.3 to 2.4, the no-server TMDB mode to 2.5, and 3.0 stays.
+  2. **Scope.** In scope:
+     - the rating schedule
+     - poster selection, Step 1 only: libraries, genres, ratings, and one collection (smart or not) or playlist as a source
+     - weighting and no repeats
+     - viewer profiles
+     - the 2.3.0 release with a "What's new in 2.3" notice (R-UPG-3, superseding R-UPG-2)
+
+     Out of scope:
+     - the in-app rule builder (poster selection Step 2)
+     - multiple servers (they come with the source adapters)
+     - "On this day", the playlist and Find a poster, and the rest of the Ideas
+  3. **Settings keys.** Each feature phase adds its own keys to `js/settings.js` (convention 10 is set aside for this run). The feature phases therefore run one after another. Only `mock-selection-data` runs beside `rating-schedule`.
+  4. **Profiles** bundle:
+     - the household limit
+     - `limitNowPlaying`
+     - the poster selection
+     - weighting
+     - the frame
+
+     Music and captions are not bundled, because neither feature exists. A profile that follows the Plex Home user now playing is out of scope.
+  5. **Defaults change nothing on upgrade.** No slots, no profiles, weighting off and a no-repeat window of 0 days, so a 2.2 display behaves as before. Settings saved before 2.3 with one `libraryKey` load as that one library.
+  6. **Safety.** The limit, or the slot or profile in force, is a ceiling and always wins (D5). An implausible clock, an unreadable slot or a missing profile gives the strictest limit (fail closed). A stricter change takes the poster off at once. The schedule, selection and profiles are applied on Save only and never live-previewed. Opening Settings behind the PIN is the gate on all of them, with no per-field gate.
+  7. **Testing.** The run tests against the mock Plex server only. The Plex genre filter and the collection and playlist endpoints are (verify) items carried into `docs/validation/real-server-extended.md`. Nothing runs on a Raspberry Pi.
+  8. **Floor check.** Six phases, three tagged `risk:high` (the child-safety limit), so the loop runs.
+
+## Conductor rulings — 2026-10-31 (rating-schedule r1 questions Q1–Q4, under D44): D102
+
+- **D102 How the rating schedule reads what it cannot trust, and when it notices a slot change.** The builder's four proposed readings, accepted under D44 (all fail closed or neutral; none relaxes D5 or D101):
+  1. A non-empty slot list with no readable slot is an unreadable schedule and reads as G all day. An empty or absent list is "no slots", and the base limit applies.
+  2. Each slot has a three-choice weekday select (Every day, Weekdays Mon–Fri, Weekends Sat–Sun). A stored set that matches none of these is kept and shown as "Selected days". An unreadable or empty set reads as every day at G. A slot carries past midnight until the next applicable slot starts.
+  3. More than 8 slots: the first 8 readable slots, in file order, are kept. The editor cannot add a ninth.
+  4. A slot change is noticed by a one-second check plus a check when the tab becomes visible, not by a timer to the next slot start (js/limit-schedule.js `createLimitWatch`). It follows sleep, wake and clock jumps with nothing to re-arm.
+
+## Conductor ruling — 2026-10-31 (rating-schedule r1 reviews; criterion change self-answered under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D103
+
+- **D103 Every rating-schedule slip fails closed, the base limit keeps its meaning, and the editor says what applies now.** This amends D102 items 1–2 and rating-schedule criteria 1 and 2. The question was saved in `.orchestrator/phases/rating-schedule.md` before re-scoring, and answered with option (a).
+  - **Unreadable time.** A schedule with any slot whose time is unreadable reads as the strictest limit (G) all day. It no longer drops that slot. This supersedes "drops a slot with an unreadable time". The editor refuses Save, with a message, while a slot's time is empty or unreadable.
+  - **Weekday sets.** A slot applies only on the days in its set. Before a day's first applicable slot, the previous day's last applicable slot carries over only when it also applies today. Otherwise the base limit (`maxContentRating`) applies. This supersedes D102 item 2's "a slot carries past midnight until the next applicable slot starts".
+  - **Status line.** Under the editor, a line shows the limit in force now and until when. This is a scope addition the plan did not name, taken under D44 as the remedy for the UX walk's Important 1.
+  - **Smaller fixes in the same round:**
+    - the time field's focus outline is visible
+    - the help text says the slots are kept but not applied while the household toggle is off
+    - the slot limit list shows the same labels as the main limit list
+    - each Remove button names its slot
+    - the empty card's advice names the time slots when one is in force
+    - the D37 cached-ratings re-check runs whenever the base limit or any slot sets a limit
+    - `limitInForce` reads an absent `maxContentRating` as the settings default '' and says so
+    - e2e case 4 asserts the offline fallback directly
+  - **Dismissed:** cold Minor 2, the redraw of a pinned or now-playing poster at a slot change. It happens at most a few times a day and shows the same poster.
+
+## Conductor ruling — 2026-11-01 (rating-schedule r2 reviews; criterion change self-answered under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D104
+
+- **D104 The carry-over takes the latest of yesterday's slots that also apply today.** This amends D103's carry-over sentence and rating-schedule criterion 1. The question was saved in `.orchestrator/phases/rating-schedule.md` before re-scoring, and answered with option (a).
+  - **The rule.** Before a day's first applicable slot, the latest-starting of the previous day's slots that also apply today carries over. Of two at the same start, the stricter wins. Only when there is no such slot does the base limit apply. This supersedes D103's "the previous day's last applicable slot carries over only when it also applies today".
+  - **Why.** Adding a slot can no longer move an hour it does not cover to the base limit (the cold review r2 case: "Mon 03:00 G" became "Mon 03:00 R").
+  - **The anchored review r2 tie case** (G Sundays-only and "No limit" every day, both at 22:00) gives "no limit" on Monday 03:00. The every-day slot is the slot that applies on Monday. That is the D103 reading "a slot applies only on the days in its set", and no fix is made.
+  - **Same round:**
+    - a test pins "the stricter wins" at the carry-over
+    - the stale comment at js/settings-ui.js:244 is fixed
+    - the status line names the saved settings ("Saved: …") so it does not contradict unsaved edits
+    - the slot limit select does not clip on a phone
+    - the toggle-off "kept, not applied" line shows where a parent can see it
+    - the footer message clears when the bad time is fixed
+    - the status line's spring-forward text names the real change time
+  - **Dismissed:** the re-check of cached ratings while the household toggle is off and a saved slot sets a limit. It is the literal reading of D103 and costs one request.
+
+## Conductor ruling — 2026-11-01 (rating-schedule r3 reviews; criterion change self-answered under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D105
+
+- **D105 The rating schedule's carry-over never goes looser than the base limit unless a slot runs on from yesterday; every remaining slip fails closed.** This amends D102 item 3, D104's rule and rating-schedule criteria 1 and 2. The question was saved in `.orchestrator/phases/rating-schedule.md` with the grid `rating-schedule--carry-grid-r1.out`, and answered with option (a).
+  - **Carry-over.** Before a day's first applicable slot, the slot in force at the end of the previous day carries over when it also applies today, because a slot runs until the next one starts. Otherwise, the latest-starting of the previous day's slots that also apply today carries over (the stricter of two at the same start), but never looser than the base limit. When there is none, the base limit applies.
+    - The grid changes only two rows: cold r3 Saturday 03:00 (none → PG-13) and anchored r2 Monday 03:00 (none → PG-13).
+    - This supersedes D104's carry-over sentence.
+  - **Fall-back hour.** In the repeated hour of a fall-back clock change, a slot that has started does not stop applying.
+  - **More than 8 slots.** A schedule with more than 8 slots reads as the strictest limit all day. This supersedes D102 item 3, which kept the first 8.
+  - **Boundaries.** A slot boundary replaces the poster on screen only when it is no longer allowed. A paused display keeps an allowed poster, and a looser boundary takes effect at the next rotation.
+  - **Same round:**
+    - the help text says the status line is below
+    - the slot limit select does not clip at 1920×1080 or rotation 90, and the fit test allows for the arrow
+    - a test pins the same-day guard of the spring-forward text, so a zone that skips midnight (America/Santiago) cannot loop
+  - **Process.** The carry-over drew a loosening finding in rounds 1, 2 and 3 (the Recurring pattern). The next re-dispatch therefore branches: two candidates in separate worktrees, and only the better by the computed Step 4 band is reviewed (re-dispatches 3 and 4 of 5).
+
+## Conductor record — 2026-11-01 (rating-schedule closes on candidate r4; non-blocking findings, under D44): D106
+
+- **D106 rating-schedule lands as candidate r4. Its remaining Minor findings are routed, not re-dispatched.** All three round-4 reviews APPROVE with no Critical or Important finding. Four re-dispatches were used, including the branched round r4/r5, where r4 won a tied pick. The Minors go where their files are next edited, so the fifth re-dispatch is not spent on them.
+  - **Routed to `viewer-profiles`.** Its Output already holds js/limit-schedule.js, js/settings-ui.js and docs/spec.md. The `viewer-profiles` brief carries these items:
+    1. The comments on `limitInForce` and `MAX_SLOTS` are brought up to D105 (anchored r4 Minor 2).
+    2. The status line never names a time already past in the repeated autumn hour (anchored r4 Minor 3).
+    3. The status line is written only when its text changes, so a screen reader does not re-announce it every second (cold r4 Minor 2).
+    4. "until <weekday> HH:MM" says "next" when the change is a week away (cold r4 Minor 3).
+    5. R-FILT-2's carry-over sentence says the slots in force at the end of yesterday run on only when every one of them applies today, which is what the code does. This is the stricter reading of D105 in the corner anchored r4 Minor 1 names: base G, "PG-13 from 22:00 every day" and "No limit from 22:00 Sundays" give Monday 03:00 = G.
+  - **Owner follow-up.** One unreadable slot time in an import or a stored value replaces the whole schedule with "G all day" without telling the user, and a Save then keeps it (cold r4 Minor 1). This fails safe; whether to show a notice is the owner's call.
+  - **Unpicked candidate.** Candidate r5 (one `opening()` rule and a week-long brute-force test) also scored COMPLETE 75/75. Its work stays on branch `orch/rating-schedule-r5`, which the hook does not let the conductor delete.
+
+## Conductor rulings — 2026-11-01 (poster-selection pre-flight, before dispatch; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D107
+
+- **D107 How a poster selection combines, migrates and fails closed.** These rulings were made before the `poster-selection` builder was dispatched, because the plan's text leaves them open and each one changes the phase's Output.
+  1. **Source.** The source is either the chosen movie libraries or one collection (smart or not) or one playlist. A collection or playlist replaces the library choice; it does not add to it.
+     - The genre selection narrows a library source only. A collection or playlist is already curated.
+     - The rating selection and the limit in force (R-FILT-2) apply to every source. The rating selection is intersected with the limit in force and can never add an unrated or above-limit value (D5).
+  2. **Migration.** Settings saved before 2.3 with only `libraryKey` load as that one library, with no genres, no rating subset and no collection or playlist. Nothing else changes (D101 ruling 5).
+  3. **Proportional pool.** A pool over several libraries samples each library in proportion to its title count. The counts come from the libraries' size-0 count request. The pool size setting is the total, split by those shares.
+  4. **Offline.** While the selection narrows the pool (more than one library chosen, or any genre, rating subset, collection or playlist), a cached poster is drawn only when its cache entry records that it belongs to the selection in force: its library, its genres, or membership of that collection or playlist. An entry without those fields is never drawn under a narrowing selection (fail closed). With the 2.2 selection, one library and nothing else, offline behaves as today.
+  5. **Counts.** The mock's size-0 count ignores filters (mock-selection-data review M2), so no "N titles match" count that combines a filter with the size-0 request is shown or tested. Library checkboxes show the plain library count, as the library select does today.
+  6. **Unconfirmed Plex shapes.** Each Plex request shape the research could not confirm is a (verify) row in docs/validation/real-server-extended.md (D101 ruling 7). The client also filters the reply on the item's own fields, so a server that ignores a parameter cannot widen the pool. The rows cover:
+     - the genre list shape
+     - `genre=<key>`, `genre=<title>`, and the comma OR list
+     - the `Genre` tag's `filter` attribute
+     - the collection listing and children paths
+     - the playlist paths and attributes
+     - `viewCount` left off unwatched titles
+     - `totalSize` with filters
+  7. **Empty result.** A selection that matches nothing shows the empty card naming the selection (the libraries, genres, ratings, collection or playlist), with the existing advice about "unwatched only" and the limit.
+
+## Conductor rulings — 2026-11-01 (poster-selection r1 questions Q5–Q8, under D44): D108
+
+- **D108 What D107 left open in poster selection.** The builder's four proposed readings were accepted under D44.
+  1. **Unreadable counts.** When a library's count cannot be read, or every count is zero, the pool size is split evenly. A library with a known count of 0 among known counts gets no share.
+  2. **Traceability.** R-SEL-1's traceability row sits after R-FILT-1's E14 row.
+  3. **Validation status.** `docs/validation/real-server-extended.md` ends `Overall: PENDING` while its new section H (verify) rows, V1-E28 to V1-E34, are unrun.
+  4. **Curated lists.** A collection's or playlist's items are kept to movies and cut to the pool size, best rated first. "Unwatched only" drops titles with a viewCount.
+
+## Conductor rulings — 2026-11-01 (poster-selection r1 reviews, spec-gaps; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D109
+
+- **D109 What the poster-selection r1 reviews left open.** These amend D107; no criterion changes.
+  1. **Which ratings Settings offers.** Settings offers every rating up to the loosest limit the base limit or any time slot sets, so a household can narrow a looser evening slot to its own higher ratings. The engine still intersects the choice with the limit in force at draw time (D107 item 1), so nothing above the limit in force is shown. Ticks are no longer dropped on Save. (cold Minor 5, walk Minor 4)
+  2. **Genre help text.** The genre help says a title shows only when it matches a ticked genre and, when ratings are ticked, a ticked rating. (walk Minor 5)
+  3. **Empty-card advice.** While the selection narrows the pool, the empty card's advice also suggests widening the selection: more libraries, fewer genres or ratings, or the libraries instead of a collection or playlist. This adds to D107 item 7. (walk Minor 6)
+  4. **New (verify) row.** A (verify) row asks whether a library list reply carries every `Genre` tag of an item. If Plex trims tags in list replies, the client's own genre check could drop titles. (anchored Minor 3)
+  5. **Follow-up, outside run 8's phases.** A "Can't reach Plex" status message shows beside the empty card although the server answered. It does the same on the 2.2 path. This is a FOLLOW-UP for the owner. (walk, declined to judge)
+
+## Conductor rulings — 2026-11-01 (poster-selection r2 reviews, spec-gaps; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D110
+
+- **D110 Poster selection after a Save, collections under a limit, and partial failures.** These amend D107 and D109; no criterion changes.
+  1. **The empty card after a Save.** When a saved selection draws nothing (an "empty" result), the empty card naming the selection is shown if the poster on screen no longer matches the saved selection. A poster that still matches stays. (UX walk r2 Important 1. This was already true in 2.2 for an empty library, but genres and ratings make it common.)
+  2. **Collections and playlists under a limit.** Items the limit in force or the chosen ratings would reject are dropped before the list is cut to its size. The full listing still updates the offline memberships. With a rating subset the limit empties, no collection or playlist is requested, as for a library. (cold r2 Important 1 and Minor 2; anchored r2 Minor 2)
+  3. **A failing library.** When several libraries are chosen and one fails, the pool is built from the others. Only when all fail is the pool request a failure. (cold r2 Minor 3)
+  4. **Wording.**
+     - The empty-card advice reads as one sentence with no nested brackets, and suggests "more libraries" only when an unticked movie library exists. (cold r2 Minor 4, walk r2 Minor 2)
+     - The genre help no longer says "Test the connection" once the connection has been tested. (walk r2 Minor 1)
+     - The rating help and R-SEL-1's bullet say ratings are offered up to the loosest of the limit and the time slots. (anchored r2 Minor 1, walk r2 Minor 3)
+  5. **Stale client in Settings.** Settings drops the client of an earlier connection test when it reopens, so genres and sources always come from the current server. (anchored r2 Minor 3)
+  6. **Stored ticks.** A stored rating tick above the offered range is kept on Save, not dropped. The engine's intersection with the limit in force decides what is shown. (anchored r2, declined to judge; D109 item 1)
+
+## Conductor rulings — 2026-11-01 (poster-selection r3 reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D111
+
+- **D111 A kept rating tick is visible, and the last selection gaps close.** This amends D110 item 6, which caused the round's Important. No criterion changes.
+  1. **Kept ticks above the offered range.** A stored rating tick above the offered range is shown as a ticked row marked as above the limit, so a parent sees it and can untick it. Ticking or unticking another rating box does not drop it. The engine's intersection with the limit in force still decides what is shown. (cold r3 Important and walk r3 Important 1; anchored r3, declined to judge)
+  2. **Empty card under a collection or playlist.** With ratings ticked, the empty card's advice also says to tick fewer ratings. (walk r3 Minor)
+  3. **A failing library.** When a library fails among several, the reduced pool is kept only briefly, then the full selection is asked for again. It is not kept for the pool's 30 minutes. (cold r3 Minor 1)
+  4. **Spec text.** The R-SEL-1 "Empty result" bullet in docs/spec.md gives the wording the engine prints and the "more libraries" condition. (anchored r3 Minor 1)
+  5. **Dismissed.** The multi-library pool load waits for each library's title count, with its 8-second timeout, every 30 minutes (cold r3 Minor 2). The counts are asked for in parallel, and the wait only shows when a count hangs; it slows loading and changes nothing shown.
+  6. **Process.** This is poster-selection's third re-dispatch, so it branches: two candidates in separate worktrees, and only the better by the computed Step 4 band is reviewed (re-dispatches 3 and 4 of 5). The rounds converged; each round's findings were new and smaller.
+
+## Conductor record — 2026-11-01 (poster-selection closes on candidate r4; non-blocking findings, under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D112
+
+- **D112 poster-selection lands as candidate r4. Its three remaining Minor findings go to `weighting-no-repeats`; they are not re-dispatched.** All three round-4 reviews APPROVE: the anchored review and the UX walk with no finding, and the cold review with three Minor spec-gaps. Four of the five re-dispatches were used, including the branched round r4/r5, where r4 won a tied pick. `weighting-no-repeats` is the next phase to change how the pool is drawn, so the items go there. Its Output and criterion 5 gain `js/selection.js`, `tests/selection.test.js` and `tests/e2e/selection.spec.mjs`. Its criterion 3 already runs the selection spec. The `weighting-no-repeats` brief carries these items:
+  1. **A failed library beside an empty one.** When a library fails and the libraries that answered give no posters, the display reports the failure as a connection problem, as when every library fails. It does not show the "No posters found in …" card. That card's advice to loosen the selection would not help. The reviewer's test case is one engine test: one library rejects and another returns `[]`. (cold r4 Minor 1, which the reviewer called worth fixing before release)
+  2. **A small ticked library is never starved.** Every ticked library whose title count is above zero gets at least one slot of the pool. For example, `libraryShares(100, [10000, 10])` gives the 10-title library at least 1. Shares stay proportional otherwise. Topping up a short library from the others is not required. (cold r4 Minor 2)
+  3. **Genres under a collection or playlist.** Save keeps the genre ticks the sheet shows when a source is chosen. The engine already ignores genres for a source, so switching back to "The libraries above" restores them. (cold r4 Minor 3)
+
+## Conductor rulings — 2026-11-01 (weighting-no-repeats pre-flight; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D113
+
+- **D113 How weighting and the no-repeat window draw, and the margin criterion 2 checks.** The pre-flight found that the plan left the e2e margin unstated, and that today's in-memory history makes any weight nearly invisible on a small pool. The simulation scripts are `weighting-no-repeats--probe-history-sim.mjs` and `-sim2.mjs` in the run's trail. The draw is 60 picks from 8 titles, 4 watched and 4 unwatched. Today's rule never shows any of the last 10 titles while a fresh title is left. With that rule, an unwatched weight of 3 gives a mean of 34.2 unwatched picks of 60, against 30.0 with no weight. Without that rule it gives 43.3. Criterion 2 changes, under D44.
+  1. **Weights.** "Unwatched first" gives a title with no `viewCount` (or `viewCount` 0) weight 3 and a watched title weight 1. "Highest rated first" weights a title by its `audienceRating`, or `rating` when that is absent, so that a higher rating is drawn more often. A title with neither rating gets the lowest weight. Off, every title weighs 1. Weighting reorders chances inside the permitted pool only.
+  2. **The in-memory history of 10.** It stays exactly as today when weighting is off and the window is 0 (D101 ruling 5). When weighting is on, the draw is weighted over the permitted pool minus the poster now on screen and minus the titles inside the no-repeat window. The last-10 rule does not apply, because it cancels the weight on a small pool. When the window is above 0, the window replaces the last-10 rule.
+  3. **The window.** Whole days, 0 to 30; 0 is off. The display remembers when each title was last shown in its own storage. That record survives a reload, is pruned past the window, and starts empty when its value is corrupt. It is never exported. When every permitted title is inside the window, the title shown least recently is drawn.
+  4. **Offline.** Draws from the poster cache are unchanged and unweighted; js/poster-cache.js and js/main.js are not in this phase's Output. The engine still records a cached poster as shown.
+  5. **Unwatched only.** `unwatchedOnly` is on by default, so the pool has no watched titles and "unwatched first" changes nothing until it is turned off. The help text says so. The e2e case turns it off.
+  6. **Criterion 2's margin.** With "unwatched first", 4 of the eight titles marked watched, `unwatchedOnly` off and the window 0, at least 36 of 60 draws are unwatched. The spec seeds the page's random so the run repeats. At weight 3 with an unseeded random, a run falls below 36 in 0.68 % of runs. With no weight it falls below 36 in 99.97 %.
+  7. **Unit criterion 1.** "At least twice as often" is measured on the engine's draw with a seeded random over 2,000 picks, with the window at 0.
+
+## Conductor rulings — 2026-11-01 (weighting-no-repeats r1 questions; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D114
+
+- **D114 The builder's Q11 and Q12 are ruled as proposed.**
+  1. **Q11, the live preview.** `weighting` and `noRepeatDays` are plain form fields, so another live control's preview carries their unsaved values to the engine, as `unwatchedOnly` and `randomPoolSize` do today. Cancel restores them. The fix needs js/main.js, which is outside this phase's Output. It goes to `viewer-profiles`, whose Output holds js/main.js: both keys join the preview carve-out there, with the D106 items.
+  2. **Q12, recording at window 0.** Nothing is stored while the window is 0 (D101 ruling 5: a default adds no storage key). Raising the window starts with an empty record.
+
+## Conductor rulings — 2026-11-01 (weighting-no-repeats r1 reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D115
+
+- **D115 The weighting wording says "reviews" and says the limit still decides, and a window set to 0 clears the record.** The UX walk r1 asks for a revision (Important, spec-gap); the anchored review r1 approves with one Minor (code-bug against D114 2). No criterion changes.
+  1. **The option's name.** "Highest rated first" becomes "Best reviewed first (audience score)", so it cannot be read as the content rating (G … R) a few rows above. The weight is unchanged (D113 1). The spec and the code comments use the same words. (walk r1 Important 1)
+  2. **The help says the limit still decides.** The help paragraph gains one sentence: favouring a title never lets in one the household limit, a time slot or the poster selection leaves out. (walk r1 Important 1)
+  3. **The help is read with the controls.** Both controls name `#weighting-help` with `aria-describedby`, as the source menu does with its help. (walk r1 Minor 2)
+  4. **A window set to 0 clears the record.** When the saved window is 0, the shown-titles record is removed from storage if it is there, so raising the window again starts empty, as D114 2 says. R-SEL-2's sentence states this; one unit test covers it. (anchored r1 Minor 1)
+  5. **Dismissed.** The walk's other notes need no change: typed days are cleaned silently like the other number fields; the 19 px sideways scroll on a phone is the pre-existing owner follow-up; the live preview is D114 1.
+
+## Conductor record — 2026-11-01 (weighting-no-repeats closes on r2; non-blocking findings, under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D116
+
+- **D116 weighting-no-repeats lands as r2. Its two remaining Minors go to `viewer-profiles`, which has js/main.js in its Output.** Both round-2 reviews APPROVE; one re-dispatch was used. The `viewer-profiles` brief carries these items, each with a test, beside the D106 items and D114 1:
+  1. **The live preview may clear the record.** D114 1 lets an unsaved window value reach the engine through another control's live preview. Since D115 4, an unsaved 0 can then delete the saved record: Cancel restores the setting but not the record. When both keys join the preview carve-out in js/main.js, this case is covered by a test. Draws stay inside the limit; only earlier repeats follow. (anchored r2 Minor)
+  2. **Save with 0 clears the record.** A window saved as 0 clears the record at Save, not only at the next draw or shown poster, so 0 → Save → 3 → Save before any poster shows starts empty. (walk r2 Minor 1)
+
+## Conductor rulings — 2026-11-01 (viewer-profiles pre-flight; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D117
+
+- **D117 How a profile is stored, edited and put in force.** The plan names the bundle (D101 ruling 4) and the fail-closed rule (criterion 1). It leaves the stored shape, the editor and some edge cases open. No criterion changes.
+  1. **What a profile holds.** A profile has an id, a name (1 to 24 characters after trimming, unique ignoring case) and a bundle of these settings: `maxContentRating`, `limitNowPlaying`, the poster selection (`libraryKeys`, `libraryNames`, `genres`, `ratings`, `source`), `weighting`, `noRepeatDays` and `frameId`. It holds nothing else. At most 6 profiles; a 7th is refused. The new key `profiles` defaults to `[]`, so an upgrade changes nothing (D101 ruling 5).
+  2. **The editor.** It lives in Settings > Household, next to the slot editor. "New profile" saves the sheet's current values of the bundled settings under a name. "Update from the sheet" replaces a profile's bundle with the sheet's current values. A profile can be renamed or deleted. All of it applies on Save, Cancel restores, and nothing is live-previewed (D101 ruling 6). Opening Settings behind the PIN is the only gate.
+  3. **A slot names a profile.** Each slot gives either a limit, as today, or a profile. While a slot that names a profile is in force, that profile's bundle replaces those settings. The limit in force is the profile's `maxContentRating`. Carry-over, the fall-back hour and the stricter of two slots at the same start (D103–D105) work as for a limit, using the profile's limit. Outside every slot, the sheet's own values apply.
+  4. **One resolver.** js/profiles.js gives the settings in force at a moment: the stored settings, with the in-force profile's bundle laid over them and `maxContentRating` set to the limit in force. The engine, the offline fallback, now playing, the frame, the empty card and the status line all read it, as they read `limitInForce` today.
+  5. **Fail closed.** A slot that names a missing profile, or an implausible clock while any slot names a profile, gives the strictest limit among the base, every slot and every profile (criterion 1). The other settings come from the sheet. An unreadable schedule still gives G all day (D102).
+  6. **Deleting a profile a slot names.** Deletion is refused while a slot names the profile, and the editor says which slot. An imported or stored slot that names a missing profile fails closed under item 5.
+  7. **A boundary that changes the profile.** A poster the new profile does not allow comes off within 2 s, as for a stricter limit (D104). That covers the limit and the selection. An allowed poster stays. A new frame or weighting applies without a reload. The pool reloads when the selection changes.
+  8. **The household toggle.** With the household limit off ("No limit" base), no limit applies from any slot or profile, as with slots today. A profile's other settings still switch at their slots.
+  9. **Export and import.** Profiles are exported and imported with the slots. An imported profile is cleaned like the sheet's own values. PIN material is never exported (D5).
+  10. **Carried items.** The brief also carries D106 items 1–5, D114 1 and D116 1–2.
+
+## Conductor rulings — 2026-11-01 (viewer-profiles Output; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D118
+
+- **D118 viewer-profiles' Output gains the files its carried items need.** D106 items 2–4 change the status line that tests/e2e/rating-schedule.spec.mjs checks. D116 2 changes when js/weighting.js's record is cleared, which tests/engine.test.js, tests/weighting.test.js and tests/e2e/weighting.spec.mjs cover. The resolver (D117 4) changes what the engine reads. The Output list therefore gains `js/weighting.js`, `tests/engine.test.js`, `tests/weighting.test.js`, `tests/e2e/rating-schedule.spec.mjs` and `tests/e2e/weighting.spec.mjs`. Criterion 1 also runs the engine and weighting unit files, and criterion 5 lists the five new paths. This is a criterion change under D44, as D112 was.
+
+## Conductor rulings — 2026-11-01 (viewer-profiles r1 questions; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D119
+
+- **D119 The profile builder's Q13–Q15 are ruled as proposed.** Each errs toward the stricter limit, or leaves the 2 s bound as it is.
+  1. **Q13, a slot that names a missing profile.** The slot adds no limit of its own. The strictest of the base, the other slots and every profile decides. The rule applies at every moment while any slot names a missing profile, not only while that slot is in force. This is never looser than the in-force-only reading, so D5 holds.
+  2. **Q14, a profile with an absent or unknown limit.** It reads as G, as an unknown slot limit does, never as no limit.
+  3. **Q15, rating-schedule case 3.** The builder's probes found no D104 defect. js/main.js takes the poster off in the one-second check before it awaits anything; in 23 probe runs it came off 2 to 53 ms of real time after the boundary. The case now checks "within 2 s" on the page's own clock. It also checks that the poster comes off before the page's first request after the boundary. The 2 s bound is unchanged. The cause of the old real-time misses is not known. The run's unknown stays open until the release's full suite runs clean under load.
+
+## Conductor rulings — 2026-11-01 (viewer-profiles r1 reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D120
+
+- **D120 A profile is edited apart from the household's own values. A missing profile gives G. With the household off, slots and profiles are kept and not applied.** The UX walk r1 and the cold review r1 ask for a revision, and the anchored review r1 approves. The two walk Importants come from D117 2's "snapshot the sheet" design: it cannot make a "No limit" profile, and it changes the household's own values. This amends D117 items 2, 5 and 8 and D119 item 1. No criterion changes.
+  1. **Editing a profile (walk Importants 1–2).** "New profile" and "Edit" open that profile in the sheet. A banner names the profile, and the bundled controls show the profile's values. The household's own values are set aside. "Done" writes the bundle into the profile and puts the household's values back. "Discard" puts them back with no change. While a profile is open, Save and Cancel are not offered. A Cancel of the whole sheet still restores everything. While a profile is open, its limit list also offers "No limit", as a slot's does. The household's own values never change by editing a profile.
+  2. **A slot that names a missing profile gives G (cold Important 1).** It is read like an unreadable slot: G, the strictest value, while that slot would be in force, and in an implausible-clock case. A missing strict profile can then never make the result looser. The status line says the profile is missing. This replaces D117 5 and D119 1 for a missing profile. An implausible clock still gives the strictest of the base, every slot and every profile.
+  3. **A profile with no library and no source (cold Important 2).** "Done" is refused while the profile ticks no library and has no source, as the sheet's own Save is. A stored or imported profile like that shows the empty card naming the profile, never a blank screen.
+  4. **The household toggle off (walk Minor 3; dlog hit).** With the household limit off, the slots and profiles are kept and not applied, as R-FILT-2 and the slot help already say. No profile switches anything. This replaces D117 8.
+  5. **One shown-titles record (cold Minor 3; anchored ruling).** All profiles share one record. A profile with a window of 0 records nothing and clears nothing. The record is cleared (D115 4, D116 2) only when the household's own saved window is 0 and no profile has a window above 0.
+  6. **A late draw at a boundary (cold Minor 4).** A poster whose draw finishes after a boundary is checked against the selection in force when it is shown, not only the limit. One out of the new selection is not shown.
+  7. **Small fixes.** The boundary watch reads the clock once per check (cold Minor 6). After a rename, focus goes to the renamed row, and a click on another row's button is not lost (walk Minor 4). Name boxes read "Profile name", and the profile help is linked to the editor's fields (walk Minor 5). The one-line summary adds the weighting when it is on.
+  8. **Tests (anchored Minors 1–4, cold Minor 5, the conductor's surviving mutant).** Add cases for: the offline fallback under a profile slot; a pinned poster across a profile boundary; `limitNowPlaying` defaulting to on when a profile omits it; a carried profile whose limit equals the base still applies its bundle; the first of two equally strict slots supplies the bundle; profile cases 3 and 3b check that the poster comes off before the next request; and a Save that changes only the in-force profile's now-playing rule redraws at once.
+  9. **Spec (anchored Minor 5).** R-PROF-1 says duplicate names are dropped, not "made unique". The fit check it names, at 1920×1080, a phone and rotation 90, is added to the profiles spec.
+
+## Conductor rulings — 2026-11-01 (viewer-profiles r2 questions; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D121
+
+- **D121 The profile builder's Q16–Q18 are ruled as proposed.**
+  1. **Q16.** A new profile starts from the household's current values, so it begins as a copy to change. Nothing is saved until Done.
+  2. **Q17.** While a profile is open, only the bundled values are set aside. The slots, the connection and the controls outside the bundle stay editable. The household toggle, position mode, the profile rows, Save and Cancel are off. A whole-sheet Cancel (Escape) still restores everything.
+  3. **Q18.** The selection check after a poster's decode is kept beside the check before it, as the limit's own two checks are. No test can isolate the second one, because a held image request ends before the decode starts.
+
+## Conductor rulings — 2026-11-01 (viewer-profiles r2 reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D122
+
+- **D122 viewer-profiles takes a short round 3 for the r2 reviews' Minors.** All three r2 reviews APPROVE, but the Step 7 band is RE-DISPATCH 85/95: docs/spec.md:309 contradicts D120 9. No later phase of run 8 may change js/settings-ui.js or js/main.js, so the code Minors are fixed here, not carried.
+  1. **The Pin button's poster stays at a profile boundary (anchored Minor 1).** `inSelectionNow` exempts the pinned poster (`staticRatingKey`) again, as R-PROF-1 and D5 say. This errs strict, never wide, but offline it put the empty card in place of the owner's pin. Add case 14b: pin with the button, cross 06:00 online and offline, and check that no poster is taken off.
+  2. **The banner names the profile as it is now (walk Minor 1, cold Minor 1, anchored Minor 4).** The Edit handler reads the name and bundle from `pendingProfiles` by id. Case 5b checks the banner after a rename in the same row.
+  3. **The genre list follows the open profile's libraries (cold Minor 2).** Opening a profile, Done and Discard each cancel a genre load already in flight and load the genres for the libraries now shown. A Kids profile is never offered the household library's genres.
+  4. **The household's live controls keep previewing while a profile is open (walk Minor 2; the anchored review's declined item).** This keeps D121 2. While a profile is open, `read()` takes the bundled keys from the set-aside household values and every other key from the controls. Done and Discard send one preview. Nothing a profile holds is previewed (D120 1).
+  5. **Wording (walk Minors 3 and 4).**
+     - The profile help says that while a slot is in force the profile's settings replace the household's, its limit too, even when the profile's limit is looser, and that the status line says which limit is in force.
+     - The banner names everything the bundle holds: the limit, the now-playing rule, the selection, weighting and days, and the frame.
+     - Done writes "<name> kept; it applies when you press Save." to a polite live region.
+  6. **Tests (anchored Minors 2 and 3, cold Minor 3).**
+     - A unit case reaches the floor compare at js/limit-schedule.js:159: base G; Kids (G) from 20:00 every day; R from 22:00 on Sundays; Monday 03:00 gives the Kids bundle.
+     - A profiles e2e case checks that an open profile's frame is not previewed while it is open: it runs at a time with no profile slot in force and moves a live control before Done.
+  7. **Spec (walk Minor 5, anchored Minor 5).** docs/spec.md:309 reads "names cut to 24; a later duplicate (ignoring case) is dropped". R-PROF-1 gains the wording in item 5.
+  No criterion changes. Re-dispatch 2 of 5.
+
+## Conductor rulings — 2026-11-01 (viewer-profiles r3 question and reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D123
+
+- **D123 viewer-profiles lands on round 3; Q19 is ruled as proposed; three r3 Minors become follow-ups.** All three r3 reviews APPROVE, and the Step 7 band is COMPLETE 95/95.
+  1. **Q19.** The preview that Done and Discard send stays as D122 4 ruled. No test can tell it from its absence. The anchored review notes one effect: a household control that does not preview live, changed while a profile is open, is previewed at Done or Discard. No limit, selection or pin value is involved.
+  2. **The pinned poster above a profile's limit stays (cold review question).** This is D5 and D32 as written: an owner-pinned poster is exempt. Nothing changes.
+  3. **Follow-ups (owner: Nathan). None of these changes the limit in force. No later phase of run 8 may change js/settings-ui.js.**
+     - While an opened profile's genres load, the household's genres stay tickable for that moment (cold r3 Minor). The fix: clear the list when the load starts.
+     - The "<name> kept" notice outlives Cancel and Save (walk r3 Minor 1). The fix: clear it when the sheet or a profile opens.
+     - Nothing on screen says why a pinned poster stays up under a stricter profile (walk r3 Minor 2).
+
+## Conductor rulings — 2026-11-02 (release-2.3.0 pre-flight; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D124
+
+- **D124 release-2.3.0's Output gains `index.html` and `js/settings-ui.js`, for the Household section only.** Criterion 2 asks the notice's Open settings action to open Settings "at Household". The sheet can scroll only to the `protection` and `layout` sections (js/settings-ui.js `runOpenOptions`), and the Household fieldset has no id (index.html:204). The phase may give that fieldset an id and add a `household` branch beside the other two. It may change nothing else in either file. The D123 follow-ups stay follow-ups. Criterion 5's list gains the two paths. No other criterion changes.
+
+## Conductor rulings — 2026-11-02 (release-2.3.0 Step 4; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D125
+
+- **D125 The full suite's two failures are fixed in release-2.3.0, with no change in behaviour.** Criterion 4 failed. content-rating and metadata ran past the runner's 180 s per-spec limit, and metadata case 6 fails on the 2.3 tip. The diagnosis (`.orchestrator/artifacts/release-2.3.0--diagnosis-r1.md`) found two causes. rating-schedule (6dd77201) added two one-second timers, js/main.js:189 `limitWatch.check` and js/settings-ui.js:527 the slot status line. Playwright's fake clock waits about 4 ms of real time after each timer fire, so a spec that fast-forwards hours of fake time grew by about 50%. The cost is test-only: no extra requests, no later poster, about 7 µs a second on a display. Separately, metadata.spec.mjs:112 asserts the cache entry's exact key set, which poster-selection extended with `genres` on purpose (R-SEL-1).
+  1. **js/settings-ui.js.** The slot status timer runs only while the sheet is open. It starts when the sheet opens and is cleared when the dialog closes. What it shows does not change.
+  2. **js/main.js.** `limitWatch.check` no longer has a timer of its own. It runs once a second from one existing one-second timer, first and in its own try/catch, so a sleep or reload error can never skip it and it can never skip them. The page goes back to the timer count it had before run 8. D104's 2 s removal bound holds, and the rating-schedule and profiles 2 s cases must pass unchanged.
+  3. **tests/e2e/metadata.spec.mjs:112.** The expected key set gains `'genres'`. Nothing else in the spec changes.
+  4. Not chosen: raising the runner's per-spec limit (tests/e2e/run.mjs), and replacing `runFor` with `fastForward` in the specs. Both change what the tests prove or how they are measured.
+  Output gains `tests/e2e/metadata.spec.mjs`, and the timer changes in `js/main.js` (already in the Output) and `js/settings-ui.js` (D124 extended). Criterion 5's list gains the spec. No other criterion changes.
+
+## Conductor rulings — 2026-11-02 (release-2.3.0 r2 reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D126
+
+- **D126 release-2.3.0 takes a short round 3 for its two REVISE reviews.** The Step 7 band is RE-DISPATCH 59/85. Every finding is small, and all are inside or next to the release.
+  1. **What Open settings lands on (walk Important 1).** On a 2.2 display, "Household with children" is usually off, and the schedule and profiles are hidden under it. Add one plain line under the toggle in index.html, always shown: "Turn this on for a rating limit, a rating schedule and viewer profiles." The toggle is never ticked by itself.
+  2. **Ticking the toggle scrolls the new controls away (walk Important 2).** css/app.css `.sheet-body` gains `overflow-anchor: none`. tests/e2e/preset.spec.mjs gains a step: Open settings, tick the toggle, and the toggle and the schedule editor are in view.
+  3. **The notice's words (walk Minor 5).** "What's new in 2.3: rating limits by time of day, viewer profiles, and choosing which posters show, favouring unwatched ones." The same text goes in R-UPG-3, the README and the e2e cases.
+  4. **README and Roadmap accuracy (anchored Important 1–2, Minors 1–3).**
+     - README.md:367 and Roadmap.md:88 name the two exemptions: an owner-pinned poster (D5, D32), and the title playing now when the profile's now-playing rule is off.
+     - Every Ideas entry that gives 2.2 for unshipped work says it has no release yet. The poster-selection Step 1 credit moves to 2.3.
+     - The clock sentence: an implausible clock gives the strictest limit the household has set, and an unreadable schedule gives G all day.
+     - The Random rotation row says the last 10 shown are avoided by default.
+     - Roadmap.md:153 "a different library or collection per slot" says a slot can name a profile for this.
+  5. **The status timer race (anchored Minor 4).** The dialog's `close` listener stops the slot status timer only when the dialog is not open again (`if (!dialog.open) stopSlotStatusTimer();`). tests/e2e/rating-schedule.spec.mjs gains one case: the sheet closed and reopened, then a slot boundary passes, and the status line changes. Opening twice starts one timer. The case fails when either the restart or the guard is removed.
+  6. **Follow-ups (owner: Nathan).** These existed before 2.3 and stay as they are:
+     - the toast's width and height on a phone, and its overlap with the control bar;
+     - the 29 px button;
+     - focus after Open settings;
+     - the 15 px toast text on a TV.
+  Output gains `css/app.css` (that one declaration) and `tests/e2e/rating-schedule.spec.mjs` (that one case). index.html gains the hint line beside the D124 id. No criterion changes beyond criterion 5's list. Re-dispatch 2 of 5.
+
+## Conductor rulings — 2026-11-02 (release-2.3.0 r3 deviation; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D127
+
+- **D127 The builder's Household hold is kept as proposed.** D126 2's `overflow-anchor: none` undid the Open settings scroll to Household (D124). The connection, library and genre lists above Household fill in after the scroll and pushed it down, and the "opens at Household" case failed. The builder added `holdAtTop()` in js/settings-ui.js, used only by the Household branch. It keeps Household at the top while those lists grow, and lets go at the first wheel turn, touch move or key press, when the sheet closes, or after 8 s. A spec fails when the hold's observer, its plain-scroll fallback or the CSS line is deleted, and preset passed 7 of 7 runs under load. The reviews judge it. A mouse drag on the scrollbar is not among its release events; the walk checks whether that matters.
+
+## Conductor rulings — 2026-11-02 (release-2.3.0 r3 reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D128
+
+- **D128 release-2.3.0 round 4 replaces the D126 2 / D127 scroll mechanism with the walk's tested one, and closes the r3 test and wording gaps.** Both r3 reviews say REVISE, and the Step 7 band is RE-DISPATCH 59/85.
+  - **Why the mechanism goes.** With a slow server (lists 1.5 s late), `overflow-anchor: none` moves every open sheet's content 203 px under the reader (walk Important 2). The hold pulls the view back after a scrollbar drag (walk Important 1). The unused 'protection' and 'layout' scrolls drift (anchored Minor 2).
+  1. **The scroll.** css/app.css goes back to its 2.3-tip state: no `overflow-anchor` line, so the browser's scroll anchoring is kept. `holdAtTop()` is removed (D127 is replaced), and the Household branch is a plain `scrollIntoView` like the other two. When "Household with children" is ticked and its options appear, the toggle stays where it was on screen (a scroll correction in the code that shows the options), so the schedule and profiles come into view below it. The toggle is never ticked by itself. A spec ticks the toggle by mouse and by keyboard and checks that the toggle stays put and the slot editor is in view. A second spec, with the mock's list answers delayed, checks that Open settings still lands at Household and that a sheet opened with the gear does not move once the reader has scrolled.
+  2. **Tests the reviews found missing (anchored Important 1).** A rating-schedule case covers Position then Done as two separate clicks, after which the status line still changes at a boundary. It fails when the restart in `resumeSheet` is removed. A case shows that opening twice starts one timer: count the one-second timers. It fails when the `=== null` guard is removed.
+  3. **Words.**
+     - The hint reads, whether the box is ticked or not: "The rating limit, the times it changes during the day, and viewer profiles are set here." (walk Minors.)
+     - README and Roadmap: an implausible clock counts profiles only when a slot names one (anchored Minor 3). Roadmap:158 states the clock condition once (anchored Minor 5).
+     - The README quotes the notice in full (anchored Minor 4, D126 3).
+  4. **Branching (the skill's rule from the third re-dispatch).** This is re-dispatch 3 of 5. Two candidates start from the staged r3 tree, each in its own worktree:
+     - **r4:** the resumed builder applies items 1–3 as written.
+     - **r5:** a fresh builder closes the same items with the least code it finds that reads cleanly, keeping every rule in 1–3.
+     Both cost a re-dispatch (3 and 4 of 5). Each must pass a cheap gate: `npm test` and `node tests/e2e/run.mjs release preset smoke rating-schedule`. The Step 4 records follow, then `closer pick`. Only the winner goes to review.
+  Output: css/app.css returns to its tip state (it leaves the Output's changed files). Everything else stays as D124–D126 set it.
+
+## Owner answer and ruling — 2026-11-02 (release-2.3.0 r4 reviews): D129
+
+- **D129 release-2.3.0 uses its last re-dispatch (5 of 5) for the r4 review's three small items.** Nathan was asked before the last round. His answer: "Use the last round (Recommended)". The UX walk r4 approves; the anchored review r4 asks for revision. The round makes these three changes and nothing else:
+  1. **tests/e2e/rating-schedule.spec.mjs case 25 (around :825–827).** Before the "closed: the timer is given back" check, wait until the one-second timer count drops back. The close event stops the timer a moment after `dialog.open` turns false. The app code does not change. The case must still fail when the `=== null` guard is removed, and it must pass repeatedly under load.
+  2. **README.md:43 and :366, Roadmap.md:88 and :158.** The implausible-clock sentence says the strictest of the base, every slot "and, when any slot names a profile, every profile", as js/limit-schedule.js:131 and docs/spec.md:267 do.
+  3. **tests/e2e/preset.spec.mjs:186–188.** The comment no longer describes the removed hold.
+  If this round does not pass review, the phase stops and goes to Nathan; there is no sixth round.
+
+## Decision checkpoint — 2026-11-02 (run 8 close; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D130
+
+- **D130 Two session decisions not yet in the log.**
+  1. **The orchestration gate checks a correction, not the tally it supersedes.** Nathan approved this with "Change the gate (Recommended)" when viewer-profiles' gate refused. Two of that phase's tallies had been derived while a cited sweep file was still being written, then re-derived as `-c1` corrections. `closer gate` now skips a tally that a correction names in `_correction.supersedes`, and checks the correction instead. The change is in the kernel repository (~/.claude 4a4ef566), with a test that fails on the old gate, and `closer evalguard` passed with Nathan's words. Reversibility: high (one kernel commit). Release r6 used it again.
+  2. **A review verdict carries forward when its lens is untouched.** For release-2.3.0 r6, criterion 6 counted the UX walk's r4 APPROVE. The r4→r6 delta changed only README.md, Roadmap.md and two e2e specs, and no app, CSS or HTML file, so the screens walked were the same. The phase file records the delta's file list. A later round that touches a walked file needs a fresh walk.
