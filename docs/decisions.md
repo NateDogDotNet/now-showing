@@ -661,3 +661,23 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   3. **tests/e2e/metadata.spec.mjs:112.** The expected key set gains `'genres'`. Nothing else in the spec changes.
   4. Not chosen: raising the runner's per-spec limit (tests/e2e/run.mjs), and replacing `runFor` with `fastForward` in the specs. Both change what the tests prove or how they are measured.
   Output gains `tests/e2e/metadata.spec.mjs`, and the timer changes in `js/main.js` (already in the Output) and `js/settings-ui.js` (D124 extended). Criterion 5's list gains the spec. No other criterion changes.
+
+## Conductor rulings — 2026-11-02 (release-2.3.0 r2 reviews; under D44, verbatim: "Always auto accept \"defaults\" for me when you normally want to stop and ask me a question."): D126
+
+- **D126 release-2.3.0 takes a short round 3 for its two REVISE reviews.** The Step 7 band is RE-DISPATCH 59/85. Every finding is small, and all are inside or next to the release.
+  1. **What Open settings lands on (walk Important 1).** On a 2.2 display, "Household with children" is usually off, and the schedule and profiles are hidden under it. Add one plain line under the toggle in index.html, always shown: "Turn this on for a rating limit, a rating schedule and viewer profiles." The toggle is never ticked by itself.
+  2. **Ticking the toggle scrolls the new controls away (walk Important 2).** css/app.css `.sheet-body` gains `overflow-anchor: none`. tests/e2e/preset.spec.mjs gains a step: Open settings, tick the toggle, and the toggle and the schedule editor are in view.
+  3. **The notice's words (walk Minor 5).** "What's new in 2.3: rating limits by time of day, viewer profiles, and choosing which posters show, favouring unwatched ones." The same text goes in R-UPG-3, the README and the e2e cases.
+  4. **README and Roadmap accuracy (anchored Important 1–2, Minors 1–3).**
+     - README.md:367 and Roadmap.md:88 name the two exemptions: an owner-pinned poster (D5, D32), and the title playing now when the profile's now-playing rule is off.
+     - Every Ideas entry that gives 2.2 for unshipped work says it has no release yet. The poster-selection Step 1 credit moves to 2.3.
+     - The clock sentence: an implausible clock gives the strictest limit the household has set, and an unreadable schedule gives G all day.
+     - The Random rotation row says the last 10 shown are avoided by default.
+     - Roadmap.md:153 "a different library or collection per slot" says a slot can name a profile for this.
+  5. **The status timer race (anchored Minor 4).** The dialog's `close` listener stops the slot status timer only when the dialog is not open again (`if (!dialog.open) stopSlotStatusTimer();`). tests/e2e/rating-schedule.spec.mjs gains one case: the sheet closed and reopened, then a slot boundary passes, and the status line changes. Opening twice starts one timer. The case fails when either the restart or the guard is removed.
+  6. **Follow-ups (owner: Nathan).** These existed before 2.3 and stay as they are:
+     - the toast's width and height on a phone, and its overlap with the control bar;
+     - the 29 px button;
+     - focus after Open settings;
+     - the 15 px toast text on a TV.
+  Output gains `css/app.css` (that one declaration) and `tests/e2e/rating-schedule.spec.mjs` (that one case). index.html gains the hint line beside the D124 id. No criterion changes beyond criterion 5's list. Re-dispatch 2 of 5.
