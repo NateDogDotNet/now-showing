@@ -1235,3 +1235,118 @@ Added on the owner's word (2026-10-31, verbatim: "write the run 8 plan and orche
 | `release-2.3.0` | `viewer-profiles` | docs, ui | 18480/18801 |
 
 Reviewers use 18680/19001 and 18780/19101. `mock-selection-data` and `rating-schedule` are the only concurrent pair (disjoint Outputs).
+
+## Run 9 — 2.4: the source adapters, with Jellyfin and Emby (D134)
+
+Drafted on the owner's word (2026-11-02, verbatim: "draft the run-9 plan for 2.4"); the policy answers are D134 ("1. b 2. a 3. a 4. a 5. b 6. a"). Every question during execution is answered "defaults" (D134 ruling 7, D44). Starting commit: `main` 9eeb995f, on a new branch `2.4`. Conventions as runs 3–8, with convention 10 set aside as in run 8 (each phase adds its own settings keys, so the phases that share `js/settings.js` run one after another). Order: `carried-tidy-ups` and `mock-jellyfin` (concurrent, disjoint Outputs), then `source-adapters`, then `jellyfin-source`, then `emby-source`, then `release-2.4.0`. The branch is pushed; no pull request, merge or tag unless the owner asks (D13, D79). Tested against the mock servers only (D134 ruling 4); every Jellyfin or Emby request the mock cannot prove is marked (verify) and carried into `docs/validation/real-server-extended.md` (convention 9).
+
+Facts this section stands on (invocation probes, `.orchestrator/artifacts/research--jellyfin-api-r1.md` and `research--jellyfin-cors-r1b.md`): a stock Jellyfin server answers cross-origin requests from any origin with any header (`CorsHosts` defaults to `["*"]`), so the browser talks to it directly as it does to Plex; Quick Connect (a 6-digit code, 10 minutes, on by default) is the keyboard-free sign-in; `GET /Sessions` needs no admin rights; `OfficialRating` is a plain string (`PG-13`, `TV-MA`, `15`) with no country prefix.
+
+### 52. `carried-tidy-ups` — The six items carried from 2.1.1 and the one carried from 2.3
+
+- **Goal:** The engineering backlog's "Carried from 2.1.1" and "Carried from 2.3" lists are empty: each item is fixed or its comment corrected, with a test where behaviour changes.
+- **Rulings:** D79, D122, D123, D134 · **Mode:** afk · **Tags:** ui · **Blocked by:** none
+- **Output:** `js/helper.js`, `js/tv-power.js`, `js/engine.js`, `js/main.js` (the rating re-check only), `js/sleep.js` (comment), `js/settings-ui.js` (the Done and Discard preview only), `tests/helper.test.js`, `tests/tv-power.test.js`, `tests/engine.test.js`, `tests/e2e/content-rating.spec.mjs` (comments), `tests/e2e/helper.spec.mjs`, `tests/e2e/profiles.spec.mjs`
+- **Acceptance criteria:**
+  1. `node --test tests/helper.test.js tests/tv-power.test.js tests/engine.test.js`  (cases: one failed helper read after a good one keeps `helper.available` true, and two in a row clear it; a sleep and a wake again inside one TV wake window leave `tvWaking` true until the second window ends; after a pool failure the rating re-check sends no further batch; `tests/tv-power.test.js` restores `requestAnimationFrame` after each case)
+  2. `test -f tests/e2e/content-rating.spec.mjs && ! grep -n 'refreshRating' tests/e2e/content-rating.spec.mjs && ! grep -nE 'const TV_WAKE_MS = [0-9]+; // js/main.js' tests/e2e/helper.spec.mjs`
+  3. `node tests/e2e/run.mjs profiles`  (a new case, D134 ruling 5, superseding D123 1 and the "Done and Discard send one preview" sentence of D122 4: while a profile is open, a household control that does not preview live (the builder names it in the case) is changed, then Done, then Discard of another profile: the display shows neither change before Save, a Save applies it, and a whole-sheet Cancel restores it; the live controls still preview as D122 4 rules; the case fails when Done's preview is restored as in 2.3.1)
+  4. `npm test && node tests/e2e/run.mjs helper content-rating sleep status profiles settings-sheet`
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/helper.js|js/tv-power.js|js/engine.js|js/main.js|js/sleep.js|js/settings-ui.js|tests/helper.test.js|tests/tv-power.test.js|tests/engine.test.js|tests/e2e/content-rating.spec.mjs|tests/e2e/helper.spec.mjs|tests/e2e/profiles.spec.mjs)')"`
+  6. narrated: the anchored review and a UX walk (a profile opened, a household control changed, Done, Discard, Save, Cancel) APPROVE on disk.
+- **Notes/hazards:** the helper's `available` feeds the TV power-on decision at wake; "two failures in a row" is the rule, and a helper that never answered stays unavailable. No limit, selection or pin value is previewed, before or after the change (D120 1, D5).
+
+### 53. `mock-jellyfin` — A mock Jellyfin server beside the mock Plex server
+
+- **Goal:** `npm run demo` and the e2e harness can start a fake Jellyfin server with the data the Jellyfin source needs, so `jellyfin-source` is tested against data, not assumptions.
+- **Rulings:** D134 · **Mode:** afk · **Tags:** none (test tooling) · **Blocked by:** none
+- **Output:** `scripts/mock-jellyfin.mjs` (new), `tests/mock-jellyfin.test.js` (new), `scripts/serve.mjs` (the `--mock` branch only), `tests/e2e/lib.mjs` (expose the mock Jellyfin port), `package.json` (the `demo` script only)
+- **Acceptance criteria:**
+  1. `test -f tests/mock-jellyfin.test.js && node --test tests/mock-jellyfin.test.js`  (against a mock started on a free port: `GET /System/Info/Public` answers without a token with `ServerName` and `Id`; Quick Connect `GET /QuickConnect/Enabled`, `POST /QuickConnect/Initiate` → `{Code, Secret}`, `GET /QuickConnect/Connect?secret=` reports `Authenticated` false until `POST /__mock/quickconnect-approve`, then `POST /Users/AuthenticateWithQuickConnect` → `{AccessToken, User:{Id}}`; `POST /Users/AuthenticateByName` with the mock's user and password; a request without a valid `Authorization: MediaBrowser … Token="…"` header or `api_key` gets 401; `/UserViews` lists two movie libraries (`CollectionType: "movies"`) and one music library; `/Items` honours `ParentId`, `IncludeItemTypes=Movie`, `Recursive`, `SortBy=Random`, `Limit`, `StartIndex`, `GenreIds`, `OfficialRatings` (pipe-separated), `Filters=IsUnplayed`, `Ids`, and answers `TotalRecordCount`; every movie carries `Id`, `Name`, `ProductionYear`, `OfficialRating` (at least one each of G, PG, PG-13, R, one `TV-MA`, one `15` and one unrated), `CommunityRating`, `Genres`, `GenreItems`, `RunTimeTicks`, `Overview`, `UserData.PlayCount`, `ImageTags.Primary`; `/Genres?ParentId=` lists genres; one BoxSet and one playlist with their items; `GET /Sessions` returns the session set by `POST /__mock/jellyfin-sessions` (a movie, or an episode with `SeriesId`); `/Items/{id}/Images/Primary` returns an image; every reply carries `Access-Control-Allow-Origin: *`)
+  2. `node --test tests/mock-plex.test.js && node tests/e2e/run.mjs smoke first-run settings-sheet`  (the Plex mock and the harness behave as before)
+  3. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(scripts/mock-jellyfin.mjs|tests/mock-jellyfin.test.js|scripts/serve.mjs|tests/e2e/lib.mjs|package.json)')"`
+  4. narrated: the anchored review APPROVE on disk, and the shapes match `research--jellyfin-api-r1.md`; each shape the mock invents is named as (verify) in the review.
+- **Notes/hazards:** every title is invented; no real token or metadata. The mock listens on its own free port; the e2e harness passes it to specs as it does the Plex mock port.
+
+### 54. `source-adapters` — Plex becomes the first source adapter, with no change in behaviour
+
+- **Goal:** The engine, the display, Settings and the first-run card talk to a media server only through a source-adapter interface, Plex is its first adapter, and a Plex user sees and gets exactly what 2.3.1 gives them.
+- **Requirements:** new R-SRC-1 · **Rulings:** D5, D51, D73, D134 · **Mode:** afk · **Tags:** architecture, risk:high · **Blocked by:** `carried-tidy-ups` (shared Output files)
+- **Output:** `js/sources/index.js` (new), `js/sources/plex.js` (moved from `js/plex.js`), `js/plex.js` (removed), `js/duration.js` (`formatRuntime`), `js/engine.js`, `js/display.js`, `js/fill.js`, `js/main.js`, `js/settings.js`, `js/settings-ui.js`, `js/sleep-control.js`, `js/ratings.js`, `js/selection.js`, `js/poster-cache.js`, `sw.js`, `tests/plex.test.js`, `tests/sources.test.js` (new), `tests/fill.test.js`, `tests/engine.test.js`, `tests/settings.test.js`, `tests/poster-cache.test.js`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `test -f tests/sources.test.js && node --test tests/sources.test.js tests/plex.test.js tests/engine.test.js tests/settings.test.js tests/poster-cache.test.js tests/fill.test.js`  (cases: `createSource(settings)` returns the Plex adapter when `serverType` is absent or `'plex'` and refuses an unknown type with an error of kind `config`; the adapter object has exactly the methods the interface lists in `js/sources/index.js` (identity, libraries, libraryCount, sessions, pool, sourceItems, genres, collections, playlists, item, items, imageUrl, nowPlaying, label); a 2.3.1 settings object loads with `serverType: 'plex'` and is otherwise unchanged; a 2.3.1 poster index, pinned key and no-repeat history are read as Plex entries with no rewrite; an error from any adapter keeps the `kind` strings `network`, `timeout`, `auth`, `http`, `parse`)
+  2. `test -f js/sources/plex.js && test ! -e js/plex.js && test -z "$(grep -lE "from '\./plex\.js'|from '\./sources/plex\.js'" js/*.js)"`  (nothing outside `js/sources/` imports an adapter directly)
+  3. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (every existing spec passes; no spec's expected text, count or request shape changes — `git diff <the phase's starting commit> -- tests/e2e` is empty)
+  4. `grep -q '^\*\*R-SRC-1' docs/spec.md`
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/sources/index.js|js/sources/plex.js|js/plex.js|js/duration.js|js/engine.js|js/display.js|js/fill.js|js/main.js|js/settings.js|js/settings-ui.js|js/sleep-control.js|js/ratings.js|js/selection.js|js/poster-cache.js|sw.js|tests/plex.test.js|tests/sources.test.js|tests/fill.test.js|tests/engine.test.js|tests/settings.test.js|tests/poster-cache.test.js|docs/spec.md)')"`
+  6. narrated: the anchored review, an independent cold review (risk:high), `/arch-review` of the interface in `js/sources/index.js`, and a UX walk (first run, Sign in with Plex, Settings > Plex connection, the empty card and the status pill: every word and screen as in 2.3.1) APPROVE on disk.
+- **Notes/hazards:**
+  - The child-safety path does not move: every poster from any adapter still passes `allows()` in the engine (D5). Server-side rating filters stay an optimisation, never the gate.
+  - Words the user sees come from the adapter's `label` ("Plex" for Plex), so every 2.3.1 string is unchanged for a Plex user. plex.tv sign-in text stays inside the Plex adapter's sign-in flow.
+  - The setting is `serverType`, not `source`: `source` already names the collection or playlist source (D107), and a poster's `source` already means now-playing, random, static or cache.
+  - Identity: items keep their server ids; `serverType` scopes them. Bare keys stored by 2.3.1 read as Plex (D134 ruling 3).
+  - `PlexError` becomes `SourceError` with the same `kind` values; the empty card's "Sign in again" fix asks the adapter for its sign-in flow.
+  - `js/plex.js` leaves `SHELL` and `js/sources/*.js` join it, in the same commit (convention 5).
+
+### 55. `jellyfin-source` — Show posters from a Jellyfin server
+
+- **Goal:** A household with a Jellyfin server can sign in with a Quick Connect code (or a user name and password), choose movie libraries, genres, ratings, a collection or a playlist, and get the same display, now playing, limit, schedule, profiles and weighting as a Plex household, failing closed on any rating it cannot read.
+- **Requirements:** new R-SRC-2 · **Rulings:** D5, D51, D73, D134 · **Mode:** afk · **Tags:** ui, risk:high · **Blocked by:** `source-adapters`, `mock-jellyfin`
+- **Output:** `js/sources/jellyfin.js` (new), `js/sources/index.js`, `js/ratings.js`, `js/settings.js`, `js/settings-ui.js`, `index.html`, `css/app.css`, `js/main.js`, `sw.js`, `tests/jellyfin.test.js` (new), `tests/ratings.test.js`, `tests/settings.test.js`, `tests/sources.test.js`, `tests/e2e/jellyfin.spec.mjs` (new), `docs/spec.md`, `docs/validation/real-server-extended.md`
+- **Acceptance criteria:**
+  1. `test -f tests/jellyfin.test.js && node --test tests/jellyfin.test.js tests/ratings.test.js tests/settings.test.js tests/sources.test.js`  (cases against the mock: the requests built for one library, two libraries, a genre set, a rating set, a BoxSet and a playlist; the Authorization header carries `Client`, `Device`, `DeviceId`, `Version` and `Token`; a Jellyfin item maps to the poster shape the engine reads (title, year, rating, runtime from `RunTimeTicks`, summary, genres, `viewCount` from `UserData.PlayCount`, `audienceRating` from `CommunityRating`); an episode playing shows its series poster with the series' own rating (D73), and an episode whose series rating cannot be read is treated as unrated; ratings: `G`…`NC-17` and `TV-*` map as for Plex, any other value (`15`, `12A`, empty) is unknown and hidden under any limit (fail closed); the token is in `SECRET_KEYS` and never exported without the secrets option)
+  2. `test -f tests/e2e/jellyfin.spec.mjs && node tests/e2e/run.mjs jellyfin`  (against the mock: first run with Jellyfin chosen shows a Quick Connect code large and upright, approving it on the mock signs in and lists the movie libraries; user name and password also sign in; 30 picks under a PG limit show only G and PG titles and never the `15`, `TV-MA` or unrated titles; a genre, a BoxSet and a playlist each narrow the pool; now playing a movie and an episode; a rating-schedule slot and a profile apply to Jellyfin posters as to Plex; switching from Plex to Jellyfin and back clears the poster cache, pin and no-repeat history (D134 ruling 3); the mock down → offline cache within the limit; Settings at 1920×1080, a phone and rotation 90)
+  3. `npm test && node tests/e2e/run.mjs jellyfin first-run settings-sheet content-rating rating-schedule selection profiles weighting cache-first smoke`
+  4. `grep -q '^\*\*R-SRC-2' docs/spec.md && grep -qi 'jellyfin' docs/validation/real-server-extended.md && grep -qi 'quick connect' docs/validation/real-server-extended.md`
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/sources/jellyfin.js|js/sources/index.js|js/ratings.js|js/settings.js|js/settings-ui.js|index.html|css/app.css|js/main.js|sw.js|tests/jellyfin.test.js|tests/ratings.test.js|tests/settings.test.js|tests/sources.test.js|tests/e2e/jellyfin.spec.mjs|docs/spec.md|docs/validation/real-server-extended.md)')"`
+  6. narrated: the anchored review, an independent cold review (risk:high) and a UX walk (the server-type choice, Quick Connect on the first-run card and in Settings, the connection section at 1920×1080, a phone and rotation 90) APPROVE on disk.
+- **Notes/hazards:**
+  - Unrated and unknown ratings are hidden under any limit (D5, R-FILT-1). Jellyfin's own parental controls are not relied on; the engine's `allows()` is the gate.
+  - The poster image URL carries the token as `api_key`, as the Plex URL carries `X-Plex-Token` today; the offline cache stores no token.
+  - Quick Connect may be turned off on a server: the card checks `/QuickConnect/Enabled` and offers the user name and password form instead.
+  - Every Jellyfin request and field the mock invents is a (verify) row in a new section of `docs/validation/real-server-extended.md`; no real Jellyfin server is used in this run.
+  - Shared MediaBrowser code (the item mapping, the header, the rating map) may live in `js/sources/jellyfin.js` for `emby-source` to import; Emby itself is the next phase. Multiple servers, Play now and the rest of 2.4's list are out of scope (D134 ruling 1).
+
+### 56. `emby-source` — Show posters from an Emby server
+
+- **Goal:** A household with an Emby server can sign in with a user name and password and get what a Jellyfin household gets, failing closed on any rating it cannot read and on any reply the adapter does not recognise.
+- **Requirements:** new R-SRC-3 · **Rulings:** D5, D51, D73, D134 · **Mode:** afk · **Tags:** ui, risk:high · **Blocked by:** `jellyfin-source` (shared Output files)
+- **Output:** `js/sources/emby.js` (new), `js/sources/jellyfin.js` (shared helpers only), `js/sources/index.js`, `js/settings.js`, `js/settings-ui.js`, `index.html`, `js/main.js`, `sw.js`, `scripts/mock-jellyfin.mjs` (an Emby mode), `tests/mock-jellyfin.test.js`, `tests/emby.test.js` (new), `tests/sources.test.js`, `tests/settings.test.js`, `tests/e2e/emby.spec.mjs` (new), `docs/spec.md`, `docs/validation/real-server-extended.md`
+- **Acceptance criteria:**
+  1. `test -f tests/emby.test.js && node --test tests/emby.test.js tests/jellyfin.test.js tests/sources.test.js tests/settings.test.js tests/mock-jellyfin.test.js`  (cases against the mock in Emby mode: sign-in by `POST /Users/AuthenticateByName` with `Username` and `Pw`; the `X-Emby-Authorization: Emby UserId=…, Client=…, Device=…, DeviceId=…, Version=…` header and `X-Emby-Token`; libraries, the random pool, genres, a BoxSet, a playlist, `/Sessions` and the image URL through the paths the plan's research names (each marked (verify)); the same poster mapping and rating map as Jellyfin (D134 ruling 3); a `/Sessions` reply of 401 or 403 means no now-playing, never an error card; the Jellyfin cases still pass)
+  2. `test -f tests/e2e/emby.spec.mjs && node tests/e2e/run.mjs emby`  (against the mock in Emby mode: Settings offers Emby beside Plex and Jellyfin; user name and password sign in and list the movie libraries; no Quick Connect code is shown for Emby; 30 picks under a PG limit show only G and PG titles; a genre, a BoxSet and a playlist each narrow the pool; now playing a movie; switching Jellyfin → Emby clears the poster cache, pin and no-repeat history (D134 ruling 2); Settings at 1920×1080, a phone and rotation 90)
+  3. `npm test && node tests/e2e/run.mjs emby jellyfin first-run settings-sheet content-rating selection profiles smoke`
+  4. `grep -q '^\*\*R-SRC-3' docs/spec.md && grep -qi 'emby' docs/validation/real-server-extended.md`
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(js/sources/emby.js|js/sources/jellyfin.js|js/sources/index.js|js/settings.js|js/settings-ui.js|index.html|js/main.js|sw.js|scripts/mock-jellyfin.mjs|tests/mock-jellyfin.test.js|tests/emby.test.js|tests/sources.test.js|tests/settings.test.js|tests/e2e/emby.spec.mjs|docs/spec.md|docs/validation/real-server-extended.md)')"`
+  6. narrated: the anchored review, an independent cold review (risk:high) and a UX walk (the server-type choice and the Emby sign-in at 1920×1080, a phone and rotation 90) APPROVE on disk.
+- **Notes/hazards:**
+  - Emby's item, session and view paths and its CORS default are unconfirmed (`research--jellyfin-api-r1.md` section 9): the builder's research note names a primary source for each path it uses or marks it (verify), and every one is a row in `docs/validation/real-server-extended.md`. A server that refuses cross-origin requests shows the existing connection error; no proxy is added in this run.
+  - No Quick Connect for Emby: the first-run card for Emby points to Settings for the user name and password.
+  - The password is never stored; only the access token is, in `SECRET_KEYS`.
+
+### 57. `release-2.4.0` — Version 2.4.0, its upgrade notice and the docs
+
+- **Goal:** `VERSION` is 2.4.0, a configured display shows a one-time "What's new in 2.4" notice, and the README, Roadmap and spec describe what 2.4 shipped and what of the Roadmap's 2.4 list moves later.
+- **Requirements:** new R-UPG-4 (supersedes R-UPG-3) · **Rulings:** D13, D79, D134 · **Mode:** afk · **Tags:** docs, ui · **Blocked by:** `emby-source`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/release.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/lib.mjs`, `Roadmap.md`, `README.md`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `grep -q "VERSION = '2.4.0'" sw.js && grep -q "VERSION = '2.4.0'" js/main.js && test "$(grep -c '"version": "2.4.0"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
+  2. `node tests/e2e/run.mjs release preset smoke`  (the notice: marker `'2.4'`; a configured display upgraded from 2.3 shows "What's new in 2.4" once, naming Jellyfin and Emby; a fresh install shows nothing but gets the marker; the harness seeds `'2.4'`)
+  3. `grep -qE '^## .*Done in 2\.4' Roadmap.md && grep -qi 'jellyfin' README.md && grep -qi 'emby' README.md && grep -q '^\*\*R-UPG-4' docs/spec.md && ! grep -q '^### Carried from 2.1.1' Roadmap.md && ! grep -q '^### Carried from 2.3' Roadmap.md`
+  4. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, by the conductor, after the memory gate)
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|tests/e2e/release.spec.mjs|tests/e2e/preset.spec.mjs|tests/e2e/smoke.spec.mjs|tests/e2e/lib.mjs|Roadmap.md|README.md|docs/spec.md)')"`
+  6. narrated: keep-docs-current over `9eeb995f..HEAD` inside the phase; the anchored documentation review and a UX walk of the notice APPROVE on disk.
+- **Notes/hazards:** the README says Jellyfin and Emby are tested against mock servers only, and lists the (verify) rows. No tag, no GitHub release, no pull request (D13, D79).
+
+### Run 9 graph, tags and ports
+
+| Phase | Blocked by | Tags | Builder ports |
+|---|---|---|---|
+| `carried-tidy-ups` | — | ui | 18480/18801 |
+| `mock-jellyfin` | — | — | 18580/18901 |
+| `source-adapters` | `carried-tidy-ups` | architecture, risk:high | 18480/18801 |
+| `jellyfin-source` | `source-adapters`, `mock-jellyfin` | ui, risk:high | 18480/18801 |
+| `emby-source` | `jellyfin-source` | ui, risk:high | 18480/18801 |
+| `release-2.4.0` | `emby-source` | docs, ui | 18480/18801 |
+
+Reviewers use 18680/19001 and 18780/19101. `carried-tidy-ups` and `mock-jellyfin` are the only concurrent pair (disjoint Outputs).
