@@ -524,7 +524,16 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     });
   }
 
-  setInterval(() => dialog.open && syncSlotStatus(), 1000); // the slot in force changes at its boundary while the sheet is open
+  // The slot in force changes at its boundary while the sheet is open, so the status line is re-read once a second, only while it is open
+  // (a timer that runs with the sheet closed has nothing to do). Started where the sheet opens, cleared when it closes; never twice.
+  let slotStatusTimer = null;
+  function startSlotStatusTimer() {
+    if (slotStatusTimer === null) slotStatusTimer = setInterval(() => dialog.open && syncSlotStatus(), 1000);
+  }
+  function stopSlotStatusTimer() {
+    clearInterval(slotStatusTimer);
+    slotStatusTimer = null;
+  }
 
   $('slot-add').addEventListener('click', () => {
     const row = slotRow({ start: '08:00', limit: field('maxContentRating').value });
@@ -642,7 +651,12 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   function syncDependent() {
     $('custom-frame-row').hidden = field('frameId').value !== CUSTOM_FRAME_ID;
+    // Showing or hiding the Household options keeps the toggle where it was on screen, so the schedule and the profiles come into view
+    // below it instead of the sheet's scroll position moving the toggle away.
+    const toggleTop = $('household-toggle').getBoundingClientRect().top;
     $('household-options').hidden = !$('household-toggle').checked;
+    const moved = $('household-toggle').getBoundingClientRect().top - toggleTop;
+    if (moved) dialog.querySelector('.sheet-body').scrollTop += moved;
     field('username').disabled = !field('showNowPlaying').checked;
     field('includeEpisodes').disabled = !field('showNowPlaying').checked;
     for (const out of form.querySelectorAll('output[data-for]')) {
@@ -985,6 +999,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   $('settings-cancel').addEventListener('click', closeSheet);
   dialog.addEventListener('close', () => {
+    if (!dialog.open) stopSlotStatusTimer(); // a close queued before a reopen (position mode's Done) must not stop the open sheet's timer
     closePreset();
     setTokenShown(false); // the token is hidden again whenever the sheet closes
     cancelSignIn();
@@ -1019,6 +1034,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   function runOpenOptions({ wantSignIn, token, test, section }, auto) {
     if (section === 'protection') $('protection-fieldset').scrollIntoView({ block: 'start' });
     else if (section === 'layout') $('layout-fieldset').scrollIntoView({ block: 'start' });
+    else if (section === 'household') $('household-fieldset').scrollIntoView({ block: 'start' });
     if (token) signIn({ token });
     else if (wantSignIn) signIn();
     else if (test || (auto && original.plexToken && original.serverUrl)) testConnection();
@@ -1027,6 +1043,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   /** Done or Escape: the sheet comes back with the values just set and the SAME `original`, so Cancel still reverts. */
   function resumeSheet() {
     if (!dialog.open) dialog.showModal();
+    startSlotStatusTimer(); // the sheet comes back from position mode, which closed it
     syncDependent();
     $('position-btn').focus();
   }
@@ -1188,6 +1205,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       $('manual-connection').open = Boolean(original.plexToken && !original.serverName);
       closePreset();
       dialog.showModal();
+      startSlotStatusTimer();
       runOpenOptions({ wantSignIn, token, test, section }, true);
     },
     /** For the fix buttons, while the sheet is already open. */

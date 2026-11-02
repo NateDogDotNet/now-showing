@@ -153,7 +153,7 @@ const markerOnce = (page, value) =>
   }, value);
 const clearMarkerOnce = (page) => markerOnce(page, null);
 const toastState = (page) => page.evaluate(() => ({ hidden: document.getElementById('toast').hidden, text: document.getElementById('toast').textContent, buttons: [...document.querySelectorAll('#toast button')].map((b) => b.textContent) }));
-const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.2/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.3/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
 
 await withApp({ settings: seed() }, async ({ page, app }) => {
   await clearMarkerOnce(page);
@@ -161,7 +161,8 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await waitToast(page);
   const t = await toastState(page);
   assert.ok(t.buttons.includes('Open settings'), `buttons: ${t.buttons}`);
-  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.2', 'marker written');
+  assert.ok(t.text.includes("What's new in 2.3: rating limits by time of day, viewer profiles, and choosing which posters show, favouring unwatched ones."), `words: ${t.text}`);
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.3', 'marker written');
   await page.reload();
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
   await page.waitForTimeout(1500);
@@ -169,18 +170,35 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   check('upgrade toast shows once for a configured install');
 });
 
-// A 2.1 install (marker '2.1') is told about 2.2 once, and the marker moves on.
+// A 2.2 install (marker '2.2') is told about 2.3 once, and the marker moves on.
 await withApp({ settings: seed() }, async ({ page, app }) => {
-  await markerOnce(page, '2.1');
+  await markerOnce(page, '2.2');
   await page.goto(app.url);
   await waitToast(page);
-  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.2', 'marker becomes 2.2');
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.3', 'marker becomes 2.3');
   await page.reload();
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
   await page.waitForTimeout(1500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'not shown again after a reload');
-  check("marker '2.1': the 2.2 toast shows once and the marker becomes 2.2");
+  check("marker '2.2': the 2.3 toast shows once and the marker becomes 2.3");
 });
+
+// Waits until Household is at the top of the sheet body. The connection test and the library, genre and collection requests have all
+// answered (the network is idle) and two frames have drawn, so the browser has finished moving the sheet's content; then the position
+// is read. The wait is on that state, not on a delay.
+const householdAtTop = async (page) => {
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await page.waitForFunction(
+    () => {
+      const f = document.getElementById('household-fieldset').getBoundingClientRect();
+      const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
+      return document.getElementById('settings').open && f.top >= body.top - 1 && f.top < body.top + 80;
+    },
+    null,
+    { timeout: 8000 },
+  );
+};
 
 await withApp({ settings: seed() }, async ({ page, app }) => {
   await clearMarkerOnce(page);
@@ -188,14 +206,79 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await waitToast(page);
   await page.click('#toast button:has-text("Open settings")');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
+  await householdAtTop(page).catch(() => {}); // the assertion below reports where it is if it never gets there
   const where = await page.evaluate(() => {
-    const f = document.getElementById('layout-fieldset').getBoundingClientRect();
+    const f = document.getElementById("household-fieldset").getBoundingClientRect();
     const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
     return { top: f.top, bottom: f.bottom, bodyTop: body.top, bodyBottom: body.bottom };
   });
-  assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyBottom, `fieldset scrolled into view: ${JSON.stringify(where)}`);
-  assert.equal(await page.locator('#layout-fieldset legend').isVisible(), true);
-  check('Open settings opens Settings at Frame & layout');
+  assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyTop + 80, `fieldset scrolled into view: ${JSON.stringify(where)}`);
+  assert.equal(await page.locator('#household-fieldset legend').isVisible(), true);
+  check('Open settings opens Settings at Household');
+});
+
+// D128 1: ticking "Household with children" reveals the limit, the schedule and the profiles. The toggle stays where it was on screen
+// (within a few px) and the schedule editor comes into view below it, whether the box is ticked by mouse or by keyboard.
+const settled = async (page) => {
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+};
+const openAtHousehold = async (page, app) => {
+  await clearMarkerOnce(page);
+  await page.goto(app.url);
+  await waitToast(page);
+  await page.click('#toast button:has-text("Open settings")');
+  await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
+  await settled(page);
+};
+const togglePlace = (page) =>
+  page.evaluate(() => {
+    const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
+    const box = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; };
+    return { body: { top: body.top, bottom: body.bottom }, toggle: box(document.getElementById('household-toggle')), slots: box(document.getElementById('slot-label')) };
+  });
+for (const how of ['mouse', 'keyboard']) {
+  await withApp({ settings: seed({ maxContentRating: '' }) }, async ({ page, app }) => {
+    await openAtHousehold(page, app);
+    assert.equal(await page.locator('text=The rating limit, the times it changes during the day, and viewer profiles are set here.').isVisible(), true, 'the line under the toggle says what is set here');
+    const before = await togglePlace(page);
+    if (how === 'mouse') await page.click('#household-toggle');
+    else {
+      await page.focus('#household-toggle');
+      await page.keyboard.press('Space');
+    }
+    assert.equal(await page.isChecked('#household-toggle'), true, 'the toggle is ticked');
+    const after = await togglePlace(page);
+    assert.ok(Math.abs(after.toggle.top - before.toggle.top) <= 4, `the toggle stays put when ticked by ${how}: ${JSON.stringify({ before, after })}`);
+    assert.ok(after.slots.top >= after.body.top - 1 && after.slots.top < after.body.bottom, `the schedule editor is inside the sheet body's visible box: ${JSON.stringify(after)}`);
+    check(`ticking Household with children by ${how}: the toggle stays put and the schedule editor is in view`);
+  });
+}
+
+// D128 1: a slow server answers the library, collection and playlist lists late. Open settings still lands at Household once they arrive,
+// and a sheet opened with the gear and scrolled by the reader does not move when they arrive.
+const slowLists = (page) =>
+  page.route(/\/(library\/sections|playlists)/, async (route) => {
+    await new Promise((done) => setTimeout(done, 1500));
+    await route.continue();
+  });
+await withApp({ settings: seed() }, async ({ page, app }) => {
+  await slowLists(page);
+  await openAtHousehold(page, app);
+  const where = await page.evaluate(() => ({ top: document.getElementById('household-fieldset').getBoundingClientRect().top, bodyTop: document.querySelector('#settings .sheet-body').getBoundingClientRect().top }));
+  assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyTop + 80, `Household is at the top once the late lists arrived: ${JSON.stringify(where)}`);
+  check('Open settings lands at Household when the lists arrive late');
+});
+await withApp({ settings: seed() }, async ({ page, app }) => {
+  await slowLists(page);
+  await openSettings(page, app);
+  const place = () => page.evaluate(() => document.getElementById('layout-fieldset').getBoundingClientRect().top);
+  await page.evaluate(() => { document.querySelector('#settings .sheet-body').scrollTop = 1200; });
+  const before = await place();
+  await settled(page);
+  const after = await place();
+  assert.ok(Math.abs(after - before) <= 4, `a sheet scrolled by the reader does not move when the lists arrive: ${before} -> ${after}`);
+  check('a sheet opened with the gear and scrolled does not move when the lists arrive late');
 });
 
 await withApp({ settings: seed({ settingsPinHash: auth.hash, settingsPinSalt: auth.salt }) }, async ({ page, app }) => {
@@ -208,12 +291,13 @@ await withApp({ settings: seed({ settingsPinHash: auth.hash, settingsPinSalt: au
   for (const d of PIN) await page.click(`#pin-dialog [data-key="${d}"]`);
   await page.click('#pin-dialog [data-key="ok"]');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
+  await householdAtTop(page).catch(() => {});
   const where = await page.evaluate(() => {
-    const f = document.getElementById('layout-fieldset').getBoundingClientRect();
+    const f = document.getElementById("household-fieldset").getBoundingClientRect();
     const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
     return { top: f.top, bottom: f.bottom, bodyTop: body.top, bodyBottom: body.bottom };
   });
-  assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyBottom, `fieldset scrolled into view after the PIN: ${JSON.stringify(where)}`);
+  assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyTop + 80, `fieldset scrolled into view after the PIN: ${JSON.stringify(where)}`);
   check('Open settings goes through the PIN gate');
 });
 
@@ -222,7 +306,7 @@ await withApp({ settings: { pixelShift: false, dailyReload: false } }, async ({ 
   await page.goto(app.url);
   await page.waitForTimeout(2500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'unconfigured: no toast');
-  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.2', 'unconfigured: marker written');
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.3', 'unconfigured: marker written');
   assert.ok(!(await page.evaluate(() => document.querySelector('#toast button'))) || (await toastState(page)).hidden);
   check('unconfigured install never shows the toast');
 });
@@ -250,7 +334,7 @@ await withApp({ settings: {} }, async ({ page, context, app }) => {
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
   await page.waitForTimeout(1500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'a fresh config.json install shows no upgrade toast');
-  assert.equal(await marker(page), '2.2', 'the marker is written');
+  assert.equal(await marker(page), '2.3', 'the marker is written');
   check('K60: a config.json-provisioned first boot writes the marker and shows no toast');
 });
 
@@ -260,6 +344,6 @@ await withApp({ settings: seed() }, async ({ page, context, app }) => {
   await clearMarkerOnce(page);
   await page.goto(app.url);
   await waitToast(page);
-  assert.equal(await marker(page), '2.2');
+  assert.equal(await marker(page), '2.3');
   check('K60: an upgraded stored install (config.json beside it) still shows the toast');
 });

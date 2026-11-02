@@ -24,7 +24,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.2.3';
+export const VERSION = '2.3.0';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -186,7 +186,6 @@ const limitWatch = createLimitWatch({
     tick({ force: true });
   },
 });
-setInterval(limitWatch.check, 1000);
 
 /**
  * The progress bar and player label follow the session the engine saw this tick, but only while that very
@@ -375,7 +374,16 @@ const reload = createReload({ state, storage, log, getLastDrawAt: () => lastDraw
 setInterval(reload.dailyReloadTick, 1000);
 const tv = createTvPower({ state, helper, tick, diagnosticsOpen: () => $('diagnostics').open, renderDiagnostics });
 const sleepControl = createSleepControl({ state, log, $, tick, syncFirstRun, tv, reload, brightness, getClient: () => client, getEngine: () => engine });
-setInterval(sleepControl.evaluateSleep, 1000);
+// One timer serves both once-a-second checks (the page has no more one-second timers than it had before the limit watch). The limit watch
+// runs first, in its own try/catch, so an error in either can never skip the other.
+setInterval(() => {
+  try {
+    limitWatch.check();
+  } catch (err) {
+    log.warn(`Limit check failed: ${err.message}`);
+  }
+  sleepControl.evaluateSleep();
+}, 1000);
 sleepControl.listenForManualWake();
 
 // ---------- Errors carry their fix (R-SET-6) ----------
@@ -1239,23 +1247,24 @@ async function boot() {
   announceWhatsNew();
 }
 
-// ---------- The upgrade notice (R-UPG-2) ----------
+// ---------- The upgrade notice (R-UPG-3) ----------
 
 const WHATS_NEW_KEY = 'plexPoster.whatsNew';
-const WHATS_NEW_VERSION = '2.2';
+const WHATS_NEW_VERSION = '2.3';
 
 /**
  * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new
- * and pointed at the Frame & layout fieldset (through the normal PIN gate). An unconfigured one is a fresh install, not an
- * upgrade, so it shows nothing. Either way the marker is written, so it never shows again. The 2.1 notice is retired.
+ * and pointed at the Household fieldset (through the normal PIN gate), where the rating schedule and viewer profiles live.
+ * An unconfigured one is a fresh install, not an upgrade, so it shows nothing. Either way the marker is written, so it
+ * never shows again. The 2.2 notice is retired.
  */
 function announceWhatsNew() {
   if (storage.getItem(WHATS_NEW_KEY) === WHATS_NEW_VERSION) return;
   storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION);
   if (!isConfigured(state.settings)) return;
-  toast("What's new in 2.2: drag the poster into place, and fill the empty space around it.", {
+  toast("What's new in 2.3: rating limits by time of day, viewer profiles, and choosing which posters show, favouring unwatched ones.", {
     action: 'Open settings',
-    onAction: () => requestSettings({ section: 'layout' }),
+    onAction: () => requestSettings({ section: 'household' }),
     ms: 20_000,
   });
 }

@@ -759,6 +759,77 @@ slotCase('22 the status line is written only when its words change', { settings:
   check('the status line is written only when its words change');
 });
 
+// 23. The sheet closed and opened again within one task (position mode: Position poster, then Done) must keep the status line moving:
+// the close event of the first close arrives after the reopen and must not stop the timer of the open sheet.
+slotCase('23 closed and reopened within one task: the status line still follows the boundary', { settings: seed(), clock: { time: '2026-01-05T14:58:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  assert.match(await page.textContent('#slot-status'), /^Saved: in force now: G until 15:00\.$/);
+  await page.evaluate(() => {
+    document.getElementById('position-btn').click();
+    document.getElementById('position-done').click();
+  });
+  assert.equal(await page.evaluate(() => document.getElementById('settings').open), true, 'the sheet is open again');
+  await advance(page, 130_000); // past 15:00:00
+  assert.match(await page.textContent('#slot-status'), /^Saved: in force now: PG-13 until 22:00\.$/);
+  check('closed and reopened in one task: the status line follows the 15:00 boundary');
+});
+
+// 24. Position poster, then Done, as two separate clicks (the close of the first arrives before the reopen): the status line still follows
+// the boundary, so the sheet's timer was started again by the way back.
+slotCase('24 position then Done, two clicks: the status line still follows the boundary', { settings: seed(), clock: { time: '2026-01-05T14:58:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  assert.match(await page.textContent('#slot-status'), /^Saved: in force now: G until 15:00\.$/);
+  await page.click('#position-btn');
+  await page.waitForFunction(() => !document.getElementById('settings').open, null, { timeout: 5000 });
+  await page.click('#position-done');
+  await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
+  await advance(page, 130_000); // past 15:00:00
+  assert.match(await page.textContent('#slot-status'), /^Saved: in force now: PG-13 until 22:00\.$/);
+  check('position then Done in two clicks: the status line follows the 15:00 boundary');
+});
+
+// 25. The sheet never runs two status timers: coming back from position mode within one task (the close not yet delivered) leaves one
+// one-second timer more than the page has with the sheet closed, and closing the sheet gives it back.
+slotCase('25 one status timer at most', { settings: seed(), clock: { time: '2026-01-05T14:58:00' } }, async ({ page, app }) => {
+  await page.addInitScript(() => {
+    const live = new Set();
+    const set = window.setInterval.bind(window);
+    const clear = window.clearInterval.bind(window);
+    window.setInterval = (fn, ms, ...rest) => {
+      const id = set(fn, ms, ...rest);
+      if (ms === 1000) live.add(id);
+      return id;
+    };
+    window.clearInterval = (id) => {
+      live.delete(id);
+      return clear(id);
+    };
+    window.__oneSecondTimers = () => live.size;
+  });
+  await page.goto(app.url);
+  await posterShown(page);
+  const timers = () => page.evaluate(() => window.__oneSecondTimers());
+  const closed = await timers();
+  await openSettings(page);
+  assert.equal(await timers(), closed + 1, 'open: one timer more');
+  await page.evaluate(() => {
+    document.getElementById('position-btn').click();
+    document.getElementById('position-done').click();
+  });
+  assert.equal(await page.evaluate(() => document.getElementById('settings').open), true, 'the sheet is open again');
+  assert.equal(await timers(), closed + 1, 'back from position mode within one task: still one timer more, not two');
+  await page.click('#settings-cancel');
+  await page.waitForFunction(() => !document.getElementById('settings').open, null, { timeout: 5000 });
+  // The close event stops the timer a moment after the dialog reads closed, so the wait is on the count itself.
+  await page.waitForFunction((n) => window.__oneSecondTimers() === n, closed, { timeout: 5000 });
+  assert.equal(await timers(), closed, 'closed: the timer is given back');
+  check('the sheet never runs two status timers, and gives its one back on close');
+});
+
 // ---------- run ----------
 
 const WORKERS = Number(process.env.E2E_SCHEDULE_WORKERS || 4);
