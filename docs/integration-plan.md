@@ -1211,13 +1211,13 @@ Added on the owner's word (2026-10-31, verbatim: "write the run 8 plan and orche
 
 - **Goal:** `VERSION` is 2.3.0, a configured display shows a one-time "What's new in 2.3" notice, and the README, Roadmap and spec describe what 2.3 shipped, with the Roadmap's later releases renumbered.
 - **Requirements:** new R-UPG-3 (supersedes R-UPG-2) · **Rulings:** D13, D79, D93, D101 · **Mode:** afk · **Tags:** docs, ui · **Blocked by:** `viewer-profiles`
-- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/preset.spec.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/lib.mjs`, `Roadmap.md`, `README.md`, `docs/spec.md`, and (D124) `index.html` and `js/settings-ui.js` for the Household section only
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/preset.spec.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/lib.mjs`, `Roadmap.md`, `README.md`, `docs/spec.md`, and (D124) `index.html` and `js/settings-ui.js` for the Household section only, and (D125) `tests/e2e/metadata.spec.mjs` and the two one-second timers in `js/main.js` and `js/settings-ui.js`
 - **Acceptance criteria:**
   1. `grep -q "VERSION = '2.3.0'" sw.js && grep -q "VERSION = '2.3.0'" js/main.js && test "$(grep -c '"version": "2.3.0"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
   2. `node tests/e2e/run.mjs release preset smoke`  (the notice: marker `'2.3'`; a configured display upgraded from 2.2 shows "What's new in 2.3" once with an Open settings action that opens Settings at Household; a fresh install shows nothing but gets the marker; the harness seeds `'2.3'`)
   3. `grep -qE '^## .*Done in 2\.3' Roadmap.md && grep -qE '^[0-9]+\. \*\*2\.4:\*\* the source-adapter' Roadmap.md && grep -qE '^[0-9]+\. \*\*2\.5:\*\* the no-server mode' Roadmap.md && grep -qi 'rating schedule' README.md && grep -q '^\*\*R-UPG-3' docs/spec.md`
   4. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, by the conductor, after the memory gate)
-  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|tests/e2e/preset.spec.mjs|tests/e2e/smoke.spec.mjs|tests/e2e/lib.mjs|Roadmap.md|README.md|docs/spec.md|index.html|js/settings-ui.js)')"`  (D124 adds `index.html` and `js/settings-ui.js`)
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|tests/e2e/preset.spec.mjs|tests/e2e/smoke.spec.mjs|tests/e2e/lib.mjs|Roadmap.md|README.md|docs/spec.md|index.html|js/settings-ui.js|tests/e2e/metadata.spec.mjs)')"`  (D124 adds `index.html` and `js/settings-ui.js`; D125 adds `tests/e2e/metadata.spec.mjs`)
   6. narrated: keep-docs-current over `22c11fa3..HEAD` inside the phase; the anchored documentation review and a UX walk of the notice APPROVE on disk.
 - **Notes/hazards:**
   - The Roadmap renumbers (D101 ruling 1): the source adapters become 2.4, the no-server TMDB mode 2.5, and 3.0 stays.
