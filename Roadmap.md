@@ -95,9 +95,9 @@ Four 2.3 features and the upgrade notice are built and tested (D101). Version 2.
 - **Version**: 2.3.0 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`.
 - **Still to check on a real server** (carried into `docs/validation/real-server-extended.md`): the Plex `genre` filter and the collection and playlist endpoints are (verify) items; nothing in 2.3 was run against a real Plex Media Server.
 
-## ✅ Done in 2.3.1 (on the branch `2.3.1`, not merged)
+## ✅ Done in 2.3.1 (on `main`)
 
-The run-8 follow-ups (D132). Version 2.3.1 has no tag and no GitHub release, and it is tested against the mock Plex server only.
+The run-8 follow-ups (D132). Version 2.3.1 was merged into `main` on 2026-11-02 on the owner's word, with no pull request (D133). It has no tag and no GitHub release, and it is tested against the mock Plex server only.
 
 - **Profile editor**: opening a profile clears the household's genres at once ("Loading the genres…"), and the "<name> kept" notice goes when the sheet or a profile opens.
 - **Pinned poster**: the status line under the slots, and the pin help, say a pinned poster stays up whatever the limit, time slot or profile.
@@ -121,7 +121,7 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Next
 
-2.2.0 to 2.3.0 are on `main` (see the "Done in 2.2" and "Done in 2.3" sections above), and 2.3.1 (the 2.3 follow-ups) is on the branch `2.3.1`, waiting for the owner to ask for a merge. The next features follow the suggested order:
+2.2.0 to 2.3.1 are on `main` (see the "Done in 2.2", "Done in 2.3" and "Done in 2.3.1" sections above); nothing is in progress. The next features follow the suggested order:
 
 1. **2.4, the source adapters:** the adapter refactor with Plex as the first adapter, then Jellyfin and Emby, with multiple servers in poster selection. See "Sources other than Plex" under Ideas.
 2. **2.5, the no-server mode:** the TMDB adapter, after the adapter layer exists.

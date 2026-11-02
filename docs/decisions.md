@@ -731,3 +731,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   6. **The 390 px sideways scroll.** The cause: "Clear poster cache" in the Device fieldset's two-column grid would not wrap. The grid columns are now `minmax(0, 1fr)`, and its buttons wrap.
   7. **docs/spec.md.** The proposed sentence from the run-8 keep-docs-current check is in R-FILT-2, with the two new lines. R-STAT-1 and R-UPG-3 follow 3–5.
   8. **Version** 2.3.1 in sw.js, js/main.js, package.json and package-lock.json. There is no new What's new notice: the marker stays '2.3'. tests/e2e/followups.spec.mjs covers each fix, and tests/limit-schedule.test.js covers the mark.
+
+## Owner answer — 2026-11-02 (after 2.3.1): D133
+
+- **D133 2.3.1 is merged into main.** Nathan's words: "merge, push, and clean up". Branch `2.3.1` (tip bd7b7335) was merged into `main` with a merge commit (05485e64), with no pull request. The merge's tree equals bd7b7335, where `npm test` passed 723 of 723 and the full e2e suite passed 28 of 28. `npm test` passed 723 of 723 again on the merge. No tag and no GitHub release (D79). README and Roadmap now say 2.3.1 is on `main`. The branch `2.3.1` is deleted locally and on origin.
