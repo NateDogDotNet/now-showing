@@ -735,3 +735,22 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner answer — 2026-11-02 (after 2.3.1): D133
 
 - **D133 2.3.1 is merged into main.** Nathan's words: "merge, push, and clean up". Branch `2.3.1` (tip bd7b7335) was merged into `main` with a merge commit (05485e64), with no pull request. The merge's tree equals bd7b7335, where `npm test` passed 723 of 723 and the full e2e suite passed 28 of 28. `npm test` passed 723 of 723 again on the merge. No tag and no GitHub release (D79). README and Roadmap now say 2.3.1 is on `main`. The branch `2.3.1` is deleted locally and on origin.
+
+## Owner decision — 2026-11-02 (the run-9 policy, verbatim: "1. b 2. a 3. a 4. a 5. b 6. a  Create the docs only. Do not execute.  Assume that I am AFK and that I answere all questsion during implementation/execution with \"defaults\"."): D134
+
+- **D134 Run 9 builds 2.4: the source adapters, with Jellyfin and Emby.** The run-9 section of `docs/integration-plan.md` (phases 52–57) is the plan. The policy stop offered six items with a recommended option each. Nathan answered all six.
+  1. **Scope (option b).** The run has six phases: `carried-tidy-ups`, `mock-jellyfin`, `source-adapters`, `jellyfin-source`, `emby-source` and `release-2.4.0`. Emby is added as its own phase after Jellyfin. Out of scope, for a later 2.4.x run: multiple servers in poster selection, Play now, the movie-night countdown, birthday and occasion mode, the Picture frame sources, and the TMDB no-server mode (2.5).
+  2. **Switching server type (option a).** Saving a different `serverType` clears the offline poster cache, the pinned poster and the no-repeat history. Items keep their server ids. Keys stored by 2.3.1 have no prefix and read as Plex, and nothing is migrated.
+  3. **Ratings (option a).** A Jellyfin or Emby rating maps onto the G–NC-17 ladder only when it is a US film or `TV-*` value. Any other value (`15`, `12A`, empty) is unknown, and is hidden whenever a limit is set (fail closed, D5).
+  4. **Validation (option a).** The run tests against mock servers only. Every Jellyfin and Emby request or field the mocks cannot prove is a (verify) row in `docs/validation/real-server-extended.md`. No real Jellyfin or Emby server is reachable from the devbox (invocation probes: rootless podman fails, and `ssh home` has no route).
+  5. **The item carried from 2.3 (option b).** It is fixed in `carried-tidy-ups`. While a profile is open, Done and Discard no longer preview the household controls that do not preview live. This supersedes D123 1, and the sentence "Done and Discard send one preview" in D122 4. The live controls keep previewing, as D122 4 rules otherwise.
+  6. **Branch and record (option a).** The branch is `2.4`, from `main` 9eeb995f. The plan and this entry are committed separately and the branch is pushed. There is no pull request, merge or tag unless Nathan asks (D13, D79). The run-8 trail moves to `~/now-showing-run8-trail`.
+  7. **Execution.** Nathan's words: "Create the docs only. Do not execute." Nothing has been built. When the run is executed, every question is answered "defaults" (the recommended option), as D44 rules. This covers decision rounds, re-dispatch caps and criterion changes. The D44 limits still stand: anything irreversible or outward-facing other than pushing branch `2.4` waits for Nathan's own words. That covers a pull request, a merge, a tag, a release, a force-push and deleting unique work.
+  - **Facts the plan stands on (invocation probes):**
+    - `npm test` passes 723 of 723 at 9eeb995f.
+    - A stock Jellyfin server allows cross-origin requests from any origin, header and method (`CorsHosts = ["*"]` in `ServerConfiguration.cs`, `CorsPolicyProvider.cs`).
+    - Jellyfin's Quick Connect is on by default; its 6-digit code lasts 10 minutes.
+    - Jellyfin's `GET /Sessions` needs no admin rights.
+    - Emby's item, session and view paths and its CORS default are unconfirmed.
+    - The research is in `.orchestrator/artifacts/research--jellyfin-api-r1.md` and `research--jellyfin-cors-r1b.md`, and moves with the run-9 trail.
+  - **Floor check:** six phases, three of them `risk:high` (`source-adapters`, `jellyfin-source`, `emby-source`), so the orchestration loop runs.
