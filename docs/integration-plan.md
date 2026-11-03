@@ -1406,9 +1406,20 @@ Facts this section stands on (invocation probes, 2026-11-03T16:38Z):
   - The pin is shown whatever its rating (D122 1), so a pin naming a server that is gone, or an id that server no longer holds, is cleared, never re-resolved elsewhere.
   - D143 6 and D149 3 (same-type address changes, Plex server identity) are settled here by D156 3.
 
-### 60. `release-2.4.1` — Version 2.4.1, its notice and the docs
+### 60. `playwright-1.64` — Playwright 1.64.1 (Chromium build 1248)
+- **Goal:** The e2e harness runs on Playwright 1.64.1, pinned exactly, and the whole suite passes on it (D159 2).
+- **Rulings:** D159 · **Mode:** afk · **Tags:** (none: a build phase) · **Blocked by:** `multiple-servers` (the suite it runs includes `multi-server.spec.mjs`)
+- **Output:** `package.json`, `package-lock.json`, and only those `tests/e2e/*.mjs` files that a 1.64 breaking change forces to change, each named in the handback with the release-note line that forced it.
+- **Acceptance criteria:**
+  1. `grep -q '"playwright": "1.64.1"' package.json && node -e "const l=require('./package-lock.json');const v=l.packages['node_modules/playwright'].version;if(v!=='1.64.1')process.exit(1)"`
+  2. `node -e "import('playwright').then(m=>{const p=m.chromium.executablePath();console.log(p);if(!/-1248\//.test(p))process.exit(1)})"`
+  3. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, by the conductor, after the memory gate)
+  4. scope: only the Output paths changed.
+- **Notes/hazards:** Pin the exact version, never a range. Do not run `npx playwright uninstall` or delete any browser build: other sessions on this machine use them. The conductor removes build 1194 only after the commit and only after checking no other session needs it.
+
+### 61. `release-2.4.1` — Version 2.4.1, its notice and the docs
 - **Goal:** `VERSION` is 2.4.1, a configured display upgraded from 2.4 shows once "What's new in 2.4.1: choose posters from more than one server." (D156 4), and the README, Roadmap and spec describe what 2.4.1 shipped.
-- **Requirements:** new R-UPG-5 (supersedes R-UPG-4) · **Rulings:** D13, D79, D151, D152, D156 · **Mode:** afk · **Tags:** docs, ui · **Blocked by:** `multiple-servers`
+- **Requirements:** new R-UPG-5 (supersedes R-UPG-4) · **Rulings:** D13, D79, D151, D152, D156 · **Mode:** afk · **Tags:** docs, ui · **Blocked by:** `playwright-1.64` (D159 2)
 - **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/release.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/followups.spec.mjs`, `tests/e2e/lib.mjs`, `Roadmap.md`, `README.md`, `docs/spec.md`
 - **Acceptance criteria:**
   1. `grep -q "VERSION = '2.4.1'" sw.js && grep -q "VERSION = '2.4.1'" js/main.js && test "$(grep -c '"version": "2.4.1"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
@@ -1425,6 +1436,7 @@ Facts this section stands on (invocation probes, 2026-11-03T16:38Z):
 |---|---|---|---|
 | `followup-tidy-ups` | — | docs | 18480/18801 |
 | `multiple-servers` | `followup-tidy-ups` | architecture, risk:high, ui | 18480/18801 |
-| `release-2.4.1` | `multiple-servers` | docs, ui | 18480/18801 |
+| `playwright-1.64` | `multiple-servers` | — | 18480/18801 |
+| `release-2.4.1` | `playwright-1.64` | docs, ui | 18480/18801 |
 
 Every reviewer gets its own pair: 18680/19001, 18580/18901, 18781/19102 and 18782/19103. The conductor uses 18780/19101.
