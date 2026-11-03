@@ -17,12 +17,12 @@ const inOpenDialog = (e) => e.target instanceof Element && Boolean(e.target.clos
 
 /**
  * `state` is the page's shared state object (read and written live); `getClient()` and `getEngine()` return the current
- * Plex client and poster engine (rebuilt when the connection changes); `tv` is createTvPower(), `reload` is
+ * source adapter (the client) and poster engine (rebuilt when the connection changes); `tv` is createTvPower(), `reload` is
  * createReload(), `brightness` is createBrightnessTimer(); `$` looks an element up by id.
  */
 export function createSleepControl({ state, log, $, getClient, getEngine, tick, syncFirstRun, tv, reload, brightness }) {
   /**
-   * Asks Plex whether anything is playing, when sleep needs to know, and returns the sessions it saw
+   * Asks the server whether anything is playing, when sleep needs to know, and returns the sessions it saw
    * (undefined when it did not ask or could not). May wake the display. A failed poll never refreshes
    * `lastPlaybackAt` and keeps the last `playing` for at most MAX_POLL_FAILURES failures in a row (a blip
    * must not black a movie out; an outage must not hold the display awake all night). Awake, the failure is
@@ -104,8 +104,8 @@ export function createSleepControl({ state, log, $, getClient, getEngine, tick, 
       tv.powerOffAfterVeil();
       next();
     } else if (tv.isOff && state.settings.deviceHelper) {
-      // The TV is off because we switched it off: power it on even if a helper read has failed since (helper.available only
-      // says whether the last read worked; a helper that is really gone just fails the call, and the wake goes on).
+      // The TV is off because we switched it off: power it on even if a helper read has failed since (helper.available forgives
+      // one missed read and clears after two in a row, D135 1; a helper that is really gone just fails the call, and the wake goes on).
       tv.wakeTv().then(tv.afterTvWake);
     } else {
       tv.clearOff(); // the setting was switched off since the power off: no helper call at all

@@ -251,7 +251,7 @@ await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true }) }
 });
 
 // 7. Wake timing (fake clock): the first poster fetch is no earlier than the power-on request + TV_WAKE_MS, and within ~2 s after.
-const TV_WAKE_MS = 4000; // js/main.js
+const TV_WAKE_MS = 4000; // the value js/tv-power.js exports as TV_WAKE_MS
 await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true, nowPlayingPollSeconds: 20 }) /* a slow poll: only the wake itself can bring the poster early */, clock: { time: INSIDE } }, async ({ page, context, app, mock }) => {
   await mock.stop();
   const seen = await watch(page);
@@ -506,9 +506,9 @@ await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sle
   check(`schedule-end wake (07:00): power on, then the poster fetch ${posterAt - onAt} ms later`);
 });
 
-// 14-17. tv-wake-fixes (D73, D80). One failed helper status read clears helper.available (js/helper.js read()); the TV was
-// still switched off by us, so the wake must send power on all the same. The fake helper cannot fail, so one request to
-// __helper/status is aborted with a Playwright route (times: 1). The read is made by opening Settings while asleep (it
+// 14-17. tv-wake-fixes (D73, D80, D135 1). One failed helper status read keeps helper.available; two in a row clear it and a good
+// read resets the count (js/helper.js read()). The TV was still switched off by us, so the wake must send power on all the same.
+// The fake helper cannot fail, so requests to __helper/status are aborted with a Playwright route (times: n). The read is made by opening Settings while asleep (it
 // probes), through a script click: a pointer press while asleep would be a manual wake.
 const openSettings = async (page) => {
   await page.evaluate(() => document.querySelector('[data-action="settings"]').click());
@@ -526,27 +526,59 @@ const cpuRowShown = async (page) => {
   return row !== undefined;
 };
 
-/** Asleep with the TV switched off (one `display off` recorded), then one status read fails; resolves how many were aborted. */
-async function failOneStatusRead(page, context, app, { keepSettingsOpen = false } = {}) {
+/** Every request to __helper/status the page makes, aborted or not (counted when it is sent). */
+const countStatusRequests = (page) => {
+  const seen = { count: 0 };
+  page.on('request', (r) => /\/__helper\/status$/.test(r.url()) && seen.count++);
+  return seen;
+};
+
+/** Asleep with the TV switched off (one `display off` recorded). */
+async function asleepTvOff(page, context, app) {
   await page.goto(app.url);
   await waitAsleep(page);
   await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 1, 10000, 500);
   assert.deepEqual(await shapeOf(context, app), [['display', false]], 'the TV was switched off');
+}
+
+/** The next `count` status reads fail, one per Settings opening (it probes), in a row; resolves when the last one was aborted. */
+async function failStatusReads(page, count, { keepSettingsOpen = false } = {}) {
   const aborted = { count: 0 };
-  await page.route('**/__helper/status', (route) => (aborted.count++, route.abort()), { times: 1 });
-  await openSettings(page); // opening Settings probes the helper
-  await advanceUntil(page, async () => aborted.count === 1, 5000, 250);
-  await advance(page, 500, 250);
-  if (!keepSettingsOpen) await cancelSettings(page);
+  await page.route('**/__helper/status', (route) => (aborted.count++, route.abort()), { times: count });
+  for (let i = 1; i <= count; i++) {
+    await openSettings(page);
+    await advanceUntil(page, async () => aborted.count === i, 5000, 250);
+    await advance(page, 500, 250);
+    if (!(keepSettingsOpen && i === count)) await cancelSettings(page);
+  }
   return aborted;
 }
 
-// 14. (a) A failed read while asleep does not strand the TV: the wake still sends power on, once.
+/** One good read: Settings opens and probes, with no route in the way. */
+async function goodStatusRead(page, requests) {
+  const before = requests.count;
+  await openSettings(page);
+  await advanceUntil(page, async () => requests.count > before, 5000, 250);
+  await advance(page, 500, 250);
+  await cancelSettings(page);
+}
+
+/** Opening Diagnostics reads the temperature only while the helper is available; resolves whether it sent a status request. */
+async function diagnosticsReads(page, requests) {
+  const before = requests.count;
+  await openDiag(page); // the request, when there is one, is sent as the dialog opens
+  await advance(page, 500, 250);
+  await closeDiag(page);
+  return requests.count > before;
+}
+
+// 14. (a) Two failed reads in a row while asleep do not strand the TV: the wake still sends power on, once.
 await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true }), clock: { time: INSIDE } }, async ({ page, context, app, mock }) => {
   await mock.stop();
   const seen = await watch(page);
-  await failOneStatusRead(page, context, app);
-  assert.equal(await cpuRowShown(page), false, 'after the failed read the helper is reported unavailable (Diagnostics)');
+  await asleepTvOff(page, context, app);
+  await failStatusReads(page, 2);
+  assert.equal(await cpuRowShown(page), false, 'after two failed reads in a row the helper is reported unavailable (Diagnostics), and nothing read it again');
   assert.deepEqual(await shapeOf(context, app), [['display', false]], 'a failed read sends nothing');
   await mock.play('3');
   await advanceUntil(page, async () => !(await isAsleep(page)), (POLL + 2) * 1000);
@@ -557,14 +589,15 @@ await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sle
   assert.ok(onAt >= 0 && seen.order.indexOf('poster') > onAt, `power on came before the poster fetch: ${seen.order.join(' | ')}`);
   await advance(page, 8000, 500);
   assert.equal((await helperCalls(context, app)).length, 2, 'no further power call');
-  check('failed status read while asleep: the wake still powers the TV on (once), then fetches the poster');
+  check('two failed status reads while asleep: the wake still powers the TV on (once), then fetches the poster');
 });
 
-// 15. (b) The failed read is not permanent: a later successful read reports the helper available again and sends nothing.
+// 15. (b) Two failed reads are not permanent: a later successful read reports the helper available again and sends nothing.
 await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true }), clock: { time: INSIDE } }, async ({ page, context, app, mock }) => {
   await mock.stop();
-  await failOneStatusRead(page, context, app);
-  assert.equal(await cpuRowShown(page), false, 'unavailable after the failed read');
+  await asleepTvOff(page, context, app);
+  await failStatusReads(page, 2);
+  assert.equal(await cpuRowShown(page), false, 'unavailable after two failed reads in a row');
   await openSettings(page); // the next probe succeeds
   await advance(page, 1000, 250);
   await cancelSettings(page);
@@ -575,18 +608,40 @@ await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sle
   await advanceUntil(page, async () => !(await isAsleep(page)), (POLL + 2) * 1000);
   await advance(page, TV_WAKE_MS + 2000, 500);
   assert.deepEqual(await shapeOf(context, app), [['display', false], ['display', true]], 'then exactly one power on at the wake');
-  check('failed read, then a successful one: helper available again, nothing extra sent');
+  check('two failed reads, then a successful one: helper available again, nothing extra sent');
 });
 
-// 16. The setting switched off after a failed read, with the TV still off: the release still sends its one power on.
+// 15b. D135 1, read from the page: while the helper is available Diagnostics reads the temperature as it opens (a status request); once
+// it is not, it does not. One failed read keeps it available, a good read resets the count, two in a row clear it. Each answer is the
+// presence of a request the page sent, not a race against a read's answer.
 await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true }), clock: { time: INSIDE } }, async ({ page, context, app, mock }) => {
   await mock.stop();
-  await failOneStatusRead(page, context, app, { keepSettingsOpen: true }); // the failed read was the last one: the Save finds the helper unavailable
+  const requests = countStatusRequests(page);
+  await asleepTvOff(page, context, app);
+  await failStatusReads(page, 1);
+  assert.equal(await diagnosticsReads(page, requests), true, 'fail: one failed read keeps the helper available, so Diagnostics reads it');
+  // that read was good: the count is back to zero
+  await failStatusReads(page, 1);
+  assert.equal(await diagnosticsReads(page, requests), true, 'good, fail: still available');
+  await goodStatusRead(page, requests);
+  await failStatusReads(page, 2);
+  assert.equal(await diagnosticsReads(page, requests), false, 'good, fail, fail: two in a row clear it, so Diagnostics reads nothing');
+  await goodStatusRead(page, requests);
+  assert.equal(await diagnosticsReads(page, requests), true, 'a good read makes it available again');
+  assert.deepEqual(await shapeOf(context, app), [['display', false]], 'reads sent no power call');
+  check('one failed helper read keeps it available, two in a row clear it, a good read resets (read through Diagnostics)');
+});
+
+// 16. The setting switched off after two failed reads, with the TV still off: the release still sends its one power on.
+await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true }), clock: { time: INSIDE } }, async ({ page, context, app, mock }) => {
+  await mock.stop();
+  await asleepTvOff(page, context, app);
+  await failStatusReads(page, 2, { keepSettingsOpen: true }); // the failed reads were the last two: the Save finds the helper unavailable
   await untickAndSave(page);
   await advanceUntil(page, async () => (await helperCalls(context, app)).length >= 2, 10000, 500);
   await advance(page, 6000, 500);
   assert.deepEqual(await shapeOf(context, app), [['display', false], ['display', true]], 'exactly one power on at the Save');
-  check('failed status read, then the setting switched off with the TV off: one power on');
+  check('two failed status reads, then the setting switched off with the TV off: one power on');
 });
 
 // 17. (c) A tick() inside the TV wake window is honoured after it. The display wakes on playback with a poster still on

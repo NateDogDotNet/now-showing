@@ -1,7 +1,6 @@
 // Decides which poster should be on screen. Has no DOM access so it can be unit-tested;
 // main.js calls `decide()` on a timer and renders whatever it returns.
 
-import { pickNowPlaying } from './plex.js';
 import { anyLimitSet, sanitizeSlots } from './limit-schedule.js';
 import { anyWindow, resolveSettings } from './profiles.js';
 import { allows } from './ratings.js';
@@ -111,9 +110,14 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
     // returned list here before `pool = loaded`. A pool failure rejects the load and applies nothing: with the server
     // unreachable every batch would fail too, and reporting them all unrated would empty the offline cache the caller
     // falls back to.
+    // Once the pool request has failed, this load's re-check sends no further batch (D135 3): its results would be discarded.
+    const load = { poolFailed: false };
     const [loaded, ratings] = await Promise.all([
-      fetchSelection(sel, s),
-      s.limitSet ? fetchCachedRatings() : null,
+      fetchSelection(sel, s).catch((err) => {
+        load.poolFailed = true;
+        throw err;
+      }),
+      s.limitSet ? fetchCachedRatings(load) : null,
     ]);
     if (ratings) onRatings(ratings);
     pool = loaded;
@@ -129,13 +133,15 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
    * RECHECK_BATCH (`GET /library/metadata/<k1>,<k2>,...`), at most RECHECK_REQUESTS requests. A title the response
    * does not return, a batch that fails, and any key not asked about at all are stored as unrated, which the offline
    * fallback skips under a limit (fails closed). A title merely absent from the random pool says nothing about its rating.
+   * `load.poolFailed` is set when this load's pool request fails: the loop then stops sending batches.
    * Returns the list for onRatings, or null when there is nothing cached.
    */
-  async function fetchCachedRatings() {
+  async function fetchCachedRatings(load) {
     const keys = cachedKeys();
     if (!keys.length) return null;
     const byKey = new Map();
     for (let n = 0; n < RECHECK_REQUESTS && n * RECHECK_BATCH < keys.length; n++) {
+      if (load.poolFailed) break;
       try {
         for (const p of await client.items(keys.slice(n * RECHECK_BATCH, (n + 1) * RECHECK_BATCH))) byKey.set(p.ratingKey, p);
       } catch {
@@ -224,16 +230,16 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
     /**
      * The session that counts as playback (honours `username` and `includeEpisodes`, even when
      * `showNowPlaying` is off), or null. Fetches no art and records nothing as shown; sleep mode
-     * uses it to watch for playback while the screen is black. Throws PlexError like `decide()`.
+     * uses it to watch for playback while the screen is black. Throws SourceError like `decide()`.
      * Pass the `/status/sessions` result already in hand to avoid a second request.
      */
     async playing(sessions) {
-      return pickNowPlaying(sessions ?? (await client.sessions()), getSettings());
+      return client.nowPlaying(sessions ?? (await client.sessions()), getSettings());
     },
 
     /**
      * Returns `{ poster, reason }` when the display should change, or null to keep the
-     * current poster. Throws PlexError on connection problems. `sessions` is a `/status/sessions`
+     * current poster. Throws SourceError on connection problems. `sessions` is a `/status/sessions`
      * result the caller already fetched this tick (one request per tick); omitted, it is fetched here.
      * `sessionsError` is the error of the caller's own failed sessions request this tick: it is not asked for again.
      */
@@ -243,7 +249,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
       // Now playing wins over everything; a pinned poster replaces random rotation.
       session = null;
       if (s.showNowPlaying) {
-        let np = pickNowPlaying(await sessionList(sessions, sessionsError), s);
+        let np = client.nowPlaying(await sessionList(sessions, sessionsError), s);
         if (np && s.limitNowPlaying !== false && !permitted(s, np)) np = null; // above the limit or unrated: nothing is playing
         session = np;
         if (np) {

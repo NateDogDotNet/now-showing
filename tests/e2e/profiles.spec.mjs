@@ -480,6 +480,62 @@ pCase('9 an unsaved profile edit is not previewed through another control, and S
   check('profile edits wait for Save: not previewed through another control, dropped by Cancel, applied by Save');
 });
 
+// 9b. Done and Discard preview nothing (D134 ruling 5, D135 5; supersedes D123 1 and "Done and Discard send one preview" in D122 4). The control that
+//     does not preview live is "Cross-fade" (Advanced): the display carries it as --fade-ms on the root. The page records every value the display is
+//     given. The settle point is the page's own clock run for 2 s after the last click, so nothing waits on wall time.
+const FADE_X = 2500;
+const fadeSeen = (page) => page.evaluate(() => window.__fade);
+const watchFade = (page) =>
+  page.evaluate(() => {
+    const read = () => document.documentElement.style.getPropertyValue('--fade-ms');
+    window.__fade = [read()];
+    new MutationObserver(() => {
+      const v = read();
+      if (window.__fade[window.__fade.length - 1] !== v) window.__fade.push(v);
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+  });
+/**
+ * Opens profile `nth`, makes one edit in it, and ends it with `button` (#profile-done or #profile-discard). The edit in Adults is its no-repeat days, a
+ * control that does not preview: a live control (the frame) would send the sheet's household values, X included, which D122 4 rules.
+ */
+async function editProfileThen(page, nth, edit, button) {
+  await page.click(`#profile-list li:nth-child(${nth}) .profile-edit`);
+  await page.waitForSelector('#profile-banner:not([hidden])');
+  await edit();
+  if (button === '#profile-done') await page.fill('[name="crossfadeMs"]', String(FADE_X)); // the household control X, editable while a profile is open
+  await page.click(button);
+  await page.waitForSelector('#profile-banner', { state: 'hidden' });
+}
+async function runSequence(page, app) {
+  await page.goto(app.url);
+  await posterShown(page);
+  await watchFade(page);
+  await openSettings(page);
+  await page.click('#advanced > summary');
+  await editProfileThen(page, 1, () => page.fill('[name="noRepeatDays"]', '4'), '#profile-done'); // an edit in Kids (no-repeat days), X changed, Done
+  await editProfileThen(page, 2, () => page.fill('[name="noRepeatDays"]', '5'), '#profile-discard'); // an edit in Adults, Discard
+  await advance(page, 2000); // the named settle point
+  assert.equal(await frameHidden(page), false, 'Kids still shows its saved frame');
+  assert.deepEqual(await fadeSeen(page), ['1200ms'], 'neither Done nor Discard put the household cross-fade on the display');
+}
+pCase('9b Done and Discard send no preview: the unsaved household control waits for Save', { settings: seed(), clock: { time: '2026-01-05T07:00:00' } }, async ({ page, app }) => {
+  await runSequence(page, app);
+  await saveSettings(page);
+  await page.waitForFunction((x) => document.documentElement.style.getPropertyValue('--fade-ms') === `${x}ms`, FADE_X, { timeout: 10000 });
+  assert.equal((await stored(page)).crossfadeMs, FADE_X, 'Save applies it');
+  check('Done and Discard send no preview; Save applies the unsaved household control');
+});
+pCase('9c the same sequence ended by a whole-sheet Cancel leaves the display and the stored value as before', { settings: seed(), clock: { time: '2026-01-05T07:00:00' } }, async ({ page, app }) => {
+  await runSequence(page, app);
+  await cancelSettings(page);
+  await advance(page, 2000);
+  assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--fade-ms')), '1200ms');
+  assert.equal((await stored(page)).crossfadeMs ?? 1200, 1200, 'the stored cross-fade is as before');
+  assert.equal(await frameHidden(page), false);
+  assert.equal((await stored(page)).profiles[0].frameId, 'marquee', 'Cancel kept the saved profile');
+  check('a whole-sheet Cancel after Done and Discard restores the display and the stored value');
+});
+
 // 10. A Save that changes the selection of the profile in force draws again at once (the pool follows the selection in force).
 pCase('10 a Save that changes the selection in force redraws at once', { settings: seed({ maxContentRating: 'G' }), clock: { time: '2026-01-05T07:00:00' } }, async ({ page, app }) => {
   await page.goto(app.url);

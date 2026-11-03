@@ -735,3 +735,211 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner answer — 2026-11-02 (after 2.3.1): D133
 
 - **D133 2.3.1 is merged into main.** Nathan's words: "merge, push, and clean up". Branch `2.3.1` (tip bd7b7335) was merged into `main` with a merge commit (05485e64), with no pull request. The merge's tree equals bd7b7335, where `npm test` passed 723 of 723 and the full e2e suite passed 28 of 28. `npm test` passed 723 of 723 again on the merge. No tag and no GitHub release (D79). README and Roadmap now say 2.3.1 is on `main`. The branch `2.3.1` is deleted locally and on origin.
+
+## Owner decision — 2026-11-02 (the run-9 policy, verbatim: "1. b 2. a 3. a 4. a 5. b 6. a  Create the docs only. Do not execute.  Assume that I am AFK and that I answere all questsion during implementation/execution with \"defaults\"."): D134
+
+- **D134 Run 9 builds 2.4: the source adapters, with Jellyfin and Emby.** The run-9 section of `docs/integration-plan.md` (phases 52–57) is the plan. The policy stop offered six items with a recommended option each. Nathan answered all six.
+  1. **Scope (option b).** The run has six phases: `carried-tidy-ups`, `mock-jellyfin`, `source-adapters`, `jellyfin-source`, `emby-source` and `release-2.4.0`. Emby is added as its own phase after Jellyfin. Out of scope, for a later 2.4.x run: multiple servers in poster selection, Play now, the movie-night countdown, birthday and occasion mode, the Picture frame sources, and the TMDB no-server mode (2.5).
+  2. **Switching server type (option a).** Saving a different `serverType` clears the offline poster cache, the pinned poster and the no-repeat history. Items keep their server ids. Keys stored by 2.3.1 have no prefix and read as Plex, and nothing is migrated.
+  3. **Ratings (option a).** A Jellyfin or Emby rating maps onto the G–NC-17 ladder only when it is a US film or `TV-*` value. Any other value (`15`, `12A`, empty) is unknown, and is hidden whenever a limit is set (fail closed, D5).
+  4. **Validation (option a).** The run tests against mock servers only. Every Jellyfin and Emby request or field the mocks cannot prove is a (verify) row in `docs/validation/real-server-extended.md`. No real Jellyfin or Emby server is reachable from the devbox (invocation probes: rootless podman fails, and `ssh home` has no route).
+  5. **The item carried from 2.3 (option b).** It is fixed in `carried-tidy-ups`. While a profile is open, Done and Discard no longer preview the household controls that do not preview live. This supersedes D123 1, and the sentence "Done and Discard send one preview" in D122 4. The live controls keep previewing, as D122 4 rules otherwise.
+  6. **Branch and record (option a).** The branch is `2.4`, from `main` 9eeb995f. The plan and this entry are committed separately and the branch is pushed. There is no pull request, merge or tag unless Nathan asks (D13, D79). The run-8 trail moves to `~/now-showing-run8-trail`.
+  7. **Execution.** Nathan's words: "Create the docs only. Do not execute." Nothing has been built. When the run is executed, every question is answered "defaults" (the recommended option), as D44 rules. This covers decision rounds, re-dispatch caps and criterion changes. The D44 limits still stand: anything irreversible or outward-facing other than pushing branch `2.4` waits for Nathan's own words. That covers a pull request, a merge, a tag, a release, a force-push and deleting unique work.
+  - **Facts the plan stands on (invocation probes):**
+    - `npm test` passes 723 of 723 at 9eeb995f.
+    - A stock Jellyfin server allows cross-origin requests from any origin, header and method (`CorsHosts = ["*"]` in `ServerConfiguration.cs`, `CorsPolicyProvider.cs`).
+    - Jellyfin's Quick Connect is on by default; its 6-digit code lasts 10 minutes.
+    - Jellyfin's `GET /Sessions` needs no admin rights.
+    - Emby's item, session and view paths and its CORS default are unconfirmed.
+    - The research is in `.orchestrator/artifacts/research--jellyfin-api-r1.md` and `research--jellyfin-cors-r1b.md`, and moves with the run-9 trail.
+  - **Floor check:** six phases, three of them `risk:high` (`source-adapters`, `jellyfin-source`, `emby-source`), so the orchestration loop runs.
+
+## Conductor ruling — 2026-11-03 (run 9, `carried-tidy-ups` pre-flight; answered "defaults" under D134 ruling 7): D135
+
+- **D135 What the `carried-tidy-ups` criteria 1 and 3 mean.** A cold probe of the criteria text (`.orchestrator/artifacts/carried-tidy-ups--criteria-probe-r1.md`, 20 findings) found inputs the text left open. Each is ruled here with the reading that keeps today's behaviour wherever the item does not ask for a change. The plan's criteria 1 and 3 are amended to name the extra cases.
+  1. **The helper (findings 1–4, 20).** A failed read is what `request()` in `js/helper.js` already returns `null` for: a network error, the 8 s timeout, a non-2xx reply, or a body that is not an object. Reads are counted in the order they complete. A good read resets the count. `available` becomes false only after two failed reads in a row. A helper that has never answered stays unavailable. After any good read, one failure keeps `available` true, whatever came before it. Cases: fail, good, fail → true. Fail, fail, good, fail → true. Good, fail, fail → false. A read still in flight at a wake is not awaited (unchanged).
+  2. **The TV wake window (findings 5–8).** Only the newest wake's window may clear `tvWaking`. An older window's end leaves it alone. A sleep does not change `tvWaking` (unchanged). The case asserts `tvWaking` is true just after the first window's end and false just after the second window's end.
+  3. **The rating re-check (findings 9–10).** "No further batch" means the re-check of the pool load whose pool request failed. That load sends no batch after the failure, and the next pool load re-checks as usual. Results of a batch already in flight are discarded, as today. The case asserts both halves.
+  4. **`requestAnimationFrame` (finding 11).** Each case of `tests/tv-power.test.js` restores the global to its exact earlier state in a hook that also runs when the case fails (`afterEach` or `t.after`). The property is deleted if it was absent and reassigned if it was present.
+  5. **The profiles case (findings 12–19).** A profile's values are never previewed (D120 1), so Done and Discard have nothing to put back on the display: they send no preview. This supersedes the D122 4 sentence "Done and Discard send one preview" and the `resetEditingUI` line that sends it. The case runs this sequence:
+     - Open profile A, make one edit in A, and change one non-live household control X that stays editable while a profile is open. Press Done.
+     - Open profile B, make one edit in B, and press Discard.
+     - After a settle point the case names (for example the next tick, or 1.5 s with no request), the display shows neither X's new value nor A's edit.
+     - Save applies X.
+     - A second run of the same sequence, ended by a whole-sheet Cancel instead of Save, leaves the display and the stored X as before the sheet opened.
+     - A live household control changed while a profile is open still previews (D122 4).
+     The case fails when either Done's or Discard's `onPreview` call is restored. One non-live control is enough: the limit, selection and pin are profile-bundle or pin values, never previewed by D120 1 and D29, and existing specs keep covering them. "Before or after the change" in the hazard means before and after this phase's code change.
+
+## Conductor ruling — 2026-11-03 (run 9, `mock-jellyfin` review r1; answered "defaults" under D134 ruling 7): D136
+
+- **D136 The Jellyfin mock accepts every token form the research names.** The anchored review r1 (`.orchestrator/artifacts/mock-jellyfin--review-r1.md`, Important 3, a spec-gap) found that the mock accepts only the `Authorization: MediaBrowser … Token="…"` header and the legacy `api_key` query, while the research note (section 1c) names the `X-Emby-Token` header and the `ApiKey` query as current forms too. Criterion 1 names only the first two, so it is silent on the rest. Ruling: the mock also accepts `ApiKey` and `X-Emby-Token`, and the legacy forms carry a `(verify)` comment. This widens what a test mock accepts and changes nothing a user sees; criterion 1's text is unchanged. Which form the Jellyfin source sends is `jellyfin-source`'s choice, recorded as a (verify) row there.
+  - Minor 3 of the same review (no automated check of the `serve.mjs`/`lib.mjs` wiring) is not added to this phase: the plan names no such check, and `jellyfin-source` criterion 2 (its e2e spec against the shared harness) exercises the wiring. It goes into the `jellyfin-source` brief as a hazard.
+
+## Conductor ruling — 2026-11-03 (run 9, `carried-tidy-ups` reviews r1; answered "defaults" under D134 ruling 7): D137
+
+- **D137 Three Minors from the `carried-tidy-ups` reviews.** Both reviews approved (`.orchestrator/artifacts/carried-tidy-ups--review-r1.md`, `carried-tidy-ups--review-uxwalk-r1.md`).
+  1. **Stale comments (anchored M1).** `js/tv-power.js:21` and `js/sleep-control.js:107-108` still describe the one-miss rule that D135 1 replaced. They are fixed in `source-adapters`, which already changes `js/sleep-control.js`. `js/tv-power.js` is added to that phase's Output and criterion 5, for that comment only. This costs no fix round on a phase whose code both reviews approved.
+  2. **Which `available` D135 1 means (anchored M2).** D135 1 rules the helper's state, the `helper.available` getter. The TV power decisions read it (`helperActive()` in `js/tv-power.js`). The `available` field in the object each read returns reports that one read, and only the Diagnostics display uses it. Both stay as built.
+  3. **A profile's live-section control previews the household's unsaved non-live values (UX walk M1).** This is older than this phase. Changing any live control previews the whole sheet as it would save, profile open or not, and the frame itself is not previewed. D135 5 covers only Done and Discard. Whether a live preview should carry unsaved non-live household values is Nathan's call. It is recorded as a follow-up for him, and run 9 does not change it.
+
+## Owner decision — 2026-11-03 (verbatim, at 2026-11-03T05:23:16Z: "use your discression on thoes items that are waiting on me"): D138
+
+- **D138 The conductor's choices on the three items waiting on Nathan.**
+  1. **Live preview of unsaved non-live values (D137 3).** No change in run 9. A live control's preview keeps carrying the sheet as it would save, as it has since before 2.3. The value shows on the display only as a preview: the next cross-fade uses it, and Cancel restores it. Changing the preview path would touch the child-safety preview rules (D120 1, D122 4) late in a run whose goal is the source adapters. It goes to the Roadmap's engineering backlog at `release-2.4.0` as a candidate, not a fix.
+  2. **The leftover `orch/*` branches.** Each branch's content is already on 2.4: `orch/carried-tidy-ups` equals 1f6f5478 on its files, `orch/mock-jellyfin` equals 7252c7e6, and `orch/carried-tidy-ups-r2` equals 6ea897ef, each checked by `git diff --quiet`. They can go. The host's safety hook refuses a forced branch delete from this session, and a plain `-d` refuses each branch because of its scratch commit. So the delete is a one-line command for Nathan, given in the close report. Run 9's later worktrees are removed the same way.
+  3. **Playwright build 1194.** It stays until run 9 closes, because every e2e criterion needs it. At close, the conductor tells Nathan, and the data-refinery session, that it can be removed.
+
+## Conductor ruling — 2026-11-03 (run 9, `source-adapters` reviews r1; answered "defaults" under D134 ruling 7): D139
+
+- **D139 The spec-gaps the four `source-adapters` reviews found.** All four approved (`.orchestrator/artifacts/source-adapters--review-r1.md`, `-review-cold-r1.md`, `-review-arch-r1.md`, `-review-uxwalk-r1.md`). The code-bugs go to re-dispatch r2. These are the rulings:
+  1. **An unknown stored `serverType` (cold M1, anchored M2; both lenses).** In this phase a stored value that no adapter knows still loads as Plex. Plex is the only adapter, and the anchored review found that a `config` error at boot would not be caught (`rebuildClient()`). `jellyfin-source` owns the next step. It widens the known types. It adds `serverType` to the settings change-detection list in `js/main.js` (about line 547), so a switch clears the cache, pin and history (D134 2). A stored type the build does not know must not silently become a Plex connection: it shows a connection error that names the type. These are hazards in the `jellyfin-source` brief, tested there.
+  2. **The module cycle `js/sources/index.js` ↔ `js/sources/plex.js` (cold, arch M3; both lenses).** Fixed in r2: `SourceError` and `KINDS` move to a new `js/sources/errors.js` that both files import. It joins `SHELL` and this phase's Output and criterion 5 (plan edit). Each later adapter then imports errors without a cycle.
+  3. **The interface's documented shapes (arch I1, I2, M4).** Fixed in r2, in the interface comment of `js/sources/index.js` only, with no new member and no behaviour change:
+     - the poster object an adapter returns, with the fields the engine, the display and the cache read, including `seriesRating`/`episodeRating` for D73;
+     - the library `type` values Settings offers (`'movie'`, `'show'`), which an adapter maps its own types onto;
+     - that `signInFlow` is per server type, with the members the Plex flow has today;
+     - what each error kind does on screen (an `auth` error offers "Sign in again").
+     A sign-in flow that takes a server address, a user name and password, and returns a user id is for `jellyfin-source` to add when it needs it (YAGNI here).
+  4. **Where the words come from (arch M1, M2).** The screens take the server's name from `signInFlow(settings).label`, because an unconfigured display has no adapter yet. The adapter's own `label` is the same word and stays a member of the interface (criterion 1). The plan's hazard "Words the user sees come from the adapter's `label`" is read as "from the server type's label" (the sign-in flow's or the adapter's); the plan is not reworded. `identity().machineIdentifier` stays as the Plex adapter returns it; another adapter fills it with its server id.
+  5. **Static "Plex" text in `index.html` (anchored M3).** `index.html` is not in this phase's Output, and a Plex user sees the same words. `jellyfin-source`, which owns `index.html`, makes each such line follow the server type. It is a hazard in its brief.
+  6. **The saved settings gain `"serverType": "plex"` (UX walk M1).** This is expected by D134. The walk showed that 2.3.1 drops the key on import and on rollback and keeps every other setting. No change.
+
+## Conductor ruling — 2026-11-03 (run 9, `source-adapters` reviews r2; answered "defaults" under D134 ruling 7): D140
+
+- **D140 Five sentences of the interface comment are corrected by `jellyfin-source`.** The anchored and arch reviews r2 approved (`.orchestrator/artifacts/source-adapters--review-r2.md`, `-review-arch-r2.md`). Each raised Minors against the comment in `js/sources/index.js`, which r2 added under D139 3. The comment says things the code does not do. No behaviour is affected.
+  - The adapter's `label` is called the word every sentence uses, but the screens read `signInFlow(settings).label`.
+  - The display is said to set `source: 'cache'`, but `js/poster-cache.js:170` does.
+  - A library's `type` is said to be only `'movie'` or `'show'`, but the Plex adapter passes Plex's types through and Settings offers only those two.
+  - An `auth` error is said to always show the empty card, but that happens only when no poster is on screen, and otherwise "Sign in again" comes as a toast.
+  - The pill reads "Offline" when the browser is offline.
+  These are non-blocking Minors in a file `jellyfin-source` edits next, so that phase's brief corrects each sentence to what the code does. `source-adapters` lands without another round.
+
+## Conductor ruling — 2026-11-03 (run 9, `jellyfin-source` pre-flight; answered "defaults" under D134 ruling 7): D141
+
+- **D141 What the `jellyfin-source` criteria leave open.** A cold probe of the phase text (`.orchestrator/artifacts/jellyfin-source--criteria-probe-r1.md`, 12 findings) found inputs it does not decide. Each is ruled to what the Plex path does today, or else to the fail-closed reading. Criteria 1 and 2 are amended to name the new cases.
+  1. **Which rating counts (finding 1).** A Jellyfin item's rating is its `CustomRating` when that is not empty, and its `OfficialRating` otherwise. That is the household's own override in Jellyfin's metadata editor, and the mapping (verify) is a row in `docs/validation/real-server-extended.md`. The value then maps as in rule 5. An episode's or a series' rating is read the same way.
+  2. **Upgrade (finding 2).** A missing stored `serverType` reads as `'plex'` (D134 2, D139 1), so upgrading from 2.3.1 is not a switch. The poster cache, pin and history are kept. A test pins this.
+  3. **When the switch clears (findings 3, 4).** The clear in D134 2 fires when a Save stores a `serverType` different from the stored one (absent counts as `'plex'`). An import is a Save. Choosing a type in the form, signing in, or a Cancel clears nothing. Library, genre, collection and playlist ids in the household's selection, its profiles and its slots are kept as stored. On the other server they match nothing, so the pool is empty and the empty card says so (fail closed). The household chooses again from the new server's lists.
+  4. **Offline after a switch or a tighter limit (finding 5).** The cache is cleared at the switch. After that every cached Jellyfin poster carries its rating, and offline draws pass `allows()` with the limit in force, as Plex entries do today (D37, `cache.random(…, limit, selection)`).
+  5. **Spellings (finding 6).** The rating string is matched exactly as `js/ratings.js` matches Plex's, through the same tables, with no new normalisation. `TV-*` means the TV values already on the ladder (`TV-Y`, `TV-G`, `TV-Y7`, `TV-PG`, `TV-14`, `TV-MA`), never a wildcard. `NR`, `PG13`, `US-PG`, a lower-case value and any other value are unknown, hidden under any limit (D134 3, D5).
+  6. **Now playing (finding 7).** Now playing follows the Plex rules exactly:
+     - An episode shows its series poster with the series rating in the cache, and the live check uses the episode's own rating (D73, D75).
+     - An item that is neither a movie nor an episode shows no now-playing poster.
+     - With several sessions, the session that counts is picked by the same rule Plex's `pickNowPlaying` applies (the user filter, then the first playing).
+  7. **Collections and playlists (finding 8).** Only `Movie` items become posters. A BoxSet or playlist replaces the chosen libraries, as a Plex collection or playlist does (D107 1).
+  8. **What sign-in stores (finding 9).** The password is never stored, only the access token, which is in `SECRET_KEYS`. `DeviceId` is the display's existing client id (`util.clientId`, its own storage key). It is not part of the settings and never in an export.
+  9. **Quick Connect failures (finding 10).**
+     - An expired or unknown code (`/QuickConnect/Connect` → 404 or no longer `Authenticated`) offers a new code.
+     - `/QuickConnect/Enabled` failing or false offers the user name and password form.
+     - A revoked token (401) is a SourceError of kind `auth`, with "Sign in again" as for Plex.
+  10. **Missing fields (finding 11).** A missing play count is 0. A missing runtime, score or year is left empty and not shown, as the Plex mapping does for its own missing fields. An item with no `ImageTags.Primary` is not drawn.
+  11. **Test strength (finding 12).** Criterion 2 also runs 30 picks under a PG-13 limit: G, PG and PG-13 titles only, never R, `TV-MA`, `15` or unrated. Criterion 1 adds unit cases for rules 1 and 5: a `CustomRating` that tightens and one that relaxes, and each unknown spelling listed in rule 5.
+
+## Conductor ruling — 2026-11-03 (run 9, `jellyfin-source` r1 handback, questions Q1–Q4; answered "defaults" under D134 ruling 7): D142
+
+- **D142 The four questions the `jellyfin-source` builder raised (`.orchestrator/questions.md` Q1–Q4) are answered with its proposed readings.**
+  1. **Q1, exact rating strings.** `ratingRank` upper-cases, so D141 5's "a lower-case value is unknown" cannot come from the Plex path as it is. A new `exactRating(value)` in `js/ratings.js` keeps a value only when it is exactly a US film or TV value. Only the Jellyfin adapter calls it. `ratingRank`, `allows` and every Plex path are unchanged, so a Plex `pg` still reads as PG. D141 5 is read as ruling the Jellyfin strings, not as changing Plex's.
+  2. **Q2, where the Jellyfin token lives.** The access token is stored in the existing `plexToken` key for either server type. That key stays in `SECRET_KEYS`, so `isConfigured`, export and import do not change for a Plex household. A server-type change in the sheet sets the other type's token and address aside, so a Plex token is never sent to a Jellyfin server.
+  3. **Q3, the mock has no series image.** `tests/e2e/jellyfin.spec.mjs` answers that one image request with `page.route`. `emby-source`, which owns `scripts/mock-jellyfin.mjs`, adds an image for the mock's series so the spec can drop the route.
+  4. **Q4, the service-worker version.** `js/sources/jellyfin.js` joins `SHELL`. `VERSION` stays 2.3.1 until `release-2.4.0` bumps it, as in every run's release phase (R-REL-1).
+
+## Conductor ruling — 2026-11-03 (run 9, `jellyfin-source` reviews r1; answered "defaults" under D134 ruling 7): D143
+
+- **D143 The spec-gaps the three `jellyfin-source` reviews found.** The anchored, cold and UX walk reviews asked for changes (`.orchestrator/artifacts/jellyfin-source--review-r1.md`, `-review-cold-r1.md`, `-review-uxwalk-r1.md`). Their code-bugs go to re-dispatch r3. These are the rulings, each the recommended default:
+  1. **Unreachable server vs Quick Connect off (UX S1).** D141 9's "`/QuickConnect/Enabled` failing … offers the user name and password form" is narrowed. A server that does not answer, or answers with a network, timeout or parse error, shows a connection error that names the address and lets the household change it. Only a server that answers `/QuickConnect/Enabled` with `false` offers the user name and password form in place of the code. The sentence in D141 9 is superseded by this one.
+  2. **Telling the household about a switch (UX S2).** A Save that changes the server type says so in the existing toast, in one sentence naming the new server. For example: "Now showing posters from Jellyfin. The offline posters, the pinned poster and the no-repeat history were cleared." This is new user-visible text, ruled here under the standing "defaults" answer. `docs/spec.md` R-SRC-2 states it.
+  3. **The choice on the first-run card has a visible question (UX S3).** The Plex | Jellyfin choice carries a visible label in the card's own style, for example "Your media server". The same rule as 2 applies.
+  4. **What happens to the selection at a switch (anchored M1, the decision-log hit).** D141 3 is read as "stored ids are not translated". The Settings sheet's older re-pick (`offerLibraries` drops keys the new server does not list and, with none left, picks the first movie library at the connection test) still applies, and it does not contradict D141 3. R-SRC-2 and row V1-J22 of `docs/validation/real-server-extended.md` are both corrected to describe the two routes: a switch in the sheet with a connection test re-picks, and an import-then-Save without one keeps the ids, so the pool is empty.
+  5. **Watched titles in collections and playlists (cold M1).** An item counts as watched by the same rule in a collection, a playlist and the library pool. That rule is the server's played flag (`UserData.Played`), or `UserData.PlayCount` > 0 when the flag is missing. Fixed in r3.
+  6. **Changing to another server of the same type (cold M2).** This clears nothing, as a Plex server change never has. The cached posters still pass the limit in force (D37), so no poster above the limit can show. The clear when the server address changes within one type is ruled out of scope for run 9: it belongs with the multiple-servers work D134 1 moves to a later 2.4.x run.
+
+## Conductor ruling — 2026-11-03 (run 9, `jellyfin-source` reviews r2; answered "defaults" under D134 ruling 7): D144
+
+- **D144 Three Minors from the `jellyfin-source` confirmation reviews are fixed in `emby-source`.** All three reviews approved the r3 build (`.orchestrator/artifacts/jellyfin-source--review-r2.md`, `-review-cold-r2.md`, `-review-uxwalk-r2.md`). Three Minors remain. `emby-source` changes the same files next (`js/settings.js`, `js/settings-ui.js`) and lands before `release-2.4.0`, so each is fixed there, with a test, before anything ships. A fourth `jellyfin-source` round would be its third re-dispatch, and the rules would then send two builders.
+  1. **A token sent to another server of the same type on import (cold N1, a data-exposure finding).** Importing a settings file that names a different server address of the same type, and carries no token, keeps this display's token and sends it to that address after Save. Plex has always done this. It is now ruled out: an import that changes the server address and brings no token sets the current token aside, as D142 2 already does for a change of type, and the display asks to sign in. This widens D142 2 from "a change of type" to "a change of server". It is asked here under the standing "defaults" answer, not filed, as the rubric requires of a data-exposure finding.
+  2. **"Connecting…" stays after an import during the open test (UX walk N1, code-bug).** An import made while the sheet's opening connection test runs must leave the connection section in a final state (a result or a prompt), never "Connecting…".
+  3. **The switch toast's wording when nothing can show yet (UX walk N2).** When a Save switches the type and leaves no token, the toast says the server type changed and asks the household to sign in, rather than "Now showing posters from …". D143 2's sentence is kept for a switch that can show posters.
+
+## Conductor ruling — 2026-11-03 (run 9, `emby-source` pre-flight; answered "defaults" under D134 ruling 7): D145
+
+- **D145 What the `emby-source` criteria leave open.** A cold probe of the phase text found 18 inputs it does not decide (`.orchestrator/artifacts/emby-source--criteria-probe-r1.md`). The base rule: every Jellyfin ruling applies to Emby as to Jellyfin. That covers D141 1–10, D142 1–2, D143 1–5 and D144 1–3: rating precedence and exact matching, upgrade, when a switch clears, offline, now playing, collections and playlists, sign-in storage, unreachable servers, missing fields, the token set aside on a change of type or server, and the toast. In particular:
+  1. **Tokens (findings 1–5).**
+     - Images: the image URL carries the token as `api_key`, as Jellyfin's does. The offline cache stores no token.
+     - Storage: one stored token key, set aside on any change of type or server address (D142 2, D144 1).
+     - Signing in: a sign-in before Save stores nothing until Save. A failed sign-in stores nothing new.
+  2. **What is stored (findings 6–7).**
+     - The password is never stored, drafted or logged. Criterion 1 adds a case that reads every storage key after a sign-in.
+     - The user id the server returns may be stored, but not as a secret.
+     - A user name is stored only in the existing "Only for this user" field, when the household types one.
+  3. **Child safety (findings 8, 10, 11).**
+     - Now playing obeys the limit and the session choice exactly as Plex and Jellyfin do (D5, D141 6). Rating precedence follows D141 1, marked (verify) for Emby. The engine is the gate whatever the server filters.
+     - A reply the adapter does not recognise (not JSON, no `Items`, a field of the wrong type) is a SourceError of kind `parse`. A null rating is unknown, and hidden under any limit.
+  4. **`/Sessions` (finding 9).** Any `/Sessions` failure other than a network error or a timeout means no now-playing: a 401, 403 or 404, or a reply that does not parse. It never shows an error card. Criterion 1 adds a 404 case.
+  5. **Stored choices across a switch (findings 12–14).** D141 3 and D143 4 apply to Emby, and a BoxSet or playlist replaces the libraries (D107 1). The switch clear is type-agnostic, so a unit case covers Plex → Emby beside criterion 2's Jellyfin → Emby.
+  6. **The header before sign-in (finding 15).** `X-Emby-Authorization: Emby UserId="", Client=…, Device=…, DeviceId=…, Version=…` carries no token until sign-in. The form is a (verify) row.
+  7. **Files (findings 16–17).** `tests/jellyfin.test.js` and `tests/e2e/jellyfin.spec.mjs` join the Output and criterion 5. Shared MediaBrowser code moving between the two adapters may touch their tests, and D142 3 lets the jellyfin spec drop its `page.route` once the mock serves a series image. `tests/e2e/run.mjs` stays out: no spec needs it. The conductor also checks renames with `git status --porcelain` together with `git diff --cached --name-status`.
+  8. **CORS (finding 18).** A server that refuses a cross-origin sign-in shows the existing connection error naming the address (D143 1). A display already showing posters keeps its offline cache within the limit, as for any unreachable server.
+
+## Conductor ruling — 2026-11-03 (run 9, `emby-source` r1 handback; answered "defaults" under D134 ruling 7): D146
+
+- **D146 Emby's first-run card shows the user name and password form itself.** The plan's hazard for `emby-source` reads "the first-run card for Emby points to Settings for the user name and password". The conductor's brief (`.orchestrator/artifacts/emby-source--brief-r1.md`) said instead "the card points to the user name and password form". That wording was the conductor's error. The builder followed the brief and put the form on the card, the same form Jellyfin shows there when Quick Connect is off (D143 1). Ruling: the form stays on the card. It is the Jellyfin path a household already meets, and it saves a trip to Settings. Emby still has no Quick Connect. The plan's sentence is superseded by this one. `docs/spec.md` R-SRC-3 states what was built.
+
+## Conductor ruling — 2026-11-03 (run 9, `emby-source` reviews r1; answered "defaults" under D134 ruling 7): D147
+
+- **D147 What the `emby-source` reviews found that the rulings did not decide.** The anchored, cold and UX walk reviews asked for changes (`.orchestrator/artifacts/emby-source--review-r1.md`, `-review-cold-r1.md`, `-review-uxwalk-r1.md`). The code-bugs go to re-dispatch r2. These are the rulings, each the recommended default:
+  1. **A malformed rating fails closed for both adapters (anchored I2).** A `CustomRating` or `OfficialRating` that is present but not a string makes the item's rating unknown, so it is hidden under any limit. It never falls back to the other field. Neither does a reply whose `Items` is missing, or a field of the wrong type. `js/sources/jellyfin.js` (`ratingOf`, the item list) is shared, so this changes Jellyfin households too. It is a child-safety fix (D5) and is applied to both. The reviewer's suggestion to limit it to Emby is declined. D145 3's `parse` kind applies to Emby and Jellyfin alike.
+  2. **A change of server clears the pin (cold I2).** A Save that changes the server address, within one type or across types, clears the pinned poster, as a change of type already does (D134 2). An id means nothing on another server, and a pinned poster is shown whatever its rating (D122 1), so a stale pin could put an unchecked title on screen. The offline cache and the no-repeat history stay as D143 6 rules: cached posters still pass the limit in force.
+  3. **The connection line after an import that sets the token aside (UX M2).** The sheet's connection line says the connection is not tested. It never shows the old server's "✓ … libraries".
+  4. **Emby's sign-in on a rotated phone and in Settings (UX M3, M4).**
+     - On a phone at rotation 90, the card's user name and password form scrolls within the card, so "Sign in" and "Open settings" are reachable.
+     - In Settings, Emby's sign-in form is shown open, not under a collapsed heading, and its button uses the primary style, since it is Emby's only sign-in.
+  5. **The mock's header comment (anchored M1).** It says what the Emby mode changes in the Jellyfin mode: the image route also accepts the Emby token.
+
+## Conductor ruling — 2026-11-03 (run 9, `emby-source` r2 handback, questions Q5–Q6; answered "defaults" under D134 ruling 7): D148
+
+- **D148 The two questions the `emby-source` r2 builder raised are answered with its proposed readings.**
+  1. **Q5, the rotated-phone scroll.** The style that keeps Emby's sign-in form scrollable on the first-run card at rotation 90 (D147 4) is an inline `style` on `.empty-card` in `index.html`. `css/app.css` is not in this phase's Output. It stays inline in run 9. Moving it to `css/app.css` is a tidy-up for a later run.
+  2. **Q6, `serverUserId`.** The user id Emby returns at sign-in is stored in a new setting `serverUserId` (D145 2: stored, not a secret). It is set aside with the token on a change of type or server (D142 2, D144 1). A hand-made Emby settings file with a token and no user id asks for a new sign-in ("Emby needs a new sign-in to list its libraries.").
+
+## Conductor ruling — 2026-11-03 (run 9, `emby-source` reviews r2; answered "defaults" under D134 ruling 7): D149
+
+- **D149 The pin and the Emby user id at a change of server (the `emby-source` r2 reviews).** The anchored (Critical) and UX walk (Important) reviews found the same defect (`.orchestrator/artifacts/emby-source--review-r2.md`, `-review-uxwalk-r2.md`). D147 2's pin clear compares the saved address with the in-memory settings. A live preview (after every import, and on a layout field) has already copied the new address there, so an import or a typed address followed by a previewed change keeps the pin. The UX walk drew the old pinned id from the new server. The defect goes to re-dispatch r3, a fresh builder after a Critical. These are the rulings:
+  1. **What a Save compares.** A Save compares the server type, address, token and user id with the *stored* settings, not with what a preview left in memory. A preview never puts the connection keys (`serverType`, `serverUrl`, `plexToken`, `serverUserId`) in force. The same fix makes an import that changes the address or token rebuild the server connection on Save. That gap is older than this phase; the anchored review's "declined to judge" names it.
+  2. **The user id travels with its token (anchored M1, cold M1).** An import takes the file's `serverUserId` only when the file also brings its own token. Otherwise the user id is set aside with the token (D148 2).
+  3. **Plex's several addresses (cold M2).** Comparing addresses can drop a Plex pin when a re-sign-in picks another address for the same server. It fails safe, since only the pin is lost, so the address comparison stands for every type in run 9. Comparing a server's own id is past run 9's goal line, with the multiple-servers work (D134 1, D143 6).
+
+## Owner decision — 2026-11-03 (verbatim, at 2026-11-03T13:14:58Z: "use your discression on thoes items that are waiting on me"): D150
+
+- **D150 The conductor's choices on the items waiting on Nathan, the second time.**
+  1. **The inline scroll style (D148 1).** It stays inline in run 9. `release-2.4.0` lists "move the first-run card's rotated-phone scroll style from `index.html` into `css/app.css`" in the Roadmap's engineering backlog, so a later run picks it up. `css/app.css` is in no remaining phase's Output, and adding it now would reopen a reviewed phase for a style move.
+  2. **The leftover `orch/*` branches.** Unchanged from D138 2: each is proven landed on 2.4, the host's safety hook refuses a forced delete from this session, and the close report gives Nathan the one-line command.
+  3. **Playwright build 1194.** Unchanged from D138 3: it stays until run 9 closes, and the close report says it can go.
+
+## Conductor ruling — 2026-11-03 (run 9, `release-2.4.0` pre-flight; answered "defaults" under D134 ruling 7): D151
+
+- **D151 The 2.4 upgrade notice (R-UPG-4).** R-UPG-3's rule is unchanged apart from these values:
+  - **Marker.** `plexPoster.whatsNew` becomes `'2.4'`.
+  - **Wording.** A configured display upgraded from 2.3 shows once: "What's new in 2.4: show posters from a Jellyfin or Emby server as well as Plex." It has an **Open settings** action.
+  - **Where Open settings lands.** It opens Settings through the PIN gate when a PIN is set, with the server connection section, where the Plex | Jellyfin | Emby choice lives, at the top of the view and focus on that choice.
+  - **Fresh install.** It shows nothing and still gets the marker.
+  - **Harness.** The e2e harness seeds `'2.4'`. The 2.3 notice is retired.
+  The plan names the notice but not its words or its target. Both follow R-UPG-3's pattern.
+
+## Conductor ruling — 2026-11-03 (run 9, `release-2.4.0` r1 handback, question Q7; answered "defaults" under D134 ruling 7): D152
+
+- **D152 Where the 2.4 notice's Open settings lands (Q7).** D151 asks for the server connection section at the top of the view and focus on the Plex | Jellyfin | Emby choice. `js/settings-ui.js`, which scrolls the sheet to a named section, is not in `release-2.4.0`'s Output and has no server section. The builder's reading is accepted. The sheet opens at its top, where the server connection section is the first fieldset, and `js/main.js` puts focus on the checked server-type choice once the sheet is open. The PIN gate applies as before. The preset spec checks the focus.
+
+## Conductor ruling — 2026-11-03 (run 9, `release-2.4.0` Step 4; answered "defaults" under D134 ruling 7): D153
+
+- **D153 `tests/e2e/followups.spec.mjs` joins `release-2.4.0`'s Output.** Criterion 4's full suite (`.orchestrator/artifacts/release-2.4.0--ac4-r1.log`) failed only "FAIL followups". The spec's `waitToast` waits for the text "What's new in 2.3" (tests/e2e/followups.spec.mjs:50). This release retires that notice (D151), so the spec now waits for a toast that no longer exists. The plan's Output lists release, preset and smoke but not followups, which is a plan defect (move 4). It is fixed by adding the file to the Output and to criterion 5's list. The spec's toast case (case 5, the toast on a phone) keeps its purpose. Only the notice text it waits for changes.
+
+## Conductor ruling — 2026-11-03 (run 9, plan-close `/phase-gate`; answered "defaults" under D134 ruling 7): D154
+
+- **D154 The plan-close phase gate's Minors go to the next 2.4.x run.** The gate (`.orchestrator/artifacts/close--phase-gate-r1.md`) passes once the notice walk approves, and it has (`release-2.4.0--review-uxwalk-r1.md`, APPROVE). It found five Minor spec-gaps. None of them changes behaviour or child safety:
+  1. `docs/spec.md:452,458`, the security summary, still says the token appears only in Plex request URLs and that nothing leaves except for Plex and plex.tv. Jellyfin and Emby image URLs now carry the token as `api_key`, to their own server.
+  2. `docs/spec.md:535-539` has no traceability rows for R-SRC-1, R-SRC-2 and R-SRC-3.
+  3. The `package.json:5` description names only Plex.
+  4. The `signInFlow` comment at `js/sources/index.js:91` says every flow has `createPin` and `checkPin`, which Emby's does not, and the comment at `:47` omits Jellyfin's `serverUrl`.
+  5. `js/sources/jellyfin.js:16` and `js/sources/emby.js:24` import helpers from the Plex adapter, against the comment at `js/sources/errors.js:1-2`.
+  Fixing 1–3 now would be `release-2.4.0`'s third re-dispatch, which the rules run as two competing builders, and 4–5 are outside its Output. All five are FOLLOW-UPs for Nathan, for the next 2.4.x run. Item 1 comes first, because the summary understates where the token travels.

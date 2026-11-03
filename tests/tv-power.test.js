@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { describe, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createTvPower } from '../js/tv-power.js';
 
@@ -23,6 +23,16 @@ function setup({ settings = {}, state = {}, helperOver = {} } = {}) {
   });
   return { tv, st, powered, ticks, rendered };
 }
+
+// `frames()` replaces requestAnimationFrame globally; every case gets the exact earlier state back, failed or not.
+let rafBefore;
+beforeEach(() => {
+  rafBefore = Object.getOwnPropertyDescriptor(globalThis, 'requestAnimationFrame');
+});
+afterEach(() => {
+  if (rafBefore) Object.defineProperty(globalThis, 'requestAnimationFrame', rafBefore);
+  else delete globalThis.requestAnimationFrame;
+});
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -115,4 +125,41 @@ test('probeHelper does nothing when the setting is off; refreshTemperature needs
   const gone = setup({ helperOver: { available: false } });
   await gone.tv.refreshTemperature();
   assert.equal(gone.tv.info.tempC, null);
+});
+
+test('a sleep and a wake again inside one wake window: only the newest window clears tvWaking', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { tv, st } = setup();
+  const first = tv.wakeTv();
+  await flush();
+  t.mock.timers.tick(1000); // the first window is 1 s old; a sleep, then a wake again
+  const second = tv.wakeTv();
+  await flush();
+  t.mock.timers.tick(3000); // the first window ends here, the second has 1 s to go
+  await first;
+  assert.equal(st.tvWaking, true, 'the first window\'s end leaves tvWaking alone');
+  t.mock.timers.tick(1000);
+  await second;
+  assert.equal(st.tvWaking, false, 'the second window\'s end clears it');
+});
+
+test('requestAnimationFrame: absent before a case that replaced it, it is deleted again', () => {
+  assert.equal('requestAnimationFrame' in globalThis, false, 'the cases above left no global behind');
+});
+
+describe('requestAnimationFrame already present', () => {
+  const sentinel = () => {};
+  before(() => {
+    globalThis.requestAnimationFrame = sentinel;
+  });
+  after(() => {
+    delete globalThis.requestAnimationFrame;
+  });
+  test('a case replaces it', () => {
+    frames();
+    assert.notEqual(globalThis.requestAnimationFrame, sentinel);
+  });
+  test('the next case sees the earlier one again', () => {
+    assert.equal(globalThis.requestAnimationFrame, sentinel);
+  });
 });

@@ -7,7 +7,7 @@ import { createEngine } from './engine.js';
 import { createHelper } from './helper.js';
 import { cornerZone, createHold, HOLD_MS, inZone, REVEAL_MS, shouldResetPin } from './kiosk.js';
 import { createPinGate } from './pin-gate.js';
-import { createPlexClient } from './plex.js';
+import { createSource, serverTypeOf, signInFlow } from './sources/index.js';
 import { createPosterCache } from './poster-cache.js';
 import { createPosterPin } from './poster-pin.js';
 import { allows } from './ratings.js';
@@ -15,16 +15,17 @@ import { createReload, takeCarriedPlayback } from './reload.js';
 import { requestSize } from './layout.js';
 import { createLimitWatch } from './limit-schedule.js';
 import { anyWindow, resolveSettings } from './profiles.js';
+import { createShownStore } from './weighting.js';
 import { isPlausibleClock } from './schedule.js';
 import { posterMatches, selectionKey, selectionOf } from './selection.js';
-import { createSettingsUI, pinSignIn } from './settings-ui.js';
+import { applyServerText, createSettingsUI, pinSignIn } from './settings-ui.js';
 import { fromImport, isConfigured, load, save, STORAGE_KEY } from './settings.js';
 import { keyMap, listShortcuts, normalizeKey } from './shortcuts.js';
 import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.3.1';
+export const VERSION = '2.4.0';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -69,9 +70,27 @@ let lastDrawAt = -Infinity; // performance.now() of the last poster draw: its cr
 let pinResetFlag = false; // config.json served {"resetPin": true} on this load
 const backoff = createBackoff({ baseMs: 5000, maxMs: 5 * 60 * 1000 });
 
+/** The sign-in flow of the configured server type; its `label` and `words` are what the screens say about the server. A type no adapter knows reads Plex's words here: it is never used to connect (see `sourceError`). */
+const signIn = () => {
+  try {
+    return signInFlow(state.settings);
+  } catch {
+    return signInFlow({});
+  }
+};
+
+let sourceError = null; // why no client could be built for a configured display (a stored server type this build has no adapter for), or null
+
 function rebuildClient() {
   const s = state.settings;
-  client = isConfigured(s) ? createPlexClient({ serverUrl: s.serverUrl, token: s.plexToken, clientId: clientIdValue }) : null;
+  sourceError = null;
+  try {
+    client = isConfigured(s) ? createSource(s, { clientId: clientIdValue, version: VERSION }) : null;
+  } catch (err) {
+    client = null; // never a Plex connection by default (D139 1): the card says what is wrong
+    sourceError = err;
+    log.error(err.message);
+  }
   engine = client
     ? createEngine({
         client,
@@ -357,7 +376,7 @@ async function handleFailure(err, { notify = false } = {}) {
     const stored = cache.entries();
     const limit = limitNow();
     const limited = limit && !fatal && stored.length > 0 && !stored.some((e) => allows(limit, e.contentRating));
-    showEmpty(true, limited ? 'No posters within the household limit are available while Plex is unreachable.' : err.message, err.kind);
+    showEmpty(true, limited ? `No posters within the household limit are available while ${signIn().label} is unreachable.` : err.message, err.kind);
   }
   // A refresh somebody asked for that fails with a poster still on screen has nothing else to say so: the toast carries the fixes.
   if (notify && fixesFor(err.kind).length) {
@@ -424,7 +443,7 @@ new ResizeObserver(([entry]) => {
   document.documentElement.style.setProperty('--controls-h', `${Math.round(entry.borderBoxSize?.[0]?.blockSize ?? $('controls').offsetHeight)}px`);
 }).observe($('controls'));
 
-/** The empty card: `message` says what is wrong and `kind` (a PlexError kind, or 'empty') picks the fix buttons under it. */
+/** The empty card: `message` says what is wrong and `kind` (a SourceError kind, or 'empty') picks the fix buttons under it. */
 function showEmpty(show, message, kind) {
   $('empty').hidden = !show;
   if (message) $('empty-message').textContent = message;
@@ -439,7 +458,7 @@ function statusText() {
   if (state.paused) text = 'Paused';
   if (state.offlineSince) {
     const retry = state.nextAt ? ` · retrying in ${formatDuration(state.nextAt - Date.now())}` : '';
-    text = `${navigator.onLine === false ? 'Offline' : "Can't reach Plex"}${display.currentPoster ? ' · showing cached posters' : ''}${retry}`;
+    text = `${navigator.onLine === false ? 'Offline' : `Can't reach ${signIn().label}`}${display.currentPoster ? ' · showing cached posters' : ''}${retry}`;
     if (state.paused) text = `Paused · ${text}`;
   }
   return text;
@@ -513,6 +532,7 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
     const { maxContentRating, limitSlots, profiles, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
     const { pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime } = prev;
     const { libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source } = prev; // the selection (R-SEL-1, D101 ruling 6)
+    const { serverType, serverUrl, plexToken, serverUserId } = prev; // the connection keys are stored by Save, never before (D149 1): the Save compares the type, address, token and user id with the stored ones, and a preview never leaves the typed or imported ones in force
     const { weighting, noRepeatDays } = prev; // an unsaved window of 0 must not reach the engine, which would clear the saved record (D114 1, D116 1)
     next = {
       ...next,
@@ -520,9 +540,19 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
       ...{ pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime },
       ...{ libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source },
       ...{ weighting, noRepeatDays },
+      serverType, serverUrl, plexToken, serverUserId,
     };
   }
+  // A Save that stores a different server type (an absent one counts as Plex) starts over: the pinned poster goes now, and the
+  // offline cache and the no-repeat history go once the new client is built (D134 2, D141 3). A preview, a sign-in and a Cancel store nothing.
+  const switched = !preview && serverTypeOf(prev) !== serverTypeOf(next);
+  // A Save that stores another address of the same type is another server too (D147 2): an id means nothing there, and a pinned poster shows
+  // whatever its rating (D122 1), so the pin goes. The offline cache and the no-repeat history stay (D143 6): cached posters still pass the limit in force.
+  const addressOf = (s) => String(s?.serverUrl || '').trim().replace(/\/+$/, '');
+  const moved = !preview && !switched && addressOf(prev) !== addressOf(next);
+  if (switched || moved) next = { ...next, staticRatingKey: '', staticTitle: '' };
   state.settings = persist ? save(storage, next) : next;
+  if (!preview) applyServerText(serverTypeOf(state.settings));
   applyControlLabels();
   brightness.evaluate(); // live preview and Save both show at once
   // Whatever is on screen is re-checked against the settings now in force on EVERY apply, previews and Cancel
@@ -541,9 +571,22 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   // wake tick must already use the new connection, not read a session or a pool from the old one.
   // The poster selection compares by what it draws, not by object: every Save makes new lists.
   const connectionChanged =
-    ['plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some((k) => prev[k] !== state.settings[k]) ||
+    ['serverType', 'plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some((k) => prev[k] !== state.settings[k]) ||
     selectionKey(selectionOf(before)) !== selectionKey(selectionOf(inForceSettings())); // what is drawn: the profile's selection while a slot names one
   if (connectionChanged || !engine) rebuildClient();
+  if (switched) {
+    blockPoster(); // the old server's poster does not stay up under the new server
+    if (engine) engine.clearShown();
+    if (!engine) createShownStore({ storage }).clear(); // no client to ask (not signed in to the new server yet): the record is in storage all the same
+    await cache.clear().catch((err) => log.warn(`Could not clear the poster cache: ${err.message}`));
+    updatePinButton();
+    log.info(`Server type is now ${serverTypeOf(state.settings)}: the poster cache, the pinned poster and the no-repeat history were cleared.`);
+  }
+  if (moved && prev.staticRatingKey) {
+    blockPoster(); // the old server's pinned poster does not stay up under the new address
+    updatePinButton();
+    log.info('Server address changed: the pinned poster was cleared.');
+  }
   if (!anyWindow(state.settings)) engine?.clearShown(); // no window anywhere keeps no record, so raising one later starts empty (D116 2); one profile's 0 clears nothing (D120 5)
 
   document.body.classList.toggle('hide-cursor', state.settings.hideCursor);
@@ -563,6 +606,10 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   syncFirstRun(); // configured now: the code flow stops; still not: it carries on (or starts)
   if (!isConfigured(state.settings)) {
     showEmpty(true, unconfiguredMessage());
+    return;
+  }
+  if (sourceError) {
+    showEmpty(true, `${sourceError.message} Open settings and choose Plex, Jellyfin or Emby.`, sourceError.kind);
     return;
   }
   // Online, the forced tick below picks the replacement for a blocked poster; offline, handleFailure shows an
@@ -599,8 +646,12 @@ async function requestSettings(options = {}) {
     return;
   }
   const token = pendingToken; // the first open after the PIN takes it, whichever route opened Settings
+  const userId = pendingUserId;
+  const connection = pendingConnection ?? (firstRunCtl && firstRun.touched ? cardConnection() : null); // the card's choice of type and address, kept when Open settings is pressed
   pendingToken = null;
-  settingsUI.open({ ...options, token });
+  pendingUserId = '';
+  pendingConnection = null;
+  settingsUI.open({ ...options, token, userId, ...(connection ?? {}) });
   syncFirstRun(); // the sheet is its own place to sign in: the card's code steps aside
   tv.probeHelper();
 }
@@ -615,11 +666,24 @@ const settingsUI = createSettingsUI({
   choosePin: () => pinGate.prompt.choose(),
   getSettings: () => state.settings,
   clientId: clientIdValue,
+  version: VERSION,
   log,
   onPreview: (s) => applySettings(s, { persist: false, preview: true }),
   onSave: (s) => {
+    const was = serverTypeOf(state.settings);
     applySettings(s);
-    toast('Settings saved.');
+    // A switch of server type says so, naming the new server and what was cleared (D143 2).
+    const now = serverTypeOf(s);
+    if (was === now) return toast('Settings saved.');
+    let label = now;
+    try {
+      label = signInFlow({ serverType: now }).label;
+    } catch {
+      // a type this build has no adapter for is named as it was written
+    }
+    // A switch that leaves no token cannot show posters yet: it says the type changed and asks to sign in (D144 3).
+    if (!s.plexToken) return toast(`The server type is now ${label}. Sign in to ${label} to show its posters. The offline posters, the pinned poster and the no-repeat history were cleared.`);
+    toast(`Now showing posters from ${label}. The offline posters, the pinned poster and the no-repeat history were cleared.`);
   },
   fixesFor,
   runFix,
@@ -1102,7 +1166,18 @@ const FIRST_RUN_FRESH_CODES = 3;
 const FIRST_RUN_REST_MS = 5 * 60_000;
 let firstRunCtl = null; // the AbortController of the running flow, or null
 let bootSettled = false; // boot has read config.json and applied the settings: "not configured" can be believed
+let pendingUserId = ''; // the user id that came with `pendingToken` (an Emby sign-in returns one)
 let pendingToken = null; // a token the card's code earned, waiting for the first open of Settings that gets past the PIN
+let pendingConnection = null; // with a Jellyfin or Emby token: { serverType, serverUrl } the card chose, handed to the sheet with it (nothing is stored before Save)
+// The server type (and, for Jellyfin and Emby, the address) the card signs in to. It starts from the settings and changes with the card's own
+// choice; it is held in memory only, so choosing on the card stores nothing and needs no PIN.
+const firstRun = { type: 'plex', url: '', touched: false };
+const firstRunSettings = () => ({ ...state.settings, serverType: firstRun.type, serverUrl: firstRun.url });
+/** The server types that sign in at an address the household types (Plex finds its servers through plex.tv). */
+const addressed = (type) => type === 'jellyfin' || type === 'emby';
+/** What the card chose, for the sheet: the type and, for Jellyfin and Emby, the address; null when it chose what is stored and Plex (nothing to hand over). A Plex choice over a stored Jellyfin or Emby type is handed over too, so the sheet cannot keep the other type's address for this token (D142 2). */
+const cardConnection = () => (addressed(firstRun.type) || firstRun.type !== serverTypeOf(state.settings) ? { serverType: firstRun.type, serverUrl: addressed(firstRun.type) ? firstRun.url : '' } : null);
+const firstRunFlow = () => signInFlow(firstRunSettings(), { version: VERSION });
 
 // A pending token ends the flow too: the display is signed in, it only needs somebody to finish in Settings.
 const firstRunWanted = () => bootSettled && !isConfigured(state.settings) && !settingsUI.isOpen && !state.asleep && !pendingToken;
@@ -1119,33 +1194,126 @@ function syncFirstRun() {
 }
 
 /** What the empty card says on an unconfigured display: the invitation, or, once a code was approved, what is left to do. */
-const unconfiguredMessage = () => (pendingToken ? 'Signed in. Open settings to finish.' : 'Connect to your Plex server to get started.');
+const unconfiguredMessage = () => (pendingToken ? 'Signed in. Open settings to finish.' : `Connect to your ${(firstRunCtl ? firstRunFlow() : signIn()).label} server to get started.`);
 
 /** `rest` shows only the status: while the display waits to ask again, "enter this code" over empty squares would mislead. */
 function showFirstRun(code, status, { rest = false } = {}) {
   $('firstrun').classList.toggle('resting', rest);
   $('signin-code-large').textContent = code || '····';
+  $('signin-code-large').classList.toggle('long', code.length > 4); // a six-digit Quick Connect code is set a little smaller than a four-character Plex one
   $('firstrun-status').textContent = status;
 }
 
 function startFirstRun() {
   const ctl = new AbortController();
   firstRunCtl = ctl;
+  if (!firstRun.touched) {
+    firstRun.type = addressed(serverTypeOf(state.settings)) ? serverTypeOf(state.settings) : 'plex'; // a type this build lacks reads Plex here: the card only offers a sign-in
+    firstRun.url = addressed(firstRun.type) ? state.settings.serverUrl : '';
+  }
+  const flow = firstRunFlow();
+  for (const radio of document.querySelectorAll('input[name="firstrunType"]')) radio.checked = radio.value === firstRun.type;
+  applyServerText(firstRun.type);
   $('firstrun').hidden = false;
-  showFirstRun('', 'Asking plex.tv for a code…');
-  showEmpty(true, 'Connect to your Plex server to get started.');
+  $('firstrun-login').hidden = true;
+  $('firstrun-address').hidden = !(flow.needsAddress && !flow.serverUrl);
+  $('firstrun-address').querySelector('label').textContent = `${flow.label} server address`;
+  $('firstrun-address').querySelector('input[type="submit"]').value = flow.createPin ? 'Get a code' : 'Continue';
+  $('firstrun-lead').hidden = !flow.createPin; // no code is coming for Emby: the lines about one are not shown
+  $('signin-code-large').hidden = !flow.createPin; // Emby has no code to show
+  $('firstrun-url').value = firstRun.url;
+  showEmpty(true, unconfiguredMessage());
+  if (!$('firstrun-address').hidden) {
+    showFirstRun('', `Enter the address of your ${flow.label} server.`, { rest: true }); // the code needs an address to ask
+    $('firstrun-url').focus();
+    return;
+  }
+  showFirstRun('', flow.words.asking);
   runFirstRun(ctl).catch((err) => log.warn(`First-run sign-in stopped: ${err.message}`));
 }
 
+/** The card's own choice changed the server type or the address: the running code is dropped and the card starts again. */
+function restartFirstRun() {
+  firstRunCtl?.abort();
+  firstRunCtl = null;
+  syncFirstRun();
+}
+
+for (const radio of document.querySelectorAll('input[name="firstrunType"]')) {
+  radio.addEventListener('change', () => {
+    if (!radio.checked || firstRun.type === radio.value) return;
+    Object.assign(firstRun, { type: radio.value, touched: true });
+    restartFirstRun();
+  });
+}
+$('firstrun-address').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const url = $('firstrun-url').value.trim().replace(/\/+$/, '');
+  if (!url) return void showFirstRun('', `Enter the address of your ${firstRunFlow().label} server.`, { rest: true });
+  if (location.protocol === 'https:' && url.startsWith('http:')) return void showFirstRun('', firstRunFlow().words.httpsBlocked, { rest: true });
+  Object.assign(firstRun, { url, touched: true });
+  restartFirstRun();
+});
+$('firstrun-login').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const ctl = firstRunCtl;
+  if (!ctl) return;
+  const user = $('firstrun-user').value.trim();
+  if (!user) return void showFirstRun('', 'Enter the user name.', { rest: true });
+  showFirstRun('', 'Signing in…', { rest: true });
+  try {
+    const { token, userId } = await firstRunFlow().signInWithPassword(clientIdValue, user, $('firstrun-pass').value);
+    if (firstRunCtl === ctl) finishFirstRun(ctl, token, userId);
+  } catch (err) {
+    if (firstRunCtl === ctl && (err.kind === 'network' || err.kind === 'timeout')) {
+      // The server did not answer: the address is the trouble, and the household can change it here (D143 1, D145 8).
+      $('firstrun-address').hidden = false;
+      $('firstrun-login').hidden = true;
+      $('firstrun-url').value = firstRun.url;
+      showFirstRun('', `Couldn't reach ${firstRunFlow().label} at ${firstRun.url}. Check the address and try again.`, { rest: true });
+      $('firstrun-url').focus();
+    } else {
+      showFirstRun('', err.kind === 'auth' ? 'That user name or password was not accepted.' : `Sign-in failed: ${err.message}`, { rest: true });
+    }
+  } finally {
+    $('firstrun-pass').value = ''; // the password is used once and never kept
+  }
+});
+
 async function runFirstRun(ctl) {
+  const flow = firstRunFlow();
+  let quickConnect = true;
+  if (flow.quickConnectEnabled) {
+    try {
+      quickConnect = await flow.quickConnectEnabled(clientIdValue);
+    } catch {
+      if (ctl.signal.aborted) return;
+      // The server did not answer: the address is the trouble, and the household can change it here (D143 1).
+      $('firstrun-address').hidden = false;
+      $('firstrun-url').value = firstRun.url;
+      showFirstRun('', `Couldn't reach ${flow.label} at ${firstRun.url}. Check the address and try again.`, { rest: true });
+      $('firstrun-url').focus();
+      return;
+    }
+  }
+  if (!quickConnect) {
+    if (ctl.signal.aborted) return;
+    // The server answered that Quick Connect is off: the user name and password form takes its place (D143 1).
+    showFirstRun('', flow.words.passwordOnly ?? 'Quick Connect is off on this server. Sign in with a user name and password.', { rest: true });
+    $('firstrun-login').hidden = false;
+    $('firstrun-user').focus();
+    return;
+  }
   let failures = 0;
   let unused = 0; // codes in a row that ran out unapproved
   while (!ctl.signal.aborted) {
     try {
       const token = await pinSignIn(clientIdValue, {
+        settings: firstRunSettings(),
+        version: VERSION,
         signal: ctl.signal,
         onCode: (code) => {
-          failures = 0; // plex.tv answered
+          failures = 0; // the server answered
           showFirstRun(code, 'Waiting for you to approve…');
         },
       });
@@ -1153,15 +1321,15 @@ async function runFirstRun(ctl) {
       if (token) return finishFirstRun(ctl, token);
       // The code expired unused: the loop asks for a fresh one, after a rest once three in a row have gone to waste.
       if (++unused >= FIRST_RUN_FRESH_CODES) {
-        showFirstRun('', 'That code ran out. Asking plex.tv for a new one in 5 minutes…', { rest: true });
+        showFirstRun('', flow.words.ranOut, { rest: true });
         await sleep(FIRST_RUN_REST_MS, ctl.signal);
         if (ctl.signal.aborted) return;
-        showFirstRun('', 'Asking plex.tv for a code…');
+        showFirstRun('', flow.words.asking);
       }
     } catch (err) {
       if (ctl.signal.aborted) return;
-      if (failures === 0) log.warn(`Could not get a sign-in code from plex.tv: ${err.message}`); // once per outage, not per retry
-      showFirstRun('', "Can't reach plex.tv. Trying again soon…");
+      if (failures === 0) log.warn(flow.words.couldNotGet(err.message)); // once per outage, not per retry
+      showFirstRun('', flow.words.unreachable);
       await sleep(Math.min(FIRST_RUN_RETRY_MAX_MS, FIRST_RUN_RETRY_MS * 2 ** failures), ctl.signal);
       failures++;
     }
@@ -1174,16 +1342,21 @@ async function runFirstRun(ctl) {
  * already up shares its answer with this request, and one that is cancelled leaves the token waiting for the next open,
  * so the code is never asked for again and never saved without the PIN.
  */
-async function finishFirstRun(ctl, token) {
+async function finishFirstRun(ctl, token, userId = '') {
   if (firstRunCtl === ctl) firstRunCtl = null;
   $('firstrun').hidden = true;
   log.info('Sign-in code approved');
   pendingToken = token;
+  pendingUserId = firstRun.type === 'emby' ? userId : ''; // only Emby needs it
+  pendingConnection = cardConnection();
   await requestSettings();
   syncFirstRun(); // opened: the sheet owns sign-in; cancelled: the token waits and the flow stays stopped
   if (pendingToken) showEmpty(true, unconfiguredMessage()); // cancelled: say the sign-in worked and what is left
 }
-$('settings').addEventListener('close', syncFirstRun);
+$('settings').addEventListener('close', () => {
+  applyServerText(serverTypeOf(state.settings)); // the sheet showed the type it was editing; the saved one reads again
+  syncFirstRun();
+});
 
 // ---------- Boot ----------
 
@@ -1254,24 +1427,27 @@ async function boot() {
   announceWhatsNew();
 }
 
-// ---------- The upgrade notice (R-UPG-3) ----------
+// ---------- The upgrade notice (R-UPG-4) ----------
 
 const WHATS_NEW_KEY = 'plexPoster.whatsNew';
-const WHATS_NEW_VERSION = '2.3';
+const WHATS_NEW_VERSION = '2.4';
 
 /**
  * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new
- * and pointed at the Household fieldset (through the normal PIN gate), where the rating schedule and viewer profiles live.
+ * and pointed at the server connection section (through the normal PIN gate), where the Plex | Jellyfin | Emby choice lives.
  * An unconfigured one is a fresh install, not an upgrade, so it shows nothing. Either way the marker is written, so it
- * never shows again. The 2.2 notice is retired.
+ * never shows again. The 2.3 notice is retired.
  */
 function announceWhatsNew() {
   if (storage.getItem(WHATS_NEW_KEY) === WHATS_NEW_VERSION) return;
   storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION);
   if (!isConfigured(state.settings)) return;
-  toast("What's new in 2.3: rating limits by time of day, viewer profiles, and choosing which posters show, favouring unwatched ones.", {
+  toast("What's new in 2.4: show posters from a Jellyfin or Emby server as well as Plex.", {
     action: 'Open settings',
-    onAction: () => requestSettings({ section: 'household' }),
+    onAction: async () => {
+      await requestSettings({ section: 'server' }); // the sheet opens at its top, where the server connection section is
+      if (settingsUI.isOpen) document.querySelector('input[name="serverTypePick"]:checked')?.focus({ preventScroll: true });
+    },
     ms: 20_000,
   });
 }

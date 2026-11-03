@@ -112,3 +112,27 @@ test('createHelper works without a log', async () => {
   const helper = createHelper({ fetchImpl: async () => json('x', 404) });
   assert.equal((await helper.probe()).available, false);
 });
+
+test('available: one failed read after a good one keeps it true; two in a row clear it; a good read resets the count', async () => {
+  const outcomes = [];
+  const { helper } = setup(() => (outcomes.shift() ? json({ power: 'cec-ctl' }) : json('no', 503)));
+  const run = async (...seq) => {
+    outcomes.push(...seq);
+    const seen = [];
+    for (let i = 0; i < seq.length; i++) seen.push((await helper.status()).available);
+    return seen;
+  };
+  assert.equal(helper.available, false, 'a helper that has never answered is unavailable');
+  assert.deepEqual(await run(false), [false]);
+  assert.equal(helper.available, false, 'a first read that fails: still never answered');
+  assert.deepEqual(await run(true, false), [true, false], 'each result still reports its own read');
+  assert.equal(helper.available, true, 'good, fail: one miss is forgiven');
+  assert.deepEqual(await run(true, false, false), [true, false, false]);
+  assert.equal(helper.available, false, 'good, fail, fail: two in a row clear it');
+  await run(true);
+  assert.equal(helper.available, true, 'a good read brings it back');
+  await run(false, true, false);
+  assert.equal(helper.available, true, 'fail, good, fail');
+  await run(false, false, true, false);
+  assert.equal(helper.available, true, 'fail, fail, good, fail');
+});

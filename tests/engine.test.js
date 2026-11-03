@@ -2,12 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEngine } from '../js/engine.js';
 import { defaults } from '../js/settings.js';
+import { createSource } from '../js/sources/index.js';
+
+// The fake stands in for an adapter: reading a session is the Plex adapter's own nowPlaying, so these cases keep their Plex session shapes.
+const { nowPlaying } = createSource({ serverUrl: 'http://s', plexToken: 't' });
 
 function fakeClient({ sessions = [], pool = [], itemRating = '' } = {}) {
   const calls = { pool: 0, sessions: 0, item: 0, poolArgs: [] };
   return {
     calls,
     sessions: async () => (calls.sessions++, sessions),
+    nowPlaying,
     pool: async (args) => (calls.pool++, calls.poolArgs.push(args), pool),
     item: async (key) => (calls.item++, { ratingKey: key, title: `Item ${key}`, thumb: `/t/${key}`, source: 'static', contentRating: itemRating }),
   };
@@ -575,6 +580,7 @@ function gatedSetup(overrides, { cached = ['1', '2', '3'] } = {}) {
   const client = {
     calls: { items: 0 },
     sessions: async () => [],
+    nowPlaying,
     pool: () => (events.push('pool:start'), poolGate.promise.then((v) => (events.push('pool:end'), v))),
     items: (keys) => {
       client.calls.items++;
@@ -644,6 +650,33 @@ test('D80: a pool failure still rejects the load, even when the re-check succeed
   const err = await outcome;
   assert.equal(err.message, 'pool down');
   assert.equal(applied.length, 0, 'no ratings applied when the load failed');
+});
+
+test('D135 3: after a pool failure the re-check sends no further batch; the next pool load re-checks again', async () => {
+  const { engine, client, poolGate, itemGates, applied } = gatedSetup({ maxContentRating: 'PG-13' }, { cached: keysOf(250) });
+  const outcome = engine.decide().then(() => 'resolved', (err) => err);
+  await tick();
+  assert.equal(client.calls.items, 1, 'the first batch is out alongside the pool request');
+  poolGate.reject(Object.assign(new Error('pool down'), { kind: 'network' }));
+  assert.equal((await outcome).message, 'pool down');
+  itemGates[0].resolve([]); // the batch already in flight settles; its result is discarded
+  await tick();
+  await tick();
+  assert.equal(client.calls.items, 1, 'no second batch after the pool failure');
+  assert.deepEqual(applied, []);
+  // the next pool load is a fresh load: it re-checks as usual
+  client.pool = async () => [rated('g', 'G')]; // the server is back
+  const again = engine.decide();
+  await tick();
+  assert.equal(client.calls.items, 2, 'the next load sends its first batch again');
+  itemGates[1].resolve([]);
+  await tick();
+  assert.equal(client.calls.items, 3, 'and goes on to its next batch while its pool has not failed');
+  itemGates[2].resolve([]);
+  await tick();
+  itemGates[3].resolve([]);
+  await again;
+  assert.equal(applied.length, 1);
 });
 
 test('D80: with the server down (pool and every batch fail) nothing is reported, so the offline cache keeps its ratings', async () => {
@@ -816,6 +849,7 @@ function selectionClient({ counts = { 1: 8, 3: 5 }, libs = { 1: LIB_A, 3: LIB_B 
     calls,
     ...(allLibraries ? { libraries: async () => allLibraries } : {}),
     sessions: async () => [],
+    nowPlaying,
     items: async () => [],
     libraryCount: async (key) => (calls.count.push(key), counts[key] ?? null),
     pool: async (args) => (calls.pool.push(args), libs[args.libraryKey].map((p) => ({ ...p }))),
@@ -1559,4 +1593,28 @@ test('limitSet is true when only a profile slot sets a limit (the D37 re-check s
   const off = createEngine({ client, getSettings: () => ({ ...w.settings, limitSlots: [{ start: '06:00', profile: 'a' }] }), now: () => w.clock.at, random: () => 0, cachedKeys: () => ['x'], onRatings: () => {}, storage: memStorage() });
   await off.decide();
   assert.equal(rechecks, 1, 'a profile with no limit: no re-check');
+});
+
+// ---- the engine hands the settings in force to the adapter's nowPlaying, at both call sites ----
+
+test('decide() and playing() give nowPlaying the username rule and include-episodes in force', async () => {
+  const seen = [];
+  const client = { ...fakeClient({ pool: [poster('a')] }), nowPlaying: (sessions, s) => (seen.push({ sessions, username: s.username, includeEpisodes: s.includeEpisodes }), null) };
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', username: 'kid', includeEpisodes: false };
+  const engine = createEngine({ client, getSettings: () => settings, now: () => 1_000_000, random: () => 0 });
+  const given = [{ type: 'movie' }];
+  await engine.decide({ sessions: given });
+  await engine.playing(given);
+  assert.deepEqual(seen, [
+    { sessions: given, username: 'kid', includeEpisodes: false },
+    { sessions: given, username: 'kid', includeEpisodes: false },
+  ]);
+});
+
+test('decide() with a username set ignores another viewer\'s session (the real adapter reads the settings)', async () => {
+  const NPS = [{ type: 'movie', ratingKey: 'np', title: 'Playing', thumb: '/t/np', User: { title: 'someone' }, Player: { state: 'playing' } }];
+  const other = setup({ username: 'kid' }, { sessions: NPS, pool: [poster('a')] });
+  assert.equal((await other.engine.decide({ sessions: NPS })).poster.source, 'random');
+  const mine = setup({ username: 'someone' }, { sessions: NPS, pool: [poster('a')] });
+  assert.equal((await mine.engine.decide({ sessions: NPS })).poster.source, 'now-playing');
 });

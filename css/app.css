@@ -252,6 +252,22 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
   color: var(--accent);
   user-select: all;
 }
+/* The server type (Plex or Jellyfin): the rotation presets' buttons, a little roomier for a first touch. On the card they sit centred
+   above the instruction; in Settings they open the connection section. The Jellyfin address and password forms on the card are
+   stacked fields at the card's width, left aligned inside the centred card. */
+.firstrun-type-label { display: block; margin: 0 0 4px; color: var(--muted); font-size: 0.9rem; }
+.firstrun-type { justify-content: center; margin: 0 0 14px; }
+#jf-password summary { padding: 11px 0; min-height: 44px; box-sizing: border-box; }
+.server-type { margin: 2px 0 10px; }
+.firstrun-type .seg-opt span, .server-type .seg-opt span { min-width: 88px; padding: 10px 16px; text-align: center; }
+.firstrun-form { display: grid; gap: 4px; margin: 0 0 12px; text-align: left; }
+.firstrun-form label { margin: 6px 0 0; color: var(--muted); }
+.firstrun-form input { margin-top: 0; }
+.firstrun-form .btn { justify-content: center; margin-top: 10px; min-height: 44px; }
+#jf-password .input-row { margin-top: 12px; }
+#jf-status:empty { display: none; }
+
+.pin-code-large.long { font-size: clamp(48px, min(9vmin, 14vw), 84px); letter-spacing: 0.08em; }
 /* The fixes for what went wrong (R-SET-6) sit above Open settings. */
 .empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 0 0 12px; }
 .empty-actions:empty { display: none; }

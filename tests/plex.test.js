@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildUrl, createPin, createPlexClient, discoverServers, formatRuntime, pickNowPlaying, rankConnections, toPoster, xmlToContainer } from '../js/plex.js';
+import { buildUrl, createPin, createPlexClient, discoverServers, pickNowPlaying, rankConnections, toPoster, xmlToContainer } from '../js/sources/plex.js';
+import { formatRuntime } from '../js/duration.js';
 import { allowedValues } from '../js/ratings.js';
 import { pinSignIn } from '../js/settings-ui.js';
 

@@ -35,8 +35,16 @@ const rotation = (v, d) => {
 /** Each entry: [default, sanitiser]. Sanitisers coerce bad input back to the default. */
 const SCHEMA = {
   // Connection
+  // Which media server the display talks to (D134): picks the source adapter in js/sources ('plex', 'jellyfin' or 'emby'). Absent in a 2.3.1
+  // object, which is Plex. A value this build has no adapter for is kept as written, never turned into Plex: the display then shows a
+  // connection error that names it (D139 1), and a Save from Settings keeps it until a type is chosen.
+  serverType: ['plex', (v, d) => (typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, 40) : d)],
+  // The access token of whichever server type is set (the key keeps its 2.3.1 name). Jellyfin's and Emby's is the AccessToken a sign-in returns; a password is never stored (D141 8, D145 2).
   plexToken: ['', str],
   serverUrl: ['', (v, d) => str(v, d).replace(/\/+$/, '')],
+  // The id of the user an Emby sign-in returned (D145 2: not a secret). Emby lists a user's libraries only at /Users/{UserId}/Views, so the
+  // Emby adapter needs it; Plex and Jellyfin leave it empty. It belongs to the token and the address it came with and is set aside with them.
+  serverUserId: ['', str],
   serverName: ['', str],
   libraryKey: ['', (v, d) => str(String(v ?? ''), d)],
   libraryName: ['', str],
@@ -127,6 +135,9 @@ const SCHEMA = {
   showProgress: [true, bool],
   showPlayer: [false, bool],
 };
+
+/** The keys that name a server connection: a file that carries one of them and no `serverType` is a 2.3.1 (Plex) file. */
+const CONNECTION_KEYS = ['serverUrl', 'plexToken', 'libraryKey', 'libraryKeys'];
 
 /** Keys that hold secrets and are optional on export. */
 export const SECRET_KEYS = ['plexToken'];
@@ -273,5 +284,34 @@ export function fromImport(text, current = defaults()) {
   // A 2.2-shaped file names one library: it replaces the whole selection (that library, no genres, no rating subset, no source), not just the list.
   if (known.includes('libraryKey') && !known.includes('libraryKeys')) Object.assign(merged, { libraryKeys: [], libraryNames: [], genres: [], ratings: [], source: null });
   for (const k of known) merged[k] = incoming[k];
+  // A file that names a connection but no server type is a 2.3.1 file, which is Plex: it must not graft a Plex address onto another type's display.
+  if (!known.includes('serverType') && known.some((k) => CONNECTION_KEYS.includes(k))) merged.serverType = 'plex';
   return sanitize(merged);
+}
+
+/**
+ * An import as the Settings sheet applies it: `fromImport`, plus what happens to the connection (D142 2, D144 1). The current token
+ * belongs to the current server: when the file names another server type or another server address and carries no token of its own,
+ * the result has no token or user id (the display asks to sign in) and `setAside` is true. The sheet then files the old token, address
+ * and name under the old server type in its `held` list. For a file that moves to ANOTHER TYPE they come back when that type is chosen
+ * again. For a move to another address of the SAME type they do not come back: the next choice of a type files the form as it then is
+ * (an empty token) over that entry first, so the old token is gone from the sheet, and Cancel restores the stored one. A file for another
+ * server type also leaves the current address behind when it names none. A file that carries a token keeps it. `settings` is what the
+ * sheet writes; nothing is stored here.
+ */
+export function importWithConnection(text, current = defaults()) {
+  const merged = fromImport(text, current);
+  const parsed = typeof text === 'string' ? JSON.parse(text) : text;
+  const incoming = parsed?.settings && parsed.format !== undefined ? parsed.settings : parsed;
+  const typeMoved = merged.serverType !== (current.serverType || 'plex');
+  const urlMoved = !typeMoved && merged.serverUrl !== sanitize({ serverUrl: current.serverUrl }).serverUrl;
+  const brought = typeof incoming.plexToken === 'string' || typeof incoming.PLEX_TOKEN === 'string';
+  // The user id travels with its token (D149 2): the file's id counts only when the file brings its own token, and then it is the file's or none.
+  const userId = brought && 'serverUserId' in incoming ? merged.serverUserId : brought ? '' : null;
+  if (!typeMoved && !urlMoved) return { settings: { ...merged, serverUserId: userId ?? sanitize({ serverUserId: current.serverUserId }).serverUserId }, setAside: false };
+  const named = 'serverUrl' in incoming || 'PLEX_SERVER_URL' in incoming;
+  return {
+    settings: { ...merged, plexToken: brought ? merged.plexToken : '', serverUrl: typeMoved && !named ? '' : merged.serverUrl, serverName: '', serverUserId: userId ?? '' },
+    setAside: true,
+  };
 }

@@ -1,6 +1,6 @@
 // Content ratings: the US ladder, the country-prefix table (R-FILT-1, D5, Q19) and the one rule that
 // decides whether a rating may be shown under a limit. `allows()` is the child-safety guarantee: the
-// engine and the poster cache both call it, and the Plex request filter is only an optimisation.
+// engine and the poster cache both call it, and the server-side request filter is only an optimisation.
 //
 //   G = TV-Y = TV-G  <  PG = TV-Y7 = TV-PG  <  PG-13 = TV-14  <  R = TV-MA  <  NC-17
 //
@@ -66,4 +66,16 @@ export function allowedValues(limit) {
     for (const [code, rung] of table) if (rung <= max) out.push(prefix + code);
   }
   return out;
+}
+
+/**
+ * A rating from a server that writes ratings freely (Jellyfin, D134 3, D141 5): the value when it is exactly a US film or TV
+ * Parental Guidelines value on the ladder above (`G` ... `NC-17`, `TV-Y` ... `TV-MA`, upper case, no country prefix), else ''
+ * (unknown, hidden under any limit). It maps nothing and normalises nothing: `15`, `12A`, `NR`, `PG13`, `US-PG`, `gb/12A` and `pg`
+ * are all ''. Plex's values do not go through it, so a Plex household's ratings read as before.
+ */
+export function exactRating(value) {
+  if (typeof value !== 'string') return '';
+  const v = value.trim();
+  return US.has(v) ? v : '';
 }

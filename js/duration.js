@@ -41,3 +41,18 @@ export function formatMinutes(seconds) {
   }
   return text;
 }
+
+/** A non-negative number of milliseconds from a JSON number or an XML attribute string; anything else is 0. */
+export function toMs(v) {
+  const n = typeof v === 'number' || (typeof v === 'string' && v.trim() !== '') ? Number(v) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** "2 h 14 m", "48 m", "2 h"; empty when the runtime is missing or under half a minute. */
+export function formatRuntime(ms) {
+  const minutes = Math.round(toMs(ms) / 60000);
+  if (!minutes) return '';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return [h && `${h} h`, m && `${m} m`].filter(Boolean).join(' ');
+}

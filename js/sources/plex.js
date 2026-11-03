@@ -3,21 +3,14 @@
 // Requests deliberately stay CORS-"simple" (GET/POST, only an Accept header, token in
 // the query string) so browsers don't send a preflight that some Plex servers reject.
 
-import { allowedValues } from './ratings.js';
-import { ratingPasses, ratingValues } from './selection.js';
-import { SUMMARY_MAX, trimSummary } from './fill.js';
+import { allowedValues } from '../ratings.js';
+import { ratingPasses, ratingValues } from '../selection.js';
+import { SUMMARY_MAX, trimSummary } from '../fill.js';
+import { toMs } from '../duration.js';
+import { SourceError } from './errors.js';
 
 export const PRODUCT = 'Now Showing';
 const PLEX_TV = 'https://plex.tv';
-
-export class PlexError extends Error {
-  constructor(message, { status = 0, kind = 'network' } = {}) {
-    super(message);
-    this.name = 'PlexError';
-    this.status = status;
-    this.kind = kind; // 'network' | 'timeout' | 'auth' | 'http' | 'parse'
-  }
-}
 
 /** Builds a URL with query params; values that are '' / null / undefined are skipped. */
 export function buildUrl(base, path, params = {}) {
@@ -32,7 +25,7 @@ export function buildUrl(base, path, params = {}) {
 export function xmlToContainer(doc) {
   const root = doc.documentElement;
   if (!root || root.nodeName === 'parsererror' || doc.getElementsByTagName('parsererror').length) {
-    throw new PlexError('Could not parse Plex response.', { kind: 'parse' });
+    throw new SourceError('Could not parse Plex response.', { kind: 'parse' });
   }
   const attrs = (el) => Object.fromEntries(Array.from(el.attributes).map((a) => [a.name, a.value]));
   const container = attrs(root);
@@ -68,26 +61,26 @@ async function request(url, { method = 'GET', timeoutMs = 10000, fetchImpl = fet
     res = await fetchImpl(url, { method, headers: { Accept: 'application/json' }, signal: timeoutSignal(timeoutMs) });
   } catch (err) {
     const timedOut = err && (err.name === 'TimeoutError' || err.name === 'AbortError');
-    throw new PlexError(timedOut ? 'Plex did not respond in time.' : 'Could not reach Plex (network or CORS error).', {
+    throw new SourceError(timedOut ? 'Plex did not respond in time.' : 'Could not reach Plex (network or CORS error).', {
       kind: timedOut ? 'timeout' : 'network',
     });
   }
   if (res.status === 401 || res.status === 403) {
-    throw new PlexError('Plex rejected the token (unauthorised).', { status: res.status, kind: 'auth' });
+    throw new SourceError('Plex rejected the token (unauthorised).', { status: res.status, kind: 'auth' });
   }
-  if (!res.ok) throw new PlexError(`Plex returned HTTP ${res.status}.`, { status: res.status, kind: 'http' });
+  if (!res.ok) throw new SourceError(`Plex returned HTTP ${res.status}.`, { status: res.status, kind: 'http' });
 
   const text = await res.text();
   if (!text.trim()) return {};
   if (text.trimStart().startsWith('<')) {
-    if (typeof DOMParser === 'undefined') throw new PlexError('Unexpected XML response.', { kind: 'parse' });
+    if (typeof DOMParser === 'undefined') throw new SourceError('Unexpected XML response.', { kind: 'parse' });
     return xmlToContainer(new DOMParser().parseFromString(text, 'application/xml'));
   }
   try {
     const json = JSON.parse(text);
     return json.MediaContainer ?? json;
   } catch {
-    throw new PlexError('Could not parse Plex response.', { kind: 'parse' });
+    throw new SourceError('Could not parse Plex response.', { kind: 'parse' });
   }
 }
 
@@ -113,21 +106,6 @@ export function pickNowPlaying(sessions, { username = '', includeEpisodes = true
     playerState: m.Player?.state || '',
     paused: m.Player?.state === 'paused',
   };
-}
-
-/** A non-negative number of milliseconds from a JSON number or an XML attribute string; anything else is 0. */
-function toMs(v) {
-  const n = typeof v === 'number' || (typeof v === 'string' && v.trim() !== '') ? Number(v) : NaN;
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-/** "2 h 14 m", "48 m", "2 h"; empty when the runtime is missing or under half a minute. */
-export function formatRuntime(ms) {
-  const minutes = Math.round(toMs(ms) / 60000);
-  if (!minutes) return '';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return [h && `${h} h`, m && `${m} m`].filter(Boolean).join(' ');
 }
 
 /** Normalised poster descriptor used throughout the app. */
@@ -183,6 +161,9 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
   const get = (path, params = {}, opts = {}) => request(buildUrl(serverUrl, path, { ...params, ...auth }), { ...opts, fetchImpl });
 
   return {
+    /** The server's name as the user reads it: every sentence that names the server uses this. */
+    label: 'Plex',
+
     /** Server identity; succeeds only when the URL and token are good. */
     async identity() {
       const c = await get('/', {}, { timeoutMs: 8000 });
@@ -278,7 +259,7 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
     async item(ratingKey) {
       const c = await get(`/library/metadata/${encodeURIComponent(ratingKey)}`);
       const m = (c.Metadata || [])[0];
-      if (!m) throw new PlexError('That library item no longer exists.', { kind: 'http', status: 404 });
+      if (!m) throw new SourceError('That library item no longer exists.', { kind: 'http', status: 404 });
       return toPoster(m, 'static');
     },
 
@@ -290,6 +271,11 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
       if (!ratingKeys.length) return [];
       const c = await get(`/library/metadata/${ratingKeys.map(encodeURIComponent).join(',')}`);
       return (c.Metadata || []).map((m) => toPoster(m, 'static'));
+    },
+
+    /** The session poster to show from the `sessions()` list, or null (see `pickNowPlaying`); `username` and `includeEpisodes` come from the settings. */
+    nowPlaying(sessions, { username = '', includeEpisodes = true } = {}) {
+      return pickNowPlaying(sessions, { username, includeEpisodes });
     },
 
     /** A resized poster via the Plex photo transcoder — far lighter than the original artwork. */
@@ -328,7 +314,7 @@ export async function createPin(clientId, { fetchImpl = (...a) => fetch(...a) } 
     fetchImpl,
   });
   if (pin.id === undefined || pin.id === null || typeof pin.code !== 'string' || !pin.code) {
-    throw new PlexError('plex.tv did not return a sign-in code.', { kind: 'parse' });
+    throw new SourceError('plex.tv did not return a sign-in code.', { kind: 'parse' });
   }
   const life = Number(pin.expiresIn);
   return { id: pin.id, code: pin.code, expiresAt: pin.expiresAt, expiresIn: Number.isFinite(life) && life > 0 ? life : null };
@@ -381,3 +367,22 @@ export async function firstReachable(connections, token, clientId, { fetchImpl }
   }
   return null;
 }
+
+/**
+ * How a person signs in to Plex: the plex.tv code, the servers on the account, and the words the sign-in screens use for
+ * them. The Settings sheet and the empty card's first run ask the source layer for this and never name plex.tv themselves.
+ */
+export const plexSignIn = {
+  label: 'Plex',
+  createPin,
+  checkPin,
+  discoverServers,
+  firstReachable,
+  words: {
+    asking: 'Asking plex.tv for a code…',
+    ranOut: 'That code ran out. Asking plex.tv for a new one in 5 minutes…',
+    unreachable: "Can't reach plex.tv. Trying again soon…",
+    couldNotGet: (message) => `Could not get a sign-in code from plex.tv: ${message}`,
+    httpsBlocked: 'This page is https, so the browser will block an http:// server. Use the plex.direct https address (Sign in finds it) or serve the app over http on your LAN.',
+  },
+};

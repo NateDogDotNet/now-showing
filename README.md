@@ -8,7 +8,7 @@ There's no build step, no backend and no dependencies: just static files that ta
 
 ![Poster inside the marquee frame](assets/screenshots/portrait.png)
 
-> **Status of versions 2.1 to 2.3: 2.3.1 is the newest version, on `main` (merged on 2026-11-02 from the branch `2.3.1`, with no pull request, no tag and no GitHub release): it fixes the 2.3 follow-ups (see "Done in 2.3.1" in [`Roadmap.md`](Roadmap.md)). 2.3.0, also on `main` (merged on 2026-11-02 from the branch `2.3`, with no pull request): it has no tag and no GitHub release, and is tested against a mock Plex server only. It adds the rating schedule, poster selection, weighting with no repeats, and viewer profiles (see "Done in 2.3" in [`Roadmap.md`](Roadmap.md)). 2.2.3 (on `main` before 2.3) made the remote's arrow keys move between the control buttons (no tag, no GitHub release). 2.2.2 added the 30 s timeout of keyboard focus on the controls and made the mouse wheel count as activity. 2.2.1 was merged on 2026-10-18 through pull request #4. 2.2.0 was merged on 2026-10-18 through pull request #3. 2.1.0 was validated against a real Plex server; 2.1.1 and 2.2.x are tested against a mock Plex server only. Nothing has been run on a Raspberry Pi (D79).** Version 2.2.0 adds drag-and-nudge positioning (`js/position.js`), the landscape fill (`js/fill.js`) and the gap fill inside the frame (`js/layout.js` and `js/fill.js`). The code and its tests (`npm test`, `npm run test:e2e`) run against a mock Plex server, and on 2026-10-14 the app was also checked against a real Plex Media Server: all 17 core rows and the 15 extended rows that need no Pi passed. The 12 Raspberry Pi rows (V1-E11 to V1-E22) were skipped because no Pi was available, and the release was closed without them. Version 2.1.1 (merged on 2026-10-15 through pull request #2) added the 2.1.x fixes and split `js/main.js` into modules; the validation above was done on 2.1.0, not on 2.1.1 or 2.2.x. Anything below that nobody has checked on a Pi is tagged **(verify)**, which means "not yet verified": on a Raspberry Pi or, for one item, with data the test server lacks (the country-prefixed ratings, V1-E04). That covers every Chromium flag, policy and package name, and every OS and helper command. The checklists are in [`docs/validation/real-server-core.md`](docs/validation/real-server-core.md) and [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md). If a Pi row is ever run and passes, its tag comes off here.
+> **Status of versions 2.1 to 2.4: 2.4.0 is the newest version, on the branch `2.4` only: it is not merged into `main`, and it has no tag, no GitHub release and no pull request (D13, D79). It adds Jellyfin and Emby as poster sources beside Plex, and it is tested against mock servers only, so every Jellyfin and Emby request is a **(verify)** item (see "Jellyfin and Emby" below). 2.3.1 is the newest version on `main` (merged on 2026-11-02 from the branch `2.3.1`, with no pull request, no tag and no GitHub release): it fixes the 2.3 follow-ups (see "Done in 2.3.1" in [`Roadmap.md`](Roadmap.md)). 2.3.0, also on `main` (merged on 2026-11-02 from the branch `2.3`, with no pull request): it has no tag and no GitHub release, and is tested against a mock Plex server only. It adds the rating schedule, poster selection, weighting with no repeats, and viewer profiles (see "Done in 2.3" in [`Roadmap.md`](Roadmap.md)). 2.2.3 (on `main` before 2.3) made the remote's arrow keys move between the control buttons (no tag, no GitHub release). 2.2.2 added the 30 s timeout of keyboard focus on the controls and made the mouse wheel count as activity. 2.2.1 was merged on 2026-10-18 through pull request #4. 2.2.0 was merged on 2026-10-18 through pull request #3. 2.1.0 was validated against a real Plex server; 2.1.1 and 2.2.x are tested against a mock Plex server only. Nothing has been run on a Raspberry Pi (D79).** Version 2.2.0 adds drag-and-nudge positioning (`js/position.js`), the landscape fill (`js/fill.js`) and the gap fill inside the frame (`js/layout.js` and `js/fill.js`). The code and its tests (`npm test`, `npm run test:e2e`) run against a mock Plex server, and on 2026-10-14 the app was also checked against a real Plex Media Server: all 17 core rows and the 15 extended rows that need no Pi passed. The 12 Raspberry Pi rows (V1-E11 to V1-E22) were skipped because no Pi was available, and the release was closed without them. Version 2.1.1 (merged on 2026-10-15 through pull request #2) added the 2.1.x fixes and split `js/main.js` into modules; the validation above was done on 2.1.0, not on 2.1.1 or 2.2.x. Anything below that nobody has checked on a Pi is tagged **(verify)**, which means "not yet verified": on a Raspberry Pi or, for one item, with data the test server lacks (the country-prefixed ratings, V1-E04). That covers every Chromium flag, policy and package name, and every OS and helper command. The checklists are in [`docs/validation/real-server-core.md`](docs/validation/real-server-core.md) and [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md). If a Pi row is ever run and passes, its tag comes off here.
 
 ---
 
@@ -22,6 +22,7 @@ There's no build step, no backend and no dependencies: just static files that ta
 - [Tablets](#tablets)
 - [Kiosk](#kiosk) (Chromium flags, kiosk mode, the PIN)
 - [Network](#network)
+- [Jellyfin and Emby](#jellyfin-and-emby)
 - [Accounts](#accounts)
 - [The helper](#the-helper)
 - [Rotation](#rotation)
@@ -42,6 +43,7 @@ There's no build step, no backend and no dependencies: just static files that ta
 | **Favour and no repeats** | Settings > What to show: favour unwatched titles or the best reviewed, and keep a shown poster away for 0 to 30 days, remembered across reloads. The household limit still decides what can show. (2.3.0) |
 | **Rating schedule** | Settings > Household > Change the limit during the day: up to 8 time slots, each with its own rating limit (for example G from 06:00, PG-13 from 15:00, no limit from 22:00), every day, weekdays or weekends. If the clock cannot be trusted, the strictest limit you have set applies (the base limit, every slot, and, when any slot names a profile, every profile). (2.3.0) |
 | **Viewer profiles** | Settings > Household: named profiles (for example Kids, Teens, Adults), each a limit, the now-playing rule, a poster selection, weighting and a frame. A time slot can switch to a profile. The limit in force stays a ceiling. (2.3.0) |
+| **Jellyfin and Emby** | The connection section at the top of Settings (and "Your media server" on the first-run card): pick Plex, Jellyfin or Emby. Jellyfin signs in with a Quick Connect code, or a user name and password when Quick Connect is off; Emby with a user name and password. The household limit works the same for each. (2.4.0, **(verify)** on real servers) |
 | **Pin a poster** | Keeps one poster on screen until you unpin it. |
 | **Sign in with Plex** | Enter a 4-character code at [plex.tv/link](https://plex.tv/link) from your phone. The app finds your servers and picks a working address. A manual token and URL are still supported. |
 | **Code on the empty screen** | A display that is not set up yet asks plex.tv for a code by itself and shows it large on the empty screen. No keyboard needed. |
@@ -68,7 +70,7 @@ There's no build step, no backend and no dependencies: just static files that ta
 | **Import / export** | Settings as JSON (token optional), or drop a `config.json` beside the app to provision a device. |
 | **Diagnostics** | Connection state, cache, service worker, wake lock, sleep, daily reload and clock status, the CPU temperature when the helper is on, plus a log of recent events. |
 
-Position poster, Landscape fill and Gap fill are new in 2.2 (2.2.0, on `main`). The poster selection, favouring and no repeats, the rating schedule and viewer profiles are new in 2.3 (2.3.0, on `main`). See "Done in 2.2" and "Done in 2.3" in [`Roadmap.md`](Roadmap.md).
+Jellyfin and Emby as poster sources are new in 2.4 (2.4.0, on the branch `2.4`). Position poster, Landscape fill and Gap fill are new in 2.2 (2.2.0, on `main`). The poster selection, favouring and no repeats, the rating schedule and viewer profiles are new in 2.3 (2.3.0, on `main`). See "Done in 2.2", "Done in 2.3" and "Done in 2.4" in [`Roadmap.md`](Roadmap.md).
 
 ### Keyboard shortcuts
 
@@ -122,7 +124,7 @@ Open the page. A display with no settings yet shows a large code on the empty sc
 
 Prefer the settings panel? Press **Open settings** on the empty screen, click **Sign in with Plex**, or open *Enter token and server manually* and paste a token ([how to find it](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)) and a URL such as `http://192.168.1.10:32400`. Pick a **library**, then **Save**.
 
-To try the app without a Plex server, run `npm run demo`. Then use token `demo-token` and server `http://localhost:32401`, which is a mock server with generated posters.
+To try the app without a Plex server, run `npm run demo`. Then use token `demo-token` and server `http://localhost:32401`, which is a mock server with generated posters. The demo also starts a mock Jellyfin and Emby server on the Plex mock's port plus 1000 (`http://localhost:33401`).
 
 ---
 
@@ -346,9 +348,22 @@ Reload the page. While that flag is in the file, every load clears the PIN and t
 
 ## Network
 
-Put the display on an IoT or guest VLAN that can reach **only** your Plex server on port **32400**, and plex.tv on port 443 if you use **Sign in with Plex** or Plex's relay. A stolen or hacked display then can't reach the rest of your home network. A Pi also needs NTP to set its clock (see [Clock](#clock)). Your router's rules differ; this has not been tested on a real network.
+Put the display on an IoT or guest VLAN that can reach **only** your media server (Plex on port **32400**; a Jellyfin or Emby server on its own port, see [Jellyfin and Emby](#jellyfin-and-emby)), and plex.tv on port 443 if you use **Sign in with Plex** or Plex's relay. A stolen or hacked display then can't reach the rest of your home network. A Pi also needs NTP to set its clock (see [Clock](#clock)). Your router's rules differ; this has not been tested on a real network.
 
 Plex's local network discovery does not cross VLANs and this app doesn't use it. Sign in with Plex, or type the server address.
+
+---
+
+## Jellyfin and Emby
+
+Since 2.4 the display can take its posters from a Jellyfin or an Emby server instead of Plex. Choose **Your media server** on the first-run card, or the Plex | Jellyfin | Emby choice in the connection section at the top of Settings.
+
+- **Jellyfin** signs in with a Quick Connect code: enter the server address, press Sign in, and approve the code in Jellyfin. When Quick Connect is off on the server, it asks for a user name and password instead.
+- **Emby** signs in with a user name and password, on the first-run card or in Settings. Emby has no Quick Connect.
+- **Child safety holds for every source.** Ratings fail closed: an unknown or malformed rating is hidden under any limit. A Jellyfin or Emby rating counts only when it is written exactly as a US value, so a lower-case `pg` is unknown there; Plex ratings read as before. A Jellyfin or Emby household's own CustomRating counts. The app itself is the gate, as with Plex.
+- **Changing server.** A change of server type or address clears the pinned poster. A change of type also clears the offline cache and the no-repeat history. Upgrading from 2.3.1 is not a switch. This display's token is set aside on a change of server type, and on an imported file that changes the server and brings no token of its own. An address you type in Settings receives the token when you press **Test connection** or **Save**, as in 2.3, so type only an address you trust.
+- **Cross-origin requests.** A Jellyfin server allows any origin by default. Emby's default is unconfirmed, a **(verify)** row (V1-M03).
+- **Tested against mock servers only.** Jellyfin and Emby have not been run against a real server, so every request and field is a **(verify)** item. The rows to run are in [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md): section I, Jellyfin (V1-J01 to V1-J22), and section J, Emby (V1-M01 to V1-M14). Once a row passes, its tag comes off here.
 
 ---
 
@@ -466,7 +481,7 @@ css/app.css             styles
 js/
   main.js               bootstrap and glue: scheduling, offline fallback, controls, Settings, Diagnostics, kiosk, first run
   engine.js             decides which poster to show; applies the content limit (pure, unit-tested)
-  plex.js               Plex server + plex.tv client (sign-in, discovery, sessions, ratings, runtime format)
+  sources/              the media-server adapters: index.js (the adapter choice), errors.js (the shared error kinds), plex.js (Plex server + plex.tv client: sign-in, discovery, sessions, ratings, runtime format), jellyfin.js, emby.js
   display.js            frame/poster rendering, rotation, pixel shift, cross-fade, progress bar
   fill.js               landscape fill: the dimmed backdrop and the info panel, and the gap fill (blur or colour matte) (2.2.0)
   layout.js             geometry: stage size, poster box, pixel-shift orbit, the gap-fill bands and the under-4 px close (pure, unit-tested)
@@ -503,6 +518,7 @@ scripts/
   device-helper.mjs     the opt-in loopback helper that serve.mjs --helper mounts
   net.mjs               loopback checks shared by the server and the helper
   mock-plex.mjs         fake Plex server for demos and tests
+  mock-jellyfin.mjs     fake Jellyfin and Emby server for demos and tests
   check-precache.mjs    checks that every js/ file and every sw.js SHELL entry agree
 tests/                  node --test unit tests
 tests/e2e/              Playwright browser tests (run.mjs runs them; lib.mjs is the shared harness)
@@ -517,7 +533,7 @@ Drop a PNG with a transparent window into `assets/frames/` and add it to `FRAMES
 
 ```bash
 npm test                       # unit tests (node --test, no dependencies)
-npm run demo                   # app + mock Plex server
+npm run demo                   # app + mock Plex server (and a mock Jellyfin/Emby server on the Plex mock's port + 1000)
 node scripts/check-precache.mjs   # every js/ file is precached and every precached file exists
 npm ci && npx playwright install chromium   # once, for the browser tests
 npm run test:e2e               # browser tests against the mock server
@@ -533,12 +549,12 @@ The design is in [`docs/spec.md`](docs/spec.md) and the decisions that bind it a
 
 ## Security notes
 
-- Your Plex token is stored in the browser's `localStorage` on the display device, and it appears in Plex request URLs (Plex's API needs it there). Only run this on devices you trust. Use a [managed user](#accounts) with one library, and a [VLAN](#network).
+- Your media server token (Plex, Jellyfin or Emby) is stored in the browser's `localStorage` on the display device. It appears in Plex request URLs (Plex's API needs it there), and in a Jellyfin or Emby poster URL as `api_key`. Only run this on devices you trust. Use a [managed user](#accounts) with one library, and a [VLAN](#network).
 - **Exported settings** leave the token out unless you tick *include token*. They never contain the PIN.
 - The [PIN](#the-pin) is a deterrent, not security.
 - `config.json` holds the token. It is served to the device itself only, git-ignored and meant to be deleted after first run. Never commit it, and never put a reverse proxy in front of the server.
 - The dev server serves only the app's own files, and the helper is opt-in and local-only.
-- Nothing is sent anywhere except to your own Plex server and to plex.tv for sign-in.
+- Nothing is sent anywhere except to your own media server (Plex, Jellyfin or Emby) and to plex.tv for Plex sign-in.
 
 ## License
 
