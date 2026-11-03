@@ -804,3 +804,13 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   4. **Where the words come from (arch M1, M2).** The screens take the server's name from `signInFlow(settings).label`, because an unconfigured display has no adapter yet. The adapter's own `label` is the same word and stays a member of the interface (criterion 1). The plan's hazard "Words the user sees come from the adapter's `label`" is read as "from the server type's label" (the sign-in flow's or the adapter's); the plan is not reworded. `identity().machineIdentifier` stays as the Plex adapter returns it; another adapter fills it with its server id.
   5. **Static "Plex" text in `index.html` (anchored M3).** `index.html` is not in this phase's Output, and a Plex user sees the same words. `jellyfin-source`, which owns `index.html`, makes each such line follow the server type. It is a hazard in its brief.
   6. **The saved settings gain `"serverType": "plex"` (UX walk M1).** This is expected by D134. The walk showed that 2.3.1 drops the key on import and on rollback and keeps every other setting. No change.
+
+## Conductor ruling — 2026-11-03 (run 9, `source-adapters` reviews r2; answered "defaults" under D134 ruling 7): D140
+
+- **D140 Five sentences of the interface comment are corrected by `jellyfin-source`.** The anchored and arch reviews r2 approved (`.orchestrator/artifacts/source-adapters--review-r2.md`, `-review-arch-r2.md`). Each raised Minors against the comment in `js/sources/index.js`, which r2 added under D139 3. The comment says things the code does not do. No behaviour is affected.
+  - The adapter's `label` is called the word every sentence uses, but the screens read `signInFlow(settings).label`.
+  - The display is said to set `source: 'cache'`, but `js/poster-cache.js:170` does.
+  - A library's `type` is said to be only `'movie'` or `'show'`, but the Plex adapter passes Plex's types through and Settings offers only those two.
+  - An `auth` error is said to always show the empty card, but that happens only when no poster is on screen, and otherwise "Sign in again" comes as a toast.
+  - The pill reads "Offline" when the browser is offline.
+  These are non-blocking Minors in a file `jellyfin-source` edits next, so that phase's brief corrects each sentence to what the code does. `source-adapters` lands without another round.
