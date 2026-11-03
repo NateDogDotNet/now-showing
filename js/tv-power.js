@@ -14,6 +14,7 @@ export const DIAG_TEMP_MS = 5000; // CPU temperature refresh, only while Diagnos
  */
 export function createTvPower({ state, helper, tick, diagnosticsOpen, renderDiagnostics }) {
   let tvOff = false; // we asked the TV to switch off and have not switched it on again
+  let wakeId = 0; // the newest wake; only its window may clear tvWaking
   let powerChain = Promise.resolve(); // power requests go out one at a time, in order
   let helperInfo = { available: false, tempC: null, temperature: null };
 
@@ -44,12 +45,13 @@ export function createTvPower({ state, helper, tick, diagnosticsOpen, renderDiag
   /** Wake: power on first, give the TV time, and only then let the poster fetch begin. A failed call does not block. */
   async function wakeTv() {
     tvOff = false;
+    const mine = ++wakeId;
     state.tvWaking = true;
     try {
       await queuePower(true);
       await new Promise((resolve) => setTimeout(resolve, TV_WAKE_MS));
     } finally {
-      state.tvWaking = false;
+      if (mine === wakeId) state.tvWaking = false;
     }
   }
 

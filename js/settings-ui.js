@@ -410,7 +410,8 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     if (restore && was) {
       showBundle({ ...bundleOf(was.household), maxContentRating: was.household.maxContentRating || 'PG-13' });
       loadGenres();
-      onPreview(read()); // one preview, as the household's own values return (D122 4)
+      // No preview here (D134 ruling 5, D135 5): a profile's values are never previewed, so there is nothing to put back, and a
+      // household control that does not preview live must not reach the display before Save.
     }
   }
 

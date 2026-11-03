@@ -251,7 +251,7 @@ await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true }) }
 });
 
 // 7. Wake timing (fake clock): the first poster fetch is no earlier than the power-on request + TV_WAKE_MS, and within ~2 s after.
-const TV_WAKE_MS = 4000; // js/main.js
+const TV_WAKE_MS = 4000; // the value js/tv-power.js exports as TV_WAKE_MS
 await withApp({ serveArgs: HELPER_ARGS, settings: seed({ deviceHelper: true, sleepEnabled: true, nowPlayingPollSeconds: 20 }) /* a slow poll: only the wake itself can bring the poster early */, clock: { time: INSIDE } }, async ({ page, context, app, mock }) => {
   await mock.stop();
   const seen = await watch(page);

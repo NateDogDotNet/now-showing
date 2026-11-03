@@ -1,4 +1,4 @@
-// Pure sleep decision (sleep schedule and idle sleep). No DOM, no clock reads: main.js passes everything in.
+// Pure sleep decision (sleep schedule and idle sleep). No DOM, no clock reads: js/sleep-control.js passes everything in.
 
 import { inWindow } from './schedule.js';
 

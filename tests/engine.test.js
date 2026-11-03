@@ -646,6 +646,33 @@ test('D80: a pool failure still rejects the load, even when the re-check succeed
   assert.equal(applied.length, 0, 'no ratings applied when the load failed');
 });
 
+test('D135 3: after a pool failure the re-check sends no further batch; the next pool load re-checks again', async () => {
+  const { engine, client, poolGate, itemGates, applied } = gatedSetup({ maxContentRating: 'PG-13' }, { cached: keysOf(250) });
+  const outcome = engine.decide().then(() => 'resolved', (err) => err);
+  await tick();
+  assert.equal(client.calls.items, 1, 'the first batch is out alongside the pool request');
+  poolGate.reject(Object.assign(new Error('pool down'), { kind: 'network' }));
+  assert.equal((await outcome).message, 'pool down');
+  itemGates[0].resolve([]); // the batch already in flight settles; its result is discarded
+  await tick();
+  await tick();
+  assert.equal(client.calls.items, 1, 'no second batch after the pool failure');
+  assert.deepEqual(applied, []);
+  // the next pool load is a fresh load: it re-checks as usual
+  client.pool = async () => [rated('g', 'G')]; // the server is back
+  const again = engine.decide();
+  await tick();
+  assert.equal(client.calls.items, 2, 'the next load sends its first batch again');
+  itemGates[1].resolve([]);
+  await tick();
+  assert.equal(client.calls.items, 3, 'and goes on to its next batch while its pool has not failed');
+  itemGates[2].resolve([]);
+  await tick();
+  itemGates[3].resolve([]);
+  await again;
+  assert.equal(applied.length, 1);
+});
+
 test('D80: with the server down (pool and every batch fail) nothing is reported, so the offline cache keeps its ratings', async () => {
   const { engine, poolGate, itemGates, applied } = gatedSetup({ maxContentRating: 'PG-13' });
   const outcome = engine.decide().then(() => 'resolved', (err) => err);

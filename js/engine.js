@@ -111,9 +111,14 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
     // returned list here before `pool = loaded`. A pool failure rejects the load and applies nothing: with the server
     // unreachable every batch would fail too, and reporting them all unrated would empty the offline cache the caller
     // falls back to.
+    // Once the pool request has failed, this load's re-check sends no further batch (D135 3): its results would be discarded.
+    const load = { poolFailed: false };
     const [loaded, ratings] = await Promise.all([
-      fetchSelection(sel, s),
-      s.limitSet ? fetchCachedRatings() : null,
+      fetchSelection(sel, s).catch((err) => {
+        load.poolFailed = true;
+        throw err;
+      }),
+      s.limitSet ? fetchCachedRatings(load) : null,
     ]);
     if (ratings) onRatings(ratings);
     pool = loaded;
@@ -129,13 +134,15 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
    * RECHECK_BATCH (`GET /library/metadata/<k1>,<k2>,...`), at most RECHECK_REQUESTS requests. A title the response
    * does not return, a batch that fails, and any key not asked about at all are stored as unrated, which the offline
    * fallback skips under a limit (fails closed). A title merely absent from the random pool says nothing about its rating.
+   * `load.poolFailed` is set when this load's pool request fails: the loop then stops sending batches.
    * Returns the list for onRatings, or null when there is nothing cached.
    */
-  async function fetchCachedRatings() {
+  async function fetchCachedRatings(load) {
     const keys = cachedKeys();
     if (!keys.length) return null;
     const byKey = new Map();
     for (let n = 0; n < RECHECK_REQUESTS && n * RECHECK_BATCH < keys.length; n++) {
+      if (load.poolFailed) break;
       try {
         for (const p of await client.items(keys.slice(n * RECHECK_BATCH, (n + 1) * RECHECK_BATCH))) byKey.set(p.ratingKey, p);
       } catch {

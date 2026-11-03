@@ -9,6 +9,7 @@ const TIMEOUT_MS = 8000; // the server gives a command 5 s
 export function createHelper({ fetchImpl = (...args) => fetch(...args), log } = {}) {
   const failed = new Set();
   let available = false;
+  let misses = 0; // failed reads in a row: one miss keeps `available`, two clear it, a good read resets (D135 1)
 
   const fail = (kind, message, level = 'warn') => {
     if (failed.has(kind)) return;
@@ -38,12 +39,15 @@ export function createHelper({ fetchImpl = (...args) => fetch(...args), log } = 
 
   async function read(kind, failLevel) {
     const body = await request(kind, '__helper/status', {}, failLevel);
-    available = body !== null;
+    const ok = body !== null;
+    misses = ok ? 0 : misses + 1;
+    if (ok) available = true;
+    else if (misses >= 2) available = false;
     return {
-      available,
-      power: available && typeof body.power === 'string' ? body.power : null,
-      temperature: available && typeof body.temperature === 'string' ? body.temperature : null,
-      tempC: available && Number.isFinite(body.tempC) ? body.tempC : null,
+      available: ok, // this read's own outcome; the `available` getter forgives a single miss
+      power: ok && typeof body.power === 'string' ? body.power : null,
+      temperature: ok && typeof body.temperature === 'string' ? body.temperature : null,
+      tempC: ok && Number.isFinite(body.tempC) ? body.tempC : null,
     };
   }
 

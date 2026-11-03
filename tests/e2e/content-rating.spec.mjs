@@ -958,7 +958,7 @@ contentCase('23 D73 a TV-PG episode of a cached TV-MA show does not unlock the s
   await patchSettings(page, { maxContentRating: 'PG' });
   await mock.play('5', { episode: '1', episodeRating: 'TV-PG' }); // title 5 as a series, this episode rated TV-PG
   await page.reload();
-  await waitForTitle(page, 5); // shown, so the tick's refreshRating for this poster has already run
+  await waitForTitle(page, 5); // shown, so the tick's rating refresh for this poster has already run
   assert.equal((await index(page)).find((e) => e.ratingKey === '5').contentRating, 'TV-MA', "the episode's TV-PG did not overwrite the show's rating");
   const seen = await offlineTitles(page, mock, 8);
   assert.ok(!seen.has(5), `the TV-MA show is not shown from the cache under PG: ${asSorted(seen)}`);
@@ -971,7 +971,7 @@ contentCase('24 D73 an unrated episode does not hide a PG-rated show offline', {
   await patchSettings(page, { maxContentRating: 'PG' });
   await mock.play('2', { episode: '1' }); // title 2 (PG) as a series; this episode carries no rating
   await page.reload();
-  await waitForTitle(page, 2); // shown, so the tick's refreshRating for this poster has already run
+  await waitForTitle(page, 2); // shown, so the tick's rating refresh for this poster has already run
   assert.equal((await index(page)).find((e) => e.ratingKey === '2').contentRating, 'PG', 'an unrated episode did not blank the show\'s rating');
   const seen = await offlineTitles(page, mock, 6);
   assert.ok(seen.has(2), `the PG show is still shown from the cache offline: ${asSorted(seen)}`);
