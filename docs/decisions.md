@@ -860,3 +860,23 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   1. **A token sent to another server of the same type on import (cold N1, a data-exposure finding).** Importing a settings file that names a different server address of the same type, and carries no token, keeps this display's token and sends it to that address after Save. Plex has always done this. It is now ruled out: an import that changes the server address and brings no token sets the current token aside, as D142 2 already does for a change of type, and the display asks to sign in. This widens D142 2 from "a change of type" to "a change of server". It is asked here under the standing "defaults" answer, not filed, as the rubric requires of a data-exposure finding.
   2. **"Connecting…" stays after an import during the open test (UX walk N1, code-bug).** An import made while the sheet's opening connection test runs must leave the connection section in a final state (a result or a prompt), never "Connecting…".
   3. **The switch toast's wording when nothing can show yet (UX walk N2).** When a Save switches the type and leaves no token, the toast says the server type changed and asks the household to sign in, rather than "Now showing posters from …". D143 2's sentence is kept for a switch that can show posters.
+
+## Conductor ruling — 2026-11-03 (run 9, `emby-source` pre-flight; answered "defaults" under D134 ruling 7): D145
+
+- **D145 What the `emby-source` criteria leave open.** A cold probe of the phase text found 18 inputs it does not decide (`.orchestrator/artifacts/emby-source--criteria-probe-r1.md`). The base rule: every Jellyfin ruling applies to Emby as to Jellyfin. That covers D141 1–10, D142 1–2, D143 1–5 and D144 1–3: rating precedence and exact matching, upgrade, when a switch clears, offline, now playing, collections and playlists, sign-in storage, unreachable servers, missing fields, the token set aside on a change of type or server, and the toast. In particular:
+  1. **Tokens (findings 1–5).**
+     - Images: the image URL carries the token as `api_key`, as Jellyfin's does. The offline cache stores no token.
+     - Storage: one stored token key, set aside on any change of type or server address (D142 2, D144 1).
+     - Signing in: a sign-in before Save stores nothing until Save. A failed sign-in stores nothing new.
+  2. **What is stored (findings 6–7).**
+     - The password is never stored, drafted or logged. Criterion 1 adds a case that reads every storage key after a sign-in.
+     - The user id the server returns may be stored, but not as a secret.
+     - A user name is stored only in the existing "Only for this user" field, when the household types one.
+  3. **Child safety (findings 8, 10, 11).**
+     - Now playing obeys the limit and the session choice exactly as Plex and Jellyfin do (D5, D141 6). Rating precedence follows D141 1, marked (verify) for Emby. The engine is the gate whatever the server filters.
+     - A reply the adapter does not recognise (not JSON, no `Items`, a field of the wrong type) is a SourceError of kind `parse`. A null rating is unknown, and hidden under any limit.
+  4. **`/Sessions` (finding 9).** Any `/Sessions` failure other than a network error or a timeout means no now-playing: a 401, 403 or 404, or a reply that does not parse. It never shows an error card. Criterion 1 adds a 404 case.
+  5. **Stored choices across a switch (findings 12–14).** D141 3 and D143 4 apply to Emby, and a BoxSet or playlist replaces the libraries (D107 1). The switch clear is type-agnostic, so a unit case covers Plex → Emby beside criterion 2's Jellyfin → Emby.
+  6. **The header before sign-in (finding 15).** `X-Emby-Authorization: Emby UserId="", Client=…, Device=…, DeviceId=…, Version=…` carries no token until sign-in. The form is a (verify) row.
+  7. **Files (findings 16–17).** `tests/jellyfin.test.js` and `tests/e2e/jellyfin.spec.mjs` join the Output and criterion 5. Shared MediaBrowser code moving between the two adapters may touch their tests, and D142 3 lets the jellyfin spec drop its `page.route` once the mock serves a series image. `tests/e2e/run.mjs` stays out: no spec needs it. The conductor also checks renames with `git status --porcelain` together with `git diff --cached --name-status`.
+  8. **CORS (finding 18).** A server that refuses a cross-origin sign-in shows the existing connection error naming the address (D143 1). A display already showing posters keeps its offline cache within the limit, as for any unreachable server.
