@@ -835,3 +835,11 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
      - A revoked token (401) is a SourceError of kind `auth`, with "Sign in again" as for Plex.
   10. **Missing fields (finding 11).** A missing play count is 0. A missing runtime, score or year is left empty and not shown, as the Plex mapping does for its own missing fields. An item with no `ImageTags.Primary` is not drawn.
   11. **Test strength (finding 12).** Criterion 2 also runs 30 picks under a PG-13 limit: G, PG and PG-13 titles only, never R, `TV-MA`, `15` or unrated. Criterion 1 adds unit cases for rules 1 and 5: a `CustomRating` that tightens and one that relaxes, and each unknown spelling listed in rule 5.
+
+## Conductor ruling — 2026-11-03 (run 9, `jellyfin-source` r1 handback, questions Q1–Q4; answered "defaults" under D134 ruling 7): D142
+
+- **D142 The four questions the `jellyfin-source` builder raised (`.orchestrator/questions.md` Q1–Q4) are answered with its proposed readings.**
+  1. **Q1, exact rating strings.** `ratingRank` upper-cases, so D141 5's "a lower-case value is unknown" cannot come from the Plex path as it is. A new `exactRating(value)` in `js/ratings.js` keeps a value only when it is exactly a US film or TV value. Only the Jellyfin adapter calls it. `ratingRank`, `allows` and every Plex path are unchanged, so a Plex `pg` still reads as PG. D141 5 is read as ruling the Jellyfin strings, not as changing Plex's.
+  2. **Q2, where the Jellyfin token lives.** The access token is stored in the existing `plexToken` key for either server type. That key stays in `SECRET_KEYS`, so `isConfigured`, export and import do not change for a Plex household. A server-type change in the sheet sets the other type's token and address aside, so a Plex token is never sent to a Jellyfin server.
+  3. **Q3, the mock has no series image.** `tests/e2e/jellyfin.spec.mjs` answers that one image request with `page.route`. `emby-source`, which owns `scripts/mock-jellyfin.mjs`, adds an image for the mock's series so the spec can drop the route.
+  4. **Q4, the service-worker version.** `js/sources/jellyfin.js` joins `SHELL`. `VERSION` stays 2.3.1 until `release-2.4.0` bumps it, as in every run's release phase (R-REL-1).
