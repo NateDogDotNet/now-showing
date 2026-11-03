@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults, fromImport, isConfigured, load, sanitize, save, STORAGE_KEY, toExport } from '../js/settings.js';
+import { defaults, fromImport, isConfigured, load, sanitize, save, SECRET_KEYS, STORAGE_KEY, toExport } from '../js/settings.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -418,4 +418,52 @@ test('the two keys are saved, loaded, exported and imported with the other setti
   assert.deepEqual([back.weighting, back.noRepeatDays], ['rated', 7]);
   assert.ok(!/shownAt/.test(JSON.stringify(exported)), 'the last-shown record is never exported');
   assert.ok(!Object.keys(settings).some((k) => /shownAt|history/i.test(k)));
+});
+
+// ---- serverType and the access token (D134, D139 1, D141 2, 8) ----
+
+test('serverType: plex and jellyfin are kept, a missing or blank one is plex, an unknown one is kept (never turned into Plex)', () => {
+  assert.equal(defaults().serverType, 'plex');
+  assert.equal(sanitize({ serverType: 'jellyfin' }).serverType, 'jellyfin');
+  assert.equal(sanitize({ serverType: ' jellyfin ' }).serverType, 'jellyfin');
+  assert.equal(sanitize({}).serverType, 'plex');
+  for (const blank of ['', '   ', null, undefined, 3, false, {}]) assert.equal(sanitize({ serverType: blank }).serverType, 'plex', String(blank));
+  assert.equal(sanitize({ serverType: 'emby' }).serverType, 'emby');
+  assert.equal(sanitize({ serverType: 'x'.repeat(100) }).serverType.length, 40);
+});
+
+test('an object saved by 2.3.1, with no serverType, loads as plex and is not a switch', () => {
+  const stored = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1' };
+  delete stored.serverType;
+  const storage = memoryStorage({ [STORAGE_KEY]: JSON.stringify(stored) });
+  const { settings } = load(storage);
+  assert.equal(settings.serverType, 'plex');
+  assert.equal(settings.serverType, defaults().serverType);
+  assert.equal(isConfigured(settings), true);
+});
+
+test('the access token is a secret: never exported without the secrets option; the password and the device id are no setting at all', () => {
+  assert.ok(SECRET_KEYS.includes('plexToken'));
+  const s = { ...defaults(), serverType: 'jellyfin', plexToken: 'jf-secret', serverUrl: 'http://jf:8096' };
+  const plain = toExport(s);
+  assert.equal(JSON.stringify(plain).includes('jf-secret'), false);
+  assert.equal(plain.settings.serverType, 'jellyfin');
+  assert.equal(toExport(s, { includeSecrets: true }).settings.plexToken, 'jf-secret');
+  const keys = Object.keys(defaults());
+  assert.deepEqual(keys.filter((k) => /pass|pw|secret|deviceId|clientId/i.test(k)), []);
+  assert.equal(JSON.stringify(save(memoryStorage(), { ...s, password: 'hunter2', Pw: 'hunter2', deviceId: 'd' })).includes('hunter2'), false);
+});
+
+test('a Jellyfin export imports back as Jellyfin, and a file with an unknown type keeps it', () => {
+  const back = fromImport(JSON.stringify(toExport({ ...defaults(), serverType: 'jellyfin', serverUrl: 'http://jf:8096' })));
+  assert.equal(back.serverType, 'jellyfin');
+  assert.equal(fromImport(JSON.stringify({ serverType: 'emby', serverUrl: 'http://e' })).serverType, 'emby');
+});
+
+test('an import that names a connection but no server type is a Plex file; one that names none leaves the type alone (D142 2)', () => {
+  const onJellyfin = { ...defaults(), serverType: 'jellyfin', serverUrl: 'http://jf:8096', plexToken: 'jf-secret' };
+  assert.equal(fromImport(JSON.stringify({ serverUrl: 'http://plex:32400', libraryKey: '1' }), onJellyfin).serverType, 'plex');
+  assert.equal(fromImport(JSON.stringify({ PLEX_SERVER_URL: 'http://plex:32400' }), onJellyfin).serverType, 'plex');
+  assert.equal(fromImport(JSON.stringify({ rotation: 90 }), onJellyfin).serverType, 'jellyfin');
+  assert.equal(fromImport(JSON.stringify({ serverType: 'jellyfin', serverUrl: 'http://x' }), { ...defaults() }).serverType, 'jellyfin');
 });

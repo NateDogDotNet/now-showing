@@ -35,9 +35,11 @@ const rotation = (v, d) => {
 /** Each entry: [default, sanitiser]. Sanitisers coerce bad input back to the default. */
 const SCHEMA = {
   // Connection
-  // Which media server the display talks to (D134): picks the source adapter in js/sources. Absent in a 2.3.1 object, which is Plex.
-  // Widened by each adapter that lands; a value no adapter knows reads as Plex.
-  serverType: ['plex', oneOf('plex')],
+  // Which media server the display talks to (D134): picks the source adapter in js/sources ('plex' or 'jellyfin'). Absent in a 2.3.1
+  // object, which is Plex. A value this build has no adapter for is kept as written, never turned into Plex: the display then shows a
+  // connection error that names it (D139 1), and a Save from Settings keeps it until a type is chosen.
+  serverType: ['plex', (v, d) => (typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, 40) : d)],
+  // The access token of whichever server type is set (the key keeps its 2.3.1 name). Jellyfin's is the AccessToken a sign-in returns; a password is never stored (D141 8).
   plexToken: ['', str],
   serverUrl: ['', (v, d) => str(v, d).replace(/\/+$/, '')],
   serverName: ['', str],
@@ -130,6 +132,9 @@ const SCHEMA = {
   showProgress: [true, bool],
   showPlayer: [false, bool],
 };
+
+/** The keys that name a server connection: a file that carries one of them and no `serverType` is a 2.3.1 (Plex) file. */
+const CONNECTION_KEYS = ['serverUrl', 'plexToken', 'libraryKey', 'libraryKeys'];
 
 /** Keys that hold secrets and are optional on export. */
 export const SECRET_KEYS = ['plexToken'];
@@ -276,5 +281,7 @@ export function fromImport(text, current = defaults()) {
   // A 2.2-shaped file names one library: it replaces the whole selection (that library, no genres, no rating subset, no source), not just the list.
   if (known.includes('libraryKey') && !known.includes('libraryKeys')) Object.assign(merged, { libraryKeys: [], libraryNames: [], genres: [], ratings: [], source: null });
   for (const k of known) merged[k] = incoming[k];
+  // A file that names a connection but no server type is a 2.3.1 file, which is Plex: it must not graft a Plex address onto another type's display.
+  if (!known.includes('serverType') && known.some((k) => CONNECTION_KEYS.includes(k))) merged.serverType = 'plex';
   return sanitize(merged);
 }

@@ -30,7 +30,7 @@ test('createSource returns the Plex adapter when serverType is absent or plex', 
 });
 
 test('createSource refuses an unknown serverType with an error of kind config', () => {
-  for (const serverType of ['jellyfin', 'Plex', 'nonsense']) {
+  for (const serverType of ['Plex', 'nonsense', 'emby']) {
     assert.throws(
       () => createSource({ ...connection, serverType }),
       (err) => err instanceof SourceError && err.kind === 'config' && err.name === 'SourceError',
@@ -117,7 +117,9 @@ test('a 2.3.1 settings object loads with serverType plex and is otherwise unchan
   assert.equal(rest.staticRatingKey, '42');
   assert.equal(rest.rotateSeconds, 120);
   assert.equal(Object.keys(settings).length, Object.keys(stored).length + 1);
-  assert.equal(sanitize({ serverType: 'nonsense' }).serverType, 'plex');
+  // A type this build has no adapter for is kept, never turned into Plex (D139 1); a blank or non-text one is the default.
+  assert.equal(sanitize({ serverType: 'nonsense' }).serverType, 'nonsense');
+  for (const bad of ['', '  ', 7, null, true]) assert.equal(sanitize({ serverType: bad }).serverType, 'plex', String(bad));
 });
 
 test('a 2.3.1 poster index is read as Plex entries with no rewrite', async () => {
@@ -229,4 +231,36 @@ test('js/sources/errors.js imports nothing and no adapter imports the index', as
   const errors = await import('../js/sources/errors.js');
   assert.equal(errors.SourceError, SourceError, 'the index re-exports the one class');
   assert.equal(errors.KINDS, KINDS);
+});
+
+// ---- the Jellyfin adapter is the second ----
+
+test('createSource returns the Jellyfin adapter for serverType jellyfin, with the members of the interface', () => {
+  const source = createSource({ ...connection, serverType: 'jellyfin' });
+  assert.equal(source.label, 'Jellyfin');
+  assert.deepEqual(Object.keys(source).sort(), [...SOURCE_MEMBERS].sort());
+  for (const name of SOURCE_MEMBERS) assert.equal(typeof source[name], name === 'label' ? 'string' : 'function', name);
+});
+
+test('signInFlow for jellyfin is bound to the address and has the members of the Plex flow beside its own', () => {
+  const plex = signInFlow({ serverType: 'plex' });
+  const flow = signInFlow({ serverType: 'jellyfin', serverUrl: 'http://jf:8096' });
+  assert.equal(flow.label, 'Jellyfin');
+  assert.equal(flow.serverUrl, 'http://jf:8096');
+  assert.equal(flow.needsAddress, true);
+  assert.equal(plex.needsAddress, undefined, 'the Plex flow does not change');
+  for (const member of Object.keys(plex)) assert.ok(member in flow, member);
+  for (const member of ['quickConnectEnabled', 'signInWithPassword']) assert.equal(typeof flow[member], 'function');
+  assert.deepEqual(Object.keys(plex.words).sort(), Object.keys(flow.words).sort());
+});
+
+test('the Jellyfin adapter keeps its token out of the poster and sends nothing to plex.tv', async () => {
+  const seen = [];
+  const source = createSource({ serverType: 'jellyfin', serverUrl: 'http://jf.test', plexToken: 'sekrit' }, {
+    clientId: 'c',
+    fetchImpl: async (url) => (seen.push(String(url)), jsonResponse({ Items: [{ Id: '1', Name: 'T', Type: 'Movie', ImageTags: { Primary: 'x' } }] })),
+  });
+  const posters = await source.pool({ libraryKey: 'L' });
+  assert.equal(JSON.stringify(posters).includes('sekrit'), false);
+  assert.ok(seen.every((u) => u.startsWith('http://jf.test/')));
 });

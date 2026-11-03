@@ -64,9 +64,26 @@
         <h1>Now Showing</h1>
         <p id="empty-message">Connect to your Plex server to get started.</p>
         <div id="firstrun" class="firstrun" hidden>
-          <p class="firstrun-lead">On any device, go to <strong>plex.tv/link</strong> and enter this code:</p>
+          <span id="firstrun-type-label" class="firstrun-type-label">Your media server</span>
+          <div class="seg firstrun-type" role="radiogroup" aria-labelledby="firstrun-type-label">
+            <label class="seg-opt"><input type="radio" name="firstrunType" value="plex" checked /><span>Plex</span></label>
+            <label class="seg-opt"><input type="radio" name="firstrunType" value="jellyfin" /><span>Jellyfin</span></label>
+          </div>
+          <form id="firstrun-address" class="firstrun-form" novalidate hidden>
+            <label for="firstrun-url">Jellyfin server address</label>
+            <input id="firstrun-url" type="url" placeholder="http://192.168.1.10:8096" autocomplete="off" spellcheck="false" />
+            <input type="submit" class="btn primary" value="Get a code" />
+          </form>
+          <p id="firstrun-lead" class="firstrun-lead" data-srv="lead">On any device, go to <strong>plex.tv/link</strong> and enter this code:</p>
           <div id="signin-code-large" class="pin-code-large" aria-live="polite">····</div>
           <p id="firstrun-status" class="muted small"></p>
+          <form id="firstrun-login" class="firstrun-form" novalidate hidden>
+            <label for="firstrun-user">User name</label>
+            <input id="firstrun-user" type="text" autocomplete="off" spellcheck="false" />
+            <label for="firstrun-pass">Password</label>
+            <input id="firstrun-pass" type="password" autocomplete="off" />
+            <input type="submit" class="btn primary" value="Sign in" />
+          </form>
         </div>
         <div id="empty-actions" class="empty-actions"></div>
         <button type="button" class="btn primary" data-action="settings">Open settings</button>
@@ -105,12 +122,18 @@
         </div>
       <header class="sheet-head">
         <h2 id="settings-title">Settings</h2>
-        <p class="muted" id="first-run-hint" hidden>Welcome! Sign in with Plex (or enter a token and server URL), choose a library, then save.</p>
+        <p class="muted" id="first-run-hint" data-srv="hint" hidden>Welcome! Sign in with Plex (or enter a token and server URL), choose a library, then save.</p>
       </header>
 
       <div class="sheet-body">
         <fieldset>
-          <legend>Plex connection</legend>
+          <legend data-srv="legend">Plex connection</legend>
+
+          <div class="seg server-type" role="radiogroup" aria-label="Media server">
+            <label class="seg-opt"><input type="radio" name="serverTypePick" value="plex" /><span>Plex</span></label>
+            <label class="seg-opt"><input type="radio" name="serverTypePick" value="jellyfin" /><span>Jellyfin</span></label>
+          </div>
+          <input name="serverType" type="hidden" />
 
           <div id="connected-card" class="connected-card" hidden>
             <p id="connected-text" class="connected-text">Connected</p>
@@ -118,9 +141,12 @@
           </div>
 
           <div id="signin-controls" class="signin">
-            <button type="button" class="btn primary" id="signin-btn">Sign in with Plex</button>
+            <label id="jf-address-row" hidden>Server address
+              <input id="jf-address" type="url" placeholder="http://192.168.1.10:8096" autocomplete="off" spellcheck="false" />
+            </label>
+            <button type="button" class="btn primary" id="signin-btn" data-srv="signin">Sign in with Plex</button>
             <div id="signin-panel" class="signin-panel" hidden>
-              <p>On any device, go to <a href="https://plex.tv/link" target="_blank" rel="noopener">plex.tv/link</a> and enter:</p>
+              <p data-srv="panel-lead">On any device, go to <a href="https://plex.tv/link" target="_blank" rel="noopener">plex.tv/link</a> and enter:</p>
               <p id="signin-code" class="pin-code" aria-live="polite">····</p>
               <p class="muted" id="signin-status">Waiting for you to approve…</p>
               <button type="button" class="btn" id="signin-cancel">Cancel</button>
@@ -128,11 +154,24 @@
             <label id="server-pick" hidden>Server
               <select id="server-select"></select>
             </label>
+            <details id="jf-password" hidden>
+              <summary>Sign in with a user name and password</summary>
+              <label>User name
+                <input id="jf-user" type="text" autocomplete="off" spellcheck="false" />
+              </label>
+              <label>Password
+                <input id="jf-pass" type="password" autocomplete="off" />
+              </label>
+              <div class="input-row">
+                <button type="button" class="btn" id="jf-login">Sign in</button>
+              </div>
+              <p id="jf-status" class="muted small" aria-live="polite"></p>
+            </details>
           </div>
 
           <details id="manual-connection">
             <summary>Enter token and server manually</summary>
-            <label>Plex token
+            <label><span data-srv="token">Plex token</span>
               <span class="input-row">
                 <input name="plexToken" type="password" autocomplete="off" spellcheck="false" />
                 <button type="button" class="btn small" id="token-toggle" aria-label="Show token">Show</button>
@@ -179,7 +218,7 @@
         <fieldset>
           <legend>What to show</legend>
           <label class="check"><input name="showNowPlaying" type="checkbox" /> Show what's playing right now</label>
-          <label>Only for this Plex user <span class="muted">(blank = anyone)</span>
+          <label><span data-srv="user">Only for this Plex user</span> <span class="muted">(blank = anyone)</span>
             <input name="username" type="text" autocomplete="off" spellcheck="false" />
           </label>
           <label class="check"><input name="includeEpisodes" type="checkbox" /> Include TV episodes (shows the series poster)</label>
@@ -302,7 +341,7 @@
           <label>Vertical offset <output data-for="posterOffsetY"></output>
             <input name="posterOffsetY" type="range" min="-100" max="100" step="0.1" />
           </label>
-          <div class="input-row position-row"><button type="button" class="btn small" id="reset-layout">Reset layout</button><button type="button" class="btn" id="position-btn">Position poster</button><span class="muted position-reason" id="position-reason" hidden>Connect to Plex first, then you can position the poster.</span></div>
+          <div class="input-row position-row"><button type="button" class="btn small" id="reset-layout">Reset layout</button><button type="button" class="btn" id="position-btn">Position poster</button><span class="muted position-reason" id="position-reason" data-srv="position" hidden>Connect to Plex first, then you can position the poster.</span></div>
           <label>Rotation
             <select name="rotation">
               <option value="0">0° (portrait)</option>

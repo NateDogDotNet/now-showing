@@ -1,4 +1,4 @@
-// Settings sheet: form binding, live layout preview, Plex sign-in and import/export.
+// Settings sheet: form binding, live layout preview, sign-in (Plex, Jellyfin) and import/export.
 
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
@@ -36,6 +36,36 @@ function showFormValue(el, v) {
   return option ? option.textContent.trim() : showValue(v);
 }
 
+// ---- the words that follow the server type (D139 5) ----
+
+// Every element marked data-srv keeps the Plex words it has in index.html; a Jellyfin display swaps in these.
+const JELLYFIN_TEXT = {
+  lead: 'In Jellyfin, open your user menu, choose <strong>Quick Connect</strong> and enter this code:',
+  hint: 'Welcome! Sign in with Quick Connect (or a user name and password), choose a library, then save.',
+  legend: 'Jellyfin connection',
+  signin: 'Sign in with Quick Connect',
+  'panel-lead': 'In Jellyfin, open your user menu, choose <strong>Quick Connect</strong> and enter this code:',
+  token: 'Jellyfin access token',
+  user: 'Only for this Jellyfin user',
+  position: 'Connect to Jellyfin first, then you can position the poster.',
+};
+const JELLYFIN_DESCRIPTION = 'Full-screen Jellyfin movie poster display with a decorative frame — built for always-on screens.';
+
+/** Sets every data-srv line (and the page description) to the words of this server type; Plex, or one no adapter knows, reads the index.html words. */
+export function applyServerText(type, root = document) {
+  const jellyfin = type === 'jellyfin';
+  for (const el of root.querySelectorAll('[data-srv]')) {
+    el.dataset.plexHtml ??= el.innerHTML;
+    const words = jellyfin ? JELLYFIN_TEXT[el.dataset.srv] ?? el.dataset.plexHtml : el.dataset.plexHtml;
+    if (el.innerHTML !== words) el.innerHTML = words;
+  }
+  const meta = root.querySelector('meta[name="description"]');
+  if (meta) {
+    meta.dataset.plexContent ??= meta.content;
+    meta.content = jellyfin ? JELLYFIN_DESCRIPTION : meta.dataset.plexContent;
+  }
+}
+
 // ---- the plex.tv code (shared by the Settings sheet and the empty card's first run) ----
 
 const PIN_POLL_MS = 5000; // K50: one poll per 5 s while the code is fresh
@@ -44,14 +74,15 @@ const PIN_DEFAULT_LIFE_S = 15 * 60; // when plex.tv does not say how long the co
 const PIN_MIN_LIFE_MS = 5000; // a lifetime shorter than this is not believed: it must not turn into a request loop
 
 /**
- * One round of the plex.tv/link flow: asks for a code, hands it to `onCode`, and polls until it is approved. Resolves to the
- * Plex token when it is, or to null when the code expires (a fresh call makes a fresh code) or `signal` aborts. Throws a
+ * One round of the plex.tv/link flow (or, for Jellyfin, a Quick Connect code): asks for a code, hands it to `onCode`, and polls until
+ * it is approved. Resolves to the access token when it is, or to null when the code expires (a fresh call makes a fresh code; a poll
+ * that throws an error marked `expired` ends the round at once) or `signal` aborts. Throws a
  * SourceError when the code cannot be had at all (the caller decides how to retry). A poll that fails is not an error: the
  * code stays good, so it just waits longer before the next one. The lifetime is plex.tv's own `expiresIn`, counted on this
  * device's monotonic clock, so a device with the wrong date neither expires a code at once nor holds a dead one.
  */
-export async function pinSignIn(clientId, { signal, onCode, fetchImpl, pollMs = PIN_POLL_MS, minLifeMs = PIN_MIN_LIFE_MS, settings } = {}) {
-  const { createPin, checkPin } = signInFlow(settings);
+export async function pinSignIn(clientId, { signal, onCode, fetchImpl, pollMs = PIN_POLL_MS, minLifeMs = PIN_MIN_LIFE_MS, settings, version } = {}) {
+  const { createPin, checkPin } = signInFlow(settings, { version, fetchImpl });
   const pin = await createPin(clientId, fetchImpl ? { fetchImpl } : {});
   if (signal?.aborted) return null;
   onCode?.(pin.code);
@@ -66,7 +97,8 @@ export async function pinSignIn(clientId, { signal, onCode, fetchImpl, pollMs = 
       const token = await checkPin(clientId, pin.id, fetchImpl ? { fetchImpl } : {});
       failures = 0;
       if (token) return token;
-    } catch {
+    } catch (err) {
+      if (err?.expired) return null; // the server no longer knows the code: the caller asks for a fresh one
       failures = Math.min(failures + 1, 5);
     }
   }
@@ -87,7 +119,7 @@ const countLabel = (n) => `${n.toLocaleString('en-US')} ${n === 1 ? 'title' : 't
  * `requestPin()` is the app's one PIN check (true at once when no PIN is set); the token reveal, the token export,
  * an import and Reset everything all go through it. `choosePin()` asks for a new PIN twice and gives { hash, salt }.
  */
-export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave, onClearCache, onReset, requestPin, choosePin, fixesFor = () => [], runFix = () => {} }) {
+export function createSettingsUI({ getSettings, clientId, version = '', log, onPreview, onSave, onClearCache, onReset, requestPin, choosePin, fixesFor = () => [], runFix = () => {} }) {
   const $ = (id) => document.getElementById(id);
   const dialog = $('settings');
   const form = $('settings-form');
@@ -104,6 +136,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // The sign-in controls show when nothing is connected yet, or after Change; otherwise the "Connected to" card does.
   let connectionOpen = true;
   let testing = false;
+  let testRun = 0; // bumped when the connection under test is dropped (a type change, an import, a fresh open): a late answer is then ignored
   let keepOriginal = false; // set when the sheet closes FOR position mode: the close event then leaves the preview and `original` alone
   let countRun = 0; // bumped whenever the library list is rebuilt or the sheet closes, so a late count is ignored
   // The poster selection the sheet would save (R-SEL-1): set by write(), changed by the lists, saved by Save, like pendingPin.
@@ -118,6 +151,19 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   let genreRun = 0; // bumped whenever the genre list is asked for again, so a late genre answer is ignored
   let sourceRun = 0; // the same for the collection and playlist list: its own counter, so ticking a library never throws its answer away
   let offerClient = null; // the client of the last successful connection test
+  let held = {}; // the token, address and server name set aside for the server type the sheet is not showing, so a change of mind loses nothing
+
+  /** The server type the sheet shows. */
+  const formType = () => field('serverType').value || 'plex';
+  const addressOf = () => field('serverUrl').value.trim().replace(/\/+$/, '');
+  /** The sign-in flow of the type the sheet shows (the saved one may differ until Save). A type no adapter knows reads the Plex flow's words here. */
+  const flow = () => {
+    try {
+      return signInFlow({ serverType: formType(), serverUrl: addressOf() }, { version });
+    } catch {
+      return signInFlow({ serverType: 'plex' });
+    }
+  };
 
   // Frame options are built from the registry so new frames only need adding there.
   $('frame-select').replaceChildren(
@@ -130,6 +176,9 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       if (el.type === 'checkbox') el.checked = Boolean(s[el.name]);
       else el.value = String(s[el.name]);
     }
+    held = {};
+    dropTest();
+    syncServerType();
     // The household toggle is UI-only: on when a limit is set; off stores ''. The select keeps PG-13 while off.
     $('household-toggle').checked = Boolean(s.maxContentRating);
     field('maxContentRating').value = s.maxContentRating || 'PG-13';
@@ -639,7 +688,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // ---- the "Connected to" card ----
 
   function renderConnected() {
-    const server = form.dataset.serverName || getSettings().serverName || `your ${signInFlow(getSettings()).label} server`;
+    const server = form.dataset.serverName || getSettings().serverName || `your ${flow().label} server`;
     const library = sel.source
       ? sel.source.title || sel.source.kind // a collection or playlist replaces the libraries: it is what is shown
       : sel.libraries.map((l) => l.name).filter(Boolean).join(', ') || (sel.libraries.length && getSettings().libraryName) || '';
@@ -764,7 +813,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       return o;
     };
     const collections = Object.assign(document.createElement('optgroup'), { label: 'Collections' });
-    collections.append(...offered.collections.map((c) => option('collection', c, `${c.smart ? ' (smart)' : ''}${many ? ` · ${c.library}` : ''}`)));
+    collections.append(...offered.collections.map((c) => option('collection', c, `${c.smart ? ' (smart)' : ''}${many && c.library ? ` · ${c.library}` : ''}`)));
     const playlists = Object.assign(document.createElement('optgroup'), { label: 'Playlists' });
     playlists.append(...offered.playlists.map((p) => option('playlist', p)));
     select.replaceChildren(new Option('The libraries above', ''), ...(collections.children.length ? [collections] : []), ...(playlists.children.length ? [playlists] : []));
@@ -814,11 +863,13 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   async function loadSources(client, libraries) {
     const run = sourceRun;
     const [collections, playlists] = await Promise.all([
-      Promise.all(libraries.map((l) => client.collections(l.key).then((list) => list.map((c) => ({ ...c, library: l.title }))).catch(() => []))),
+      Promise.all(libraries.map((l) => client.collections(l.key).then((list) => list.map((c) => ({ library: l.title, ...c }))).catch(() => []))),
       client.playlists().catch(() => []),
     ]);
     if (run !== sourceRun) return;
-    offered.collections = collections.flat();
+    // A collection id is unique on a server: one that every library listed (Jellyfin's BoxSets belong to no library) is offered once.
+    const seen = new Set();
+    offered.collections = collections.flat().filter((c) => !seen.has(c.key) && seen.add(c.key));
     offered.playlists = playlists;
     renderSource();
   }
@@ -864,20 +915,22 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     if (testing) return false;
     const s = read();
     if (!s.serverUrl || !s.plexToken) {
-      setResult('Enter a token and server URL first (or sign in).');
+      setResult(formType() === 'jellyfin' ? 'Enter the server address and sign in first.' : 'Enter a token and server URL first (or sign in).');
       return false;
     }
     if (location.protocol === 'https:' && s.serverUrl.startsWith('http:')) {
-      setResult(signInFlow(s).words.httpsBlocked);
+      setResult(flow().words.httpsBlocked);
       return false;
     }
     setResult('Connecting…');
+    const run = ++testRun;
     testing = true;
     $('test-btn').disabled = true;
     try {
-      const client = createSource(s, { clientId });
+      const client = createSource(s, { clientId, version });
       const id = await client.identity();
       const libs = await client.libraries();
+      if (run !== testRun) return false; // the household moved on to another server type while this one answered: its answer is not theirs
       const usable = offerLibraries(libs, client);
       form.dataset.serverName = id.name;
       setResult(`✓ ${id.name || 'Server'}${id.version ? ` (v${id.version.split('-')[0]})` : ''} — ${libs.length} libraries`);
@@ -886,33 +939,72 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       loadCounts(client, usable); // after the verdict: never part of it
       return true;
     } catch (err) {
+      if (run !== testRun) return false;
       setResult(`✗ ${err.message}`, err.kind);
       log.warn(`Connection test failed: ${err.message}`);
       return false;
     } finally {
-      testing = false;
-      $('test-btn').disabled = false;
+      if (run === testRun) {
+        testing = false;
+        $('test-btn').disabled = false;
+      }
     }
   }
 
-  // ---- Sign in with Plex (plex.tv/link PIN) ----
+  // ---- Sign in with Plex (plex.tv/link PIN), or with Jellyfin (Quick Connect, or a user name and password) ----
 
   /**
-   * Signs in with a plex.tv code, shown in the sheet; or, given the `token` the empty card's code already earned, from
-   * "Signed in" onwards. Either way the rest is the same: find the servers, pick the first reachable one, test it.
+   * Signs in with a plex.tv code or a Quick Connect code, shown in the sheet; or, given the `token` the empty card's code (or a
+   * password sign-in) already earned, from "Signed in" onwards. Either way the rest is the same: find the servers, pick the first
+   * reachable one, test it. Jellyfin needs the server's address first, and offers the password form when Quick Connect is off.
    */
   async function signIn({ token = null } = {}) {
     cancelSignIn();
+    const sign = flow();
+    if (sign.needsAddress) {
+      if (!sign.serverUrl) {
+        openConnection();
+        setResult('Enter the server address first.');
+        $('jf-address').focus();
+        return;
+      }
+      if (location.protocol === 'https:' && sign.serverUrl.startsWith('http:')) {
+        openConnection();
+        setResult(sign.words.httpsBlocked);
+        return;
+      }
+      $('test-result').replaceChildren(); // an earlier "enter the address" line does not outlive the address
+    }
     const ctrl = new AbortController();
     pinAbort = ctrl;
     openConnection();
-    $('signin-panel').hidden = false;
     $('signin-btn').disabled = true;
-    $('signin-status').textContent = token ? 'Signed in. Finding your servers…' : 'Requesting a code…';
     try {
+      let quickConnect = true;
+      if (!token && sign.quickConnectEnabled) {
+        try {
+          quickConnect = await sign.quickConnectEnabled(clientId);
+        } catch (err) {
+          if (ctrl.signal.aborted) return;
+          // The server did not answer: the address is the trouble, not Quick Connect (D143 1).
+          setResult(`✗ Couldn't reach Jellyfin at ${sign.serverUrl}. Check the address and try again. (${err.message})`, err.kind);
+          $('jf-address').focus();
+          return;
+        }
+      }
+      if (!quickConnect) {
+        if (ctrl.signal.aborted) return;
+        $('jf-status').textContent = 'Quick Connect is off on this server. Sign in with a user name and password.';
+        $('jf-password').open = true;
+        $('jf-user').focus();
+        return;
+      }
+      if (ctrl.signal.aborted) return;
+      $('signin-panel').hidden = false;
+      $('signin-status').textContent = token ? 'Signed in. Finding your servers…' : 'Requesting a code…';
       if (!token) {
         token = await pinSignIn(clientId, {
-          settings: getSettings(),
+          settings: { serverType: formType(), serverUrl: sign.serverUrl },
           signal: ctrl.signal,
           onCode: (code) => {
             $('signin-code').textContent = code;
@@ -927,7 +1019,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
         $('signin-status').textContent = 'Signed in. Finding your servers…';
       }
       field('plexToken').value = token;
-      servers = await signInFlow(getSettings()).discoverServers(clientId, token, { secureOnly: location.protocol === 'https:' });
+      servers = await sign.discoverServers(clientId, token, { secureOnly: location.protocol === 'https:' });
       if (ctrl.signal.aborted) return;
       if (!servers.length) {
         $('signin-status').textContent = 'Signed in, but no reachable servers were found on this account.';
@@ -938,7 +1030,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       $('server-pick').hidden = servers.length < 2;
       await useServer(0);
       $('signin-panel').hidden = true;
-      log.info(`Signed in with ${signInFlow(getSettings()).label}`);
+      log.info(`Signed in with ${sign.label}`);
     } catch (err) {
       $('signin-status').textContent = `Sign-in failed: ${err.message}`;
       log.warn(`Sign-in failed: ${err.message}`);
@@ -952,7 +1044,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     const sv = servers[index];
     if (!sv) return;
     setResult(`Finding a working address for ${sv.name}…`);
-    const uri = await signInFlow(getSettings()).firstReachable(sv.connections, sv.accessToken, clientId);
+    const uri = await flow().firstReachable(sv.connections, sv.accessToken, clientId);
     if (!uri) {
       setResult(`✗ Couldn't reach ${sv.name} from this device.`);
       return;
@@ -968,6 +1060,57 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     pinAbort = null;
     $('signin-panel').hidden = true;
     $('signin-btn').disabled = false;
+  }
+
+  // ---- the server type (R-SRC-2): Plex or Jellyfin, chosen in the sheet and stored by Save, never before ----
+
+  /** Shows the controls and words of the type in the hidden field: the choice buttons, the Jellyfin address and password form, every data-srv line. */
+  function syncServerType() {
+    const type = formType();
+    for (const radio of form.querySelectorAll('input[name="serverTypePick"]')) radio.checked = radio.value === type;
+    const jellyfin = type === 'jellyfin';
+    $('jf-address-row').hidden = !jellyfin;
+    $('jf-password').hidden = !jellyfin;
+    $('jf-password').open = false;
+    $('jf-status').textContent = '';
+    $('jf-address').value = field('serverUrl').value;
+    field('serverUrl').placeholder = jellyfin ? 'http://192.168.1.10:8096' : 'http://192.168.1.10:32400';
+    applyServerText(type);
+  }
+
+  /** Drops a connection test in flight: its answer will be ignored, and a new test may start at once. */
+  function dropTest() {
+    testRun++;
+    testing = false;
+    $('test-btn').disabled = false;
+  }
+
+  /**
+   * The person picked a server type in the sheet. The token, address and server name belong to the type they were made for, so they are set
+   * aside (and come back if the person picks that type again): a Plex token is never offered to a Jellyfin server. The selection, the
+   * profiles and the slots stay as stored (D141 3). Nothing is saved, so Cancel undoes it.
+   */
+  function chooseServerType(type) {
+    const from = formType();
+    if (type === from) return;
+    cancelSignIn();
+    held[from] = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '' };
+    const back = held[type] || { token: '', url: '', name: '' };
+    field('plexToken').value = back.token;
+    field('serverUrl').value = back.url;
+    form.dataset.serverName = back.name;
+    field('serverType').value = type;
+    dropTest();
+    offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
+    offerClient = null;
+    countRun++;
+    genreRun++;
+    sourceRun++;
+    $('test-result').replaceChildren();
+    connectionOpen = !(back.token && back.url);
+    renderSelection();
+    syncServerType();
+    renderConnection();
   }
 
   /**
@@ -1019,6 +1162,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     if (!dialog.open) stopSlotStatusTimer(); // a close queued before a reopen (position mode's Done) must not stop the open sheet's timer
     closePreset();
     setTokenShown(false); // the token is hidden again whenever the sheet closes
+    $('jf-pass').value = '';
     cancelSignIn();
     if (keepOriginal) {
       keepOriginal = false;
@@ -1059,6 +1203,15 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     if (token) signIn({ token });
     else if (wantSignIn) signIn();
     else if (test || (auto && original.plexToken && original.serverUrl)) testConnection();
+  }
+
+  /** The first-run card's choice of server type and address, put in the sheet's controls. */
+  function takeConnection(type, url) {
+    chooseServerType(type);
+    if (url) {
+      field('serverUrl').value = url;
+      $('jf-address').value = url;
+    }
   }
 
   /** Done or Escape: the sheet comes back with the values just set and the SAME `original`, so Cancel still reverts. */
@@ -1130,6 +1283,40 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     e.target.value = formatMinutes(field('rotateSeconds').value); // shows what will be saved
   });
   $('signin-cancel').addEventListener('click', cancelSignIn);
+  for (const radio of form.querySelectorAll('input[name="serverTypePick"]')) radio.addEventListener('change', () => radio.checked && chooseServerType(radio.value));
+  $('jf-address').addEventListener('input', () => {
+    field('serverUrl').value = $('jf-address').value.trim();
+  });
+  field('serverUrl').addEventListener('input', () => {
+    $('jf-address').value = field('serverUrl').value;
+  });
+  $('jf-login').addEventListener('click', async () => {
+    const status = $('jf-status');
+    const sign = flow();
+    if (!sign.serverUrl) return void (status.textContent = 'Enter the server address first.');
+    if (!$('jf-user').value.trim()) return void (status.textContent = 'Enter the user name.');
+    status.textContent = 'Signing in…';
+    $('jf-login').disabled = true;
+    try {
+      const { token } = await sign.signInWithPassword(clientId, $('jf-user').value.trim(), $('jf-pass').value);
+      status.textContent = '';
+      await signIn({ token });
+    } catch (err) {
+      status.textContent = err.kind === 'auth' ? 'That user name or password was not accepted.' : `Sign-in failed: ${err.message}`;
+    } finally {
+      $('jf-pass').value = ''; // the password is used once and never kept
+      $('jf-login').disabled = false;
+    }
+  });
+  // Enter in the password form signs in; it never saves the sheet.
+  for (const input of [$('jf-user'), $('jf-pass'), $('jf-address')]) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (input === $('jf-address')) $('signin-btn').click();
+      else $('jf-login').click();
+    });
+  }
   $('server-select').addEventListener('change', (e) => useServer(Number(e.target.value)));
   $('test-btn').addEventListener('click', testConnection);
   $('token-toggle').addEventListener('click', async () => {
@@ -1169,7 +1356,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     const includeSecrets = $('export-secrets').checked;
     if (includeSecrets && !(await requestPin())) return; // the file would carry the token
     downloadJson('plex-poster-settings.json', toExport(read(), { includeSecrets }));
-    if (includeSecrets) toast(`Exported with your ${signInFlow(getSettings()).label} token — keep that file private.`);
+    if (includeSecrets) toast(`Exported with your ${flow().label} token — keep that file private.`);
   });
 
   $('import-btn').addEventListener('click', () => $('import-file').click());
@@ -1179,8 +1366,22 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     if (!file) return;
     if (!(await requestPin())) return; // the gate sits on the file arriving, not on the button, so a scripted change event is gated too
     try {
-      const s = fromImport(await file.text(), read());
+      const text = await file.text();
+      let s = fromImport(text, read());
+      const from = formType();
+      const away = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '' };
+      const moved = s.serverType !== from;
+      if (moved) {
+        // The file is for another server type: the token, address and name of this one stay behind (set aside), and the file's own are used (a file without secrets brings no token).
+        const parsed = JSON.parse(text);
+        const incoming = parsed?.settings && parsed.format !== undefined ? parsed.settings : parsed;
+        s = { ...s, plexToken: typeof incoming.plexToken === 'string' ? s.plexToken : typeof incoming.PLEX_TOKEN === 'string' ? s.plexToken : '', serverUrl: 'serverUrl' in incoming || 'PLEX_SERVER_URL' in incoming ? s.serverUrl : '', serverName: '' };
+      }
       write(s);
+      if (moved) {
+        held[from] = away;
+        form.dataset.serverName = '';
+      }
       onPreview(s);
       toast('Settings imported — review and press Save.');
       log.info(`Imported settings from ${file.name}`);
@@ -1196,7 +1397,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   $('reset-btn').addEventListener('click', async () => {
     if (!(await requestPin())) return;
-    if (!confirm(`Reset all settings, including your ${signInFlow(getSettings()).label} token, and clear cached posters?`)) return;
+    if (!confirm(`Reset all settings, including your ${flow().label} token, and clear cached posters?`)) return;
     original = null;
     closeSheet();
     onReset();
@@ -1206,14 +1407,16 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     /**
      * Opens the sheet. `signIn` starts a plex.tv code in it at once (the fix for a rejected token); `token` is one the empty
      * card's code already earned, so the sheet picks up at "Signed in"; `test` runs the connection test even when it would not
-     * run by itself; `section` ('protection' or 'layout') scrolls the sheet to that fieldset.
+     * run by itself; `section` ('protection' or 'layout') scrolls the sheet to that fieldset. `serverType` and `serverUrl` are the
+     * choice the empty card's first run made before it earned `token`: the sheet shows them, and nothing is stored until Save.
      */
-    open({ signIn: wantSignIn = false, token = null, test = false, section = '' } = {}) {
+    open({ signIn: wantSignIn = false, token = null, test = false, section = '', serverType = '', serverUrl = '' } = {}) {
       if (position.active) {
         // Finish position mode (the sheet returns with the values set so far and the same `original`), then honour the
         // options as a normal open would: a sign-in started from the empty card must still sign in.
         position.stop();
         resumeSheet();
+        if (serverType) takeConnection(serverType, serverUrl);
         runOpenOptions({ wantSignIn, token, test, section }, false);
         return;
       }
@@ -1232,6 +1435,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       closePreset();
       dialog.showModal();
       startSlotStatusTimer();
+      if (serverType) takeConnection(serverType, serverUrl);
       runOpenOptions({ wantSignIn, token, test, section }, true);
     },
     /** For the fix buttons, while the sheet is already open. */

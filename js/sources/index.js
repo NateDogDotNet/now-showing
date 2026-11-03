@@ -1,13 +1,15 @@
 // The source-adapter interface (D134): the engine, the display, Settings and the first-run card talk to a media server
 // only through the object `createSource(settings)` returns, and never import an adapter module themselves. Plex is the
-// first adapter; `serverType` in the settings picks it ('plex', and Plex also when the setting is absent).
+// first adapter and Jellyfin the second; `serverType` in the settings picks it ('plex' or 'jellyfin', and Plex when the setting is absent).
 //
 // What an adapter object holds (every member below, and nothing else). Items keep their server's own ids: a poster's
 // `ratingKey` is the server's id, stored as it is (the offline cache, the pinned poster and the no-repeat history key on it).
-//   label                                 the server's name as people read it ("Plex"): every sentence that names the server
+//   label                                 the server's name as people read it ("Plex"); the screens read the same word from
+//                                         signInFlow(settings).label, because an unconfigured display has no adapter yet
 //   identity()                            { name, version, machineIdentifier }; succeeds only when the URL and sign-in are good
-//   libraries()                           [{ key, title, type }]; `type` is 'movie' or 'show': Settings offers the 'movie' libraries
-//                                         (and keeps a ticked 'show' one), so an adapter maps its own library types onto these two
+//   libraries()                           [{ key, title, type }]; Settings offers only the libraries whose `type` is 'movie' (and keeps a
+//                                         ticked 'show' one). The Plex adapter passes Plex's own types through; the Jellyfin adapter maps
+//                                         its CollectionType `movies` to 'movie' and `tvshows` to 'show'
 //   libraryCount(key)                     how many items a library holds, or null; never throws
 //   sessions()                            what is playing now, in the adapter's own shape; only nowPlaying() reads it
 //   pool({ libraryKey, unwatchedOnly, size, maxContentRating, genres, ratings })   posters for the random pool
@@ -25,7 +27,7 @@
 //   ratingKey      the server's id for the title, as a string; an episode carries its series' id
 //   title, year    text; year is '' when unknown; an episode carries its series' title and year
 //   thumb          what imageUrl() takes
-//   source         'random', 'static' or 'now-playing' (the display adds 'cache' for a poster drawn from the offline cache)
+//   source         'random', 'static' or 'now-playing' (js/poster-cache.js sets 'cache' on a poster drawn from the offline cache)
 //   user           who is playing it, '' when not a session
 //   contentRating  the item's own rating as text, '' when unrated; the household limit reads it (D5, D75)
 //   seriesRating   an episode's series rating, kept apart for the offline cache only (D73); episodeRating: true says
@@ -41,15 +43,19 @@
 // Signing in is per server type, and needs no connection: signInFlow(settings) returns the flow of the settings' server type. The
 // Plex flow is { label, createPin, checkPin, discoverServers, firstReachable, words }: a code the user approves at plex.tv/link,
 // the servers on the account with their connections, the first connection that answers, and the exact sentences the sign-in
-// screens show (words.asking, ranOut, unreachable, couldNotGet(message), httpsBlocked).
+// screens show (words.asking, ranOut, unreachable, couldNotGet(message), httpsBlocked). The Jellyfin flow has the same members,
+// bound to the address in `settings.serverUrl` (`needsAddress: true`): the code is a Quick Connect code, checkPin gives the access
+// token once the code is approved (and throws an error with `expired: true` when the server no longer knows the code), and it adds
+// quickConnectEnabled(clientId) and signInWithPassword(clientId, user, password) -> { token, userId }.
 //
 // Errors an adapter throws are SourceErrors (js/sources/errors.js) whose `kind` is one of KINDS; createSource itself adds 'config'.
-// What a kind leads to on screen (js/main.js): 'auth' is an answer, not an outage: the empty card says what is wrong and offers
-// "Sign in again". Every other kind counts as the server not answering: the status pill reads "Can't reach <label>" and cached
-// posters rotate; 'network' and 'timeout' also offer Diagnostics and "Test connection"; 'http', 'parse' and 'config' offer no button.
+// What a kind leads to on screen (js/main.js): 'auth' is an answer, not an outage: with no poster on screen the empty card says what
+// is wrong and offers "Sign in again"; with one on screen the card stays away, and only a refresh somebody asked for shows a toast with the button. Every other kind counts as the server not
+// answering: the status pill reads "Can't reach <label>" (or "Offline" when the browser is offline) and cached posters rotate; 'network' and 'timeout' also offer Diagnostics and "Test connection"; 'http', 'parse' and 'config' offer no button.
 // The kind 'empty' is not a SourceError kind: the engine raises it itself when nothing can be drawn.
 
 import { KINDS, SourceError } from './errors.js';
+import { createJellyfinClient, jellyfinSignIn } from './jellyfin.js';
 import { createPlexClient, plexSignIn } from './plex.js';
 
 export { KINDS, SourceError };
@@ -65,12 +71,14 @@ export const serverTypeOf = (settings) => settings?.serverType || 'plex';
 const unknownType = (type) => new SourceError(`Unknown server type "${type}".`, { kind: 'config' });
 
 /**
- * The adapter for the settings' `serverType`, built from the connection settings (`serverUrl`, `plexToken`). `clientId` names this
- * display to the server; `fetchImpl` stands in for fetch in tests. An unknown type throws a SourceError of kind 'config'.
+ * The adapter for the settings' `serverType`, built from the connection settings (`serverUrl`, and `plexToken`, which holds the access
+ * token of either server type). `clientId` names this display to the server and `version` is the app's version (the Jellyfin header
+ * carries it); `fetchImpl` stands in for fetch in tests. An unknown type throws a SourceError of kind 'config'.
  */
-export function createSource(settings, { clientId, fetchImpl } = {}) {
+export function createSource(settings, { clientId, fetchImpl, version } = {}) {
   const type = serverTypeOf(settings);
   if (type === 'plex') return createPlexClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, fetchImpl });
+  if (type === 'jellyfin') return createJellyfinClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, version, fetchImpl });
   throw unknownType(type);
 }
 
@@ -78,8 +86,9 @@ export function createSource(settings, { clientId, fetchImpl } = {}) {
  * How a person signs in to the settings' server type: `{ label, createPin, checkPin, discoverServers, firstReachable, words }`.
  * It needs no connection, so the empty card and the Settings sheet use it before anything is configured.
  */
-export function signInFlow(settings) {
+export function signInFlow(settings, { fetchImpl, version } = {}) {
   const type = serverTypeOf(settings);
   if (type === 'plex') return plexSignIn;
+  if (type === 'jellyfin') return jellyfinSignIn({ serverUrl: settings?.serverUrl || '', fetchImpl, version });
   throw unknownType(type);
 }

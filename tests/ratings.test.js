@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { allowedValues, allows, COUNTRY_TABLE, LIMITS, ratingRank } from '../js/ratings.js';
+import { allowedValues, allows, COUNTRY_TABLE, exactRating, LIMITS, ratingRank } from '../js/ratings.js';
 
 test('the limit choices are the ladder, lowest first', () => {
   assert.deepEqual(LIMITS, ['G', 'PG', 'PG-13', 'R', 'NC-17']);
@@ -112,4 +112,26 @@ test('allowedValues grows with the limit', () => {
   assert.ok(!allowedValues('R').includes('NC-17'));
   assert.ok(allowedValues('NC-17').includes('NC-17'));
   assert.deepEqual(allowedValues('G').filter((v) => !v.includes('/')).sort(), ['G', 'TV-G', 'TV-Y']);
+});
+
+// ---- exactRating: what a server that writes ratings freely may claim (Jellyfin, D134 3, D141 5) ----
+
+test('exactRating keeps exactly the US film and TV values on the ladder and nothing else', () => {
+  for (const v of ['G', 'PG', 'PG-13', 'R', 'NC-17', 'TV-Y', 'TV-G', 'TV-Y7', 'TV-PG', 'TV-14', 'TV-MA']) {
+    assert.equal(exactRating(v), v);
+    assert.notEqual(ratingRank(exactRating(v)), null, v);
+  }
+  assert.equal(exactRating(' PG '), 'PG');
+  for (const v of ['15', '12A', '', '  ', 'NR', 'PG13', 'US-PG', 'pg', 'Pg', 'tv-ma', 'gb/12A', 'de/16', 'TV-*', 'TV-', 'TV-Z', 'U', 'M', 'MA15+', null, undefined, 12, {}]) {
+    assert.equal(exactRating(v), '', String(v));
+  }
+});
+
+test('exactRating is stricter than ratingRank only where a server writes a spelling the ladder would read: Plex values still read as before', () => {
+  // ratingRank still reads lower case and country-prefixed values (a Plex library has them); exactRating, used only for Jellyfin, does not.
+  assert.equal(ratingRank('pg'), 1);
+  assert.equal(ratingRank('gb/12A'), 2);
+  assert.equal(allows('PG', 'pg'), true);
+  assert.equal(exactRating('pg'), '');
+  assert.equal(allows('PG', exactRating('pg')), false);
 });

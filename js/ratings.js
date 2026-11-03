@@ -67,3 +67,15 @@ export function allowedValues(limit) {
   }
   return out;
 }
+
+/**
+ * A rating from a server that writes ratings freely (Jellyfin, D134 3, D141 5): the value when it is exactly a US film or TV
+ * Parental Guidelines value on the ladder above (`G` ... `NC-17`, `TV-Y` ... `TV-MA`, upper case, no country prefix), else ''
+ * (unknown, hidden under any limit). It maps nothing and normalises nothing: `15`, `12A`, `NR`, `PG13`, `US-PG`, `gb/12A` and `pg`
+ * are all ''. Plex's values do not go through it, so a Plex household's ratings read as before.
+ */
+export function exactRating(value) {
+  if (typeof value !== 'string') return '';
+  const v = value.trim();
+  return US.has(v) ? v : '';
+}
