@@ -915,3 +915,13 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   1. **The inline scroll style (D148 1).** It stays inline in run 9. `release-2.4.0` lists "move the first-run card's rotated-phone scroll style from `index.html` into `css/app.css`" in the Roadmap's engineering backlog, so a later run picks it up. `css/app.css` is in no remaining phase's Output, and adding it now would reopen a reviewed phase for a style move.
   2. **The leftover `orch/*` branches.** Unchanged from D138 2: each is proven landed on 2.4, the host's safety hook refuses a forced delete from this session, and the close report gives Nathan the one-line command.
   3. **Playwright build 1194.** Unchanged from D138 3: it stays until run 9 closes, and the close report says it can go.
+
+## Conductor ruling — 2026-11-03 (run 9, `release-2.4.0` pre-flight; answered "defaults" under D134 ruling 7): D151
+
+- **D151 The 2.4 upgrade notice (R-UPG-4).** R-UPG-3's rule is unchanged apart from these values:
+  - **Marker.** `plexPoster.whatsNew` becomes `'2.4'`.
+  - **Wording.** A configured display upgraded from 2.3 shows once: "What's new in 2.4: show posters from a Jellyfin or Emby server as well as Plex." It has an **Open settings** action.
+  - **Where Open settings lands.** It opens Settings through the PIN gate when a PIN is set, with the server connection section, where the Plex | Jellyfin | Emby choice lives, at the top of the view and focus on that choice.
+  - **Fresh install.** It shows nothing and still gets the marker.
+  - **Harness.** The e2e harness seeds `'2.4'`. The 2.3 notice is retired.
+  The plan names the notice but not its words or its target. Both follow R-UPG-3's pattern.
