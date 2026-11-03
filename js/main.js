@@ -25,7 +25,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.3.1';
+export const VERSION = '2.4.0';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -1427,24 +1427,27 @@ async function boot() {
   announceWhatsNew();
 }
 
-// ---------- The upgrade notice (R-UPG-3) ----------
+// ---------- The upgrade notice (R-UPG-4) ----------
 
 const WHATS_NEW_KEY = 'plexPoster.whatsNew';
-const WHATS_NEW_VERSION = '2.3';
+const WHATS_NEW_VERSION = '2.4';
 
 /**
  * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new
- * and pointed at the Household fieldset (through the normal PIN gate), where the rating schedule and viewer profiles live.
+ * and pointed at the server connection section (through the normal PIN gate), where the Plex | Jellyfin | Emby choice lives.
  * An unconfigured one is a fresh install, not an upgrade, so it shows nothing. Either way the marker is written, so it
- * never shows again. The 2.2 notice is retired.
+ * never shows again. The 2.3 notice is retired.
  */
 function announceWhatsNew() {
   if (storage.getItem(WHATS_NEW_KEY) === WHATS_NEW_VERSION) return;
   storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION);
   if (!isConfigured(state.settings)) return;
-  toast("What's new in 2.3: rating limits by time of day, viewer profiles, and choosing which posters show, favouring unwatched ones.", {
+  toast("What's new in 2.4: show posters from a Jellyfin or Emby server as well as Plex.", {
     action: 'Open settings',
-    onAction: () => requestSettings({ section: 'household' }),
+    onAction: async () => {
+      await requestSettings({ section: 'server' }); // the sheet opens at its top, where the server connection section is
+      if (settingsUI.isOpen) document.querySelector('input[name="serverTypePick"]:checked')?.focus({ preventScroll: true });
+    },
     ms: 20_000,
   });
 }

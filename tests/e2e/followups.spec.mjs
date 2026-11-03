@@ -47,7 +47,7 @@ const clearMarkerOnce = (page) =>
     sessionStorage.setItem('__markerCleared', '1');
     localStorage.removeItem('plexPoster.whatsNew');
   });
-const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.3/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.4/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
 
 // ---------- 1. "Can't reach Plex" only when Plex did not answer ----------
 
@@ -180,14 +180,15 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await waitToast(page);
   await page.click('#toast button:has-text("Open settings")');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-  assert.equal(await page.evaluate(() => document.activeElement?.id), 'household-toggle', 'focus starts on the Household toggle');
+  assert.equal(await page.evaluate(() => document.activeElement?.name === 'serverTypePick' && document.activeElement.checked), true, 'focus starts on the chosen server type');
   await page.keyboard.press('Tab');
   const where = await page.evaluate(() => {
     const el = document.activeElement;
-    return { inHousehold: Boolean(el?.closest('#household-fieldset')), after: Boolean(document.getElementById('household-toggle').compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING), id: el?.id };
+    const start = document.querySelector('#settings input[name="serverTypePick"]:checked');
+    return { after: Boolean(start.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING), id: el?.id };
   });
-  assert.ok(where.after, `the first Tab moves on from Household, not back to Plex connection: ${JSON.stringify(where)}`);
-  check('Open settings puts focus on the Household toggle');
+  assert.ok(where.after, `the first Tab moves on from the server choice: ${JSON.stringify(where)}`);
+  check('Open settings puts focus on the server choice');
 });
 
 // ---------- 7. The Settings sheet at 390 px does not scroll sideways ----------
