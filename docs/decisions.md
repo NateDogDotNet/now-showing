@@ -754,3 +754,19 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
     - Emby's item, session and view paths and its CORS default are unconfirmed.
     - The research is in `.orchestrator/artifacts/research--jellyfin-api-r1.md` and `research--jellyfin-cors-r1b.md`, and moves with the run-9 trail.
   - **Floor check:** six phases, three of them `risk:high` (`source-adapters`, `jellyfin-source`, `emby-source`), so the orchestration loop runs.
+
+## Conductor ruling — 2026-11-03 (run 9, `carried-tidy-ups` pre-flight; answered "defaults" under D134 ruling 7): D135
+
+- **D135 What the `carried-tidy-ups` criteria 1 and 3 mean.** A cold probe of the criteria text (`.orchestrator/artifacts/carried-tidy-ups--criteria-probe-r1.md`, 20 findings) found inputs the text left open. Each is ruled here with the reading that keeps today's behaviour wherever the item does not ask for a change. The plan's criteria 1 and 3 are amended to name the extra cases.
+  1. **The helper (findings 1–4, 20).** A failed read is what `request()` in `js/helper.js` already returns `null` for: a network error, the 8 s timeout, a non-2xx reply, or a body that is not an object. Reads are counted in the order they complete. A good read resets the count. `available` becomes false only after two failed reads in a row. A helper that has never answered stays unavailable. After any good read, one failure keeps `available` true, whatever came before it. Cases: fail, good, fail → true. Fail, fail, good, fail → true. Good, fail, fail → false. A read still in flight at a wake is not awaited (unchanged).
+  2. **The TV wake window (findings 5–8).** Only the newest wake's window may clear `tvWaking`. An older window's end leaves it alone. A sleep does not change `tvWaking` (unchanged). The case asserts `tvWaking` is true just after the first window's end and false just after the second window's end.
+  3. **The rating re-check (findings 9–10).** "No further batch" means the re-check of the pool load whose pool request failed. That load sends no batch after the failure, and the next pool load re-checks as usual. Results of a batch already in flight are discarded, as today. The case asserts both halves.
+  4. **`requestAnimationFrame` (finding 11).** Each case of `tests/tv-power.test.js` restores the global to its exact earlier state in a hook that also runs when the case fails (`afterEach` or `t.after`). The property is deleted if it was absent and reassigned if it was present.
+  5. **The profiles case (findings 12–19).** A profile's values are never previewed (D120 1), so Done and Discard have nothing to put back on the display: they send no preview. This supersedes the D122 4 sentence "Done and Discard send one preview" and the `resetEditingUI` line that sends it. The case runs this sequence:
+     - Open profile A, make one edit in A, and change one non-live household control X that stays editable while a profile is open. Press Done.
+     - Open profile B, make one edit in B, and press Discard.
+     - After a settle point the case names (for example the next tick, or 1.5 s with no request), the display shows neither X's new value nor A's edit.
+     - Save applies X.
+     - A second run of the same sequence, ended by a whole-sheet Cancel instead of Save, leaves the display and the stored X as before the sheet opened.
+     - A live household control changed while a profile is open still previews (D122 4).
+     The case fails when either Done's or Discard's `onPreview` call is restored. One non-live control is enough: the limit, selection and pin are profile-bundle or pin values, never previewed by D120 1 and D29, and existing specs keep covering them. "Before or after the change" in the hazard means before and after this phase's code change.
