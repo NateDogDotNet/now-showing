@@ -970,3 +970,20 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   8. **The live-preview candidate (a).** It stays in the backlog (D138 1).
   - **Floor check:** three phases, and `multiple-servers` is `risk:high`, so the orchestration loop runs.
   - **Execution:** every question during the run answers itself with the defaults under the standing D44 rule. A pull request, a merge, a tag, a release, a force-push or deleting unique work still waits for Nathan's own words.
+
+## Conductor ruling — 2026-11-03 (run 10, `multiple-servers` pre-claim criteria probe; answered "defaults" under D44): D157
+
+- **D157 What the `multiple-servers` criteria leave open.** A cold probe of the phase text (`.orchestrator/artifacts/multiple-servers--criteria-probe-r1.md`, 14 findings) found inputs it leaves undecided or decides two ways. Each is ruled to the fail-closed reading, and criterion 1 is amended to name the cases.
+  1. **"The first server" (finding 1, Critical).** Entries stored by 2.4.0 belong to the server entry carried over from 2.4.0, never to a position in the list. Reordering moves nothing. Removing that entry clears those entries, the pin included. No other server can inherit them.
+  2. **An address or type change (finding 2).** D156 3 decides the case. A new address whose server reports the same server id keeps that server's entries. A different id clears them, and so does an id that cannot be read on Save. A change of type is always a different server. The criterion's "changing its address or type clears" is superseded by this rule.
+  3. **The token after an address change (finding 3).** The server's identity is read first, without a token. A Plex server answers its public `/identity`; Jellyfin and Emby answer `/System/Info/Public`. The token is sent only if the id matches the entry's. Otherwise the token is set aside and the household signs in, as D142 2 and D144 1 already rule.
+  4. **Tokens per server (finding 4).** Each server entry holds its own token, and every entry's token is in `SECRET_KEYS`. A token goes only to its own entry's address, so two servers of one type never share or overwrite a token.
+  5. **An id that cannot be read (finding 5).** A server that is down keeps its entries but contributes nothing to the pool. Its pin is not drawn while it is down, and no token is sent to a changed address until the id is read. At upgrade, rule 1 applies.
+  6. **A duplicate server id (finding 6).** Adding an entry whose server reports an id already in the list is refused with a message that names the server.
+  7. **The cache and the limit (finding 7).** As today (D37): every cached poster passes `allows()` with the limit in force when it is drawn, the slot and profile included.
+  8. **Now playing on two servers (finding 8).** The session that counts is chosen by Plex's `pickNowPlaying` rule: the user filter, then the first one playing. It is applied over all servers in list order, and the limit applies as today (D5, D141 6).
+  9. **Down is not gone (finding 9).** Only a removal or a different id clears a server's entries.
+  10. **Proportions and sources (finding 10).** Each chosen library is sampled in proportion to the title count its server reports, before the rating filter, as for one server today. A collection or playlist is one source on one server, and it replaces every chosen library (D107 1).
+  11. **More than three stored (finding 11).** Loading keeps the first three entries and drops the rest. Nothing is sent to a dropped entry.
+  12. **Old and new keys (finding 12).** A new stored key carries its server id in a form that no 2.4.0 key can have. A key without that form is a 2.4.0 key (rule 1).
+  13. **One film on two servers (finding 13).** These are two items; no-repeat applies per item.
