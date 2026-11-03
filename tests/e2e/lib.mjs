@@ -3,7 +3,7 @@
 //   await withApp({ settings, viewport, hasTouch, isMobile, clock, serviceWorkers,
 //                   serveArgs, localStorage }, async ({ page, context, app, mock }) => { ... });
 //
-// app = { url, port, mockPort, argv, stop() }. Without serveArgs the spec uses the shared server
+// app = { url, port, mockPort, jellyfinPort, argv, stop() }. Without serveArgs the spec uses the shared server
 // that run.mjs started on E2E_PORT / E2E_MOCK_PORT. Passing serveArgs (even []) starts a dedicated
 // `serve.mjs --mock` child on freshly probed ports, which is killed when the callback returns.
 
@@ -13,11 +13,13 @@ import { createServer } from 'node:net';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { jellyfinPortFor } from '../../scripts/mock-jellyfin.mjs';
 
 export const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 export const SERVE = join(ROOT, 'scripts', 'serve.mjs');
 export const E2E_PORT = Number(process.env.E2E_PORT || 18080);
 export const E2E_MOCK_PORT = Number(process.env.E2E_MOCK_PORT || 18401);
+export const E2E_JELLYFIN_PORT = jellyfinPortFor(E2E_MOCK_PORT); // serve.mjs --mock puts the Jellyfin mock on the Plex mock's port plus 1000
 
 // Prefer the local devDependency; fall back to the global install (a bare ESM import does not find it).
 async function loadPlaywright() {
@@ -177,10 +179,10 @@ export async function withApp(opts, fn) {
   let app;
   if (serveArgs) {
     dedicated = await startDedicated(serveArgs);
-    app = { url: `http://127.0.0.1:${dedicated.port}/`, port: dedicated.port, mockPort: dedicated.mockPort, argv: dedicated.argv, spawned: dedicated.spawned };
+    app = { url: `http://127.0.0.1:${dedicated.port}/`, port: dedicated.port, mockPort: dedicated.mockPort, jellyfinPort: jellyfinPortFor(dedicated.mockPort), argv: dedicated.argv, spawned: dedicated.spawned };
     app.stop = () => dedicated.child.kill();
   } else {
-    app = { url: `http://127.0.0.1:${E2E_PORT}/`, port: E2E_PORT, mockPort: E2E_MOCK_PORT, argv: ['--mock'], stop() {} };
+    app = { url: `http://127.0.0.1:${E2E_PORT}/`, port: E2E_PORT, mockPort: E2E_MOCK_PORT, jellyfinPort: E2E_JELLYFIN_PORT, argv: ['--mock'], stop() {} };
   }
 
   const browser = await chromium.launch({ args: ['--no-sandbox'] });

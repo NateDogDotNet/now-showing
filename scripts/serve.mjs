@@ -5,7 +5,7 @@
 //   node scripts/serve.mjs                 # http://localhost:8080
 //   node scripts/serve.mjs --port 3000
 //   node scripts/serve.mjs --host 0.0.0.0  # reachable from other devices on the LAN
-//   node scripts/serve.mjs --mock          # plus a fake Plex server on :32401 for demos/tests
+//   node scripts/serve.mjs --mock          # plus a fake Plex server on :32401 and a fake Jellyfin on :33401 for demos/tests
 //   node scripts/serve.mjs --root <dir>    # serve <dir> instead of the repo root (tests)
 //   node scripts/serve.mjs --helper        # opt-in loopback device helper (screen power, CPU temp)
 //       --helper-power cec-ctl|cec-client|wlr-randr|none   (default: auto-detect)
@@ -127,7 +127,12 @@ function send(res, status, text) {
 
 if (args.includes('--mock')) {
   const { startMockPlex } = await import('./mock-plex.mjs');
+  const { startMockJellyfin, jellyfinPortFor, TOKEN, USERNAME, PASSWORD } = await import('./mock-jellyfin.mjs');
   const port = Number(opt('mock-port', 32401));
+  const jellyfinPort = jellyfinPortFor(port); // the Plex mock's port plus 1000: the e2e harness derives the same number
+  // Both listen before either line prints: the harness waits for the Plex line, then uses both.
+  await startMockJellyfin({ port: jellyfinPort, host: HOST });
   await startMockPlex({ port, host: HOST });
   console.log(`Mock Plex server   → http://localhost:${port}  (token: demo-token, library key: 1)`);
+  console.log(`Mock Jellyfin      → http://localhost:${jellyfinPort}  (user: ${USERNAME}, password: ${PASSWORD}, token: ${TOKEN})`);
 }
