@@ -929,3 +929,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Conductor ruling — 2026-11-03 (run 9, `release-2.4.0` r1 handback, question Q7; answered "defaults" under D134 ruling 7): D152
 
 - **D152 Where the 2.4 notice's Open settings lands (Q7).** D151 asks for the server connection section at the top of the view and focus on the Plex | Jellyfin | Emby choice. `js/settings-ui.js`, which scrolls the sheet to a named section, is not in `release-2.4.0`'s Output and has no server section. The builder's reading is accepted. The sheet opens at its top, where the server connection section is the first fieldset, and `js/main.js` puts focus on the checked server-type choice once the sheet is open. The PIN gate applies as before. The preset spec checks the focus.
+
+## Conductor ruling — 2026-11-03 (run 9, `release-2.4.0` Step 4; answered "defaults" under D134 ruling 7): D153
+
+- **D153 `tests/e2e/followups.spec.mjs` joins `release-2.4.0`'s Output.** Criterion 4's full suite (`.orchestrator/artifacts/release-2.4.0--ac4-r1.log`) failed only "FAIL followups". The spec's `waitToast` waits for the text "What's new in 2.3" (tests/e2e/followups.spec.mjs:50). This release retires that notice (D151), so the spec now waits for a toast that no longer exists. The plan's Output lists release, preset and smoke but not followups, which is a plan defect (move 4). It is fixed by adding the file to the Output and to criterion 5's list. The spec's toast case (case 5, the toast on a phone) keeps its purpose. Only the notice text it waits for changes.
