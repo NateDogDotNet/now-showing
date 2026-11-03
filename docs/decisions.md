@@ -895,3 +895,9 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
      - On a phone at rotation 90, the card's user name and password form scrolls within the card, so "Sign in" and "Open settings" are reachable.
      - In Settings, Emby's sign-in form is shown open, not under a collapsed heading, and its button uses the primary style, since it is Emby's only sign-in.
   5. **The mock's header comment (anchored M1).** It says what the Emby mode changes in the Jellyfin mode: the image route also accepts the Emby token.
+
+## Conductor ruling — 2026-11-03 (run 9, `emby-source` r2 handback, questions Q5–Q6; answered "defaults" under D134 ruling 7): D148
+
+- **D148 The two questions the `emby-source` r2 builder raised are answered with its proposed readings.**
+  1. **Q5, the rotated-phone scroll.** The style that keeps Emby's sign-in form scrollable on the first-run card at rotation 90 (D147 4) is an inline `style` on `.empty-card` in `index.html`. `css/app.css` is not in this phase's Output. It stays inline in run 9. Moving it to `css/app.css` is a tidy-up for a later run.
+  2. **Q6, `serverUserId`.** The user id Emby returns at sign-in is stored in a new setting `serverUserId` (D145 2: stored, not a secret). It is set aside with the token on a change of type or server (D142 2, D144 1). A hand-made Emby settings file with a token and no user id asks for a new sign-in ("Emby needs a new sign-in to list its libraries.").
