@@ -59,8 +59,8 @@
       </aside>
     </div>
     <div id="empty" class="empty" hidden>
-      <!-- The card never grows taller than the screen as the viewer sees it (--vh, js/display.js, which already counts a rotated screen); a form longer than that scrolls inside the card, so its buttons stay reachable (D147 4). -->
-      <div class="empty-card" style="max-height: calc(var(--vh) - 48px); overflow-y: auto">
+      <!-- The card never grows taller than the screen as the viewer sees it (--vh, js/display.js, which already counts a rotated screen); a form longer than that scrolls inside the card, so its buttons stay reachable (D147 4); the rule is `.empty-card` in css/app.css. -->
+      <div class="empty-card">
         <img src="assets/icons/icon.svg" alt="" width="72" height="72" />
         <h1>Now Showing</h1>
         <p id="empty-message">Connect to your Plex server to get started.</p>

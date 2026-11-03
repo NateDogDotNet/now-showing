@@ -8,18 +8,13 @@ import { ratingPasses, ratingValues } from '../selection.js';
 import { SUMMARY_MAX, trimSummary } from '../fill.js';
 import { toMs } from '../duration.js';
 import { SourceError } from './errors.js';
+import { buildUrl, timeoutSignal } from './http.js';
+
+// buildUrl lives in http.js; it is re-exported so that tests/plex.test.js, which imports it from here, is unchanged.
+export { buildUrl };
 
 export const PRODUCT = 'Now Showing';
 const PLEX_TV = 'https://plex.tv';
-
-/** Builds a URL with query params; values that are '' / null / undefined are skipped. */
-export function buildUrl(base, path, params = {}) {
-  const url = new URL(path, base.endsWith('/') ? base : base + '/');
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== '' && v !== null && v !== undefined) url.searchParams.set(k, String(v));
-  }
-  return url.toString();
-}
 
 /** Converts a Plex XML MediaContainer into the same shape as the JSON API. */
 export function xmlToContainer(doc) {
@@ -46,13 +41,6 @@ export function xmlToContainer(doc) {
   if (items.length) container.Metadata = items;
   if (dirs.length) container.Directory = dirs;
   return container;
-}
-
-export function timeoutSignal(ms) {
-  if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) return AbortSignal.timeout(ms);
-  const c = new AbortController();
-  setTimeout(() => c.abort(), ms);
-  return c.signal;
 }
 
 async function request(url, { method = 'GET', timeoutMs = 10000, fetchImpl = fetch } = {}) {

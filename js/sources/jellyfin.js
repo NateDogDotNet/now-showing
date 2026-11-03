@@ -13,7 +13,7 @@ import { ratingPasses, ratingValues } from '../selection.js';
 import { SUMMARY_MAX, trimSummary } from '../fill.js';
 import { toMs } from '../duration.js';
 import { SourceError } from './errors.js';
-import { buildUrl, timeoutSignal } from './plex.js';
+import { buildUrl, timeoutSignal } from './http.js';
 
 export const CLIENT_NAME = 'Now Showing';
 const TICKS_PER_MS = 10_000; // RunTimeTicks and PositionTicks are 100 ns ticks (a (verify) row)

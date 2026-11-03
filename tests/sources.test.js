@@ -218,6 +218,42 @@ test('the import guard catches an adapter import in either quote style, a bare i
   assert.equal(probe('a.js', "import { createSource } from './sources/index.js';"), 0, 'the index is the one way in');
 });
 
+// ---- no adapter imports another adapter: the shared HTTP helpers are in http.js, SourceError in errors.js ----
+
+const ADAPTERS = ['plex', 'jellyfin', 'emby'];
+// The one exception: the Emby adapter builds on the shared MediaBrowser code that lives in the Jellyfin adapter (R-SRC-3, D145).
+const ALLOWED_ADAPTER_IMPORTS = new Set(['emby.js>jellyfin']);
+/** The "adapter>adapter" pairs in a folder of adapters: a file there importing another adapter's module (either quote, dynamic import too). */
+export function adapterCrossImports(dir) {
+  const found = [];
+  for (const f of readdirSync(dir).filter((n) => ADAPTERS.includes(n.slice(0, -3)) && n.endsWith('.js'))) {
+    const src = readFileSync(new URL(f, dir), 'utf8');
+    for (const other of ADAPTERS.filter((a) => a + '.js' !== f)) {
+      if (new RegExp(`(?:from|import)\\s*\\(?\\s*(['"])\\./${other}(?:\\.js)?\\1`).test(src)) found.push(`${f}>${other}`);
+    }
+  }
+  return found.filter((p) => !ALLOWED_ADAPTER_IMPORTS.has(p));
+}
+
+test('no adapter imports another adapter (the generic helpers are in http.js)', () => {
+  assert.deepEqual(adapterCrossImports(new URL('../js/sources/', import.meta.url)), []);
+});
+
+test('the adapter cross-import guard catches a Jellyfin or Plex adapter importing another adapter, in either quote style', () => {
+  const probe = (file, text) => {
+    const dir = mkdtempSync(join(tmpdir(), 'src-cross-'));
+    for (const f of ADAPTERS) writeFileSync(join(dir, f + '.js'), f === file ? text : '');
+    const r = adapterCrossImports(pathToFileURL(dir + '/'));
+    rmSync(dir, { recursive: true });
+    return r;
+  };
+  assert.deepEqual(probe('jellyfin', "import { buildUrl } from './plex.js';"), ['jellyfin.js>plex']);
+  assert.deepEqual(probe('emby', 'import { buildUrl } from "./plex.js";'), ['emby.js>plex']);
+  assert.deepEqual(probe('plex', "const m = await import('./emby.js');"), ['plex.js>emby']);
+  assert.deepEqual(probe('emby', "import { request } from './jellyfin.js';"), [], 'the one allowed pair');
+  assert.deepEqual(probe('jellyfin', "import { buildUrl } from './http.js';"), []);
+});
+
 // ---- the sources folder has no import cycle: errors.js is imported by the index and the adapters, and imports nothing ----
 
 test('js/sources/errors.js imports nothing and no adapter imports the index', async () => {

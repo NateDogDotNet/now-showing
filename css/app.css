@@ -232,6 +232,9 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
   border: 1px solid var(--panel-line);
   border-radius: var(--radius);
   padding: 28px;
+  /* Never taller than the screen as the viewer sees it (--vh counts a rotated screen); a longer form scrolls inside the card (D147 4, D150 1). */
+  max-height: calc(var(--vh) - 48px);
+  overflow-y: auto;
 }
 .empty-card h1 { font-size: 1.4rem; margin: 12px 0 6px; }
 .empty-card p { color: var(--muted); margin: 0 0 18px; }

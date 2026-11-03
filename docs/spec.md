@@ -449,13 +449,13 @@ Each feature phase adds its own controls to the settings sheet (a new "Display p
 
 ## Security and privacy
 
-- **Token handling**: stored in `localStorage` on the device. Never in a QR code, helper response, receipt, Diagnostics (already truncated to 4 characters), log line, or export unless ticked. It does appear in Plex request URLs by design (principle 4).
+- **Token handling**: stored in `localStorage` on the device. Never in a QR code, helper response, receipt, Diagnostics (already truncated to 4 characters), log line, or export unless ticked. It does appear in Plex request URLs by design (principle 4); a Jellyfin or Emby token travels in a request header and also as `api_key` in that server's poster image URLs (an `<img>` cannot send a header).
 - **Git history** holds an old token (S1): rotate it (required); purge optional and skipped unless the repository is public or shared (D14).
 - **`config.json`** is a token file: loopback-only with a hostname-only Host check (R-SEC-1), git-ignored, and the README says to delete it after first run. The server serves an allowlist of app paths only (D9).
 - **Local helper** is the only listening surface the plan adds: opt-in `--helper`, loopback-only, shares `isLoopback`/`isLoopbackHost`, custom header, never a shell, validated inputs, no CORS grant (D8).
 - **PIN** is client-side deterrence, not authentication; the UI says so (D16). Recovery is a loopback `config.json` flag (D10).
 - **Least privilege Plex access**: managed user restricted to one library (R-DOC-6); IoT VLAN (R-DOC-5).
-- **Privacy**: "Playing in {room}" and user names are shown on the display only; nothing is sent anywhere except to the user's own Plex server and plex.tv for sign-in.
+- **Privacy**: "Playing in {room}" and user names are shown on the display only; the Plex token goes to the user's own Plex server and to plex.tv; a Jellyfin or Emby token goes to that server only, also as `api_key` in its poster image URLs. The token is set aside, and so not sent to the new server, in two cases: a change of server type (D142 2), and an import that changes the server and brings no token (D144 1, D149 2). A server address typed in Settings receives the token, as in 2.3 and 2.4.0: the connection test and Save send it there. Nothing else is sent anywhere.
 
 ## Open questions
 
@@ -537,6 +537,9 @@ The `genre` list, filter and comma-OR shapes, the collection and playlist paths 
 | — (D117) | R-PROF-1 | `viewer-profiles` |
 | — (D101, D124) | R-UPG-3 | `release-2.3.0` |
 | — (D134, D151, D152) | R-UPG-4 | `release-2.4.0` |
+| — (D134) | R-SRC-1 | `source-adapters` (`js/sources/index.js`, `js/sources/plex.js`; `tests/sources.test.js`) |
+| — (D134, D139, D141) | R-SRC-2 | `jellyfin-source` (`js/sources/jellyfin.js`; `tests/jellyfin.test.js`, `tests/mock-jellyfin.test.js`, `tests/e2e/jellyfin.spec.mjs`) |
+| — (D134, D144, D145) | R-SRC-3 | `emby-source` (`js/sources/emby.js`; `tests/emby.test.js`, `tests/e2e/emby.spec.mjs`) |
 | E15 | R-DOC-6 | `docs` |
 | E16 | R-KIOSK-2 | `kiosk-and-pin` |
 | E17 | R-DOC-5 | `docs` |

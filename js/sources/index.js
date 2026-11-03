@@ -44,12 +44,12 @@
 // Plex flow is { label, createPin, checkPin, discoverServers, firstReachable, words }: a code the user approves at plex.tv/link,
 // the servers on the account with their connections, the first connection that answers, and the exact sentences the sign-in
 // screens show (words.asking, ranOut, unreachable, couldNotGet(message), httpsBlocked). The Jellyfin flow has the same members,
-// bound to the address in `settings.serverUrl` (`needsAddress: true`): the code is a Quick Connect code, checkPin gives the access
+// bound to the address in `settings.serverUrl` (`needsAddress: true`, and `serverUrl` itself): the code is a Quick Connect code, checkPin gives the access
 // token once the code is approved (and throws an error with `expired: true` when the server no longer knows the code), and it adds
 // quickConnectEnabled(clientId) and signInWithPassword(clientId, user, password) -> { token, userId }. The Jellyfin flow's screens
 // say "Quick Connect is off" when it is; a flow with no code at all adds words.passwordOnly in its place. The Emby flow (Emby has no Quick Connect) is
 // { label, needsAddress, serverUrl, quickConnectEnabled (always false), signInWithPassword, discoverServers, firstReachable, words }:
-// no createPin or checkPin. It is built with `settings.serverUserId` (the id the sign-in returned), which firstReachable's libraries request needs (Emby lists libraries at Users/{UserId}/Views).
+// it has no createPin or checkPin. It is built with `settings.serverUserId` (the id the sign-in returned), which firstReachable's libraries request needs (Emby lists libraries at Users/{UserId}/Views).
 //
 // Errors an adapter throws are SourceErrors (js/sources/errors.js) whose `kind` is one of KINDS; createSource itself adds 'config'.
 // What a kind leads to on screen (js/main.js): 'auth' is an answer, not an outage: with no poster on screen the empty card says what
@@ -88,8 +88,9 @@ export function createSource(settings, { clientId, fetchImpl, version } = {}) {
 }
 
 /**
- * How a person signs in to the settings' server type: `{ label, createPin, checkPin, discoverServers, firstReachable, words }`.
- * It needs no connection, so the empty card and the Settings sheet use it before anything is configured.
+ * How a person signs in to the settings' server type. The Plex flow is `{ label, createPin, checkPin, discoverServers, firstReachable, words }`;
+ * the Jellyfin flow adds `needsAddress`, `serverUrl`, `quickConnectEnabled` and `signInWithPassword`; the Emby flow is `{ label, needsAddress,
+ * serverUrl, quickConnectEnabled, signInWithPassword, discoverServers, firstReachable, words }` (no `createPin` or `checkPin`). It needs no connection, so the empty card and the Settings sheet use it before anything is configured.
  */
 export function signInFlow(settings, { fetchImpl, version } = {}) {
   const type = serverTypeOf(settings);

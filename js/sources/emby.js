@@ -21,7 +21,7 @@
 // error or a timeout (a 401 or 403 for a user who may not list sessions, a 404, a reply that does not parse) means nothing is playing and
 // never an error card (D145 4). The password is sent once and never kept (D141 8, D145 2).
 
-import { buildUrl } from './plex.js';
+import { buildUrl } from './http.js';
 import { SourceError } from './errors.js';
 import { CLIENT_NAME, createMediaBrowserClient, request } from './jellyfin.js';
 
