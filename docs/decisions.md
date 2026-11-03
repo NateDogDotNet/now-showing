@@ -814,3 +814,24 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   - An `auth` error is said to always show the empty card, but that happens only when no poster is on screen, and otherwise "Sign in again" comes as a toast.
   - The pill reads "Offline" when the browser is offline.
   These are non-blocking Minors in a file `jellyfin-source` edits next, so that phase's brief corrects each sentence to what the code does. `source-adapters` lands without another round.
+
+## Conductor ruling — 2026-11-03 (run 9, `jellyfin-source` pre-flight; answered "defaults" under D134 ruling 7): D141
+
+- **D141 What the `jellyfin-source` criteria leave open.** A cold probe of the phase text (`.orchestrator/artifacts/jellyfin-source--criteria-probe-r1.md`, 12 findings) found inputs it does not decide. Each is ruled to what the Plex path does today, or else to the fail-closed reading. Criteria 1 and 2 are amended to name the new cases.
+  1. **Which rating counts (finding 1).** A Jellyfin item's rating is its `CustomRating` when that is not empty, and its `OfficialRating` otherwise. That is the household's own override in Jellyfin's metadata editor, and the mapping (verify) is a row in `docs/validation/real-server-extended.md`. The value then maps as in rule 5. An episode's or a series' rating is read the same way.
+  2. **Upgrade (finding 2).** A missing stored `serverType` reads as `'plex'` (D134 2, D139 1), so upgrading from 2.3.1 is not a switch. The poster cache, pin and history are kept. A test pins this.
+  3. **When the switch clears (findings 3, 4).** The clear in D134 2 fires when a Save stores a `serverType` different from the stored one (absent counts as `'plex'`). An import is a Save. Choosing a type in the form, signing in, or a Cancel clears nothing. Library, genre, collection and playlist ids in the household's selection, its profiles and its slots are kept as stored. On the other server they match nothing, so the pool is empty and the empty card says so (fail closed). The household chooses again from the new server's lists.
+  4. **Offline after a switch or a tighter limit (finding 5).** The cache is cleared at the switch. After that every cached Jellyfin poster carries its rating, and offline draws pass `allows()` with the limit in force, as Plex entries do today (D37, `cache.random(…, limit, selection)`).
+  5. **Spellings (finding 6).** The rating string is matched exactly as `js/ratings.js` matches Plex's, through the same tables, with no new normalisation. `TV-*` means the TV values already on the ladder (`TV-Y`, `TV-G`, `TV-Y7`, `TV-PG`, `TV-14`, `TV-MA`), never a wildcard. `NR`, `PG13`, `US-PG`, a lower-case value and any other value are unknown, hidden under any limit (D134 3, D5).
+  6. **Now playing (finding 7).** Now playing follows the Plex rules exactly:
+     - An episode shows its series poster with the series rating in the cache, and the live check uses the episode's own rating (D73, D75).
+     - An item that is neither a movie nor an episode shows no now-playing poster.
+     - With several sessions, the session that counts is picked by the same rule Plex's `pickNowPlaying` applies (the user filter, then the first playing).
+  7. **Collections and playlists (finding 8).** Only `Movie` items become posters. A BoxSet or playlist replaces the chosen libraries, as a Plex collection or playlist does (D107 1).
+  8. **What sign-in stores (finding 9).** The password is never stored, only the access token, which is in `SECRET_KEYS`. `DeviceId` is the display's existing client id (`util.clientId`, its own storage key). It is not part of the settings and never in an export.
+  9. **Quick Connect failures (finding 10).**
+     - An expired or unknown code (`/QuickConnect/Connect` → 404 or no longer `Authenticated`) offers a new code.
+     - `/QuickConnect/Enabled` failing or false offers the user name and password form.
+     - A revoked token (401) is a SourceError of kind `auth`, with "Sign in again" as for Plex.
+  10. **Missing fields (finding 11).** A missing play count is 0. A missing runtime, score or year is left empty and not shown, as the Plex mapping does for its own missing fields. An item with no `ImageTags.Primary` is not drawn.
+  11. **Test strength (finding 12).** Criterion 2 also runs 30 picks under a PG-13 limit: G, PG and PG-13 titles only, never R, `TV-MA`, `15` or unrated. Criterion 1 adds unit cases for rules 1 and 5: a `CustomRating` that tightens and one that relaxes, and each unknown spelling listed in rule 5.
