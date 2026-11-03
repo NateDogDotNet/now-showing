@@ -987,3 +987,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   11. **More than three stored (finding 11).** Loading keeps the first three entries and drops the rest. Nothing is sent to a dropped entry.
   12. **Old and new keys (finding 12).** A new stored key carries its server id in a form that no 2.4.0 key can have. A key without that form is a 2.4.0 key (rule 1).
   13. **One film on two servers (finding 13).** These are two items; no-repeat applies per item.
+
+## Conductor ruling — 2026-11-03 (run 10, `followup-tidy-ups` r1 handback, question Q1; answered "defaults" under D44): D158
+
+- **D158 Emby keeps importing the shared MediaBrowser code from `js/sources/jellyfin.js` (Q1).** D154 5 asks that no adapter import another. `js/sources/emby.js` imports the MediaBrowser item mapping, the rating map and the header code from `js/sources/jellyfin.js`. That is the sharing the run-9 plan named in its `jellyfin-source` note: "Shared MediaBrowser code ... may live in `js/sources/jellyfin.js` for `emby-source` to import". Moving that code needs a new file outside this phase's Output. The generic HTTP helpers (`buildUrl`, `timeoutSignal`) move to `js/sources/http.js`, and the guard in `tests/sources.test.js` refuses every adapter-to-adapter import except emby → jellyfin. `js/sources/plex.js` re-exports `buildUrl` because the unchanged `tests/plex.test.js` imports it from there. A move of the MediaBrowser code to its own module is backlog for a later run.
