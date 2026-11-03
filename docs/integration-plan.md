@@ -1328,13 +1328,13 @@ Facts this section stands on (invocation probes, `.orchestrator/artifacts/resear
 
 - **Goal:** `VERSION` is 2.4.0, a configured display shows a one-time "What's new in 2.4" notice, and the README, Roadmap and spec describe what 2.4 shipped and what of the Roadmap's 2.4 list moves later.
 - **Requirements:** new R-UPG-4 (supersedes R-UPG-3) · **Rulings:** D13, D79, D134 · **Mode:** afk · **Tags:** docs, ui · **Blocked by:** `emby-source`
-- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/release.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/lib.mjs`, `Roadmap.md`, `README.md`, `docs/spec.md`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/release.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/followups.spec.mjs` (D153), `tests/e2e/lib.mjs`, `Roadmap.md`, `README.md`, `docs/spec.md`
 - **Acceptance criteria:**
   1. `grep -q "VERSION = '2.4.0'" sw.js && grep -q "VERSION = '2.4.0'" js/main.js && test "$(grep -c '"version": "2.4.0"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
   2. `node tests/e2e/run.mjs release preset smoke`  (the notice: marker `'2.4'`; a configured display upgraded from 2.3 shows "What's new in 2.4" once, naming Jellyfin and Emby; a fresh install shows nothing but gets the marker; the harness seeds `'2.4'`)
   3. `grep -qE '^## .*Done in 2\.4' Roadmap.md && grep -qi 'jellyfin' README.md && grep -qi 'emby' README.md && grep -q '^\*\*R-UPG-4' docs/spec.md && ! grep -q '^### Carried from 2.1.1' Roadmap.md && ! grep -q '^### Carried from 2.3' Roadmap.md`
   4. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, by the conductor, after the memory gate)
-  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|tests/e2e/release.spec.mjs|tests/e2e/preset.spec.mjs|tests/e2e/smoke.spec.mjs|tests/e2e/lib.mjs|Roadmap.md|README.md|docs/spec.md)')"`
+  5. `test -z "$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -v '^\.orchestrator/' | grep -vxE '(sw.js|js/main.js|package.json|package-lock.json|tests/e2e/release.spec.mjs|tests/e2e/preset.spec.mjs|tests/e2e/smoke.spec.mjs|tests/e2e/followups.spec.mjs|tests/e2e/lib.mjs|Roadmap.md|README.md|docs/spec.md)')"`
   6. narrated: keep-docs-current over `9eeb995f..HEAD` inside the phase; the anchored documentation review and a UX walk of the notice APPROVE on disk.
 - **Notes/hazards:** the README says Jellyfin and Emby are tested against mock servers only, and lists the (verify) rows. No tag, no GitHub release, no pull request (D13, D79).
 
