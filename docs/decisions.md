@@ -952,3 +952,21 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   - There was no stash.
   - The seven `orch/*` branches each hold a phase worktree committed in place, with the same content on `main` (D138 2). The host's safety hook refuses their forced delete from this session, so Nathan deletes them.
   The open follow-up D154 stands for the next 2.4.x run.
+
+## Owner decision — 2026-11-03 (the run-10 policy, verbatim at 2026-11-03T16:58:48Z: "defaults"): D156
+
+- **D156 Run 10 builds 2.4.1: multiple servers in poster selection, and the 2.4 follow-ups.** The run-10 section of `docs/integration-plan.md` (phases 58–60) is the plan. The policy stop offered eight items with a recommended option each, and Nathan answered "defaults", which takes every recommended option.
+  1. **Scope (a).** Three phases: `followup-tidy-ups`, `multiple-servers` and `release-2.4.1`.
+     - Play now is left for a later 2.4.x run.
+     - The movie-night countdown, birthday mode and the Picture frame sources wait for prerequisites that are not built: the Poster playlist and marquee captions, the Frame and marquee styles, and Browse first (3.0).
+  2. **Ids across servers (a).** Every cached poster, the pin and each no-repeat entry carry the id of the server they came from. Keys stored by 2.4.0 have no server id and read as the first server's, with nothing rewritten. Adding a server clears nothing.
+  3. **Which server a setting belongs to (a).** A server is known by its own id: Plex's `machineIdentifier`, or the `Id` from Jellyfin's or Emby's `/System/Info/Public`.
+     - A new address with the same server id keeps that server's cache, pin and history, which closes D149 3.
+     - A different id clears that server's entries, which closes D143 6.
+  4. **The notice (a).** A one-time "What's new in 2.4.1: choose posters from more than one server." with marker `'2.4.1'`, and Open settings landing on the server list. R-UPG-5 supersedes R-UPG-4.
+  5. **Validation (a).** The run tests against mock servers only, with (verify) rows: the Plex mock and the Jellyfin mock in its Jellyfin and Emby modes, at once. At invocation, the HOME machine answered ssh, but nothing listened there on 8096 or 32400.
+  6. **Branch and record (a).** Branch `2.4.1` from `main` 0025b501, pushed. There is no pull request, merge or tag unless Nathan asks (D13, D79). The run-9 trail moved to `~/now-showing-run9-trail`. The plan section and this entry are committed separately.
+  7. **How many servers (a).** Up to three, in any mix of Plex, Jellyfin and Emby.
+  8. **The live-preview candidate (a).** It stays in the backlog (D138 1).
+  - **Floor check:** three phases, and `multiple-servers` is `risk:high`, so the orchestration loop runs.
+  - **Execution:** every question during the run answers itself with the defaults under the standing D44 rule. A pull request, a merge, a tag, a release, a force-push or deleting unique work still waits for Nathan's own words.
