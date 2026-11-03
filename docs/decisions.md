@@ -943,3 +943,12 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   4. The `signInFlow` comment at `js/sources/index.js:91` says every flow has `createPin` and `checkPin`, which Emby's does not, and the comment at `:47` omits Jellyfin's `serverUrl`.
   5. `js/sources/jellyfin.js:16` and `js/sources/emby.js:24` import helpers from the Plex adapter, against the comment at `js/sources/errors.js:1-2`.
   Fixing 1–3 now would be `release-2.4.0`'s third re-dispatch, which the rules run as two competing builders, and 4–5 are outside its Output. All five are FOLLOW-UPs for Nathan, for the next 2.4.x run. Item 1 comes first, because the summary understates where the token travels.
+
+## Owner decision — 2026-11-03 (verbatim: "commit, merge, push, and clean up branches, worktrees, and stash"): D155
+
+- **D155 2.4.0 is merged into `main`.** Nathan's words above approve the merge. Branch `2.4` (run 9, release afb417bc) is merged into `main` with a merge commit (6367fb02). As with 2.3.1 (D133), there is no pull request, no tag and no GitHub release. The README and the Roadmap now say 2.4.0 is on `main`. Clean-up:
+  - The merged branch `2.4` is deleted locally and on origin.
+  - The worktrees are pruned; only the main checkout was left.
+  - There was no stash.
+  - The seven `orch/*` branches each hold a phase worktree committed in place, with the same content on `main` (D138 2). The host's safety hook refuses their forced delete from this session, so Nathan deletes them.
+  The open follow-up D154 stands for the next 2.4.x run.

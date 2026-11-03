@@ -107,9 +107,9 @@ The run-8 follow-ups (D132). Version 2.3.1 was merged into `main` on 2026-11-02 
 - **The settings sheet** no longer scrolls sideways on a 390 px phone.
 - **Version**: 2.3.1 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new in 2.3" notice is unchanged.
 
-## ✅ Done in 2.4 (2.4.0, on the branch `2.4`)
+## ✅ Done in 2.4 (2.4.0, on `main`)
 
-Jellyfin and Emby as poster sources beside Plex, and the upgrade notice (D134). Version 2.4.0 is on the branch `2.4` only: it is not merged into `main`, and it has no tag, no GitHub release and no pull request (D13, D79). It is tested against mock servers only (the mock Plex server, and `scripts/mock-jellyfin.mjs` for Jellyfin and Emby), and nothing has been run on a Raspberry Pi. The rows to run on real Jellyfin and Emby servers are in `docs/validation/real-server-extended.md`: section I (V1-J01 to V1-J22) and section J (V1-M01 to V1-M14), all (verify).
+Jellyfin and Emby as poster sources beside Plex, and the upgrade notice (D134). Version 2.4.0 is on `main`, merged on 2026-11-03 from the branch `2.4`, with no tag, no GitHub release and no pull request (D13, D79, D155). It is tested against mock servers only (the mock Plex server, and `scripts/mock-jellyfin.mjs` for Jellyfin and Emby), and nothing has been run on a Raspberry Pi. The rows to run on real Jellyfin and Emby servers are in `docs/validation/real-server-extended.md`: section I (V1-J01 to V1-J22) and section J (V1-M01 to V1-M14), all (verify).
 
 - **Source adapters (R-SRC-1)**: the engine, the display, Settings and the first-run card talk to a media server only through one adapter object, with Plex as the first adapter and no change in how it behaves.
 - **Jellyfin (R-SRC-2)**: the Plex | Jellyfin | Emby choice in the connection section at the top of Settings, and "Your media server" on the first-run card. It signs in with a Quick Connect code, or with a user name and password when Quick Connect is off.
@@ -128,14 +128,14 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 1. **2.1.x:** done (2.1.1), including the `js/main.js` split that the source-adapter work needed first.
 2. **2.2:** done: drag-and-nudge positioning, the landscape fill and the gap fill (2.2.0), and the point releases 2.2.1 to 2.2.3 (polish, and the controls on mouse, keyboard and TV remote), all on `main`.
 3. **2.3:** done, on `main`: the rating schedule, poster selection (Step 1), weighting and no repeats, and viewer profiles, with the "What's new in 2.3" notice. What the 2.2 plan listed after these ("On this day", the playlist and Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music) was not part of 2.3 and is still ahead, with no release number yet.
-4. **2.4:** done, on the branch `2.4`: the source-adapter refactor with Plex as the first adapter, then Jellyfin and Emby, each mapping its own ratings for the household limit and failing closed. Multiple servers in poster selection, Play now, the movie-night countdown, birthday and occasion mode, and the Picture frame sources (Plex Photos first, then a folder and Immich, then museum art) did not ship in 2.4 and are still ahead, for a later 2.4.x run (D134 1).
+4. **2.4:** done, on `main`: the source-adapter refactor with Plex as the first adapter, then Jellyfin and Emby, each mapping its own ratings for the household limit and failing closed. Multiple servers in poster selection, Play now, the movie-night countdown, birthday and occasion mode, and the Picture frame sources (Plex Photos first, then a folder and Immich, then museum art) did not ship in 2.4 and are still ahead, for a later 2.4.x run (D134 1).
 5. **2.5:** the no-server mode as a TMDB adapter. It needs the adapter layer, a TMDB key the user supplies (stored like the Plex token), TMDB's attribution, a certification mapping for the household limit, and it has no now-playing. Clear-logo marquees, poster artwork sources and the filter on any production house come with it; Coming Soon for titles not in the library comes after 2.5.
 6. **3.0:** Browse first mode (with the Browse button in poster mode), the main-screen choice (Posters, Browse first, Picture frame, Home controls) and Home controls. It is built from Find a poster, the gestures and Play now, so it comes after them.
 7. **Later:** the rest of the Ideas. Multiple displays comes last among the large features, lowest risk first (Change together and Mirror, then Chain, then Controller), because Controller opens the largest attack surface. It needs the source adapters' item IDs first (the `js/main.js` split is done in 2.1.1).
 
 ## ⏭ Next
 
-2.2.0 to 2.3.1 are on `main` (see the "Done in 2.2", "Done in 2.3" and "Done in 2.3.1" sections above). 2.4.0 is built on the branch `2.4` and is not merged; nothing is in progress. The next feature follows the suggested order:
+2.2.0 to 2.4.0 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1" and "Done in 2.4" sections above); nothing is in progress. The next feature follows the suggested order:
 
 1. **2.5, the no-server mode:** the TMDB adapter, on the adapter layer 2.4 built.
 
