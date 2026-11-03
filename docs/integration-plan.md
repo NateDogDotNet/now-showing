@@ -1383,7 +1383,8 @@ Facts this section stands on (invocation probes, 2026-11-03T16:38Z):
      - A pool over two servers samples each chosen library in proportion to its title count.
      - A server that fails leaves the pool to the others.
      - Every poster from every server passes `allows()` (D5).
-     - Removing a server, or changing its address or type, clears that server's cache entries, its pin and its history, and nothing of the others (D147 2, D143 6).
+     - Removing a server, or a change of address or type that reveals a different server id (or none on Save), clears that server's cache entries, its pin and its history, and nothing of the others; a new address with the same id keeps them (D156 3, D157 2).
+     - D157 adds: entries stored by 2.4.0 belong to the server entry carried over from 2.4.0, never to a list position, and go with it when it is removed; after an address change the server id is read without a token before the token is sent; each entry has its own token in `SECRET_KEYS`; a duplicate server id is refused; a server that is down keeps its entries and contributes nothing; a fourth stored entry is dropped on load.
      - Each server's token goes only to that server.)
   2. `test -f tests/e2e/multi-server.spec.mjs && node tests/e2e/run.mjs multi-server`  (against the Plex mock and the Jellyfin mock at once:
      - Settings adds a second server.
