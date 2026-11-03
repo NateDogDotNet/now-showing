@@ -908,3 +908,10 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   1. **What a Save compares.** A Save compares the server type, address, token and user id with the *stored* settings, not with what a preview left in memory. A preview never puts the connection keys (`serverType`, `serverUrl`, `plexToken`, `serverUserId`) in force. The same fix makes an import that changes the address or token rebuild the server connection on Save. That gap is older than this phase; the anchored review's "declined to judge" names it.
   2. **The user id travels with its token (anchored M1, cold M1).** An import takes the file's `serverUserId` only when the file also brings its own token. Otherwise the user id is set aside with the token (D148 2).
   3. **Plex's several addresses (cold M2).** Comparing addresses can drop a Plex pin when a re-sign-in picks another address for the same server. It fails safe, since only the pin is lost, so the address comparison stands for every type in run 9. Comparing a server's own id is past run 9's goal line, with the multiple-servers work (D134 1, D143 6).
+
+## Owner decision — 2026-11-03 (verbatim, at 2026-11-03T13:14:58Z: "use your discression on thoes items that are waiting on me"): D150
+
+- **D150 The conductor's choices on the items waiting on Nathan, the second time.**
+  1. **The inline scroll style (D148 1).** It stays inline in run 9. `release-2.4.0` lists "move the first-run card's rotated-phone scroll style from `index.html` into `css/app.css`" in the Roadmap's engineering backlog, so a later run picks it up. `css/app.css` is in no remaining phase's Output, and adding it now would reopen a reviewed phase for a style move.
+  2. **The leftover `orch/*` branches.** Unchanged from D138 2: each is proven landed on 2.4, the host's safety hook refuses a forced delete from this session, and the close report gives Nathan the one-line command.
+  3. **Playwright build 1194.** Unchanged from D138 3: it stays until run 9 closes, and the close report says it can go.
