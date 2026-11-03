@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatRuntime } from '../js/plex.js';
+import { formatRuntime } from '../js/duration.js';
 import { BACKDROP_OPACITY, BACKDROP_WIDTH, PANEL_MIN_EM, SUMMARY_MAX, backdropBox, drawBackdrop, drawGapBlur, drawGapFill, edgeColour, fillState, gapLayerOpen, infoBox, infoParts, infoTitleSize, isLandscape, swapBackdrop, swapGapFill, trimSummary, visibleRight } from '../js/fill.js';
 import { posterBox } from '../js/layout.js';
 

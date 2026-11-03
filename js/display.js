@@ -1,7 +1,7 @@
 // Renders the frame and poster: sizing, rotation and cross-fades.
 
 import { detectWindow, findFrame, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
-import { formatRuntime } from './plex.js';
+import { formatRuntime } from './duration.js';
 import { blurPlan, closeGap, gapBands, imageRect, posterBox, shiftOffset, shiftRoom, stageSize } from './layout.js';
 import { backdropBox, fillState, infoBox, infoParts, gapLayerOpen, infoTitleSize, swapBackdrop, swapGapFill, visibleRight } from './fill.js';
 

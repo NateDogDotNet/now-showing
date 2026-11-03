@@ -35,6 +35,9 @@ const rotation = (v, d) => {
 /** Each entry: [default, sanitiser]. Sanitisers coerce bad input back to the default. */
 const SCHEMA = {
   // Connection
+  // Which media server the display talks to (D134): picks the source adapter in js/sources. Absent in a 2.3.1 object, which is Plex.
+  // Widened by each adapter that lands; a value no adapter knows reads as Plex.
+  serverType: ['plex', oneOf('plex')],
   plexToken: ['', str],
   serverUrl: ['', (v, d) => str(v, d).replace(/\/+$/, '')],
   serverName: ['', str],

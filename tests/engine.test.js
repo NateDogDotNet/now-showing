@@ -2,12 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEngine } from '../js/engine.js';
 import { defaults } from '../js/settings.js';
+import { createSource } from '../js/sources/index.js';
+
+// The fake stands in for an adapter: reading a session is the Plex adapter's own nowPlaying, so these cases keep their Plex session shapes.
+const { nowPlaying } = createSource({ serverUrl: 'http://s', plexToken: 't' });
 
 function fakeClient({ sessions = [], pool = [], itemRating = '' } = {}) {
   const calls = { pool: 0, sessions: 0, item: 0, poolArgs: [] };
   return {
     calls,
     sessions: async () => (calls.sessions++, sessions),
+    nowPlaying,
     pool: async (args) => (calls.pool++, calls.poolArgs.push(args), pool),
     item: async (key) => (calls.item++, { ratingKey: key, title: `Item ${key}`, thumb: `/t/${key}`, source: 'static', contentRating: itemRating }),
   };
@@ -575,6 +580,7 @@ function gatedSetup(overrides, { cached = ['1', '2', '3'] } = {}) {
   const client = {
     calls: { items: 0 },
     sessions: async () => [],
+    nowPlaying,
     pool: () => (events.push('pool:start'), poolGate.promise.then((v) => (events.push('pool:end'), v))),
     items: (keys) => {
       client.calls.items++;
@@ -843,6 +849,7 @@ function selectionClient({ counts = { 1: 8, 3: 5 }, libs = { 1: LIB_A, 3: LIB_B 
     calls,
     ...(allLibraries ? { libraries: async () => allLibraries } : {}),
     sessions: async () => [],
+    nowPlaying,
     items: async () => [],
     libraryCount: async (key) => (calls.count.push(key), counts[key] ?? null),
     pool: async (args) => (calls.pool.push(args), libs[args.libraryKey].map((p) => ({ ...p }))),
@@ -1586,4 +1593,28 @@ test('limitSet is true when only a profile slot sets a limit (the D37 re-check s
   const off = createEngine({ client, getSettings: () => ({ ...w.settings, limitSlots: [{ start: '06:00', profile: 'a' }] }), now: () => w.clock.at, random: () => 0, cachedKeys: () => ['x'], onRatings: () => {}, storage: memStorage() });
   await off.decide();
   assert.equal(rechecks, 1, 'a profile with no limit: no re-check');
+});
+
+// ---- the engine hands the settings in force to the adapter's nowPlaying, at both call sites ----
+
+test('decide() and playing() give nowPlaying the username rule and include-episodes in force', async () => {
+  const seen = [];
+  const client = { ...fakeClient({ pool: [poster('a')] }), nowPlaying: (sessions, s) => (seen.push({ sessions, username: s.username, includeEpisodes: s.includeEpisodes }), null) };
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', username: 'kid', includeEpisodes: false };
+  const engine = createEngine({ client, getSettings: () => settings, now: () => 1_000_000, random: () => 0 });
+  const given = [{ type: 'movie' }];
+  await engine.decide({ sessions: given });
+  await engine.playing(given);
+  assert.deepEqual(seen, [
+    { sessions: given, username: 'kid', includeEpisodes: false },
+    { sessions: given, username: 'kid', includeEpisodes: false },
+  ]);
+});
+
+test('decide() with a username set ignores another viewer\'s session (the real adapter reads the settings)', async () => {
+  const NPS = [{ type: 'movie', ratingKey: 'np', title: 'Playing', thumb: '/t/np', User: { title: 'someone' }, Player: { state: 'playing' } }];
+  const other = setup({ username: 'kid' }, { sessions: NPS, pool: [poster('a')] });
+  assert.equal((await other.engine.decide({ sessions: NPS })).poster.source, 'random');
+  const mine = setup({ username: 'someone' }, { sessions: NPS, pool: [poster('a')] });
+  assert.equal((await mine.engine.decide({ sessions: NPS })).poster.source, 'now-playing');
 });

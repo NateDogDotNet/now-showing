@@ -1,7 +1,6 @@
 // Decides which poster should be on screen. Has no DOM access so it can be unit-tested;
 // main.js calls `decide()` on a timer and renders whatever it returns.
 
-import { pickNowPlaying } from './plex.js';
 import { anyLimitSet, sanitizeSlots } from './limit-schedule.js';
 import { anyWindow, resolveSettings } from './profiles.js';
 import { allows } from './ratings.js';
@@ -231,16 +230,16 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
     /**
      * The session that counts as playback (honours `username` and `includeEpisodes`, even when
      * `showNowPlaying` is off), or null. Fetches no art and records nothing as shown; sleep mode
-     * uses it to watch for playback while the screen is black. Throws PlexError like `decide()`.
+     * uses it to watch for playback while the screen is black. Throws SourceError like `decide()`.
      * Pass the `/status/sessions` result already in hand to avoid a second request.
      */
     async playing(sessions) {
-      return pickNowPlaying(sessions ?? (await client.sessions()), getSettings());
+      return client.nowPlaying(sessions ?? (await client.sessions()), getSettings());
     },
 
     /**
      * Returns `{ poster, reason }` when the display should change, or null to keep the
-     * current poster. Throws PlexError on connection problems. `sessions` is a `/status/sessions`
+     * current poster. Throws SourceError on connection problems. `sessions` is a `/status/sessions`
      * result the caller already fetched this tick (one request per tick); omitted, it is fetched here.
      * `sessionsError` is the error of the caller's own failed sessions request this tick: it is not asked for again.
      */
@@ -250,7 +249,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
       // Now playing wins over everything; a pinned poster replaces random rotation.
       session = null;
       if (s.showNowPlaying) {
-        let np = pickNowPlaying(await sessionList(sessions, sessionsError), s);
+        let np = client.nowPlaying(await sessionList(sessions, sessionsError), s);
         if (np && s.limitNowPlaying !== false && !permitted(s, np)) np = null; // above the limit or unrated: nothing is playing
         session = np;
         if (np) {

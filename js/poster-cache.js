@@ -1,5 +1,6 @@
 // Keeps the most recently shown posters (image + metadata) in the Cache API so the
-// display keeps cycling real artwork while the Plex server is unreachable.
+// display keeps cycling real artwork while the media server is unreachable. Entries are keyed by the server's own id (`ratingKey`);
+// an index written by 2.3.1 has bare keys, which read as Plex entries: nothing is rewritten or migrated (D134 ruling 2).
 
 import { allows } from './ratings.js';
 import { entryInSelection } from './selection.js';

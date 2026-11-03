@@ -2,7 +2,7 @@
 
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
-import { createPin, checkPin, createPlexClient, discoverServers, firstReachable } from './plex.js';
+import { createSource, signInFlow } from './sources/index.js';
 import { describeLimitNow, MAX_SLOTS, NO_LIMIT, wasUnreadable } from './limit-schedule.js';
 import { createPositionMode } from './position.js';
 import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describeProfile, MAX_PROFILES, removeProfile, renameProfile, updateProfile } from './profiles.js';
@@ -46,11 +46,12 @@ const PIN_MIN_LIFE_MS = 5000; // a lifetime shorter than this is not believed: i
 /**
  * One round of the plex.tv/link flow: asks for a code, hands it to `onCode`, and polls until it is approved. Resolves to the
  * Plex token when it is, or to null when the code expires (a fresh call makes a fresh code) or `signal` aborts. Throws a
- * PlexError when the code cannot be had at all (the caller decides how to retry). A poll that fails is not an error: the
+ * SourceError when the code cannot be had at all (the caller decides how to retry). A poll that fails is not an error: the
  * code stays good, so it just waits longer before the next one. The lifetime is plex.tv's own `expiresIn`, counted on this
  * device's monotonic clock, so a device with the wrong date neither expires a code at once nor holds a dead one.
  */
-export async function pinSignIn(clientId, { signal, onCode, fetchImpl, pollMs = PIN_POLL_MS, minLifeMs = PIN_MIN_LIFE_MS } = {}) {
+export async function pinSignIn(clientId, { signal, onCode, fetchImpl, pollMs = PIN_POLL_MS, minLifeMs = PIN_MIN_LIFE_MS, settings } = {}) {
+  const { createPin, checkPin } = signInFlow(settings);
   const pin = await createPin(clientId, fetchImpl ? { fetchImpl } : {});
   if (signal?.aborted) return null;
   onCode?.(pin.code);
@@ -638,7 +639,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
   // ---- the "Connected to" card ----
 
   function renderConnected() {
-    const server = form.dataset.serverName || getSettings().serverName || 'your Plex server';
+    const server = form.dataset.serverName || getSettings().serverName || `your ${signInFlow(getSettings()).label} server`;
     const library = sel.source
       ? sel.source.title || sel.source.kind // a collection or playlist replaces the libraries: it is what is shown
       : sel.libraries.map((l) => l.name).filter(Boolean).join(', ') || (sel.libraries.length && getSettings().libraryName) || '';
@@ -867,14 +868,14 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       return false;
     }
     if (location.protocol === 'https:' && s.serverUrl.startsWith('http:')) {
-      setResult('This page is https, so the browser will block an http:// server. Use the plex.direct https address (Sign in finds it) or serve the app over http on your LAN.');
+      setResult(signInFlow(s).words.httpsBlocked);
       return false;
     }
     setResult('Connecting…');
     testing = true;
     $('test-btn').disabled = true;
     try {
-      const client = createPlexClient({ serverUrl: s.serverUrl, token: s.plexToken, clientId });
+      const client = createSource(s, { clientId });
       const id = await client.identity();
       const libs = await client.libraries();
       const usable = offerLibraries(libs, client);
@@ -911,6 +912,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     try {
       if (!token) {
         token = await pinSignIn(clientId, {
+          settings: getSettings(),
           signal: ctrl.signal,
           onCode: (code) => {
             $('signin-code').textContent = code;
@@ -925,7 +927,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
         $('signin-status').textContent = 'Signed in. Finding your servers…';
       }
       field('plexToken').value = token;
-      servers = await discoverServers(clientId, token, { secureOnly: location.protocol === 'https:' });
+      servers = await signInFlow(getSettings()).discoverServers(clientId, token, { secureOnly: location.protocol === 'https:' });
       if (ctrl.signal.aborted) return;
       if (!servers.length) {
         $('signin-status').textContent = 'Signed in, but no reachable servers were found on this account.';
@@ -936,7 +938,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
       $('server-pick').hidden = servers.length < 2;
       await useServer(0);
       $('signin-panel').hidden = true;
-      log.info('Signed in with Plex');
+      log.info(`Signed in with ${signInFlow(getSettings()).label}`);
     } catch (err) {
       $('signin-status').textContent = `Sign-in failed: ${err.message}`;
       log.warn(`Sign-in failed: ${err.message}`);
@@ -950,7 +952,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     const sv = servers[index];
     if (!sv) return;
     setResult(`Finding a working address for ${sv.name}…`);
-    const uri = await firstReachable(sv.connections, sv.accessToken, clientId);
+    const uri = await signInFlow(getSettings()).firstReachable(sv.connections, sv.accessToken, clientId);
     if (!uri) {
       setResult(`✗ Couldn't reach ${sv.name} from this device.`);
       return;
@@ -1167,7 +1169,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
     const includeSecrets = $('export-secrets').checked;
     if (includeSecrets && !(await requestPin())) return; // the file would carry the token
     downloadJson('plex-poster-settings.json', toExport(read(), { includeSecrets }));
-    if (includeSecrets) toast('Exported with your Plex token — keep that file private.');
+    if (includeSecrets) toast(`Exported with your ${signInFlow(getSettings()).label} token — keep that file private.`);
   });
 
   $('import-btn').addEventListener('click', () => $('import-file').click());
@@ -1194,7 +1196,7 @@ export function createSettingsUI({ getSettings, clientId, log, onPreview, onSave
 
   $('reset-btn').addEventListener('click', async () => {
     if (!(await requestPin())) return;
-    if (!confirm('Reset all settings, including your Plex token, and clear cached posters?')) return;
+    if (!confirm(`Reset all settings, including your ${signInFlow(getSettings()).label} token, and clear cached posters?`)) return;
     original = null;
     closeSheet();
     onReset();

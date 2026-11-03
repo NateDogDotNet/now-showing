@@ -7,7 +7,7 @@ import { createEngine } from './engine.js';
 import { createHelper } from './helper.js';
 import { cornerZone, createHold, HOLD_MS, inZone, REVEAL_MS, shouldResetPin } from './kiosk.js';
 import { createPinGate } from './pin-gate.js';
-import { createPlexClient } from './plex.js';
+import { createSource, signInFlow } from './sources/index.js';
 import { createPosterCache } from './poster-cache.js';
 import { createPosterPin } from './poster-pin.js';
 import { allows } from './ratings.js';
@@ -69,9 +69,12 @@ let lastDrawAt = -Infinity; // performance.now() of the last poster draw: its cr
 let pinResetFlag = false; // config.json served {"resetPin": true} on this load
 const backoff = createBackoff({ baseMs: 5000, maxMs: 5 * 60 * 1000 });
 
+/** The sign-in flow of the configured server type; its `label` and `words` are what the screens say about the server. */
+const signIn = () => signInFlow(state.settings);
+
 function rebuildClient() {
   const s = state.settings;
-  client = isConfigured(s) ? createPlexClient({ serverUrl: s.serverUrl, token: s.plexToken, clientId: clientIdValue }) : null;
+  client = isConfigured(s) ? createSource(s, { clientId: clientIdValue }) : null;
   engine = client
     ? createEngine({
         client,
@@ -357,7 +360,7 @@ async function handleFailure(err, { notify = false } = {}) {
     const stored = cache.entries();
     const limit = limitNow();
     const limited = limit && !fatal && stored.length > 0 && !stored.some((e) => allows(limit, e.contentRating));
-    showEmpty(true, limited ? 'No posters within the household limit are available while Plex is unreachable.' : err.message, err.kind);
+    showEmpty(true, limited ? `No posters within the household limit are available while ${signIn().label} is unreachable.` : err.message, err.kind);
   }
   // A refresh somebody asked for that fails with a poster still on screen has nothing else to say so: the toast carries the fixes.
   if (notify && fixesFor(err.kind).length) {
@@ -424,7 +427,7 @@ new ResizeObserver(([entry]) => {
   document.documentElement.style.setProperty('--controls-h', `${Math.round(entry.borderBoxSize?.[0]?.blockSize ?? $('controls').offsetHeight)}px`);
 }).observe($('controls'));
 
-/** The empty card: `message` says what is wrong and `kind` (a PlexError kind, or 'empty') picks the fix buttons under it. */
+/** The empty card: `message` says what is wrong and `kind` (a SourceError kind, or 'empty') picks the fix buttons under it. */
 function showEmpty(show, message, kind) {
   $('empty').hidden = !show;
   if (message) $('empty-message').textContent = message;
@@ -439,7 +442,7 @@ function statusText() {
   if (state.paused) text = 'Paused';
   if (state.offlineSince) {
     const retry = state.nextAt ? ` · retrying in ${formatDuration(state.nextAt - Date.now())}` : '';
-    text = `${navigator.onLine === false ? 'Offline' : "Can't reach Plex"}${display.currentPoster ? ' · showing cached posters' : ''}${retry}`;
+    text = `${navigator.onLine === false ? 'Offline' : `Can't reach ${signIn().label}`}${display.currentPoster ? ' · showing cached posters' : ''}${retry}`;
     if (state.paused) text = `Paused · ${text}`;
   }
   return text;
@@ -1119,7 +1122,7 @@ function syncFirstRun() {
 }
 
 /** What the empty card says on an unconfigured display: the invitation, or, once a code was approved, what is left to do. */
-const unconfiguredMessage = () => (pendingToken ? 'Signed in. Open settings to finish.' : 'Connect to your Plex server to get started.');
+const unconfiguredMessage = () => (pendingToken ? 'Signed in. Open settings to finish.' : `Connect to your ${signIn().label} server to get started.`);
 
 /** `rest` shows only the status: while the display waits to ask again, "enter this code" over empty squares would mislead. */
 function showFirstRun(code, status, { rest = false } = {}) {
@@ -1132,8 +1135,8 @@ function startFirstRun() {
   const ctl = new AbortController();
   firstRunCtl = ctl;
   $('firstrun').hidden = false;
-  showFirstRun('', 'Asking plex.tv for a code…');
-  showEmpty(true, 'Connect to your Plex server to get started.');
+  showFirstRun('', signIn().words.asking);
+  showEmpty(true, unconfiguredMessage());
   runFirstRun(ctl).catch((err) => log.warn(`First-run sign-in stopped: ${err.message}`));
 }
 
@@ -1143,6 +1146,7 @@ async function runFirstRun(ctl) {
   while (!ctl.signal.aborted) {
     try {
       const token = await pinSignIn(clientIdValue, {
+        settings: state.settings,
         signal: ctl.signal,
         onCode: (code) => {
           failures = 0; // plex.tv answered
@@ -1153,15 +1157,15 @@ async function runFirstRun(ctl) {
       if (token) return finishFirstRun(ctl, token);
       // The code expired unused: the loop asks for a fresh one, after a rest once three in a row have gone to waste.
       if (++unused >= FIRST_RUN_FRESH_CODES) {
-        showFirstRun('', 'That code ran out. Asking plex.tv for a new one in 5 minutes…', { rest: true });
+        showFirstRun('', signIn().words.ranOut, { rest: true });
         await sleep(FIRST_RUN_REST_MS, ctl.signal);
         if (ctl.signal.aborted) return;
-        showFirstRun('', 'Asking plex.tv for a code…');
+        showFirstRun('', signIn().words.asking);
       }
     } catch (err) {
       if (ctl.signal.aborted) return;
-      if (failures === 0) log.warn(`Could not get a sign-in code from plex.tv: ${err.message}`); // once per outage, not per retry
-      showFirstRun('', "Can't reach plex.tv. Trying again soon…");
+      if (failures === 0) log.warn(signIn().words.couldNotGet(err.message)); // once per outage, not per retry
+      showFirstRun('', signIn().words.unreachable);
       await sleep(Math.min(FIRST_RUN_RETRY_MAX_MS, FIRST_RUN_RETRY_MS * 2 ** failures), ctl.signal);
       failures++;
     }

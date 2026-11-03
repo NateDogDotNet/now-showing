@@ -18,7 +18,7 @@ export function createTvPower({ state, helper, tick, diagnosticsOpen, renderDiag
   let powerChain = Promise.resolve(); // power requests go out one at a time, in order
   let helperInfo = { available: false, tempC: null, temperature: null };
 
-  /** The setting is on and the last probe found a helper. Everything else about the helper is gated on this. */
+  /** The setting is on and the helper counts as available (a single missed read is forgiven; two in a row clear it, D135 1). Everything else about the helper is gated on this. */
   const helperActive = () => state.settings.deviceHelper && helper.available;
 
   /** Probes once (boot, Settings opening, the setting being switched on); a display already asleep is switched off now. */

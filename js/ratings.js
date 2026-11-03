@@ -1,6 +1,6 @@
 // Content ratings: the US ladder, the country-prefix table (R-FILT-1, D5, Q19) and the one rule that
 // decides whether a rating may be shown under a limit. `allows()` is the child-safety guarantee: the
-// engine and the poster cache both call it, and the Plex request filter is only an optimisation.
+// engine and the poster cache both call it, and the server-side request filter is only an optimisation.
 //
 //   G = TV-Y = TV-G  <  PG = TV-Y7 = TV-PG  <  PG-13 = TV-14  <  R = TV-MA  <  NC-17
 //

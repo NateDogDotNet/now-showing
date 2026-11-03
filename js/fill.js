@@ -129,7 +129,7 @@ export function swapBackdrop(canvases, next, img, enabled) {
 
 /**
  * What the info panel says: the title, "rating · runtime · year" (missing parts left out) and the trimmed summary.
- * `formatRuntime` is injected (plex.js owns it, and plex.js imports this module).
+ * `formatRuntime` is injected (duration.js owns it; fill.js stays free of the server code).
  */
 export function infoParts(poster, formatRuntime) {
   if (!poster) return { title: '', meta: '', summary: '' };
