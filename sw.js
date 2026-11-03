@@ -37,6 +37,7 @@ const SHELL = [
   'js/shortcuts.js',
   'js/sleep.js',
   'js/sleep-control.js',
+  'js/sources/emby.js',
   'js/sources/errors.js',
   'js/sources/index.js',
   'js/sources/jellyfin.js',

@@ -19,7 +19,6 @@ const TOKEN = 'jf-demo-token';
 const hex = (prefix, n) => prefix + String(n).padStart(31, '0');
 const MOVIES = hex('b', 1);
 const KIDS_LIB = hex('b', 2);
-const SERIES_ID = hex('f', 1);
 const T = {
   G: ['The Grand Marquee', 'Tiny Lanterns', 'The Paper Kite', 'Moonlit Meadow'],
   PG: ['Midnight Projector', 'Pocket Dragons', 'Captain Pudding'],
@@ -334,11 +333,7 @@ const sessionsRequests = (page) => {
   return seen;
 };
 
-jfCase('10 now playing a movie, and an episode that shows its series poster', { settings: npSeed() }, async ({ page, context, app }) => {
-  // The mock holds no image for its invented series: this answers that one request, so the episode's series poster can draw.
-  await context.route(`**/Items/${SERIES_ID}/Images/Primary*`, (route) =>
-    route.fulfill({ status: 200, contentType: 'image/svg+xml', headers: { 'access-control-allow-origin': '*' }, body: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><rect width="600" height="900" fill="#225"/></svg>' }),
-  );
+jfCase('10 now playing a movie, and an episode that shows its series poster', { settings: npSeed() }, async ({ page, app }) => {
   await page.goto(app.url);
   await posterShown(page);
   await mockPost(app, `/__mock/jellyfin-sessions?kind=movie&id=${hex('a', 3)}&user=demo`);
@@ -350,8 +345,7 @@ jfCase('10 now playing a movie, and an episode that shows its series poster', { 
   await mockPost(app, '/__mock/jellyfin-sessions?kind=none');
 });
 
-jfCase('11 now playing under a limit: an unrated series and a "15" movie count as nothing playing', { settings: npSeed({ maxContentRating: 'PG', limitNowPlaying: true }) }, async ({ page, context, app }) => {
-  await context.route(`**/Items/${SERIES_ID}/Images/Primary*`, (route) => route.fulfill({ status: 200, contentType: 'image/svg+xml', headers: { 'access-control-allow-origin': '*' }, body: '<svg xmlns="http://www.w3.org/2000/svg" width="6" height="9"/>' }));
+jfCase('11 now playing under a limit: an unrated series and a "15" movie count as nothing playing', { settings: npSeed({ maxContentRating: 'PG', limitNowPlaying: true }) }, async ({ page, app }) => {
   const polls = sessionsRequests(page);
   await recordDraws(page);
   await page.goto(app.url);
@@ -484,13 +478,13 @@ jfCase('13b an imported file that changes only serverType is a Save: the client 
   await openSettings(page);
   await testOk(page);
   // The connection (address and token) is the same: only the type differs, so only the type's own change can rebuild the client.
-  await page.setInputFiles('#import-file', { name: 'later-build.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ serverType: 'emby', plexToken: TOKEN, serverUrl: jf(app) })) });
-  await page.waitForFunction(() => document.querySelector('input[name="serverType"]').value === 'emby');
+  await page.setInputFiles('#import-file', { name: 'later-build.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ serverType: 'kodi', plexToken: TOKEN, serverUrl: jf(app) })) });
+  await page.waitForFunction(() => document.querySelector('input[name="serverType"]').value === 'kodi');
   await save(page);
-  await page.waitForFunction(() => /Unknown server type "emby"/.test(document.getElementById('empty-message').textContent), null, { timeout: 15000 });
+  await page.waitForFunction(() => /Unknown server type "kodi"/.test(document.getElementById('empty-message').textContent), null, { timeout: 15000 });
   await waitUntil('the cache to be cleared', async () => !(await index(page)).some((e) => e.ratingKey === 'seed-1'));
   const s = await stored(page);
-  assert.equal(s.serverType, 'emby');
+  assert.equal(s.serverType, 'kodi');
   assert.equal(s.staticRatingKey, '');
   assert.ok(!('seed-1' in (await history(page))));
   assert.equal(s.plexToken, TOKEN, 'the token and address are as they were');
@@ -705,7 +699,7 @@ jfCase('14 the mock down: cached posters within the limit, "Can\'t reach Jellyfi
   check(`20 offline rotations under PG: ${[...offline].sort().join(', ')}`);
 });
 
-jfCase('15 a stored server type this build lacks shows a connection error that names it, and connects to no Plex server', { settings: seed({ serverType: 'emby' }) }, async ({ page, app }) => {
+jfCase('15 a stored server type this build lacks shows a connection error that names it, and connects to no Plex server', { settings: seed({ serverType: 'kodi' }) }, async ({ page, app }) => {
   const asked = [];
   page.on('request', (r) => {
     const u = new URL(r.url());
@@ -714,8 +708,8 @@ jfCase('15 a stored server type this build lacks shows a connection error that n
   await page.goto(app.url);
   await page.waitForSelector('#empty:not([hidden])');
   const message = await page.textContent('#empty-message');
-  assert.match(message, /"emby"/);
-  assert.equal((await stored(page)).serverType, 'emby', 'the stored type is not rewritten');
+  assert.match(message, /"kodi"/);
+  assert.equal((await stored(page)).serverType, 'kodi', 'the stored type is not rewritten');
   assert.deepEqual(asked, [], 'no server was asked');
   check(`the card says: ${message}`);
 });

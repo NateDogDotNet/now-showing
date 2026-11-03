@@ -1,4 +1,4 @@
-// Settings sheet: form binding, live layout preview, sign-in (Plex, Jellyfin) and import/export.
+// Settings sheet: form binding, live layout preview, sign-in (Plex, Jellyfin, Emby) and import/export.
 
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
@@ -9,7 +9,7 @@ import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describe
 import { parseHHMM } from './schedule.js';
 import { LIMITS } from './ratings.js';
 import { genreRequestValue, offeredRatings, selectionOf } from './selection.js';
-import { defaults, fromImport, isConfigured, sanitize, toExport } from './settings.js';
+import { defaults, importWithConnection, isConfigured, sanitize, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
 const LAYOUT_KEYS = ['posterScale', 'posterOffsetX', 'posterOffsetY'];
@@ -38,7 +38,7 @@ function showFormValue(el, v) {
 
 // ---- the words that follow the server type (D139 5) ----
 
-// Every element marked data-srv keeps the Plex words it has in index.html; a Jellyfin display swaps in these.
+// Every element marked data-srv keeps the Plex words it has in index.html; a Jellyfin or Emby display swaps in these.
 const JELLYFIN_TEXT = {
   lead: 'In Jellyfin, open your user menu, choose <strong>Quick Connect</strong> and enter this code:',
   hint: 'Welcome! Sign in with Quick Connect (or a user name and password), choose a library, then save.',
@@ -50,19 +50,32 @@ const JELLYFIN_TEXT = {
   position: 'Connect to Jellyfin first, then you can position the poster.',
 };
 const JELLYFIN_DESCRIPTION = 'Full-screen Jellyfin movie poster display with a decorative frame — built for always-on screens.';
+// Emby has no Quick Connect: its sign-in is the user name and password form, so the lines about a code are not shown for it.
+const EMBY_TEXT = {
+  lead: 'Sign in with your Emby user name and password.',
+  hint: 'Welcome! Sign in with your Emby user name and password, choose a library, then save.',
+  legend: 'Emby connection',
+  signin: 'Sign in to Emby',
+  'panel-lead': 'Sign in with your Emby user name and password.',
+  token: 'Emby access token',
+  user: 'Only for this Emby user',
+  position: 'Connect to Emby first, then you can position the poster.',
+};
+const EMBY_DESCRIPTION = 'Full-screen Emby movie poster display with a decorative frame — built for always-on screens.';
+const SERVER_WORDS = { jellyfin: [JELLYFIN_TEXT, JELLYFIN_DESCRIPTION], emby: [EMBY_TEXT, EMBY_DESCRIPTION] };
 
 /** Sets every data-srv line (and the page description) to the words of this server type; Plex, or one no adapter knows, reads the index.html words. */
 export function applyServerText(type, root = document) {
-  const jellyfin = type === 'jellyfin';
+  const [text, description] = SERVER_WORDS[type] || [null, null];
   for (const el of root.querySelectorAll('[data-srv]')) {
     el.dataset.plexHtml ??= el.innerHTML;
-    const words = jellyfin ? JELLYFIN_TEXT[el.dataset.srv] ?? el.dataset.plexHtml : el.dataset.plexHtml;
+    const words = text ? text[el.dataset.srv] ?? el.dataset.plexHtml : el.dataset.plexHtml;
     if (el.innerHTML !== words) el.innerHTML = words;
   }
   const meta = root.querySelector('meta[name="description"]');
   if (meta) {
     meta.dataset.plexContent ??= meta.content;
-    meta.content = jellyfin ? JELLYFIN_DESCRIPTION : meta.dataset.plexContent;
+    meta.content = description || meta.dataset.plexContent;
   }
 }
 
@@ -151,7 +164,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   let genreRun = 0; // bumped whenever the genre list is asked for again, so a late genre answer is ignored
   let sourceRun = 0; // the same for the collection and playlist list: its own counter, so ticking a library never throws its answer away
   let offerClient = null; // the client of the last successful connection test
-  let held = {}; // the token, address and server name set aside for the server type the sheet is not showing, so a change of mind loses nothing
+  let held = {}; // the token, address, server name and user id set aside for the server type the sheet is not showing, so a change of mind loses nothing
 
   /** The server type the sheet shows. */
   const formType = () => field('serverType').value || 'plex';
@@ -159,7 +172,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   /** The sign-in flow of the type the sheet shows (the saved one may differ until Save). A type no adapter knows reads the Plex flow's words here. */
   const flow = () => {
     try {
-      return signInFlow({ serverType: formType(), serverUrl: addressOf() }, { version });
+      return signInFlow({ serverType: formType(), serverUrl: addressOf(), serverUserId: field('serverUserId').value }, { version });
     } catch {
       return signInFlow({ serverType: 'plex' });
     }
@@ -704,6 +717,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   /** Shows the sign-in controls in place of the card. */
   function openConnection() {
     connectionOpen = true;
+    if (formType() === 'emby') $('jf-password').open = true;
     renderConnection();
   }
 
@@ -915,7 +929,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     if (testing) return false;
     const s = read();
     if (!s.serverUrl || !s.plexToken) {
-      setResult(formType() === 'jellyfin' ? 'Enter the server address and sign in first.' : 'Enter a token and server URL first (or sign in).');
+      setResult(formType() !== 'plex' ? 'Enter the server address and sign in first.' : 'Enter a token and server URL first (or sign in).');
       return false;
     }
     if (location.protocol === 'https:' && s.serverUrl.startsWith('http:')) {
@@ -958,7 +972,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
    * password sign-in) already earned, from "Signed in" onwards. Either way the rest is the same: find the servers, pick the first
    * reachable one, test it. Jellyfin needs the server's address first, and offers the password form when Quick Connect is off.
    */
-  async function signIn({ token = null } = {}) {
+  async function signIn({ token = null, userId = '' } = {}) {
     cancelSignIn();
     const sign = flow();
     if (sign.needsAddress) {
@@ -987,20 +1001,23 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
         } catch (err) {
           if (ctrl.signal.aborted) return;
           // The server did not answer: the address is the trouble, not Quick Connect (D143 1).
-          setResult(`✗ Couldn't reach Jellyfin at ${sign.serverUrl}. Check the address and try again. (${err.message})`, err.kind);
+          setResult(`✗ Couldn't reach ${sign.label} at ${sign.serverUrl}. Check the address and try again. (${err.message})`, err.kind);
           $('jf-address').focus();
           return;
         }
       }
       if (!quickConnect) {
         if (ctrl.signal.aborted) return;
-        $('jf-status').textContent = 'Quick Connect is off on this server. Sign in with a user name and password.';
+        $('jf-status').textContent = sign.words.passwordOnly ?? 'Quick Connect is off on this server. Sign in with a user name and password.';
         $('jf-password').open = true;
         $('jf-user').focus();
         return;
       }
       if (ctrl.signal.aborted) return;
       $('signin-panel').hidden = false;
+      // A flow with no code (Emby) shows neither a code placeholder nor the line about entering one: only its status (UX M1).
+      $('signin-code').hidden = !sign.createPin;
+      document.querySelector('#signin-panel [data-srv="panel-lead"]').hidden = !sign.createPin;
       $('signin-status').textContent = token ? 'Signed in. Finding your servers…' : 'Requesting a code…';
       if (!token) {
         token = await pinSignIn(clientId, {
@@ -1019,6 +1036,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
         $('signin-status').textContent = 'Signed in. Finding your servers…';
       }
       field('plexToken').value = token;
+      field('serverUserId').value = formType() === 'emby' ? userId : ''; // only Emby needs the user id (C1); it goes with its token
       servers = await sign.discoverServers(clientId, token, { secureOnly: location.protocol === 'https:' });
       if (ctrl.signal.aborted) return;
       if (!servers.length) {
@@ -1068,21 +1086,28 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   function syncServerType() {
     const type = formType();
     for (const radio of form.querySelectorAll('input[name="serverTypePick"]')) radio.checked = radio.value === type;
-    const jellyfin = type === 'jellyfin';
-    $('jf-address-row').hidden = !jellyfin;
-    $('jf-password').hidden = !jellyfin;
-    $('jf-password').open = false;
+    const addressed = type === 'jellyfin' || type === 'emby'; // the types that sign in at an address the household types
+    const codeless = type === 'emby'; // Emby has no code to approve: the user name and password form is its only sign-in and shows open
+    $('jf-address-row').hidden = !addressed;
+    $('jf-password').hidden = !addressed;
+    $('jf-password').open = codeless;
+    $('jf-password').querySelector('summary').hidden = codeless; // Emby's only sign-in shows open, not under a heading that can be folded away (D147 4)
+    $('jf-login').classList.toggle('primary', codeless); // ... and is the primary button, since there is no other (D147 4)
+    $('signin-btn').hidden = codeless;
     $('jf-status').textContent = '';
     $('jf-address').value = field('serverUrl').value;
-    field('serverUrl').placeholder = jellyfin ? 'http://192.168.1.10:8096' : 'http://192.168.1.10:32400';
+    field('serverUrl').placeholder = addressed ? 'http://192.168.1.10:8096' : 'http://192.168.1.10:32400';
     applyServerText(type);
   }
 
   /** Drops a connection test in flight: its answer will be ignored, and a new test may start at once. */
   function dropTest() {
+    const unfinished = testing;
     testRun++;
     testing = false;
     $('test-btn').disabled = false;
+    // The dropped test will not write its verdict, so a "Connecting…" it left on the line would stay for good (D144 2): the line says what is left to do.
+    if (unfinished) setResult('Connection not tested yet. Press Test connection.');
   }
 
   /**
@@ -1094,9 +1119,10 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     const from = formType();
     if (type === from) return;
     cancelSignIn();
-    held[from] = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '' };
-    const back = held[type] || { token: '', url: '', name: '' };
+    held[from] = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '', userId: field('serverUserId').value };
+    const back = held[type] || { token: '', url: '', name: '', userId: '' };
     field('plexToken').value = back.token;
+    field('serverUserId').value = back.userId;
     field('serverUrl').value = back.url;
     form.dataset.serverName = back.name;
     field('serverType').value = type;
@@ -1192,7 +1218,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   });
 
   /** What open() asks of the sheet once it is up; `auto` adds the connection test a fresh open runs for a saved connection. */
-  function runOpenOptions({ wantSignIn, token, test, section }, auto) {
+  function runOpenOptions({ wantSignIn, token, userId = '', test, section }, auto) {
     if (section === 'protection') $('protection-fieldset').scrollIntoView({ block: 'start' });
     else if (section === 'layout') $('layout-fieldset').scrollIntoView({ block: 'start' });
     else if (section === 'household') {
@@ -1200,7 +1226,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       // Focus starts in Household too, so the first Tab or arrow press stays where the reader was sent, not back at Plex connection.
       $('household-toggle').focus({ preventScroll: true });
     }
-    if (token) signIn({ token });
+    if (token) signIn({ token, userId });
     else if (wantSignIn) signIn();
     else if (test || (auto && original.plexToken && original.serverUrl)) testConnection();
   }
@@ -1298,11 +1324,18 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     status.textContent = 'Signing in…';
     $('jf-login').disabled = true;
     try {
-      const { token } = await sign.signInWithPassword(clientId, $('jf-user').value.trim(), $('jf-pass').value);
+      const { token, userId } = await sign.signInWithPassword(clientId, $('jf-user').value.trim(), $('jf-pass').value);
       status.textContent = '';
-      await signIn({ token });
+      await signIn({ token, userId });
     } catch (err) {
-      status.textContent = err.kind === 'auth' ? 'That user name or password was not accepted.' : `Sign-in failed: ${err.message}`;
+      if (err.kind === 'network' || err.kind === 'timeout') {
+        // The server did not answer: the address is the trouble, and it is named here and can be changed (D143 1, D145 8).
+        status.textContent = '';
+        setResult(`✗ Couldn't reach ${sign.label} at ${sign.serverUrl}. Check the address and try again. (${err.message})`, err.kind);
+        $('jf-address').focus();
+      } else {
+        status.textContent = err.kind === 'auth' ? 'That user name or password was not accepted.' : `Sign-in failed: ${err.message}`;
+      }
     } finally {
       $('jf-pass').value = ''; // the password is used once and never kept
       $('jf-login').disabled = false;
@@ -1367,20 +1400,15 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     if (!(await requestPin())) return; // the gate sits on the file arriving, not on the button, so a scripted change event is gated too
     try {
       const text = await file.text();
-      let s = fromImport(text, read());
       const from = formType();
-      const away = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '' };
-      const moved = s.serverType !== from;
-      if (moved) {
-        // The file is for another server type: the token, address and name of this one stay behind (set aside), and the file's own are used (a file without secrets brings no token).
-        const parsed = JSON.parse(text);
-        const incoming = parsed?.settings && parsed.format !== undefined ? parsed.settings : parsed;
-        s = { ...s, plexToken: typeof incoming.plexToken === 'string' ? s.plexToken : typeof incoming.PLEX_TOKEN === 'string' ? s.plexToken : '', serverUrl: 'serverUrl' in incoming || 'PLEX_SERVER_URL' in incoming ? s.serverUrl : '', serverName: '' };
-      }
+      const away = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '', userId: field('serverUserId').value };
+      // A file for another server (another type, or another address) never receives this display's token: without its own, none is kept (D142 2, D144 1).
+      const { settings: s, setAside } = importWithConnection(text, read());
       write(s);
-      if (moved) {
+      if (setAside) {
         held[from] = away;
         form.dataset.serverName = '';
+        setResult('Connection not tested yet. Press Test connection.'); // the old server's "✓ … libraries" is not this connection's (D147 3)
       }
       onPreview(s);
       toast('Settings imported — review and press Save.');
@@ -1410,14 +1438,14 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
      * run by itself; `section` ('protection' or 'layout') scrolls the sheet to that fieldset. `serverType` and `serverUrl` are the
      * choice the empty card's first run made before it earned `token`: the sheet shows them, and nothing is stored until Save.
      */
-    open({ signIn: wantSignIn = false, token = null, test = false, section = '', serverType = '', serverUrl = '' } = {}) {
+    open({ signIn: wantSignIn = false, token = null, userId = '', test = false, section = '', serverType = '', serverUrl = '' } = {}) {
       if (position.active) {
         // Finish position mode (the sheet returns with the values set so far and the same `original`), then honour the
         // options as a normal open would: a sign-in started from the empty card must still sign in.
         position.stop();
         resumeSheet();
         if (serverType) takeConnection(serverType, serverUrl);
-        runOpenOptions({ wantSignIn, token, test, section }, false);
+        runOpenOptions({ wantSignIn, token, userId, test, section }, false);
         return;
       }
       if (dialog.open) return;
@@ -1436,7 +1464,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       dialog.showModal();
       startSlotStatusTimer();
       if (serverType) takeConnection(serverType, serverUrl);
-      runOpenOptions({ wantSignIn, token, test, section }, true);
+      runOpenOptions({ wantSignIn, token, userId, test, section }, true);
     },
     /** For the fix buttons, while the sheet is already open. */
     startSignIn: () => signIn(),

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults, fromImport, isConfigured, load, sanitize, save, SECRET_KEYS, STORAGE_KEY, toExport } from '../js/settings.js';
+import { defaults, fromImport, importWithConnection, isConfigured, load, sanitize, save, SECRET_KEYS, STORAGE_KEY, toExport } from '../js/settings.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -467,3 +467,107 @@ test('an import that names a connection but no server type is a Plex file; one t
   assert.equal(fromImport(JSON.stringify({ rotation: 90 }), onJellyfin).serverType, 'jellyfin');
   assert.equal(fromImport(JSON.stringify({ serverType: 'jellyfin', serverUrl: 'http://x' }), { ...defaults() }).serverType, 'jellyfin');
 });
+
+// ---- an import never sends this display's token to another server (D142 2, D144 1) ----
+
+for (const type of ['plex', 'jellyfin', 'emby']) {
+  const here = { ...defaults(), serverType: type, serverUrl: 'http://mine:8096', plexToken: `${type}-secret`, serverName: 'Mine' };
+  const file = (settings) => JSON.stringify({ format: 'plex-poster-display/settings', version: 1, settings });
+
+  test(`${type}: an import that names another server address and brings no token leaves no token and asks to sign in (D144 1)`, () => {
+    const { settings, setAside } = importWithConnection(file({ serverType: type, serverUrl: 'http://friend:8096', rotation: 90 }), here);
+    assert.equal(setAside, true);
+    assert.equal(settings.plexToken, '', 'the friend\'s address never receives this display\'s token');
+    assert.equal(settings.serverUrl, 'http://friend:8096');
+    assert.equal(settings.serverName, '');
+    assert.equal(settings.rotation, 90);
+    assert.equal(isConfigured(settings), false);
+  });
+
+  test(`${type}: a bare settings file (a config.json) behaves the same, and a legacy file names no type`, () => {
+    assert.equal(importWithConnection({ serverType: type, serverUrl: 'http://friend:8096' }, here).settings.plexToken, '');
+    if (type === 'plex') assert.equal(importWithConnection({ PLEX_SERVER_URL: 'http://friend:32400' }, here).settings.plexToken, '');
+  });
+
+  test(`${type}: an import that brings its own token keeps it; one for the same address, or none, keeps this display's`, () => {
+    const own = importWithConnection(file({ serverType: type, serverUrl: 'http://friend:8096', plexToken: 'theirs' }), here);
+    assert.equal(own.settings.plexToken, 'theirs');
+    assert.equal(own.setAside, true, 'the old token is still set aside');
+    for (const same of [{ serverType: type, serverUrl: 'http://mine:8096' }, { serverType: type, serverUrl: 'http://mine:8096/' }, { rotation: 90 }]) {
+      const r = importWithConnection(file(same), here);
+      assert.equal(r.settings.plexToken, `${type}-secret`, JSON.stringify(same));
+      assert.equal(r.setAside, false);
+    }
+  });
+}
+
+test('an import for another server type brings no token and no address unless the file has them (D142 2)', () => {
+  const here = { ...defaults(), serverType: 'plex', serverUrl: 'http://mine:32400', plexToken: 'plex-secret' };
+  const bare = importWithConnection(JSON.stringify({ serverType: 'emby', rotation: 90 }), here);
+  assert.equal(bare.setAside, true);
+  assert.equal(bare.settings.plexToken, '');
+  assert.equal(bare.settings.serverUrl, '');
+  const named = importWithConnection(JSON.stringify({ serverType: 'emby', serverUrl: 'http://e:8096' }), here);
+  assert.equal(named.settings.serverUrl, 'http://e:8096');
+  assert.equal(named.settings.plexToken, '');
+});
+
+test('an Emby token is a secret: an export without secrets leaves it out, one with secrets keeps it, and an import restores it', () => {
+  const s = { ...defaults(), serverType: 'emby', serverUrl: 'http://e:8096', plexToken: 'emby-secret' };
+  assert.ok(SECRET_KEYS.includes('plexToken'));
+  assert.equal('plexToken' in toExport(s).settings, false);
+  assert.equal(toExport(s, { includeSecrets: true }).settings.plexToken, 'emby-secret');
+  assert.equal(fromImport(JSON.stringify(toExport(s, { includeSecrets: true }))).plexToken, 'emby-secret');
+  assert.equal(sanitize({ serverType: 'emby' }).serverType, 'emby');
+});
+
+// ---- the user id an Emby sign-in returns (C1, D145 2): a setting, not a secret, that goes with the token ----
+
+test('serverUserId: kept as written (trimmed), empty by default, saved, exported without secrets, and not a secret', () => {
+  assert.equal(defaults().serverUserId, '');
+  assert.equal(sanitize({ serverUserId: '  u-1  ' }).serverUserId, 'u-1');
+  assert.equal(sanitize({ serverUserId: 7 }).serverUserId, '');
+  assert.ok(!SECRET_KEYS.includes('serverUserId'));
+  const s = { ...defaults(), serverType: 'emby', serverUrl: 'http://e:8096', plexToken: 'emby-secret', serverUserId: 'u-1' };
+  assert.equal(toExport(s).settings.serverUserId, 'u-1');
+  assert.equal(load({ getItem: () => JSON.stringify(save({ setItem() {} }, s)) }).settings.serverUserId, 'u-1');
+});
+
+for (const type of ['plex', 'jellyfin', 'emby']) {
+  test(`${type}: an import that sets the token aside sets the user id aside with it; one that brings a token keeps the file's id (C1)`, () => {
+    const here = { ...defaults(), serverType: type, serverUrl: 'http://mine:8096', plexToken: 'mine-secret', serverUserId: 'my-user' };
+    const file = (settings) => JSON.stringify({ format: 'plex-poster-display/settings', version: 1, settings });
+    const away = importWithConnection(file({ serverType: type, serverUrl: 'http://friend:8096' }), here);
+    assert.equal(away.settings.plexToken, '');
+    assert.equal(away.settings.serverUserId, '', 'the old server\'s user id does not stay with a display that has no token for it');
+    const own = importWithConnection(file({ serverType: type, serverUrl: 'http://friend:8096', plexToken: 'theirs', serverUserId: 'their-user' }), here);
+    assert.equal(own.settings.serverUserId, 'their-user');
+    const same = importWithConnection(file({ rotation: 90 }), here);
+    assert.equal(same.settings.serverUserId, 'my-user', 'no move: the id stays with its token');
+  });
+}
+
+// ---- the user id takes the file's only with the file's own token (D149 2) ----
+
+for (const type of ['plex', 'jellyfin', 'emby']) {
+  const here = { ...defaults(), serverType: type, serverUrl: 'http://mine:8096', plexToken: 'mine-secret', serverUserId: 'my-user' };
+  const file = (settings) => JSON.stringify({ format: 'plex-poster-display/settings', version: 1, settings });
+
+  test(`${type}: a same-address file with no token keeps this display's token AND its own user id, whatever id the file names (D149 2)`, () => {
+    for (const same of [{ serverUserId: 'their-user' }, { serverType: type, serverUrl: 'http://mine:8096', serverUserId: 'their-user', rotation: 90 }]) {
+      const r = importWithConnection(file(same), here);
+      assert.equal(r.settings.plexToken, 'mine-secret', JSON.stringify(same));
+      assert.equal(r.settings.serverUserId, 'my-user', 'the file\'s id does not replace the id that belongs to this display\'s token');
+      assert.equal(r.setAside, false);
+    }
+  });
+
+  test(`${type}: a file with its own token for another address brings the file's user id, or none, never this display's old one (D149 2)`, () => {
+    const withId = importWithConnection(file({ serverType: type, serverUrl: 'http://friend:8096', plexToken: 'theirs', serverUserId: 'their-user' }), here);
+    assert.deepEqual([withId.settings.plexToken, withId.settings.serverUserId], ['theirs', 'their-user']);
+    const noId = importWithConnection(file({ serverType: type, serverUrl: 'http://friend:8096', plexToken: 'theirs' }), here);
+    assert.deepEqual([noId.settings.plexToken, noId.settings.serverUserId], ['theirs', ''], 'the old id does not stay with the file\'s token');
+    const sameAddressOwnToken = importWithConnection(file({ plexToken: 'theirs' }), here);
+    assert.deepEqual([sameAddressOwnToken.settings.plexToken, sameAddressOwnToken.settings.serverUserId], ['theirs', ''], 'a new token for this address does not keep the old token\'s id');
+  });
+}

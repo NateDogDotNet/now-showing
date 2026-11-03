@@ -1,6 +1,6 @@
 // The source-adapter interface (D134): the engine, the display, Settings and the first-run card talk to a media server
 // only through the object `createSource(settings)` returns, and never import an adapter module themselves. Plex is the
-// first adapter and Jellyfin the second; `serverType` in the settings picks it ('plex' or 'jellyfin', and Plex when the setting is absent).
+// first adapter, Jellyfin the second and Emby the third; `serverType` in the settings picks it ('plex', 'jellyfin' or 'emby', and Plex when the setting is absent).
 //
 // What an adapter object holds (every member below, and nothing else). Items keep their server's own ids: a poster's
 // `ratingKey` is the server's id, stored as it is (the offline cache, the pinned poster and the no-repeat history key on it).
@@ -46,7 +46,10 @@
 // screens show (words.asking, ranOut, unreachable, couldNotGet(message), httpsBlocked). The Jellyfin flow has the same members,
 // bound to the address in `settings.serverUrl` (`needsAddress: true`): the code is a Quick Connect code, checkPin gives the access
 // token once the code is approved (and throws an error with `expired: true` when the server no longer knows the code), and it adds
-// quickConnectEnabled(clientId) and signInWithPassword(clientId, user, password) -> { token, userId }.
+// quickConnectEnabled(clientId) and signInWithPassword(clientId, user, password) -> { token, userId }. The Jellyfin flow's screens
+// say "Quick Connect is off" when it is; a flow with no code at all adds words.passwordOnly in its place. The Emby flow (Emby has no Quick Connect) is
+// { label, needsAddress, serverUrl, quickConnectEnabled (always false), signInWithPassword, discoverServers, firstReachable, words }:
+// no createPin or checkPin. It is built with `settings.serverUserId` (the id the sign-in returned), which firstReachable's libraries request needs (Emby lists libraries at Users/{UserId}/Views).
 //
 // Errors an adapter throws are SourceErrors (js/sources/errors.js) whose `kind` is one of KINDS; createSource itself adds 'config'.
 // What a kind leads to on screen (js/main.js): 'auth' is an answer, not an outage: with no poster on screen the empty card says what
@@ -55,6 +58,7 @@
 // The kind 'empty' is not a SourceError kind: the engine raises it itself when nothing can be drawn.
 
 import { KINDS, SourceError } from './errors.js';
+import { createEmbyClient, embySignIn } from './emby.js';
 import { createJellyfinClient, jellyfinSignIn } from './jellyfin.js';
 import { createPlexClient, plexSignIn } from './plex.js';
 
@@ -79,6 +83,7 @@ export function createSource(settings, { clientId, fetchImpl, version } = {}) {
   const type = serverTypeOf(settings);
   if (type === 'plex') return createPlexClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, fetchImpl });
   if (type === 'jellyfin') return createJellyfinClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, version, fetchImpl });
+  if (type === 'emby') return createEmbyClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, version, userId: settings?.serverUserId, fetchImpl });
   throw unknownType(type);
 }
 
@@ -90,5 +95,6 @@ export function signInFlow(settings, { fetchImpl, version } = {}) {
   const type = serverTypeOf(settings);
   if (type === 'plex') return plexSignIn;
   if (type === 'jellyfin') return jellyfinSignIn({ serverUrl: settings?.serverUrl || '', fetchImpl, version });
+  if (type === 'emby') return embySignIn({ serverUrl: settings?.serverUrl || '', fetchImpl, version, userId: settings?.serverUserId || '' });
   throw unknownType(type);
 }

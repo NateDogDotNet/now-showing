@@ -1,7 +1,7 @@
 // Jellyfin source adapter (R-SRC-2, D134, D141): the same interface as the Plex adapter (js/sources/index.js), spoken in
 // Jellyfin's API. The mock server in scripts/mock-jellyfin.mjs is the only server this was run against; every request and
 // field it invents is a (verify) row in docs/validation/real-server-extended.md. Shared MediaBrowser code (the header, the
-// item mapping, the rating pick) is exported for the Emby adapter to import.
+// item mapping, the rating pick, the client and the request) is exported for the Emby adapter (js/sources/emby.js) to import.
 //
 // Requests carry the token in the `Authorization: MediaBrowser ...` header; the poster image URL carries it as `api_key`
 // (an <img> cannot send a header), as the Plex image URL carries X-Plex-Token. The offline cache stores no token.
@@ -33,10 +33,14 @@ const text = (v) => (typeof v === 'string' ? v.trim() : '');
 /**
  * The rating that counts for an item (D141 1): its `CustomRating` when that is not empty, else its `OfficialRating`, else ''.
  * It counts only when it is exactly a US film or TV value (exactRating in js/ratings.js, D141 5); anything else, `15` or `NR` or `pg` too, is '' (unknown).
+ * A rating field that is present (not null, not left out) but is not a string is a reply this adapter does not read: the item is unrated, whatever
+ * the other field holds, so it is hidden under any limit and never falls back to the other field (D147 1, D5).
  */
 export function ratingOf(item) {
   if (!item || typeof item !== 'object') return '';
-  return exactRating(text(item.CustomRating) ? item.CustomRating : item.OfficialRating);
+  const { CustomRating: custom, OfficialRating: official } = item;
+  if ((custom != null && typeof custom !== 'string') || (official != null && typeof official !== 'string')) return '';
+  return exactRating(text(custom) ? custom : official);
 }
 
 const number = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -100,7 +104,8 @@ export function pickNowPlaying(sessions, { username = '', includeEpisodes = true
   };
 }
 
-async function request(url, { method = 'GET', body, headers = {}, timeoutMs = 10000, fetchImpl = (...a) => fetch(...a), badLogin = false } = {}) {
+/** One JSON request. Every message names the server by `label` ('Jellyfin' or 'Emby'). Shared with the Emby adapter. */
+export async function request(url, { method = 'GET', body, headers = {}, timeoutMs = 10000, fetchImpl = (...a) => fetch(...a), badLogin = false, label = 'Jellyfin' } = {}) {
   let res;
   try {
     res = await fetchImpl(url, {
@@ -111,48 +116,72 @@ async function request(url, { method = 'GET', body, headers = {}, timeoutMs = 10
     });
   } catch (err) {
     const timedOut = err && (err.name === 'TimeoutError' || err.name === 'AbortError');
-    throw new SourceError(timedOut ? 'Jellyfin did not respond in time.' : 'Could not reach Jellyfin (network or CORS error).', { kind: timedOut ? 'timeout' : 'network' });
+    throw new SourceError(timedOut ? `${label} did not respond in time.` : `Could not reach ${label} (network or CORS error).`, { kind: timedOut ? 'timeout' : 'network' });
   }
   if (res.status === 401 || res.status === 403) {
-    throw new SourceError(badLogin ? 'Jellyfin did not accept that sign-in.' : 'Jellyfin rejected the token (unauthorised).', { status: res.status, kind: 'auth' });
+    throw new SourceError(badLogin ? `${label} did not accept that sign-in.` : `${label} rejected the token (unauthorised).`, { status: res.status, kind: 'auth' });
   }
-  if (!res.ok) throw new SourceError(`Jellyfin returned HTTP ${res.status}.`, { status: res.status, kind: 'http' });
+  if (!res.ok) throw new SourceError(`${label} returned HTTP ${res.status}.`, { status: res.status, kind: 'http' });
   const raw = await res.text();
   if (!raw.trim()) return {};
   try {
     return JSON.parse(raw);
   } catch {
-    throw new SourceError('Could not parse Jellyfin response.', { kind: 'parse' });
+    throw new SourceError(`Could not parse ${label} response.`, { kind: 'parse' });
   }
 }
 
-const itemsOf = (reply) => (Array.isArray(reply?.Items) ? reply.Items : []);
+/**
+ * The `Items` list of a reply. A reply with no `Items` array, or one whose entries are not objects, is not one this adapter recognises:
+ * a SourceError of kind `parse` (D145 3, D147 1), never an empty list. Shared with the Emby adapter.
+ */
+export function itemsOf(reply, label = 'Jellyfin') {
+  if (!reply || !Array.isArray(reply.Items) || reply.Items.some((i) => !i || typeof i !== 'object' || Array.isArray(i))) {
+    throw new SourceError(`Could not read the ${label} reply: it holds no list of items.`, { kind: 'parse' });
+  }
+  return reply.Items;
+}
 const listParam = (values, sep = ',') => values.join(sep);
 
 /** The server-side OfficialRatings filter values: only plain US values, which are what Jellyfin carries (an optimisation, not the gate). */
 const serverRatings = (values) => values.filter((v) => !v.includes('/'));
 
 export function createJellyfinClient({ serverUrl, token, clientId, version = '', fetchImpl = (...a) => fetch(...a) }) {
-  const headers = { Authorization: authHeader({ clientId, version, token }) };
-  const get = (path, params = {}, opts = {}) => request(buildUrl(serverUrl, path, params), { ...opts, headers, fetchImpl });
+  return createMediaBrowserClient({ label: 'Jellyfin', serverUrl, token, headers: { Authorization: authHeader({ clientId, version, token }) }, fetchImpl, viewsPath: 'UserViews' });
+}
+
+/**
+ * The adapter both servers share: the same paths, items and rating map (D134 3, D145). `label` names the server in messages, `headers`
+ * carry its sign-in scheme, and `softSessions` makes a /Sessions failure other than a network error or a timeout mean "nothing playing"
+ * (the Emby adapter: a 401, 403, 404 or an unreadable reply, D145 4) instead of an error. `viewsPath` is the route that lists a user's
+ * libraries: Jellyfin's `UserViews`, Emby's `Users/{UserId}/Views`; `null` (an Emby display with no user id) is an `auth` error that asks for a new sign-in.
+ */
+export function createMediaBrowserClient({ label, serverUrl, token, headers, fetchImpl, softSessions = false, viewsPath = 'UserViews' }) {
+  const get = (path, params = {}, opts = {}) => request(buildUrl(serverUrl, path, params), { ...opts, headers, fetchImpl, label });
+  const items = (reply) => itemsOf(reply, label);
+  const views = (opts = {}) => {
+    if (!viewsPath) throw new SourceError(`${label} needs a new sign-in to list its libraries.`, { kind: 'auth' });
+    return get(viewsPath, {}, opts);
+  };
   const movies = (list) => list.filter((m) => m.Type === 'Movie' && hasImage(m));
 
   /** The items with these ids, with the fields a poster needs. */
-  const byIds = async (ids) => (ids.length ? itemsOf(await get('Items', { Ids: listParam(ids), Recursive: 'true', Fields: FIELDS })) : []);
+  const byIds = async (ids) => (ids.length ? items(await get('Items', { Ids: listParam(ids), Recursive: 'true', Fields: FIELDS })) : []);
 
   return {
-    label: 'Jellyfin',
+    label,
 
     /** Server identity; succeeds only when the address and the token are good (the public info alone would not prove the token). */
     async identity() {
-      const info = await request(buildUrl(serverUrl, 'System/Info/Public'), { headers, fetchImpl, timeoutMs: 8000 });
-      await get('UserViews', {}, { timeoutMs: 8000 });
+      const info = await request(buildUrl(serverUrl, 'System/Info/Public'), { headers, fetchImpl, timeoutMs: 8000, label });
+      if (!info || typeof info !== 'object' || Array.isArray(info)) throw new SourceError(`Could not read the ${label} reply: it is not server information.`, { kind: 'parse' });
+      await views({ timeoutMs: 8000 });
       return { name: text(info.ServerName), version: text(info.Version), machineIdentifier: text(info.Id) };
     },
 
     async libraries() {
       const typeOf = { movies: 'movie', tvshows: 'show' };
-      return itemsOf(await get('UserViews'))
+      return items(await views())
         .filter((v) => typeof v.Id === 'string' && typeof v.Name === 'string')
         .map((v) => ({ key: v.Id, title: v.Name, type: typeOf[v.CollectionType] || String(v.CollectionType || '') }));
     },
@@ -174,8 +203,18 @@ export function createJellyfinClient({ serverUrl, token, clientId, version = '',
      * session is shown on a rating that was not checked. A playing item the reply leaves out is rated unknown, not on the session's own rating.
      */
     async sessions() {
-      const all = await get('Sessions');
-      const live = (Array.isArray(all) ? all : []).filter((s) => s?.NowPlayingItem && typeof s.NowPlayingItem.Id === 'string');
+      let all;
+      try {
+        all = await get('Sessions');
+      } catch (err) {
+        if (!softSessions || err.kind === 'network' || err.kind === 'timeout') throw err;
+        return []; // D145 4: any other /Sessions failure means no now-playing, never an error card
+      }
+      if (!Array.isArray(all)) {
+        if (softSessions) return []; // an Emby reply that is not a list of sessions is the same as one that does not parse (D145 4)
+        throw new SourceError(`Could not read the ${label} reply: sessions are not a list.`, { kind: 'parse' });
+      }
+      const live = all.filter((s) => s?.NowPlayingItem && typeof s.NowPlayingItem.Id === 'string');
       if (!live.length) return [];
       const ids = [...new Set(live.flatMap((s) => [s.NowPlayingItem.Id, s.NowPlayingItem.Type === 'Episode' ? s.NowPlayingItem.SeriesId : null]).filter((i) => typeof i === 'string' && i))];
       const found = new Map((await byIds(ids)).map((i) => [i.Id, i]));
@@ -206,13 +245,13 @@ export function createJellyfinClient({ serverUrl, token, clientId, version = '',
         Limit: maxContentRating || ratings.length ? Math.min(size * 3, 500) : size,
         Fields: FIELDS,
       });
-      return movies(itemsOf(reply)).map((m) => toPoster(m, 'random'));
+      return movies(items(reply)).map((m) => toPoster(m, 'random'));
     },
 
     /** The movies of one collection (a BoxSet) or playlist: best scored first, at most `size` (3x under a limit or a rating subset). Only Movie items count (D141 7). */
     async sourceItems({ kind, key }, { unwatchedOnly = true, size = 100, maxContentRating = '', ratings = [] } = {}) {
       const reply = kind === 'playlist' ? await get(`Playlists/${encodeURIComponent(key)}/Items`, { Fields: FIELDS }) : await get('Items', { ParentId: key, Fields: FIELDS });
-      const all = itemsOf(reply);
+      const all = items(reply);
       const posters = movies(all)
         .filter((m) => !(unwatchedOnly && watched(m)) && ratingPasses(maxContentRating, ratings, ratingOf(m)))
         .sort((a, b) => (number(b.CommunityRating) ?? 0) - (number(a.CommunityRating) ?? 0))
@@ -224,20 +263,20 @@ export function createJellyfinClient({ serverUrl, token, clientId, version = '',
 
     /** The genres a library lists, as `{ key (the genre's id), title }`. */
     async genres(libraryKey) {
-      return itemsOf(await get('Genres', { ParentId: libraryKey, IncludeItemTypes: 'Movie' }))
+      return items(await get('Genres', { ParentId: libraryKey, IncludeItemTypes: 'Movie' }))
         .filter((g) => typeof g.Name === 'string' && g.Name.trim() !== '')
         .map((g) => ({ key: typeof g.Id === 'string' ? g.Id : '', title: g.Name.trim() }));
     },
 
     /** The collections (BoxSets) of the server; a BoxSet is not a child of a library, so the library does not narrow them and none is named (`library: ''`). */
     async collections() {
-      return itemsOf(await get('Items', { IncludeItemTypes: 'BoxSet', Recursive: 'true' }))
+      return items(await get('Items', { IncludeItemTypes: 'BoxSet', Recursive: 'true' }))
         .filter((c) => typeof c.Id === 'string' && typeof c.Name === 'string')
         .map((c) => ({ key: c.Id, title: c.Name, smart: false, library: '' }));
     },
 
     async playlists() {
-      return itemsOf(await get('Items', { IncludeItemTypes: 'Playlist', MediaTypes: 'Video', Recursive: 'true' }))
+      return items(await get('Items', { IncludeItemTypes: 'Playlist', MediaTypes: 'Video', Recursive: 'true' }))
         .filter((p) => typeof p.Id === 'string' && typeof p.Name === 'string')
         .map((p) => ({ key: p.Id, title: p.Name }));
     },

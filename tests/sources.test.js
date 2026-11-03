@@ -30,7 +30,7 @@ test('createSource returns the Plex adapter when serverType is absent or plex', 
 });
 
 test('createSource refuses an unknown serverType with an error of kind config', () => {
-  for (const serverType of ['Plex', 'nonsense', 'emby']) {
+  for (const serverType of ['Plex', 'nonsense', 'Emby', 'EMBY']) {
     assert.throws(
       () => createSource({ ...connection, serverType }),
       (err) => err instanceof SourceError && err.kind === 'config' && err.name === 'SourceError',

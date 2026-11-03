@@ -1,5 +1,5 @@
-// A tiny fake Jellyfin server for demos and browser tests, beside the fake Plex server. Every title, name, user, password and
-// token below is invented. Shapes follow the research note (.orchestrator/artifacts/research--jellyfin-api-r1.md); where that
+// A tiny fake Jellyfin server (and, per request, a fake Emby server) for demos and browser tests, beside the fake Plex server. Every
+// title, name, user, password and token below is invented. Shapes follow the research note (.orchestrator/artifacts/research--jellyfin-api-r1.md); where that
 // note marks a shape inferred or unconfirmed, a `// (verify)` comment above the route or field says so.
 //
 // Sign-in: user `demo`, password `demo-pass`, or Quick Connect. Both give the one token below. A request needs it as
@@ -7,15 +7,30 @@
 // /System/Info/Public, /QuickConnect/Enabled, /QuickConnect/Initiate, /QuickConnect/Connect, /Users/AuthenticateByName,
 // /Users/AuthenticateWithQuickConnect, the /__mock control routes and OPTIONS.
 //
+// Emby mode (R-SRC-3, D145): a request that carries an `X-Emby-Authorization: Emby UserId=..., Client=..., Device=..., DeviceId=...,
+// Version=...` header is an Emby request, on the same port and over the same titles, so the shared server (serve.mjs --mock) serves both
+// types. Its sign-in is POST /Users/AuthenticateByName with `Username` and `Pw` (a header that is not `Emby ...`, or a wrong pair, is
+// 401) and gives EMBY_TOKEN; a request then needs it as the `X-Emby-Token` header (or `api_key`, which the poster image uses). The
+// `Authorization: MediaBrowser` header means nothing to an Emby request. Emby has no Quick Connect, so those routes answer 404 to it,
+// and /System/Info/Public names an Emby server. What an Emby request is served is otherwise what a Jellyfin one is (every path is a
+// (verify) row for Emby), with two differences that follow Emby's reference: GET /UserViews, Jellyfin's route, is a 404 to an Emby request, and
+// the libraries are served at GET /Users/<the user id the sign-in returned>/Views (any other id is a 404). A Jellyfin request (no such header) is
+// served exactly as before, with one exception: the poster image route (GET /Items/<id>/Images/Primary) also accepts the Emby token as `api_key` from
+// a request that has no Emby header, because an <img> of an Emby display cannot send one. No other Jellyfin-mode route takes the Emby token.
+//
 // Control endpoints (no token needed):
 //   POST /__mock/quickconnect-approve         approve every pending Quick Connect request
 //   POST /__mock/jellyfin-sessions?kind=movie&id=<movie id>&user=demo&paused=1
-//                                             set what GET /Sessions reports: kind=movie (id defaults to the first movie),
-//                                             kind=episode (an episode of an invented series, with SeriesId), kind=none clears it
+//                                             set what GET /Sessions reports (to either type): kind=movie (id defaults to the first
+//                                             movie), kind=episode (an episode of an invented series, with SeriesId), kind=none clears it
+//   POST /__mock/emby-sessions-reply?mode=401|403|404|500|garbage|ok
+//                                             make GET /Sessions answer an Emby request with that status, or with text that is not JSON
+//                                             (garbage); ok (the default) serves the sessions again. A Jellyfin request is not affected.
 //
 // Libraries: Movies (8 titles), Kids Movies (5 titles), Music (no items). Movies carry OfficialRating G, PG, PG-13, R, TV-MA, 15
 // and one unrated title (no OfficialRating key). One BoxSet and one playlist (it spans
-// both movie libraries) list their items through ParentId. The web port is the Plex mock's port plus 1000 (jellyfinPortFor).
+// both movie libraries) list their items through ParentId, and the playlist is also listed through GET /Playlists/{id}/Items. The web
+// port is the Plex mock's port plus 1000 (jellyfinPortFor); above 64535 that would pass 65535, so it is the Plex mock's port minus 1000.
 
 import { createServer } from 'node:http';
 import { randomBytes, randomInt } from 'node:crypto';
@@ -23,6 +38,7 @@ import { randomBytes, randomInt } from 'node:crypto';
 export const TOKEN = 'jf-demo-token';
 export const USERNAME = 'demo';
 export const PASSWORD = 'demo-pass';
+export const EMBY_TOKEN = 'emby-demo-token';
 
 // The Jellyfin mock listens on the Plex mock's port plus 1000, so serve.mjs and the e2e harness agree from one number.
 // A Plex mock port above 64535 would push it past 65535, so those ports step down by 1000 instead.
@@ -30,9 +46,11 @@ export const jellyfinPortFor = (plexMockPort) => (Number(plexMockPort) + 1000 > 
 
 const hex = (prefix, n) => prefix + String(n).padStart(31, '0'); // a 32-hex-digit id, as Jellyfin writes a Guid with no dashes
 const SERVER_ID = hex('9', 1);
-const USER_ID = hex('8', 1);
+export const USER_ID = hex('8', 1);
 const SERIES_ID = hex('f', 1);
 const EPISODE_ID = hex('f', 2);
+// The series the episode session names. It is not listed anywhere (no /Items reply holds it); only its poster image is served (D142 3).
+const SERIES = { Id: SERIES_ID, Name: 'Harbor Lights', color: '#223355' };
 const ROOT = 'root';
 // (verify) RunTimeTicks unit: 10,000,000 ticks per second is the .NET convention, inferred; the research did not read it.
 const TICKS = 10_000_000;
@@ -116,6 +134,7 @@ const quickConnectResult = (r) => ({
 export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}) {
   const pending = new Map(); // secret -> { secret, code, approved, added }
   let sessions = [];
+  let embySessionsReply = 'ok'; // what an Emby request's GET /Sessions answers: ok, a status, or garbage
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -144,9 +163,16 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
       return res.end();
     }
 
+    // An Emby request (R-SRC-3): it carries the X-Emby-Authorization header. A Jellyfin request never does.
+    const emby = 'x-emby-authorization' in req.headers;
+
     // Control routes (the mock's own, no token).
     if (req.method === 'POST' && path === '/__mock/quickconnect-approve') {
       for (const r of pending.values()) r.approved = true;
+      return json(200, { ok: true });
+    }
+    if (req.method === 'POST' && path === '/__mock/emby-sessions-reply') {
+      embySessionsReply = q.get('mode') || 'ok';
       return json(200, { ok: true });
     }
     // (verify) /Sessions shape: SessionInfoDto fields are read from source, PlayState.IsPaused is the expected name, not confirmed.
@@ -180,8 +206,12 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
     // Public routes (no token).
     if (req.method === 'GET' && path === '/System/Info/Public') {
       // (verify) the /System route prefix is inferred, and Version 10.10.0 is invented.
+      if (emby) return json(200, { ServerName: 'Mock Emby', Id: SERVER_ID, Version: '4.8.0.0', ProductName: 'Emby Server', StartupWizardCompleted: true }); // (verify) Emby's public info fields are not read
       return json(200, { ServerName: 'Mock Jellyfin', Id: SERVER_ID, Version: '10.10.0', ProductName: 'Jellyfin Server', StartupWizardCompleted: true });
     }
+    // Emby has no Quick Connect (the research note, section 9, finds none): an Emby request for any of its routes gets a 404.
+    if (emby && path.startsWith('/QuickConnect/')) return json(404, { error: 'Not found' });
+    if (emby && path === '/Users/AuthenticateWithQuickConnect') return json(404, { error: 'Not found' });
     if (req.method === 'GET' && path === '/QuickConnect/Enabled') return json(200, true);
     // (verify) Quick Connect flow: the three routes and the field names are read from source, the flow end to end is inferred.
     // (verify) The real status codes for an unknown secret (404 here) and an unapproved sign-in (401 here) are not in the research; whether Initiate and AuthenticateByName need the device-identity header is unconfirmed (the mock does not ask).
@@ -200,6 +230,12 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
       const r = pending.get((await body()).Secret);
       return r?.approved ? json(200, signedIn()) : json(401, { error: 'Not approved' });
     }
+    // (verify) Emby's sign-in: Username and a plain-text Pw (DEV-EMBY-AUTH), the Emby X-Emby-Authorization header, and an AuthenticationResult with AccessToken and User.Id.
+    if (req.method === 'POST' && path === '/Users/AuthenticateByName' && emby) {
+      const b = await body();
+      const scheme = /^Emby\s+UserId=.*\bClient=.*\bDevice=.*\bDeviceId=.*\bVersion=/i.test(req.headers['x-emby-authorization']);
+      return scheme && b.Username === USERNAME && b.Pw === PASSWORD ? json(200, { ...signedIn(), AccessToken: EMBY_TOKEN }) : json(401, { error: 'Invalid user or password' });
+    }
     if (req.method === 'POST' && path === '/Users/AuthenticateByName') {
       const b = await body();
       return b.Username === USERNAME && b.Pw === PASSWORD ? json(200, signedIn()) : json(401, { error: 'Invalid user or password' });
@@ -208,11 +244,18 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
     // Everything else needs the token.
     // (verify) Authorization header quoting: `MediaBrowser Key="value", ...` is inferred from the parser keys, not from a quoted example.
     // (verify) Token transports: the research reads the Authorization MediaBrowser Token, the X-Emby-Token header and the ApiKey query as current, and the api_key query as legacy; which a default server accepts, and whether the legacy Emby scheme works, is unconfirmed (the mock refuses that scheme).
+    // (verify) An Emby request is read by X-Emby-Token or api_key (DEV-EMBY-KEY); the poster image of an Emby display carries only api_key, so that one route also takes EMBY_TOKEN.
     const header = /^MediaBrowser\s.*\bToken="?([^",]*)"?/i.exec(req.headers.authorization || '');
-    const token = header ? header[1] : (req.headers['x-emby-token'] ?? q.get('apikey') ?? q.get('api_key'));
-    if (token !== TOKEN) return json(401, { error: 'Unauthorized' });
+    const isImage = /^\/Items\/[0-9a-f]+\/Images\/Primary$/.test(path);
+    const token = emby ? (req.headers['x-emby-token'] ?? q.get('api_key')) : header ? header[1] : (req.headers['x-emby-token'] ?? q.get('apikey') ?? q.get('api_key'));
+    if (emby ? token !== EMBY_TOKEN : token !== TOKEN && !(isImage && token === EMBY_TOKEN)) return json(401, { error: 'Unauthorized' });
 
-    if (req.method === 'GET' && path === '/UserViews') return json(200, { Items: VIEWS.map(wire), TotalRecordCount: VIEWS.length });
+    // Emby has no /UserViews (Jellyfin's user-less route): its reference lists only GET /Users/{UserId}/Views (UserViewsService, read 2026-11-03).
+    // An Emby request for /UserViews gets a 404, so a test catches an adapter that asks for a Jellyfin-only path; a Jellyfin request is served as before.
+    if (req.method === 'GET' && path === '/UserViews') return emby ? json(404, { error: 'Not found' }) : json(200, { Items: VIEWS.map(wire), TotalRecordCount: VIEWS.length });
+    // The Emby route for a user's libraries; the id is the one the Emby sign-in returned, and any other id is a user the server does not know.
+    const userViews = /^\/Users\/([^/]+)\/Views$/.exec(path);
+    if (emby && req.method === 'GET' && userViews) return userViews[1] === USER_ID ? json(200, { Items: VIEWS.map(wire), TotalRecordCount: VIEWS.length }) : json(404, { error: 'Unknown user' });
 
     // Page a list the way /Items does: TotalRecordCount is the count before paging; an empty Limit is absent.
     const page = (pool) => {
@@ -249,7 +292,7 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
       return json(200, page(pool));
     }
 
-    // The route the research confirms for a playlist's items (PlaylistsController); the /Playlists base and the reply wrapper are expected, not read.
+    // (verify) The route the research confirms for a playlist's items on Jellyfin (PlaylistsController); the /Playlists base and the reply wrapper are expected, not read. For Emby it is the same route, unread.
     const playlistItems = /^\/Playlists\/([0-9a-f]+)\/Items$/.exec(path);
     if (req.method === 'GET' && playlistItems) {
       return PLAYLIST.Id === playlistItems[1] ? json(200, page(PLAYLIST.members)) : json(404, { error: 'Not found' });
@@ -263,12 +306,19 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
       return json(200, { Items: out, TotalRecordCount: out.length });
     }
 
-    if (req.method === 'GET' && path === '/Sessions') return json(200, sessions);
+    if (req.method === 'GET' && path === '/Sessions') {
+      if (emby && embySessionsReply === 'garbage') {
+        res.writeHead(200, { ...cors, 'Content-Type': 'text/plain' });
+        return res.end('<html>not json');
+      }
+      if (emby && /^\d{3}$/.test(embySessionsReply)) return json(Number(embySessionsReply), { error: 'Mock refusal' });
+      return json(200, sessions);
+    }
 
     // (verify) Image auth: the research note could not confirm whether an anonymous request succeeds; the mock asks for the token (api_key works, as an <img> cannot send headers).
     const image = /^\/Items\/([0-9a-f]+)\/Images\/Primary$/.exec(path);
     if (req.method === 'GET' && image) {
-      const item = EVERYTHING.find((i) => i.Id === image[1]);
+      const item = EVERYTHING.find((i) => i.Id === image[1]) || (image[1] === SERIES.Id ? SERIES : null);
       if (!item) return json(404, { error: 'Not found' });
       res.writeHead(200, { ...cors, 'Content-Type': 'image/svg+xml' });
       return res.end(poster(item));

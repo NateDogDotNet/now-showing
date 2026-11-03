@@ -59,7 +59,8 @@
       </aside>
     </div>
     <div id="empty" class="empty" hidden>
-      <div class="empty-card">
+      <!-- The card never grows taller than the screen as the viewer sees it (--vh, js/display.js, which already counts a rotated screen); a form longer than that scrolls inside the card, so its buttons stay reachable (D147 4). -->
+      <div class="empty-card" style="max-height: calc(var(--vh) - 48px); overflow-y: auto">
         <img src="assets/icons/icon.svg" alt="" width="72" height="72" />
         <h1>Now Showing</h1>
         <p id="empty-message">Connect to your Plex server to get started.</p>
@@ -68,6 +69,7 @@
           <div class="seg firstrun-type" role="radiogroup" aria-labelledby="firstrun-type-label">
             <label class="seg-opt"><input type="radio" name="firstrunType" value="plex" checked /><span>Plex</span></label>
             <label class="seg-opt"><input type="radio" name="firstrunType" value="jellyfin" /><span>Jellyfin</span></label>
+            <label class="seg-opt"><input type="radio" name="firstrunType" value="emby" /><span>Emby</span></label>
           </div>
           <form id="firstrun-address" class="firstrun-form" novalidate hidden>
             <label for="firstrun-url">Jellyfin server address</label>
@@ -132,8 +134,10 @@
           <div class="seg server-type" role="radiogroup" aria-label="Media server">
             <label class="seg-opt"><input type="radio" name="serverTypePick" value="plex" /><span>Plex</span></label>
             <label class="seg-opt"><input type="radio" name="serverTypePick" value="jellyfin" /><span>Jellyfin</span></label>
+            <label class="seg-opt"><input type="radio" name="serverTypePick" value="emby" /><span>Emby</span></label>
           </div>
           <input name="serverType" type="hidden" />
+          <input name="serverUserId" type="hidden" />
 
           <div id="connected-card" class="connected-card" hidden>
             <p id="connected-text" class="connected-text">Connected</p>

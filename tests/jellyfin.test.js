@@ -276,11 +276,47 @@ test('the rating that counts is CustomRating when it is not empty, else Official
   assert.equal(ratingOf({ OfficialRating: 'R', CustomRating: 'PG' }), 'PG', 'a custom rating that relaxes');
   assert.equal(allows('PG', ratingOf({ OfficialRating: 'PG', CustomRating: 'R' })), false);
   assert.equal(allows('PG', ratingOf({ OfficialRating: 'R', CustomRating: 'PG' })), true);
-  for (const empty of ['', '   ', null, undefined, 4]) assert.equal(ratingOf({ OfficialRating: 'PG-13', CustomRating: empty }), 'PG-13', String(empty));
+  for (const empty of ['', '   ', null, undefined]) assert.equal(ratingOf({ OfficialRating: 'PG-13', CustomRating: empty }), 'PG-13', String(empty));
   assert.equal(ratingOf({ OfficialRating: 'G', CustomRating: '15' }), '', 'a custom rating wins even when it is not one we read: unknown');
   assert.equal(ratingOf({ CustomRating: 'PG' }), 'PG');
   assert.equal(ratingOf({}), '');
   assert.equal(ratingOf(null), '');
+});
+
+test('a rating field that is present but not a string makes the rating unknown, never a fallback to the other field (D147 1)', () => {
+  for (const bad of [4, true, ['R'], { v: 'R' }]) {
+    assert.equal(ratingOf({ OfficialRating: 'G', CustomRating: bad }), '', `CustomRating ${JSON.stringify(bad)} over OfficialRating G`);
+    assert.equal(ratingOf({ OfficialRating: bad, CustomRating: 'PG' }), '', `OfficialRating ${JSON.stringify(bad)} under CustomRating PG`);
+    assert.equal(ratingOf({ OfficialRating: bad }), '', `OfficialRating ${JSON.stringify(bad)} alone`);
+    assert.equal(ratingOf({ CustomRating: bad }), '', `CustomRating ${JSON.stringify(bad)} alone`);
+  }
+  for (const limit of ['G', 'PG', 'PG-13', 'R', 'NC-17']) assert.equal(allows(limit, ratingOf({ OfficialRating: 'G', CustomRating: ['R'] })), false, `OfficialRating G with CustomRating ['R'] under ${limit}`);
+});
+
+test('a pool, a genre list, a collection list or a library list with no Items array, or entries that are not objects, is a parse error (D147 1)', async () => {
+  const bad = [{}, { Items: 'x' }, { Items: null }, { Items: { a: 1 } }, { Items: [null] }, { Items: ['x'] }, { Items: [[]] }, { Items: [{ Id: 'a' }, 7] }, [], null];
+  for (const reply of bad) {
+    const jf = stubbed({ '/Items': reply, '/UserViews': reply, '/Genres': reply, '/Playlists/p/Items': reply });
+    const why = JSON.stringify(reply);
+    await assert.rejects(() => jf.pool({ libraryKey: 'l' }), (err) => err.kind === 'parse' && /Jellyfin/.test(err.message), `pool ${why}`);
+    await assert.rejects(() => jf.libraries(), (err) => err.kind === 'parse', `libraries ${why}`);
+    await assert.rejects(() => jf.genres('l'), (err) => err.kind === 'parse', `genres ${why}`);
+    await assert.rejects(() => jf.collections(), (err) => err.kind === 'parse', `collections ${why}`);
+    await assert.rejects(() => jf.playlists(), (err) => err.kind === 'parse', `playlists ${why}`);
+    await assert.rejects(() => jf.sourceItems({ kind: 'playlist', key: 'p' }), (err) => err.kind === 'parse', `playlist items ${why}`);
+    await assert.rejects(() => jf.items(['a']), (err) => err.kind === 'parse', `items ${why}`);
+  }
+  assert.deepEqual(await stubbed({ '/Items': { Items: [] } }).pool({ libraryKey: 'l' }), [], 'an empty list is a list');
+});
+
+test('sessions that are not a list, and server information that is not an object, are parse errors for Jellyfin (D147 1)', async () => {
+  for (const reply of [{}, { Items: [] }, 'x', 7]) {
+    await assert.rejects(() => stubbed({ '/Sessions': reply }).sessions(), (err) => err.kind === 'parse', JSON.stringify(reply));
+  }
+  assert.deepEqual(await stubbed({ '/Sessions': [] }).sessions(), []);
+  for (const info of [null, [], 'x']) {
+    await assert.rejects(() => stubbed({ '/System/Info/Public': info, '/UserViews': { Items: [] } }).identity(), (err) => err.kind === 'parse', JSON.stringify(info));
+  }
 });
 
 test('the US film and TV values map as for Plex; every other spelling is unknown and hidden under any limit', () => {

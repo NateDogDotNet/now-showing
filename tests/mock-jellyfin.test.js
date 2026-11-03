@@ -1,6 +1,6 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startMockJellyfin, jellyfinPortFor, TOKEN, USERNAME, PASSWORD } from '../scripts/mock-jellyfin.mjs';
+import { startMockJellyfin, jellyfinPortFor, TOKEN, EMBY_TOKEN, USER_ID, USERNAME, PASSWORD } from '../scripts/mock-jellyfin.mjs';
 
 let server;
 let base;
@@ -307,4 +307,92 @@ test('GET /Playlists/{id}/Items lists the playlist, pages it, and needs the toke
   assert.equal(paged.StartIndex, 1);
   assert.equal((await get(`/Playlists/${list.Id}/Items`, {})).status, 401);
   assert.equal((await get('/Playlists/00000000000000000000000000000000/Items')).status, 404);
+});
+
+// ---- Emby mode (R-SRC-3, D145): a request with the X-Emby-Authorization header ----
+
+const EMBY_ID = 'Emby UserId="", Client="Test", Device="Test", DeviceId="t1", Version="1"';
+const EMBY = { 'X-Emby-Authorization': EMBY_ID, 'X-Emby-Token': EMBY_TOKEN };
+const embySignIn = (body, header = EMBY_ID) => post('/Users/AuthenticateByName', body, { 'X-Emby-Authorization': header });
+
+test('Emby mode: sign-in takes Username and Pw with the Emby header and gives the Emby token', async () => {
+  const ok = await embySignIn({ Username: USERNAME, Pw: PASSWORD });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.AccessToken, EMBY_TOKEN);
+  assert.equal(typeof ok.body.User.Id, 'string');
+  assert.equal((await embySignIn({ Username: USERNAME, Pw: 'wrong' })).status, 401);
+  assert.equal((await embySignIn({ Username: USERNAME, Password: PASSWORD })).status, 401, 'the field is Pw');
+  assert.equal((await embySignIn({ Username: USERNAME, Pw: PASSWORD }, 'MediaBrowser Client="x"')).status, 401, 'the header must be the Emby form');
+  // a Jellyfin sign-in is unchanged: no Emby header, the Jellyfin token
+  assert.equal((await post('/Users/AuthenticateByName', { Username: USERNAME, Pw: PASSWORD })).body.AccessToken, TOKEN);
+});
+
+test('Emby mode: a request needs the Emby token as X-Emby-Token or api_key; the Jellyfin token and the MediaBrowser header do not do', async () => {
+  const views = `/Users/${USER_ID}/Views`;
+  assert.equal((await get(views, EMBY)).status, 200);
+  assert.equal((await get(views, { 'X-Emby-Authorization': EMBY_ID })).status, 401);
+  assert.equal((await get(views, { 'X-Emby-Authorization': EMBY_ID, 'X-Emby-Token': TOKEN })).status, 401);
+  assert.equal((await get(views, { 'X-Emby-Authorization': EMBY_ID, ...AUTH })).status, 401, 'the MediaBrowser header means nothing to an Emby request');
+  assert.equal((await get(`${views}?api_key=${EMBY_TOKEN}`, { 'X-Emby-Authorization': EMBY_ID })).status, 200);
+  assert.equal((await get(views, {})).status, 401);
+});
+
+test('Emby mode: libraries are at /Users/{UserId}/Views only; /UserViews (Jellyfin\'s route) and another user id are 404 (C1)', async () => {
+  const ok = await get(`/Users/${USER_ID}/Views`, EMBY);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.TotalRecordCount, 3);
+  assert.equal((await get('/UserViews', EMBY)).status, 404, 'Emby has no /UserViews');
+  assert.equal((await get(`/UserViews?api_key=${EMBY_TOKEN}`, { 'X-Emby-Authorization': EMBY_ID })).status, 404);
+  assert.equal((await get('/Users/ffffffffffffffffffffffffffffffff/Views', EMBY)).status, 404, 'a user the server does not know');
+  // Jellyfin mode is as it was: /UserViews is served, and the Emby route is not
+  assert.equal((await get('/UserViews')).status, 200);
+  assert.equal((await get(`/Users/${USER_ID}/Views`)).status, 404);
+});
+
+test('Emby mode: the poster image takes the Emby token as api_key alone, and nothing else does', async () => {
+  const id = (await movies()).Items[0].Id;
+  assert.equal((await raw(`/Items/${id}/Images/Primary?api_key=${EMBY_TOKEN}`)).status, 200);
+  assert.equal((await raw(`/Items/${id}/Images/Primary?api_key=nope`)).status, 401);
+  assert.equal((await raw(`/Genres?api_key=${EMBY_TOKEN}`)).status, 401, 'a Jellyfin request with the Emby token is refused outside the image');
+});
+
+test('Emby mode: no Quick Connect, an Emby server name, and the same titles as Jellyfin', async () => {
+  for (const path of ['/QuickConnect/Enabled', '/QuickConnect/Connect?secret=x']) assert.equal((await get(path, EMBY)).status, 404, path);
+  assert.equal((await post('/QuickConnect/Initiate', undefined, EMBY)).status, 404);
+  assert.equal((await post('/Users/AuthenticateWithQuickConnect', { Secret: 'x' }, EMBY)).status, 404);
+  assert.equal((await get('/QuickConnect/Enabled', {})).body, true, 'Jellyfin still has it');
+  assert.equal((await get('/System/Info/Public', EMBY)).body.ServerName, 'Mock Emby');
+  assert.equal((await get('/System/Info/Public', {})).body.ServerName, 'Mock Jellyfin');
+  const emby = (await get('/Items?IncludeItemTypes=Movie&Recursive=true', EMBY)).body;
+  assert.deepEqual(names(emby).sort(), names(await movies()).sort());
+  assert.ok((await get('/Genres', EMBY)).body.Items.length > 0);
+  const box = (await get('/Items?IncludeItemTypes=BoxSet&Recursive=true', EMBY)).body.Items[0];
+  assert.equal((await get(`/Items?ParentId=${box.Id}`, EMBY)).body.Items.length, 2);
+  const list = (await get('/Items?IncludeItemTypes=Playlist&Recursive=true', EMBY)).body.Items[0];
+  assert.equal((await get(`/Playlists/${list.Id}/Items`, EMBY)).body.Items.length, 3);
+});
+
+test('Emby mode: /Sessions follows the control route, and emby-sessions-reply refuses only an Emby request', async () => {
+  await post('/__mock/jellyfin-sessions?kind=movie');
+  assert.equal((await get('/Sessions', EMBY)).body.length, 1);
+  for (const [mode, status] of [['401', 401], ['403', 403], ['404', 404], ['500', 500]]) {
+    await post(`/__mock/emby-sessions-reply?mode=${mode}`);
+    assert.equal((await get('/Sessions', EMBY)).status, status, mode);
+    assert.equal((await get('/Sessions')).status, 200, `a Jellyfin request is not refused (${mode})`);
+  }
+  await post('/__mock/emby-sessions-reply?mode=garbage');
+  const garbage = await raw('/Sessions', { headers: EMBY });
+  assert.equal(garbage.status, 200);
+  assert.match(await garbage.text(), /not json/);
+  await post('/__mock/emby-sessions-reply?mode=ok');
+  assert.equal((await get('/Sessions', EMBY)).status, 200);
+  await post('/__mock/jellyfin-sessions?kind=none');
+});
+
+test('the mock holds an image for its series, so an episode session can draw its poster (D142 3)', async () => {
+  const res = await raw(`/Items/${'f'.padEnd(31, '0')}1/Images/Primary`, { headers: AUTH });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /svg/);
+  assert.match(await res.text(), /Harbor Lights/);
+  assert.equal((await get(`/Items?Ids=${'f'.padEnd(31, '0')}1&Recursive=true`)).body.Items.length, 0, 'the series is still listed nowhere');
 });
