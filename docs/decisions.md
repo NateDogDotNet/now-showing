@@ -933,3 +933,13 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Conductor ruling — 2026-11-03 (run 9, `release-2.4.0` Step 4; answered "defaults" under D134 ruling 7): D153
 
 - **D153 `tests/e2e/followups.spec.mjs` joins `release-2.4.0`'s Output.** Criterion 4's full suite (`.orchestrator/artifacts/release-2.4.0--ac4-r1.log`) failed only "FAIL followups". The spec's `waitToast` waits for the text "What's new in 2.3" (tests/e2e/followups.spec.mjs:50). This release retires that notice (D151), so the spec now waits for a toast that no longer exists. The plan's Output lists release, preset and smoke but not followups, which is a plan defect (move 4). It is fixed by adding the file to the Output and to criterion 5's list. The spec's toast case (case 5, the toast on a phone) keeps its purpose. Only the notice text it waits for changes.
+
+## Conductor ruling — 2026-11-03 (run 9, plan-close `/phase-gate`; answered "defaults" under D134 ruling 7): D154
+
+- **D154 The plan-close phase gate's Minors go to the next 2.4.x run.** The gate (`.orchestrator/artifacts/close--phase-gate-r1.md`) passes once the notice walk approves, and it has (`release-2.4.0--review-uxwalk-r1.md`, APPROVE). It found five Minor spec-gaps. None of them changes behaviour or child safety:
+  1. `docs/spec.md:452,458`, the security summary, still says the token appears only in Plex request URLs and that nothing leaves except for Plex and plex.tv. Jellyfin and Emby image URLs now carry the token as `api_key`, to their own server.
+  2. `docs/spec.md:535-539` has no traceability rows for R-SRC-1, R-SRC-2 and R-SRC-3.
+  3. The `package.json:5` description names only Plex.
+  4. The `signInFlow` comment at `js/sources/index.js:91` says every flow has `createPin` and `checkPin`, which Emby's does not, and the comment at `:47` omits Jellyfin's `serverUrl`.
+  5. `js/sources/jellyfin.js:16` and `js/sources/emby.js:24` import helpers from the Plex adapter, against the comment at `js/sources/errors.js:1-2`.
+  Fixing 1–3 now would be `release-2.4.0`'s third re-dispatch, which the rules run as two competing builders, and 4–5 are outside its Output. All five are FOLLOW-UPs for Nathan, for the next 2.4.x run. Item 1 comes first, because the summary understates where the token travels.
