@@ -925,3 +925,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   - **Fresh install.** It shows nothing and still gets the marker.
   - **Harness.** The e2e harness seeds `'2.4'`. The 2.3 notice is retired.
   The plan names the notice but not its words or its target. Both follow R-UPG-3's pattern.
+
+## Conductor ruling — 2026-11-03 (run 9, `release-2.4.0` r1 handback, question Q7; answered "defaults" under D134 ruling 7): D152
+
+- **D152 Where the 2.4 notice's Open settings lands (Q7).** D151 asks for the server connection section at the top of the view and focus on the Plex | Jellyfin | Emby choice. `js/settings-ui.js`, which scrolls the sheet to a named section, is not in `release-2.4.0`'s Output and has no server section. The builder's reading is accepted. The sheet opens at its top, where the server connection section is the first fieldset, and `js/main.js` puts focus on the checked server-type choice once the sheet is open. The PIN gate applies as before. The preset spec checks the focus.
