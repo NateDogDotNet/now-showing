@@ -296,8 +296,10 @@ piCase('6b no reload while Diagnostics is open; it reloads after close', { setti
   check('Diagnostics open at 04:00: no reload; one after close');
 });
 
-// 7. Never while a poster is loading (state.busy): the first poster download is held across 04:00.
-piCase('7 no reload while a poster is still loading (busy)', { settings: seed() }, async ({ page, app }) => {
+// 7. Never while a poster is loading (state.busy): the first poster download is held across 04:00. Playwright 1.64 runs
+//    AbortSignal.timeout on the fake clock, so the app's 20 s poster fetch timeout ends a held download after 20 simulated
+//    seconds: the clock starts 5 s before 04:00 and the hold covers 8 s (about 11 s with real time), so 04:00 falls 5 s in and the release about 11 s in, both at least 5 s inside the timeout.
+piCase('7 no reload while a poster is still loading (busy)', { clock: { time: '2026-01-05T03:59:55' }, settings: seed() }, async ({ page, app }) => {
   const errors = pageErrors(page);
   let release;
   const gate = new Promise((resolve) => (release = resolve));
@@ -308,7 +310,7 @@ piCase('7 no reload while a poster is still loading (busy)', { settings: seed() 
   await countNavigations(page);
   await page.goto(app.url);
   await controlled(page);
-  await staysPut(page, 1, 90_000, 'the poster download is held');
+  await staysPut(page, 1, 8_000, 'the poster download is held');
   release();
   await posterShown(page);
   await untilNavigations(page, 2, 30_000);

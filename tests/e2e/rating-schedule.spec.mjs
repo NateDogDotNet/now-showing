@@ -514,7 +514,8 @@ slotCase('12 returning to the tab applies the slot in force', { settings: seed()
 });
 
 // 13. A tick already running when a STRICTER boundary passes began under the old limit: a forced tick follows it.
-slotCase('13 a boundary during a running tick is not lost', { settings: seed(), clock: { time: '2026-01-05T05:59:50' } }, async ({ page, app }) => {
+// Playwright 1.64 runs AbortSignal.timeout on the fake clock: the held library request (10 s timeout) must cross 06:00 and be released before it times out, so the clock starts 3 s before 06:00 and advances 5 s.
+slotCase('13 a boundary during a running tick is not lost', { settings: seed(), clock: { time: '2026-01-05T05:59:57' } }, async ({ page, app }) => {
   const pools = poolRequests(page);
   let release;
   const gate = new Promise((resolve) => (release = resolve));
@@ -526,7 +527,7 @@ slotCase('13 a boundary during a running tick is not lost', { settings: seed(), 
   await page.goto(app.url);
   await page.waitForTimeout(500);
   assert.equal(pools.length, 1, 'the first tick is waiting for its pool (busy)');
-  await advance(page, 15_000); // 06:00:05: the boundary passes while the tick is busy, with nothing on screen yet
+  await advance(page, 5_000); // about 06:00:02: the boundary passes while the tick is busy (the 10 s request timeout is not reached), with nothing on screen yet
   release();
   await posterShown(page);
   await page.waitForTimeout(2000);
