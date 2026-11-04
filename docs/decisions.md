@@ -1022,3 +1022,10 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   5. **A lowered limit and a slow Save (cold M1).** The limit, and every other non-connection setting, takes effect at Save before any server-identity read. Only the connection keys wait for the reads.
   6. **Now playing (cold M2).** D157 8 stands. When the first playing session is above the limit, nothing is shown as playing, even if a permitted title plays on another server. This is the safe side.
   7. **A duplicate added while the first server is down (anchored M-2).** It stands as built. The duplicate is removed at the first Save at which the first server answers. A duplicate sends no token anywhere it does not already go.
+
+## Conductor ruling — 2026-11-04 (run 10, `multiple-servers` r3 reviews, the spec-gap finding; answered "defaults" under D44): D163
+
+- **D163 The profiles when the first server becomes another server.** The architecture review r3 (`.orchestrator/artifacts/multiple-servers--review-arch-r3.md`, I-1) found the first server's profile keys moved onto the server that replaced it, and asked whether the rule should differ for a lone server.
+  1. **A household with more than one server.** In such a household, a Save can find that the first server is now another server, because the address or type changed and the id read there differs or cannot be read. The old first server is then removed under D157 1 and D162 2. Its library keys, collection and pin leave the selection and every profile; no profile key is moved onto the new server. The Settings sheet offers the main selection again from the new server.
+  2. **A household with one server.** It keeps the 2.4.0 behaviour (R-SRC-2 "Switching"; plan criterion 3, a one-server household sees no change). The profiles and the slots keep their ids as stored. A key that matches nothing on the new server draws nothing, so this fails closed.
+  3. "More than one server" is judged on the settings before the Save. That means `servers` is not empty, or any scoped id is stored (D162 1).
