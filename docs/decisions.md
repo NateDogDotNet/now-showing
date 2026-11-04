@@ -1033,3 +1033,16 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner ruling — 2026-11-04 (run 10, `multiple-servers` stop 2, the re-dispatch cap; Nathan: "defaults"): D164
 
 - **D164 The `multiple-servers` re-dispatch cap is raised by two, to seven.** Round r4 (candidate A, which tied candidate B at COMPLETE 65/65) failed review on two Important findings: the anchored review's one-server token at Save, against the Q5 ruling, and the UX walk's first-run card after Remove-first, retype and Save. The rounds converge, and they recur on one path, where the first server changes. Candidate A's builder is resumed for one round, r6, with no branch. The seventh re-dispatch is held for a new Important found in r6. Not chosen: (b) forbidding Remove of the first server while others exist, and (c) taking the phase out of 2.4.1. The stop is saved in `.orchestrator/phases/multiple-servers.md` (stop message 2).
+
+## Conductor ruling — 2026-11-04 (run 10, `multiple-servers` r6 reviews, the remaining Minor findings; answered "defaults" under D44): D165
+
+- **D165 What the `multiple-servers` r6 reviews left open.** All four r6 reviews approve. These Minor findings remain, in `.orchestrator/artifacts/multiple-servers--review-r6.md`, `--review-cold-r6.md`, `--review-arch-r6.md` and `--review-uxwalk-r6.md`.
+  1. **The seconds while a Save reads the new server's id (architecture r6 m-2).** The early apply of D162 5 stands. The household limit applies at once to every poster. A library ticked from a new first server can be drawn from the old server for those seconds, and a reload in that window keeps the mix. This is accepted for 2.4.1 and recorded as a follow-up: hold back the selection in the early state when the first server's address or type changes.
+  2. **A new first server whose id cannot be read (architecture r6 m-3).** It is carried even beside other servers, because there is no id to scope its keys by. It inherits nothing from the server it replaced. This extends D162 1, which said "while alone".
+  3. **A token typed or pasted in the sheet (cold r6 R6-1).** In a one-server household, a type change with the old token pasted back by hand, then an address of another server, sends that token to the typed address. That is D142 2: a token the household types in Settings goes to the address it types, as in 2.4.0. It stands.
+  4. **Deferred to a later 2.4.x run, as follow-ups:**
+     - the pin restored with the old selection while a Save settles (anchored r6 m-1);
+     - the empty card's "Jellyfin" against the Settings line's own server name when every server is down (UX walk r6 m-3);
+     - one shared function for the token rule in `settleServers` and `tokenMayGo` (architecture M-1);
+     - a spec sentence saying the first server is not reordered (architecture M3).
+  5. **Now playing from another server (cold M2).** It stands under D162 6.
