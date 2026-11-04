@@ -1046,3 +1046,11 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
      - one shared function for the token rule in `settleServers` and `tokenMayGo` (architecture M-1);
      - a spec sentence saying the first server is not reordered (architecture M3).
   5. **Now playing from another server (cold M2).** It stands under D162 6.
+
+## Conductor ruling — 2026-11-04 (run 10, `playwright-1.64` r1 review, the spec-gap findings; answered "defaults" under D44): D166
+
+- **D166 What the Playwright 1.64 upgrade forces, when no release note says so.** The anchored review r1 (`.orchestrator/artifacts/playwright-1.64--review-r1.md`) confirmed the builder's probe. From 1.64, `AbortSignal.timeout()` in the page runs on the fake clock that `page.clock.install` sets, so a held request times out after its simulated span. No release note from 1.57.0 to 1.64.1 names this change.
+  1. **A probe stands in for the release-note line (M-3).** The plan's Output allows a `tests/e2e/*.mjs` file "that a 1.64 breaking change forces to change", each "with the release-note line that forced it". A change that no note names may be cited by a probe in the handback instead. The probe must show the same check giving one result on 1.56.1 and another on 1.64.1. Here, `AbortSignal.timeout(20000)` with `clock.runFor(60000)` is not aborted on 1.56.1 and is aborted on 1.64.1.
+  2. **A spec that still passes but no longer tests its guard is forced too (I-1, I-2).** rating-schedule case 13 and profiles case 15 pass on 1.64.1 with the guard they test removed: `js/main.js:205` and `|| !inSelectionNow(poster)` at `js/main.js:227`. Each failed with that guard removed on 1.56.1. They are in this phase's Output under 1, and each must again fail with its guard removed. The fix keeps each held request pending across its boundary, ending before its own timeout fires. The app's timeouts are not changed.
+  3. **The Node floor (M-2).** Playwright 1.64.1 needs Node 20 or later. `package.json` `engines.node` becomes `>=20` in this phase, since the upgrade forces it and package.json is in the Output. Every other place that names a Node version is checked by keep-docs-current in `release-2.4.1`.
+  4. **Case 7 margins (M-1).** Case 7 stands as built, with the margin made wider. 04:00 and the release each fall at least 5 simulated seconds inside the 20 s timeout.
