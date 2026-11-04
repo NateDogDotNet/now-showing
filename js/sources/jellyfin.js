@@ -147,7 +147,7 @@ const listParam = (values, sep = ',') => values.join(sep);
 const serverRatings = (values) => values.filter((v) => !v.includes('/'));
 
 export function createJellyfinClient({ serverUrl, token, clientId, version = '', fetchImpl = (...a) => fetch(...a) }) {
-  return createMediaBrowserClient({ label: 'Jellyfin', serverUrl, token, headers: { Authorization: authHeader({ clientId, version, token }) }, fetchImpl, viewsPath: 'UserViews' });
+  return createMediaBrowserClient({ label: 'Jellyfin', serverUrl, token, headers: { Authorization: authHeader({ clientId, version, token }) }, publicHeaders: { Authorization: authHeader({ clientId, version }) }, fetchImpl, viewsPath: 'UserViews' });
 }
 
 /**
@@ -156,7 +156,7 @@ export function createJellyfinClient({ serverUrl, token, clientId, version = '',
  * (the Emby adapter: a 401, 403, 404 or an unreadable reply, D145 4) instead of an error. `viewsPath` is the route that lists a user's
  * libraries: Jellyfin's `UserViews`, Emby's `Users/{UserId}/Views`; `null` (an Emby display with no user id) is an `auth` error that asks for a new sign-in.
  */
-export function createMediaBrowserClient({ label, serverUrl, token, headers, fetchImpl, softSessions = false, viewsPath = 'UserViews' }) {
+export function createMediaBrowserClient({ label, serverUrl, token, headers, publicHeaders = {}, fetchImpl, softSessions = false, viewsPath = 'UserViews' }) {
   const get = (path, params = {}, opts = {}) => request(buildUrl(serverUrl, path, params), { ...opts, headers, fetchImpl, label });
   const items = (reply) => itemsOf(reply, label);
   const views = (opts = {}) => {
@@ -176,6 +176,16 @@ export function createMediaBrowserClient({ label, serverUrl, token, headers, fet
       const info = await request(buildUrl(serverUrl, 'System/Info/Public'), { headers, fetchImpl, timeoutMs: 8000, label });
       if (!info || typeof info !== 'object' || Array.isArray(info)) throw new SourceError(`Could not read the ${label} reply: it is not server information.`, { kind: 'parse' });
       await views({ timeoutMs: 8000 });
+      return { name: text(info.ServerName), version: text(info.Version), machineIdentifier: text(info.Id) };
+    },
+
+    /**
+     * Who answers at this address, WITHOUT the token (D157 3, D160 1): the public `System/Info/Public`, asked with the client's identity header
+     * (`publicHeaders`) and no token. The id is the server's `Id`. Used before the token is sent to a changed address.
+     */
+    async publicIdentity() {
+      const info = await request(buildUrl(serverUrl, 'System/Info/Public'), { headers: publicHeaders, fetchImpl, timeoutMs: 8000, label });
+      if (!info || typeof info !== 'object' || Array.isArray(info)) throw new SourceError(`Could not read the ${label} reply: it is not server information.`, { kind: 'parse' });
       return { name: text(info.ServerName), version: text(info.Version), machineIdentifier: text(info.Id) };
     },
 

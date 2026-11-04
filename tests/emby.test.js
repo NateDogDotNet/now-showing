@@ -4,7 +4,7 @@
 
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { startMockJellyfin, EMBY_TOKEN, TOKEN, USERNAME, PASSWORD, USER_ID } from '../scripts/mock-jellyfin.mjs';
+import { startMockJellyfin, EMBY_TOKEN, TOKEN, USERNAME, PASSWORD, USER_ID, EMBY_SERVER_ID } from '../scripts/mock-jellyfin.mjs';
 import { createSource, serverTypeOf, signInFlow } from '../js/sources/index.js';
 import { embyAuthHeader } from '../js/sources/emby.js';
 import { createEngine } from '../js/engine.js';
@@ -421,4 +421,19 @@ test('a Save that changes the type to Emby is a switch from Plex or Jellyfin, an
   assert.notEqual(serverTypeOf({}), serverTypeOf({ serverType: 'emby' }), 'an absent type counts as Plex');
   assert.notEqual(serverTypeOf({ serverType: 'jellyfin' }), serverTypeOf({ serverType: 'emby' }));
   assert.equal(serverTypeOf({ serverType: 'emby' }), serverTypeOf({ serverType: 'emby', serverUrl: 'http://other' }));
+});
+
+// ---- the token-free identity, and the Emby server's own id (D157 3, D160 1, 2) ----
+
+test('publicIdentity sends the Emby identity header and no X-Emby-Token, and reads the Emby server\'s own Id', async () => {
+  const { source, calls } = connect();
+  const id = await source.publicIdentity();
+  assert.equal(id.name, 'Mock Emby');
+  assert.equal(id.machineIdentifier, EMBY_SERVER_ID);
+  assert.notEqual(id.machineIdentifier, '90000000000000000000000000000001', 'not the Jellyfin mock\'s id: both can be in one household');
+  assert.equal(calls.length, 1);
+  const h = calls[0].init.headers;
+  assert.ok(h['X-Emby-Authorization']);
+  assert.equal('X-Emby-Token' in h, false);
+  assert.equal(JSON.stringify(calls[0]).includes(EMBY_TOKEN), false);
 });

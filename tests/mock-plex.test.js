@@ -232,3 +232,26 @@ test('counts-fail answers the count request with that status for each movie libr
   }
   assert.equal((await get('/library/sections/3/all?X-Plex-Container-Size=0')).status, 200);
 });
+
+// ---- the public identity (D160 1) ----
+
+test('GET /identity answers without a token, with the machineIdentifier that GET / reports', async () => {
+  const bare = await fetch(`${base}/identity`);
+  assert.equal(bare.status, 200);
+  const identity = (await bare.json()).MediaContainer;
+  assert.equal(typeof identity.machineIdentifier, 'string');
+  assert.ok(identity.machineIdentifier);
+  const root = (await get('/')).body.MediaContainer;
+  assert.equal(identity.machineIdentifier, root.machineIdentifier, 'one server, one id');
+  assert.equal((await fetch(`${base}/`)).status, 401, 'every other route still needs the token');
+  assert.equal((await fetch(`${base}/library/sections`)).status, 401);
+});
+
+test('GET /identity is not answered while the server is down', async () => {
+  await post('/__mock/down');
+  try {
+    await assert.rejects(() => fetch(`${base}/identity`));
+  } finally {
+    await post('/__mock/up');
+  }
+});

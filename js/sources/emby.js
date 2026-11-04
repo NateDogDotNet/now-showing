@@ -45,7 +45,7 @@ export function embyHeaders({ clientId, version, token }) {
  */
 export function createEmbyClient({ serverUrl, token, clientId, version = '', userId = '', fetchImpl = (...a) => fetch(...a) }) {
   const viewsPath = typeof userId === 'string' && userId.trim() ? `Users/${encodeURIComponent(userId.trim())}/Views` : null;
-  return createMediaBrowserClient({ label: 'Emby', serverUrl, token, headers: embyHeaders({ clientId, version, token }), fetchImpl, softSessions: true, viewsPath });
+  return createMediaBrowserClient({ label: 'Emby', serverUrl, token, headers: embyHeaders({ clientId, version, token }), publicHeaders: embyHeaders({ clientId, version }), fetchImpl, softSessions: true, viewsPath });
 }
 
 /**

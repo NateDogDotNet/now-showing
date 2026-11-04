@@ -158,6 +158,16 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
       return { name: c.friendlyName || '', version: c.version || '', machineIdentifier: c.machineIdentifier || '' };
     },
 
+    /**
+     * Who answers at this address, WITHOUT sending the token (D157 3, D160 1): `GET /identity`, which a Plex Media Server serves with no
+     * token (a (verify) row). Only `machineIdentifier` and `version` are read: the server's name is not in that reply. Used before the
+     * token is sent to a changed address, so a token never reaches a server that is not the one it was made for.
+     */
+    async publicIdentity() {
+      const c = await request(buildUrl(serverUrl, '/identity', { 'X-Plex-Client-Identifier': clientId, 'X-Plex-Product': PRODUCT }), { timeoutMs: 8000, fetchImpl });
+      return { name: '', version: c.version || '', machineIdentifier: c.machineIdentifier || '' };
+    },
+
     async libraries() {
       const c = await get('/library/sections');
       return (c.Directory || []).map((d) => ({ key: String(d.key), title: d.title, type: d.type }));

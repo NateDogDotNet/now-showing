@@ -2,6 +2,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  belongsTo,
+  cleanServerId,
+  memberBelongsTo,
+  scopeKey,
+  splitKey,
   cleanGenres,
   cleanKeys,
   cleanNames,
@@ -313,5 +318,49 @@ test('D112 item 2: every library with titles gets at least one slot of the pool,
       assert.equal(sizes.reduce((a, b) => a + b, 0), total, `${total} over ${counts}`);
       if (total >= counts.length) assert.ok(sizes.every((n, i) => counts[i] === 0 || n >= 1), `${total} over ${counts}: ${sizes}`);
     }
+  }
+});
+
+// ---- ids by server (D156 2, D157 1, 12) ----
+
+test('a scoped id names its server and an id stored by 2.4.0 never looks scoped (D157 12)', () => {
+  assert.equal(scopeKey('abc-1', '42'), '@abc-1/42');
+  assert.deepEqual(splitKey('@abc-1/a/b'), { serverId: 'abc-1', key: 'a/b' }, 'the first "/" ends the server id');
+  for (const bare of ['42', '90000000000000000000000000000a01', '', 'collection:5', '/library/metadata/5/thumb/17']) assert.deepEqual(splitKey(bare), { serverId: '', key: bare }, bare);
+  assert.equal(scopeKey('', '42'), '42', 'no server id: the id stays bare');
+  assert.equal(scopeKey('bad id!', '42'), '42');
+  assert.equal(cleanServerId(' mock '), 'mock');
+  for (const bad of ['', 'a/b', 'a b', '@x', 5, null]) assert.equal(cleanServerId(bad), '');
+});
+
+test('a bare id belongs to the carried entry and to no other; a scoped id to the entry with that id (D157 1)', () => {
+  const carried = { id: '', carried: true };
+  const known = { id: 'jf-1', carried: false };
+  const other = { id: 'em-1', carried: false };
+  assert.deepEqual([belongsTo('42', carried), belongsTo('42', known), belongsTo('42', other)], [true, false, false]);
+  assert.deepEqual([belongsTo('@jf-1/42', known), belongsTo('@jf-1/42', other), belongsTo('@jf-1/42', carried)], [true, false, false]);
+  assert.equal(belongsTo('@jf-1/42', { id: 'jf-1', carried: true }), true, 'a carried entry that learned its id owns both forms');
+  assert.equal(belongsTo('@/42', known), false);
+  assert.equal(belongsTo('@jf-1/42', { id: '', carried: false }), false, 'an entry that does not know its id owns no scoped id');
+  assert.deepEqual([memberBelongsTo('collection:5', carried), memberBelongsTo('collection:@jf-1/5', known), memberBelongsTo('collection:@jf-1/5', carried), memberBelongsTo('nonsense', carried)], [true, true, false, false]);
+});
+
+test('a second server makes the selection narrowing, so the offline cache draws only entries that record belonging to it', () => {
+  const one = selectionOf({ libraryKeys: ['1'] });
+  assert.equal(narrows(one), false, 'a one-server household: nothing changes from 2.4.0');
+  const two = selectionOf({ libraryKeys: ['1'], servers: [{ id: 'jf-1', type: 'jellyfin', url: 'http://j', token: '' }] });
+  assert.equal(narrows(two), true);
+  assert.equal(entryInSelection({ ratingKey: '@jf-1/9', contentRating: 'G' }, two, 'PG'), false, 'an entry with no recorded library is not drawn');
+  assert.equal(entryInSelection({ ratingKey: '9', libraryKey: '1', contentRating: 'G' }, two, 'PG'), true);
+  assert.equal(entryInSelection({ ratingKey: '@jf-1/9', libraryKey: '@jf-1/b1', contentRating: 'G' }, two, 'PG'), false, 'a library that is not ticked');
+});
+
+test('every poster from every server passes the limit in force, whichever server it came from (D5)', () => {
+  const sel = selectionOf({ libraryKeys: ['1', '@jf-1/b1'] });
+  const from = (id, contentRating) => ({ ratingKey: id, contentRating });
+  for (const id of ['10', '@jf-1/10']) {
+    assert.equal(posterAllowed(sel, 'PG', from(id, 'G')), true);
+    assert.equal(posterAllowed(sel, 'PG', from(id, 'PG')), true);
+    for (const above of ['PG-13', 'R', 'NC-17', '', undefined, 'TV-MA', '15']) assert.equal(posterAllowed(sel, 'PG', from(id, above)), false, `${id} ${above}`);
   }
 });

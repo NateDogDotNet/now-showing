@@ -572,3 +572,57 @@ test('r2 gap 8: a source listing loaded online takes the membership from cached 
   createPosterCache({ storage: counting, caches: fakeCaches().caches }).syncMembers('collection:101', ['1']);
   assert.equal(writes, 0, 'nothing to remove: nothing written');
 });
+
+// ---- several servers: every entry carries the id of its server (D156 2, 3, D157 1, 2, 9) ----
+
+const JF_ID = 'jf-1';
+const scopedPoster = (n, extra = {}) => ({ ...poster(n), ratingKey: `@${JF_ID}/${n}`, thumb: `@${JF_ID}//t/${n}`, ...extra });
+
+test('clearServer removes one server\'s index entries and blobs and nothing of the others; a bare key is the carried entry\'s (D157 1, 2)', async () => {
+  const f = fakeCaches();
+  const cache = createPosterCache({ storage: memoryStorage(), caches: f.caches });
+  await cache.put(poster(1), blob(), size(300)); // stored by 2.4.0: bare
+  await cache.put(poster(2), blob(), size(300));
+  await cache.put(scopedPoster(1), blob(), size(300)); // the same title number on another server is another poster
+  await cache.put({ ...scopedPoster(5), ratingKey: '@em-1/5' }, blob(), size(300));
+  assert.equal(cache.entries().length, 4);
+
+  await cache.clearServer({ id: JF_ID, carried: false });
+  assert.deepEqual(cache.entries().map((e) => e.ratingKey).sort(), ['1', '2', '@em-1/5'], 'only the Jellyfin entry is gone; the bare ones are the carried entry\'s');
+  assert.equal(await cache.get(`@${JF_ID}/1`), null, 'its blob is gone');
+  assert.ok(await cache.get('1'), 'the bare entry\'s blob stays');
+
+  await cache.clearServer({ id: '', carried: true });
+  assert.deepEqual(cache.entries().map((e) => e.ratingKey), ['@em-1/5'], 'the carried entry goes with its bare keys, and no scoped one of another server');
+  assert.equal(await cache.get('1'), null);
+  assert.ok(await cache.get('@em-1/5'));
+});
+
+test('clearServer writes nothing when the server has no entry', async () => {
+  const writes = [];
+  const storage = { ...memoryStorage(), setItem: (k) => writes.push(k) };
+  const cache = createPosterCache({ storage, caches: fakeCaches().caches });
+  await cache.clearServer({ id: JF_ID, carried: false });
+  assert.deepEqual(writes, []);
+});
+
+test('an offline draw skips an entry whose server is not in the list, and takes one whose server is only down (D157 9)', async () => {
+  const f = fakeCaches();
+  const cache = createPosterCache({ storage: memoryStorage(), caches: f.caches });
+  await cache.put({ ...poster(1), contentRating: 'G' }, blob(), size(300));
+  await cache.put({ ...scopedPoster(2), contentRating: 'G' }, blob(), size(300));
+  await cache.put({ ...scopedPoster(3), ratingKey: '@gone-1/3', contentRating: 'G' }, blob(), size(300));
+  const inList = (key) => key === '1' || key.startsWith(`@${JF_ID}/`);
+  const seen = new Set();
+  for (let i = 0; i < 40; i++) seen.add((await cache.random(undefined, 'PG', null, inList)).poster.ratingKey);
+  assert.deepEqual([...seen].sort(), ['1', `@${JF_ID}/2`], 'a server that is down is still in the list; a server that is gone is not');
+});
+
+test('an entry is rated and drawn under the limit in force whichever server it came from (D37)', async () => {
+  const f = fakeCaches();
+  const cache = createPosterCache({ storage: memoryStorage(), caches: f.caches });
+  await cache.put({ ...poster(1), contentRating: 'G' }, blob(), size(300));
+  await cache.put({ ...scopedPoster(2), contentRating: 'R' }, blob(), size(300));
+  await cache.put({ ...scopedPoster(3), contentRating: '' }, blob(), size(300));
+  for (let i = 0; i < 20; i++) assert.equal((await cache.random(undefined, 'PG')).poster.ratingKey, '1', 'the R and the unrated entry of the second server are never drawn');
+});

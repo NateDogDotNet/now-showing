@@ -822,3 +822,32 @@ body.positioning.dragging.idle.hide-cursor #app * { cursor: grabbing !important;
   font: 600 13px ui-monospace, Menlo, Consolas, monospace;
   text-align: center;
 }
+
+#add-status:empty { display: none; } /* no line, no space, while there is nothing to say (a one-server household sees no gap) */
+/* The household's servers (R-SRC-4): one row each, the same panel language as the "Connected to" card. */
+.server-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.server-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-line);
+}
+.server-row .server-name { font-weight: 600; overflow-wrap: anywhere; }
+.server-row .server-name { order: 0; }
+.server-row button { order: 1; }
+/* The address is on its own line and never breaks inside a number; only a very long one wraps, at a word boundary. */
+.server-row .server-where { order: 2; flex: 1 1 100%; min-width: 0; overflow-wrap: break-word; word-break: normal; }
+.server-add { margin-top: 10px; }
+.server-add > summary { cursor: pointer; }
+.server-add .seg { margin: 8px 0; }
+.add-type .seg-opt span { min-width: 88px; padding: 10px 16px; text-align: center; }
+.servers { margin-top: 6px; }
+.server-list[hidden] { display: none; }
+
+/* A server's name over its libraries in the library list when there are several servers. */
+.pick-list .server-heading { margin: 8px 0 0; padding: 2px 4px; font-weight: 600; color: var(--muted); overflow-wrap: anywhere; }
+.pick-list .server-heading:first-child { margin-top: 0; }
