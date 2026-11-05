@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults, earlySettings, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, removedServers, sanitize, save, SECRET_KEYS, serverList, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
+import { defaults, earlySettings, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, oldTokenMayGo, removedServers, sanitize, save, SECRET_KEYS, serverList, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -885,6 +885,175 @@ test('one server: a Save that changes only the type keeps the token as in 2.4.0,
   assert.equal(jf.next.plexToken, 'plex-token', 'a one-server household keeps the 2.4.0 behaviour on a type change');
   const moved = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400' }), reader({ 'http://new:32400': 'other-id' }).read);
   assert.equal(moved.next.plexToken, '', 'another address of the same type that answers as another server sets the token aside (D157 3)');
+});
+
+// ---- the token rule, one table (D142 2, D157 3, D162 3, D163, D165 3) ----
+// Each row is a household, a change and the answers that come back. `settle` is what Save does with the old token (kept or set aside) and the
+// ids it asks for; `sheet` is what Test connection does (may the token go to the address, true or false) and the ids it asks for.
+// The two agree on whether the server is the same one. They differ in one case: the type changes in a one-server household (D163 2).
+const TOKEN_ROWS = [
+  {
+    name: 'same server, same address: nothing is asked',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { rotateSeconds: 60 }, answers: {},
+    settle: { keeps: true, asked: [] }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'same server at another address (recorded id): the id there matches',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverUrl: 'http://new:32400' }, answers: { 'http://new:32400': 'plex-id' },
+    settle: { keeps: true, asked: ['plex http://new:32400'] }, sheet: { go: true, asked: ['plex http://new:32400'] },
+  },
+  {
+    name: 'same server at another address (id never recorded): both addresses are read and match',
+    prev: () => settled(v240()), change: { serverUrl: 'http://new:32400' }, answers: { 'http://plex:32400': 'm', 'http://new:32400': 'm' },
+    settle: { keeps: true, asked: ['plex http://new:32400', 'plex http://plex:32400'] }, sheet: { go: true, asked: ['plex http://new:32400', 'plex http://plex:32400'] },
+  },
+  {
+    name: 'another address that answers as another server (one server)',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverUrl: 'http://new:32400' }, answers: { 'http://new:32400': 'other-id' },
+    settle: { keeps: false, asked: ['plex http://new:32400'] }, sheet: { go: false, asked: ['plex http://new:32400'] },
+  },
+  {
+    name: 'another address that does not answer (one server)',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverUrl: 'http://new:32400' }, answers: {},
+    settle: { keeps: false, asked: ['plex http://new:32400'] }, sheet: { go: false, asked: ['plex http://new:32400'] },
+  },
+  {
+    name: 'another address, id never recorded, the old address does not answer: it cannot be confirmed',
+    prev: () => settled(v240()), change: { serverUrl: 'http://new:32400' }, answers: { 'http://new:32400': 'n' },
+    settle: { keeps: false, asked: ['plex http://new:32400', 'plex http://plex:32400'] }, sheet: { go: false, asked: ['plex http://new:32400', 'plex http://plex:32400'] },
+  },
+  {
+    name: 'type change in a one-server household, the old token: Save keeps it (D163 2), the sheet sets it aside',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverType: 'jellyfin', serverUrl: 'http://jf:8096' }, answers: { 'http://jf:8096': 'jf-id-1' },
+    settle: { keeps: true, asked: ['jellyfin http://jf:8096'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'type change in a one-server household, id never recorded: the old address is not read',
+    prev: () => settled(v240()), change: { serverType: 'jellyfin', serverUrl: 'http://jf:8096' }, answers: { 'http://jf:8096': 'jf-id-1' },
+    settle: { keeps: true, asked: ['jellyfin http://jf:8096'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'type change beside other servers, the new type answers with the id the old server has: still another server',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', servers: [JF()] }), change: { serverType: 'emby', serverUrl: 'http://em2:8096' }, answers: { 'http://em2:8096': 'plex-id' },
+    settle: { keeps: false, asked: ['emby http://em2:8096'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'type change to a type nobody knows in a one-server household: the same split',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverType: 'kodi', serverUrl: 'http://k:1' }, answers: {},
+    settle: { keeps: true, asked: ['kodi http://k:1'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'type change beside other servers: set aside in both',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', servers: [JF()] }), change: { serverType: 'jellyfin', serverUrl: 'http://jf2:8096' }, answers: { 'http://jf2:8096': 'jf-id-2' },
+    settle: { keeps: false, asked: ['jellyfin http://jf2:8096'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'type change with a scoped id held (no server in the list): set aside in both (D163 3)',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', libraryKeys: ['1', '@jf-id-1/b1'], libraryNames: ['Movies', 'JF Movies'] }),
+    change: { serverType: 'jellyfin', serverUrl: 'http://jf:8096' }, answers: { 'http://jf:8096': 'jf-id-1' },
+    settle: { keeps: false, asked: ['jellyfin http://jf:8096'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'a pasted token (not the old one) at another server of the same type: it goes where it is typed (D142 2)',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverUrl: 'http://new:32400', plexToken: 'pasted' }, answers: { 'http://new:32400': 'other-id' },
+    settle: { keeps: true, asked: ['plex http://new:32400'] }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'a pasted token with a type change, beside other servers: it goes where it is typed',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', servers: [JF()] }), change: { serverType: 'jellyfin', serverUrl: 'http://jf2:8096', plexToken: 'pasted' }, answers: { 'http://jf2:8096': 'jf-id-2' },
+    settle: { keeps: true, asked: ['jellyfin http://jf2:8096'] }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'no token at all: nothing to set aside',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', plexToken: '' }), change: { serverUrl: 'http://new:32400' }, answers: { 'http://new:32400': 'other-id' },
+    settle: { keeps: true, asked: ['plex http://new:32400'] }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'the server Remove moved into the first place, retyped to the same server: its own token stays (D162 3)',
+    prev: () => promoteBase(), promote: true, change: { serverUrl: 'http://other-name:8096' }, answers: { 'http://other-name:8096': 'jf-id-1' },
+    settle: { keeps: true, asked: ['jellyfin http://other-name:8096'] }, sheet: { go: true, asked: ['jellyfin http://other-name:8096'] },
+  },
+  {
+    name: 'the server Remove moved into the first place, retyped to another server: its token is set aside',
+    prev: () => promoteBase(), promote: true, change: { serverUrl: 'http://elsewhere:8096' }, answers: { 'http://elsewhere:8096': 'other-server-id' },
+    settle: { keeps: false, asked: ['jellyfin http://elsewhere:8096'] }, sheet: { go: false, asked: ['jellyfin http://elsewhere:8096'] },
+  },
+  // addressOf is not idempotent ("x /" gives "x "), so an address can differ from the stored one in its raw form and not in its cleaned form.
+  // Save enters its read on the raw comparison and never takes the sheet's same-address shortcut (D178 1): the id is read and recorded (`after`).
+  {
+    name: 'a promoted server stored as "http://jf:8096 /", retyped to "http://jf:8096": Save reads its id and keeps it; the sheet sees the same address',
+    prev: () => sanitize({ ...promoteBase(), servers: [JF({ url: 'http://jf:8096 /' })] }), promote: true, change: { serverUrl: 'http://jf:8096' }, answers: { 'http://jf:8096': 'jf-id-1' },
+    settle: { keeps: true, asked: ['jellyfin http://jf:8096'], after: { serverId: 'jf-id-1', promoted: true, sameRecorded: false, gone: ['plex-id'] } }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'a first address stored as "http://plex:32400 / /", corrected to "http://plex:32400" (recorded id): Save reads the id and records the same server',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', serverUrl: 'http://plex:32400 / /' }), change: { serverUrl: 'http://plex:32400' }, answers: { 'http://plex:32400': 'plex-id' },
+    settle: { keeps: true, asked: ['plex http://plex:32400'], after: { serverId: 'plex-id', promoted: false, sameRecorded: true, gone: [] } }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'the same, id never recorded: Save reads both forms of the address and records the id',
+    prev: () => settled({ ...v240(), serverUrl: 'http://plex:32400 / /' }), change: { serverUrl: 'http://plex:32400' }, answers: { 'http://plex:32400': 'm', 'http://plex:32400 ': 'm' },
+    settle: { keeps: true, asked: ['plex http://plex:32400', 'plex http://plex:32400 '], after: { serverId: 'm', promoted: false, sameRecorded: false, gone: [] } }, sheet: { go: true, asked: [] },
+  },
+];
+/** The settings before a row's Save, the settings it hands in, and the server the sheet's sign-in was made for (the promoted one after Remove). */
+const rowInputs = (row) => {
+  const prev = row.prev();
+  const basis = serverList(prev)[row.promote ? 1 : 0];
+  const next = row.promote ? retyped(prev, row.change.serverUrl, { libraryKeys: ['@jf-id-1/b1'], libraryKey: '@jf-id-1/b1' }) : settled({ ...prev, ...row.change });
+  return { prev, basis: { type: basis.type, url: basis.url, token: basis.token, id: basis.id }, next };
+};
+
+test('the token rule, Save: the old token is kept or set aside in each household and change (table)', async () => {
+  for (const row of TOKEN_ROWS) {
+    const { prev, next } = rowInputs(row);
+    const { read, asked } = reader(row.answers);
+    const r = await settleServers(prev, next, read);
+    assert.equal(r.next.plexToken, row.settle.keeps ? next.plexToken : '', `${row.name}: token ${row.settle.keeps ? 'kept' : 'set aside'}`);
+    assert.deepEqual(asked, row.settle.asked, `${row.name}: ids asked`);
+    if (row.settle.after) {
+      const { serverId, promoted, sameRecorded, gone } = row.settle.after;
+      assert.deepEqual([r.next.serverId, r.promoted, r.sameRecorded, r.gone.map((e) => e.id)], [serverId, promoted, sameRecorded, gone], `${row.name}: the id recorded, what is kept and what goes`);
+    }
+  }
+});
+
+test('the token rule, Test connection: the sign-in may go to the address or is set aside, and the ids asked (table)', async () => {
+  for (const row of TOKEN_ROWS) {
+    const { basis, next } = rowInputs(row);
+    const { read, asked } = reader(row.answers);
+    const verdict = await oldTokenMayGo({ basis, type: next.serverType || 'plex', url: next.serverUrl, token: next.plexToken }, read);
+    assert.equal(verdict.go, row.sheet.go, `${row.name}: may go`);
+    assert.deepEqual(asked, row.sheet.asked, `${row.name}: ids asked`);
+  }
+});
+
+test('the token rule: what the caller asks for changes what is read and what a change of type alone does, never whether the server is the same one', async () => {
+  const basis = { type: 'plex', url: 'http://plex:32400', token: 'plex-token', id: 'plex-id' };
+  const ask = async (input, answers) => {
+    const { read, asked } = reader(answers);
+    return { verdict: await oldTokenMayGo({ basis, token: 'plex-token', ...input }, read), asked };
+  };
+  // the same type at the same address: the same server, nothing read. Save (needsAnswer) never takes this shortcut and reads the id (D178 1)
+  const idle = await ask({ type: 'plex', url: 'http://plex:32400/' }, {});
+  assert.deepEqual([idle.verdict, idle.asked], [{ go: true, same: true, answered: undefined }, []]);
+  const reads = await ask({ type: 'plex', url: 'http://plex:32400/', needsAnswer: true }, { 'http://plex:32400/': 'plex-id' });
+  assert.deepEqual([reads.verdict, reads.asked], [{ go: true, same: true, answered: 'plex-id' }, ['plex http://plex:32400/']]);
+  // a token that is not the basis's: it may go. Save still wants the id read there; the sheet reads nothing
+  const pasted = { type: 'plex', url: 'http://new:32400', token: 'pasted' };
+  const save = await ask({ ...pasted, needsAnswer: true }, { 'http://new:32400': 'other-id' });
+  assert.deepEqual([save.verdict, save.asked], [{ go: true, same: false, answered: 'other-id' }, ['plex http://new:32400']]);
+  const sheet = await ask(pasted, { 'http://new:32400': 'other-id' });
+  assert.deepEqual([sheet.verdict, sheet.asked], [{ go: true, same: false, answered: undefined }, []]);
+  // a change of type alone: kept only when the caller says so; the server is another one either way
+  const retyped = { type: 'jellyfin', url: 'http://jf:8096' };
+  const keeps = await ask({ ...retyped, keepsTypeChange: true, needsAnswer: true }, { 'http://jf:8096': 'plex-id' });
+  assert.deepEqual([keeps.verdict, keeps.asked], [{ go: true, same: false, answered: 'plex-id' }, ['jellyfin http://jf:8096']]);
+  const sets = await ask({ ...retyped, needsAnswer: true }, { 'http://jf:8096': 'plex-id' });
+  assert.deepEqual([sets.verdict.go, sets.verdict.same], [false, false]);
+  // the same type at another address: the caller's keepsTypeChange does not decide it
+  const elsewhere = await ask({ type: 'plex', url: 'http://new:32400', keepsTypeChange: true }, { 'http://new:32400': 'other-id' });
+  assert.deepEqual([elsewhere.verdict.go, elsewhere.verdict.same], [false, false]);
 });
 
 test('several servers, a retype to another server: the main selection follows the new server only with a fresh sign-in; with the old token the old first server\'s keys leave the main selection too (D163 1)', async () => {

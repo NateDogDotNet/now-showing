@@ -9,7 +9,7 @@ import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describe
 import { parseHHMM } from './schedule.js';
 import { LIMITS } from './ratings.js';
 import { belongsTo, genreRequestValue, memberBelongsTo, offeredRatings, selectionOf } from './selection.js';
-import { addressOf as cleanAddress, defaults, importWithConnection, isConfigured, MAX_SERVERS, sanitize, serverList, toExport } from './settings.js';
+import { addressOf as cleanAddress, defaults, importWithConnection, isConfigured, MAX_SERVERS, oldTokenMayGo, sanitize, serverList, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
 const LAYOUT_KEYS = ['posterScale', 'posterOffsetX', 'posterOffsetY'];
@@ -958,8 +958,9 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   }
 
   /**
-   * The sign-in the sheet holds was made for the saved server. At another address (or type) it goes only after the server there is read,
-   * without it, and found to be the same one (D157 3). Otherwise it is set aside and the household signs in to that server.
+   * The sign-in the sheet holds was made for the saved server. Test connection asks `oldTokenMayGo` (js/settings.js, the rule Save follows too)
+   * whether it may go to the address and type in the sheet: at the same address, or at another one whose server, read without it, is found to be
+   * the same one (D157 3). Otherwise it is set aside here, and the household signs in to that server. A change of type is always another server.
    */
   async function tokenMayGo(s) {
     const type = s.serverType || 'plex';
@@ -967,11 +968,8 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     // into the first place, that server (its own token, checked at its own address, D162 3). Anywhere else it goes only after the server
     // there is read without it and found to be the same one (D157 3).
     const basis = promoted || (original && { type: original.serverType || 'plex', url: original.serverUrl, token: original.plexToken, id: original.serverId });
-    if (!basis || !s.plexToken || s.plexToken !== basis.token) return true; // a sign-in made in this sheet belongs to the address it was made at
-    const sameType = type === basis.type;
-    if (sameType && cleanAddress(s.serverUrl) === cleanAddress(basis.url)) return true;
-    const [now, then] = sameType ? await Promise.all([readId(type, s.serverUrl), basis.id || readId(type, basis.url)]) : [null, null];
-    if (now && then && now === then) return true;
+    if (!basis) return true;
+    if ((await oldTokenMayGo({ basis, type, url: s.serverUrl, token: s.plexToken }, readId)).go) return true;
     field('plexToken').value = '';
     field('serverUserId').value = '';
     // With several servers, or a first server that is not the carried one, the library ticked for the server whose sign-in was set aside and its

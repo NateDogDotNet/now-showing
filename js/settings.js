@@ -484,6 +484,35 @@ function holdsScopedId(s) {
 }
 
 /**
+ * May the sign-in made for `basis` go to the server of `type` at `url`? The one rule Save (`settleServers`) and Test connection (the Settings
+ * sheet) both follow (D157 3, D162 3, D163, D165 3). `basis` is the server the sign-in was made for, `{ type, url, token, id }` (the saved first
+ * server, or the server Remove moved into its place). `readId(type, url)` asks who answers WITHOUT a token (see `settleServers`).
+ *  - A token that is not `basis`'s (typed or pasted in the sheet, or made for the new server) belongs to the address it was made at: it may go.
+ *  - The same type at the same address is the same server: it may go, and nothing is read. Save never takes this shortcut (`needsAnswer`): it has
+ *    already found the address changed on the raw comparison, and `addressOf` is not idempotent (`"x /"` gives `"x "`), so the cleaned forms can
+ *    be equal when the stored ones are not. Save then reads the id there, as it always has (D178 1).
+ *  - Otherwise it may go only when the same type answers there with `basis`'s own id (`basis.id`, or the id read at `basis.url` when none was
+ *    recorded). A change of type is always another server (D157 2).
+ *  - Another server is told the token only when the caller says a change of type alone keeps it: `keepsTypeChange`, which Save sets for a household
+ *    of one server (D163 2, Q5); the sheet never does.
+ *  - `needsAnswer`: Save. It records the id read at `url` whatever the token and the type, so it is read even when the verdict does not need it.
+ * Returns `{ go, same, answered }`: `same` is whether the server at `url` is `basis`'s, `answered` the id read there (null when nothing answered,
+ * undefined when nothing was read).
+ */
+export async function oldTokenMayGo({ basis, type, url, token, keepsTypeChange = false, needsAnswer = false }, readId) {
+  const sameType = type === basis.type;
+  if (!needsAnswer && sameType && addressOf(url) === addressOf(basis.url)) return { go: true, same: true, answered: undefined };
+  const holds = Boolean(token) && token === basis.token;
+  if (!holds && !needsAnswer) return { go: true, same: false, answered: undefined };
+  const [answered, recorded] = await Promise.all([
+    needsAnswer || sameType ? readId(type, url) : undefined,
+    sameType ? basis.id || readId(type, basis.url) : null,
+  ]);
+  const same = Boolean(recorded) && answered === recorded; // `recorded` is null after a change of type: always another server (D157 2)
+  return { go: same || !holds || (!sameType && keepsTypeChange), same, answered };
+}
+
+/**
  * The servers as a Save stores them. `readId(type, url)` asks who answers at an address WITHOUT a token and resolves to the server's own id,
  * or null when nothing answers or the reply holds no usable id (the adapters' `publicIdentity`). Returns `{ next, notes, removed, gone, promoted, sameRecorded }`; nothing is stored here.
  *  - The first server's address changes (D156 3, D157 2, 3): its id is read at the new address before the old token goes there. The same id as
@@ -516,25 +545,19 @@ export async function settleServers(prev, next, readId) {
   const urlChanged = base.url !== address;
   let another = null; // set when the first server is now another server: { id }
   let freshToken = false; // the token at Save is a sign-in made for the new server, not the old first server's
+  // More than one server before this Save (D163 3): `servers` is not empty, or any scoped id is stored.
+  const multi = prior.length > 1 || holdsScopedId(prev);
   // A first connection (the first server had no address) has nothing to compare with and nothing to clear: no read is made.
   if (address && base.url && (typeChanged || urlChanged)) {
-    const answered = await readId(type, address);
-    let same = false;
-    if (!typeChanged) {
-      if (base.id) same = answered !== null && answered === base.id;
-      else {
-        const old = await readId(type, base.url);
-        same = answered !== null && old !== null && answered === old;
-      }
-    }
+    // The old token was made for another server: it goes whatever changed, the type included, in a household with more than one server
+    // (D163 3). A one-server household that changes only the type keeps the 2.4.0 behaviour (D163 2, Q5; tests/e2e/jellyfin.spec.mjs 13b).
+    const { go, same, answered } = await oldTokenMayGo({ basis: base, type, url: address, token: out.plexToken, keepsTypeChange: !multi, needsAnswer: true }, readId);
     if (same) out.serverId = answered;
     else {
       another = { id: answered || '' };
       // A sign-in the sheet made for the new server differs from the old first server's token; one that is the same is the old server's.
       freshToken = Boolean(out.plexToken) && out.plexToken !== base.token;
-      // The old token was made for another server: it goes whatever changed, the type included, in a household with more than one server
-      // (D163 3). A one-server household that changes only the type keeps the 2.4.0 behaviour (D163 2, Q5; tests/e2e/jellyfin.spec.mjs 13b).
-      if (out.plexToken && out.plexToken === base.token && (!typeChanged || prior.length > 1 || holdsScopedId(prev))) Object.assign(out, { plexToken: '', serverUserId: '', serverName: '' });
+      if (!go) Object.assign(out, { plexToken: '', serverUserId: '', serverName: '' });
     }
   } else if (address && !out.serverCarried && !out.serverId) {
     out.serverId = (await readId(type, address)) || '';
@@ -558,7 +581,6 @@ export async function settleServers(prev, next, readId) {
     // More than one server before this Save (D163 3): the first server's keys leave every profile and none moves onto the new server (D163 1);
     // the main selection moves, as the sheet holds the household's own choice from the new address. One server keeps the 2.4.0 behaviour: the
     // profiles keep their ids as stored (D163 2).
-    const multi = prior.length > 1 || holdsScopedId(prev);
     const profiles = out.profiles;
     // The main selection follows the new server only when the household signed in to it in this sheet (a fresh token). A retype saved with the old
     // token, never signed in, leaves the old first server's keys in the main selection too: they go (D163 1).
