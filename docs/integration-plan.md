@@ -1504,3 +1504,85 @@ Facts this section stands on (invocation probes, 2026-11-05):
 | `release-2.4.2` | `server-ui-fixes` | docs | 18480/18801 |
 
 Serial: every phase touches `js/settings.js`, `js/settings-ui.js` or `js/main.js` of the one before. Every reviewer gets its own pair: 18680/19001, 18580/18901, 18782/19103. The conductor uses 18780/19101.
+
+## Run 12 — 2.4.3: Play now on a Plex player, the live preview fix, and the 2.4.2 follow-ups (DRAFT, waits for the policy answer)
+
+Drafted on the owner's word (2026-11-05, verbatim: "draft the plan for the next 2.4.x run. include the follow-ups and Play now, the live settings preview fix."). The policy answer will be D181. Starting commit: `main` 984cd0a0, on branch `2.4.3`. No pull request, merge or tag unless the owner asks (D13, D79). Conventions are as in runs 3–11. Tested against the mock servers only; every Play now request to a real Plex server or player is a **(verify)** item.
+
+Facts this section stands on (invocation probes, 2026-11-05; `.orchestrator/artifacts/research--play-now-r1.md` and `research--preview-and-followups-r1.md`):
+- `npm test` passes 977 of 977 on `main` (the D180 merge check).
+- The live preview builds its preview from a carve-out list (`js/main.js:585-597`), so an unsaved non-live value reaches the display: an unsaved Cross-fade of 4000 ms gave `--fade-ms` 4000 ms after a live change (reproduced). An allowlist of the `data-live` keys keeps 1200 ms and passes 977 of 977 in a scratch copy. D138 1 ruled "no change" in run 9; this run reverses it (D181 2).
+- `addressOf` (`js/settings.js:31`) trims, then strips slashes, so `"x /"` gives `"x "` (D178 2). `/[\s/]+$/` is idempotent; `tests/settings.test.js:985-995` assert the old output and are rewritten.
+- The status pill's `serverLabels()` (`js/main.js:541-544`) names types; it is also used by the limited empty card (`js/main.js:391`). The pill tests (`jellyfin.spec.mjs:698`, `status.spec.mjs:35`, `followups.spec.mjs:60`, `emby.spec.mjs:353`) set no server name, so their text is unchanged.
+- The sheet's footer is not sticky (`css/app.css:491-498`). At rotation 90 (844x390 and 390x844) the focused first Remove sits below the visible part of the sheet's body; `scrollIntoView({block: 'nearest'})` after the focus (`js/main.js:1545`) brings it into view in a probe.
+- Play now: a control button follows the Pin pattern (`index.html:103`, the `actions` map at `js/main.js:880-889`, `js/poster-pin.js`). `requestPin()` (`js/pin-gate.js:21`) is the one PIN check. Per-display, never-exported keys are `LOCAL_KEYS` (`js/settings.js:179`). The limit check is `allows()` (`js/ratings.js:48`). The mocks serve no plex.tv resources, no `/player/*` endpoint and no Sessions. Touch gestures are not built, so the double tap and long press entry is not in this run.
+- Plex removed remote control from Plex Web and the desktop app in 2022; whether the owner's TV app still takes it in 2026 is unknown (verify on the owner's TV).
+
+### 66. `followup-fixes` — The address cleaner, the pill's names, and the focused Remove in view
+- **Goal:** closes the three run-11 follow-ups: `addressOf` is idempotent (D178 2); the status pill and the limited empty card name each server as the all-down card does (D179 4); at rotation 90 the Remove button that Open settings focuses is in view (D179 4).
+- **Requirements:** R-SRC-4, R-UPG-5, R-STAT-1 · **Rulings:** D165 4, D168 1, D178 2, D179 4, D181 · **Mode:** afk · **Tags:** ui · **Blocked by:** —
+- **Output:** `js/settings.js`, `js/main.js`, `tests/settings.test.js`, `tests/e2e/multi-server.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/status.spec.mjs`
+- **Acceptance criteria:**
+  1. `npm test` (a table: `addressOf(addressOf(x)) === addressOf(x)` for `"x /"`, `"x/ "`, `"x//"`, `"  x  "`, `"http://h:1/ /"`; the rows at `tests/settings.test.js:985-995` state the new output).
+  2. `node tests/e2e/run.mjs multi-server preset status followups jellyfin emby` (two named servers, both down: the pill and the card name the same servers in the same words; two named servers with a limit that hides every poster: the limited empty card names them the same way; two servers, Open settings at 844x390 and at 390x844 with rotation 90: the focused Remove's bounding rect lies inside the sheet body's visible rect, and `document.elementFromPoint` at its centre is the button).
+  3. scope: only the Output paths changed.
+- **Notes/hazards:** the pill rule takes the card's own helper; it is not a second copy of the naming rule. Duplicate names follow the card's existing rule.
+
+### 67. `live-preview` — A live change previews only the live values
+- **Goal:** changing a live control in Settings previews that control's live values over the saved settings; an unsaved non-live value (Cross-fade, the limit, slots, profiles, the selection, the pin, kiosk) never reaches the display before Save (D181 2, reversing D138 1).
+- **Requirements:** R-SET-1 · **Rulings:** D120 1, D122 4, D135 5, D137 3, D138 1, D181 · **Mode:** afk · **Tags:** risk:high · **Blocked by:** `followup-fixes` (js/main.js)
+- **Output:** `js/main.js`, `tests/e2e/settings-sheet.spec.mjs`, `tests/e2e/profiles.spec.mjs`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `npm test`.
+  2. `node tests/e2e/run.mjs settings-sheet profiles brightness helper kiosk now-playing fill content-rating` (new cases: an unsaved Cross-fade of 4000 ms, then a live change: `--fade-ms` stays at the saved value and the live value shows; Cancel restores every live value; with a profile open, a live control in the profile's section previews only that live value).
+  3. `grep -q 'D181' docs/spec.md` (R-SET-1 says what a live preview carries).
+  4. scope: only the Output paths changed.
+- **Notes/hazards:** Hazard: the preview must never show a poster that the saved limit or the previewed limit would not allow (D120 1, D122 4); the allowlist keeps every limit-bearing key saved. `content-rating` needs a long timeout (it timed out at 180 s in the research probe).
+
+### 68. `play-now-players` — The allowed devices list
+- **Goal:** Settings, behind the PIN, lists the Plex players on the account and lets the owner allow each one for this display. The list is kept only on this display, starts empty, matches players by client identifier, and marks a player that has left the account as unavailable.
+- **Requirements:** R-PLAY-1 (new) · **Rulings:** D65, the D65 note, D16, D181 · **Mode:** afk · **Tags:** risk:high, ui · **Blocked by:** `live-preview` (js/main.js)
+- **Output:** `js/sources/plex.js`, `js/sources/index.js`, `js/settings.js`, `js/settings-ui.js`, `index.html`, `css/app.css`, `scripts/mock-plex.mjs`, `tests/e2e/lib.mjs`, `tests/settings.test.js`, `tests/plex.test.js`, `tests/e2e/play-now.spec.mjs`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `npm test` (the players read keeps resources whose `provides` names `player`; `allowedPlayers` is in `LOCAL_KEYS`: absent from every export and ignored on import; a renamed player with the same client identifier stays allowed; a player gone from the account is kept and shown unavailable).
+  2. `node tests/e2e/run.mjs play-now settings-sheet preset first-run` (the list shows behind the PIN; a new display allows nothing; allowing and saving survives a reload; the list reads from the mock plex.tv resources).
+  3. `grep -q 'R-PLAY-1' docs/spec.md`.
+  4. scope: only the Output paths changed.
+- **Notes/hazards:** the players read uses the existing plex.tv request helper; the token goes only to plex.tv, as it does today. Jellyfin and Emby servers show no players (D181 1).
+
+### 69. `play-now-plex` — Play now on an allowed Plex player
+- **Goal:** a Play now control button sends the poster's title to an allowed Plex player through the poster's own Plex server, resuming at the saved position when there is one. It is hidden while no device is allowed and on a Jellyfin or Emby poster, asks for the PIN each time when a PIN is set, and refuses a title the limit in force does not allow before any request.
+- **Requirements:** R-PLAY-1, R-CTRL-1 · **Rulings:** D16, D65, D120 1, D181 · **Mode:** afk · **Tags:** risk:high, ui · **Blocked by:** `play-now-players`
+- **Output:** `index.html`, `css/app.css`, `js/play-now.js` (new), `js/main.js`, `js/sources/plex.js`, `js/sources/index.js`, `sw.js`, `scripts/mock-plex.mjs`, `tests/play-now.test.js` (new), `tests/e2e/play-now.spec.mjs`, `tests/e2e/lib.mjs`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `npm test` (a decision table in `js/play-now.js`: no allowed device → hidden, nothing sent; one allowed and available → straight to it; two or more → a menu; an unavailable device is listed and cannot be picked; a title the limit or the slot in force refuses → nothing sent; a PIN set → `requestPin` before every send; resume offset from the item's saved position, and "Play from start" sends 0).
+  2. `node tests/e2e/run.mjs play-now multi-server jellyfin emby smoke` (the mock player records the command: the poster's key, the offset, the server's machine identifier and the target client identifier, with no token in the command sent to the player; a refused title records nothing; the button is reachable by the arrow keys; Jellyfin and Emby posters show no button).
+  3. `node scripts/check-precache.mjs` (`js/play-now.js` is precached).
+  4. scope: only the Output paths changed.
+- **Notes/hazards:** Hazard: a title the limit refuses must never reach the player (re-check with `allows()` at send time, not at button time). The proxy call and its parameters are (verify) on a real server; the mock follows the community-documented shape.
+
+### 70. `release-2.4.3` — Version 2.4.3, the notice and the docs
+- **Goal:** `VERSION` is 2.4.3; a "What's new in 2.4.3" notice names Play now; README, Roadmap, the spec and `docs/validation/real-server-extended.md` (new (verify) rows for Play now on a real Plex server and player) describe 2.4.3.
+- **Requirements:** R-UPG-5, R-PLAY-1 · **Rulings:** D13, D79, D181 · **Mode:** afk · **Tags:** docs · **Blocked by:** `play-now-plex`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`, `docs/spec.md`, `docs/validation/real-server-extended.md`, `tests/e2e/release.spec.mjs`
+- **Acceptance criteria:**
+  1. `grep -q "VERSION = '2.4.3'" sw.js && grep -q "VERSION = '2.4.3'" js/main.js && test "$(grep -c '"version": "2.4.3"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
+  2. `grep -qE '^## .*Done in 2\.4\.3' Roadmap.md && grep -q "WHATS_NEW_VERSION = '2.4.3'" js/main.js && ! grep -q 'Carried from 2.4' Roadmap.md`
+  3. `npm test && npm run test:e2e && node scripts/check-precache.mjs` (once, by the conductor, after the memory gate)
+  4. scope: only the Output paths changed.
+  5. narrated: keep-docs-current over `984cd0a0..HEAD` inside the phase; the anchored documentation review APPROVE on disk.
+- **Notes/hazards:** No tag, no GitHub release, no pull request and no merge into `main` unless the owner asks (D13, D79).
+
+### Run 12 graph, tags and ports
+
+| Phase | Blocked by | Tags | Builder ports |
+|---|---|---|---|
+| `followup-fixes` | — | ui | 18480/18801 |
+| `live-preview` | `followup-fixes` | risk:high | 18480/18801 |
+| `play-now-players` | `live-preview` | risk:high, ui | 18480/18801 |
+| `play-now-plex` | `play-now-players` | risk:high, ui | 18480/18801 |
+| `release-2.4.3` | `play-now-plex` | docs | 18480/18801 |
+
+Serial: each phase touches `js/main.js`, `js/settings.js` or the Play now files of the one before. Every reviewer gets its own pair: 18680/19001, 18580/18901, 18782/19103. The conductor uses 18780/19101.
+
+Out of scope for run 12 (D181 1): "Here" (local playback in the display's browser: the transcoder path, a token-safe media URL and Pi codecs cannot be tested without real devices); Play now on Jellyfin and Emby (a later run, per adapter); the double tap and long press entry (touch gestures are not built); the movie-night countdown, birthday and occasion mode, and the Picture frame sources (run-11 facts).
