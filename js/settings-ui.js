@@ -2,14 +2,14 @@
 
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
-import { createSource, signInFlow } from './sources/index.js';
+import { createSource, createSources, needsSources, readServerId, signInFlow } from './sources/index.js';
 import { describeLimitNow, MAX_SLOTS, NO_LIMIT, wasUnreadable } from './limit-schedule.js';
 import { createPositionMode } from './position.js';
 import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describeProfile, MAX_PROFILES, removeProfile, renameProfile, updateProfile } from './profiles.js';
 import { parseHHMM } from './schedule.js';
 import { LIMITS } from './ratings.js';
-import { genreRequestValue, offeredRatings, selectionOf } from './selection.js';
-import { defaults, importWithConnection, isConfigured, sanitize, toExport } from './settings.js';
+import { belongsTo, genreRequestValue, memberBelongsTo, offeredRatings, selectionOf } from './selection.js';
+import { addressOf as cleanAddress, defaults, importWithConnection, isConfigured, MAX_SERVERS, sanitize, serverList, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
 const LAYOUT_KEYS = ['posterScale', 'posterOffsetX', 'posterOffsetY'];
@@ -164,11 +164,16 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   let genreRun = 0; // bumped whenever the genre list is asked for again, so a late genre answer is ignored
   let sourceRun = 0; // the same for the collection and playlist list: its own counter, so ticking a library never throws its answer away
   let offerClient = null; // the client of the last successful connection test
+  // The other servers (up to two) and what the first one is: its own id once known, and whether it is the entry carried over from 2.4.0 (D157 1).
+  // Set by write(), changed by Add and Remove, saved by Save, like pendingPin.
+  let pending = { servers: [], id: '', carried: true };
+  let removedNames = []; // the servers Remove took out in this sheet, as the sheet named them: { id, carried, name }, for the Save toast
+  let promoted = null; // the server Remove moved into the first place, { type, url, token }: its own sign-in, not one carried to another address
   let held = {}; // the token, address, server name and user id set aside for the server type the sheet is not showing, so a change of mind loses nothing
 
   /** The server type the sheet shows. */
   const formType = () => field('serverType').value || 'plex';
-  const addressOf = () => field('serverUrl').value.trim().replace(/\/+$/, '');
+  const addressOf = () => cleanAddress(field('serverUrl').value);
   /** The sign-in flow of the type the sheet shows (the saved one may differ until Save). A type no adapter knows reads the Plex flow's words here. */
   const flow = () => {
     try {
@@ -190,6 +195,9 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       else el.value = String(s[el.name]);
     }
     held = {};
+    pending = { servers: (s.servers || []).map((e) => ({ ...e })), id: s.serverId || '', carried: s.serverCarried !== false };
+    promoted = null;
+    removedNames = [];
     dropTest();
     syncServerType();
     // The household toggle is UI-only: on when a limit is set; off stores ''. The select keeps PG-13 while off.
@@ -245,6 +253,9 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     s.genres = sel.genres; // kept while a collection or playlist is the source: the engine ignores them there, and the libraries again restore them (D112 item 3)
     s.ratings = sel.ratings; // a tick above the offered range is kept: the engine's intersection with the limit in force decides what is shown (D110 item 6)
     s.source = sel.source;
+    s.servers = pending.servers.map((e) => ({ ...e }));
+    s.serverId = pending.id;
+    s.serverCarried = pending.carried;
     s.staticRatingKey = pendingPin.key;
     s.staticTitle = pendingPin.title;
     s.settingsPinHash = pendingAuth.hash;
@@ -705,7 +716,15 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     const library = sel.source
       ? sel.source.title || sel.source.kind // a collection or playlist replaces the libraries: it is what is shown
       : sel.libraries.map((l) => l.name).filter(Boolean).join(', ') || (sel.libraries.length && getSettings().libraryName) || '';
-    $('connected-text').textContent = `Connected to ${server}${library ? ` · ${library}` : ''}`;
+    const list = sheetServers();
+    if (list.length > 1) {
+      // Several servers: every server is named, and a library is named with its server.
+      const libs = sel.source ? [sel.source.title || sel.source.kind] : sel.libraries.map((l) => `${l.name || 'a library'} (${nameOf(list[Math.max(0, list.findIndex((e) => belongsTo(l.key, e)))], Math.max(0, list.findIndex((e) => belongsTo(l.key, e))))})`);
+      $('connected-text').textContent = `Connected to ${list.map(nameOf).join(', ')}${libs.length ? ` · ${libs.join(', ')}` : ''}`;
+    } else {
+      $('connected-text').textContent = `Connected to ${server}${library ? ` · ${library}` : ''}`;
+    }
+    renderServers();
   }
 
   function renderConnection() {
@@ -766,6 +785,10 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
 
   function renderLibraries() {
     const chosen = new Map(sel.libraries.map((l) => [l.key, l.name]));
+    const list = sheetServers();
+    const many = list.length > 1;
+    // The server a library is on: by its key (a bare key is the carried first server's), shown by that server's name.
+    const slotOf = (key) => Math.max(0, list.findIndex((e) => belongsTo(key, e)));
     const rows = offered.libraries.map((l) => ({ key: l.key, title: l.title }));
     for (const [key, name] of chosen) if (!rows.some((r) => r.key === key)) rows.push({ key, title: name || `Library ${key}` }); // a stored choice the server did not list
     const locked = Boolean(sel.source);
@@ -773,10 +796,17 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       $('library-list').replaceChildren(Object.assign(document.createElement('li'), { className: 'muted small', textContent: 'Test the connection to load your libraries.' }));
       return;
     }
+    const row = (r) => {
+      const count = offered.counts[r.key];
+      return pickRow(r.key, count === undefined ? r.title : `${r.title} · ${countLabel(count)}`, chosen.has(r.key), { disabled: locked, data: { title: r.title } });
+    };
+    if (!many) return void $('library-list').replaceChildren(...rows.map(row));
+    // Several servers: each server's libraries sit under that server's name.
     $('library-list').replaceChildren(
-      ...rows.map((r) => {
-        const count = offered.counts[r.key];
-        return pickRow(r.key, count === undefined ? r.title : `${r.title} · ${countLabel(count)}`, chosen.has(r.key), { disabled: locked, data: { title: r.title } });
+      ...list.flatMap((entry, slot) => {
+        const mine = rows.filter((r) => slotOf(r.key) === slot);
+        if (!mine.length) return [];
+        return [Object.assign(document.createElement('li'), { className: 'server-heading', textContent: nameOf(entry, slot) }), ...mine.map(row)];
       }),
     );
   }
@@ -901,12 +931,14 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   }
 
   /** The server's movie libraries are on show: keep the ticked ones the server still has (any type), or tick the first movie library. */
-  function offerLibraries(all, client) {
+  function offerLibraries(all, client, down = []) {
     const movies = all.filter((l) => l.type === 'movie');
     countRun++;
     offered = { libraries: movies, genres: [], collections: [], playlists: [], counts: {} };
     const known = new Map(all.filter((l) => l.type === 'movie' || l.type === 'show').map((l) => [l.key, l.title]));
-    sel.libraries = sel.libraries.filter((l) => known.has(l.key)).map((l) => ({ key: l.key, name: known.get(l.key) }));
+    // A chosen library of a server that did not answer stays: it is not known to be gone, and only a removed server's keys leave (D157 9).
+    const unheard = (key) => down.some((e) => belongsTo(key, e));
+    sel.libraries = sel.libraries.filter((l) => known.has(l.key) || unheard(l.key)).map((l) => ({ key: l.key, name: known.get(l.key) ?? l.name }));
     if (!sel.libraries.length && !sel.source && movies.length) sel.libraries = [{ key: movies[0].key, name: movies[0].title }];
     for (const l of all) if (l.type === 'show' && sel.libraries.some((c) => c.key === l.key) && !offered.libraries.some((o) => o.key === l.key)) offered.libraries.push(l);
     renderSelection();
@@ -925,6 +957,40 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     );
   }
 
+  /**
+   * The sign-in the sheet holds was made for the saved server. At another address (or type) it goes only after the server there is read,
+   * without it, and found to be the same one (D157 3). Otherwise it is set aside and the household signs in to that server.
+   */
+  async function tokenMayGo(s) {
+    const type = s.serverType || 'plex';
+    // The sign-in the sheet holds was made for one server at one address: the saved first server, or, after Remove moved another server
+    // into the first place, that server (its own token, checked at its own address, D162 3). Anywhere else it goes only after the server
+    // there is read without it and found to be the same one (D157 3).
+    const basis = promoted || (original && { type: original.serverType || 'plex', url: original.serverUrl, token: original.plexToken, id: original.serverId });
+    if (!basis || !s.plexToken || s.plexToken !== basis.token) return true; // a sign-in made in this sheet belongs to the address it was made at
+    const sameType = type === basis.type;
+    if (sameType && cleanAddress(s.serverUrl) === cleanAddress(basis.url)) return true;
+    const [now, then] = sameType ? await Promise.all([readId(type, s.serverUrl), basis.id || readId(type, basis.url)]) : [null, null];
+    if (now && then && now === then) return true;
+    field('plexToken').value = '';
+    field('serverUserId').value = '';
+    // With several servers, or a first server that is not the carried one, the library ticked for the server whose sign-in was set aside and its
+    // name no longer stand: the card and the list refresh, and the household chooses again from the new server (D163 1). One server keeps its choice.
+    if (!pending.carried || sheetServers().length > 1) {
+      const first = sheetServers()[0];
+      sel.libraries = sel.libraries.filter((l) => !belongsTo(l.key, first));
+      if (sel.source && memberBelongsTo(`${sel.source.kind}:${sel.source.key}`, first)) sel.source = null;
+      form.dataset.serverName = '';
+      offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
+      offerClient = null;
+      renderSelection();
+    }
+    connectionOpen = true;
+    renderConnection();
+    setResult(`✗ That is not the server your sign-in was made for, so the sign-in was not sent. Sign in to ${flow().label} at this address.`);
+    return false;
+  }
+
   async function testConnection() {
     if (testing) return false;
     const s = read();
@@ -936,18 +1002,28 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       setResult(flow().words.httpsBlocked);
       return false;
     }
+    if (!(await tokenMayGo(s))) return false;
     setResult('Connecting…');
     const run = ++testRun;
     testing = true;
     $('test-btn').disabled = true;
     try {
-      const client = createSource(s, { clientId, version });
+      const client = (needsSources(s) ? createSources : createSource)(s, { clientId, version });
       const id = await client.identity();
       const libs = await client.libraries();
       if (run !== testRun) return false; // the household moved on to another server type while this one answered: its answer is not theirs
-      const usable = offerLibraries(libs, client);
-      form.dataset.serverName = id.name;
-      setResult(`✓ ${id.name || 'Server'}${id.version ? ` (v${id.version.split('-')[0]})` : ''} — ${libs.length} libraries`);
+      const usable = offerLibraries(libs, client, (libs.failed || []).map((f) => serverList(s)[f.slot]).filter(Boolean));
+      if (!(typeof id.slot === 'number' && id.slot !== 0)) form.dataset.serverName = id.name; // when the first server did not answer, its name stays as it was
+      const list = serverList(s);
+      if (list.length > 1) {
+        // Several servers: the verdict says, per server, which answered (with its libraries) and which did not.
+        const down = new Set((libs.failed || []).map((f) => f.slot));
+        const answered = list.map((e, slot) => [e, slot]).filter(([, slot]) => !down.has(slot));
+        const unreached = [...down].map((slot) => nameOf(list[slot], slot));
+        setResult(`✓ ${answered.map(([e, slot]) => `${nameOf(e, slot)} — ${libs.filter((l) => belongsTo(l.key, e)).length} libraries`).join('; ')}${unreached.length ? `. Couldn't reach ${unreached.join(' or ')}: the others still show posters.` : ''}`);
+      } else {
+        setResult(`✓ ${id.name || 'Server'}${id.version ? ` (v${id.version.split('-')[0]})` : ''} — ${libs.length} libraries`);
+      }
       renderConnected();
       log.info(`Connection test OK: ${id.name}`);
       loadCounts(client, usable); // after the verdict: never part of it
@@ -962,6 +1038,214 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
         testing = false;
         $('test-btn').disabled = false;
       }
+    }
+  }
+
+  // ---- the household's servers (R-SRC-4, D156): the first one is the form above, the others are held here until Save ----
+
+  const typeLabel = (type) => {
+    try {
+      return signInFlow({ serverType: type }).label;
+    } catch {
+      return type;
+    }
+  };
+
+  /** Who answers at an address, read without a token (js/sources/index.js). */
+  const readId = (type, url) => readServerId(type, url, { clientId, version });
+
+  /** A server as the sheet names it: its name (the first server's is the one the connection test read), else its type's label. */
+  const nameOf = (entry, slot) => (slot === 0 ? form.dataset.serverName || entry.name : entry.name) || `${typeLabel(entry.type)}`;
+
+  /** The servers the sheet would save, the first one first. */
+  const sheetServers = () => serverList(read());
+
+  let serversShown = '';
+  function renderServers() {
+    const list = sheetServers();
+    const first = list[0];
+    $('server-list').hidden = list.length < 2;
+    // The heading names the type's own words for one server; for several it names none of them (a Jellyfin or Emby server is no "Plex connection").
+    const legend = document.querySelector('legend[data-srv="legend"]');
+    if (legend && list.length > 1) legend.textContent = 'Media server connections'; // one server is the "Connected to" card above: the list shows from two
+    // Rebuilt only when what it shows changes: a rebuild above a reader's scroll position would cost the browser its scroll anchor.
+    const shown = JSON.stringify([list.map((e) => [e.name, e.type, e.url]), form.dataset.serverName || '']);
+    if (shown === serversShown) return;
+    serversShown = shown;
+    $('server-list').replaceChildren(
+      ...list.map((entry, slot) => {
+        const li = document.createElement('li');
+        li.className = 'server-row';
+        const name = Object.assign(document.createElement('span'), { className: 'server-name', textContent: nameOf(entry, slot) });
+        const where = Object.assign(document.createElement('span'), { className: 'server-where muted small', textContent: entry.url ? `${typeLabel(entry.type)} · ${entry.url}` : typeLabel(entry.type) });
+        li.append(name, where);
+        if (list.length > 1) {
+          const remove = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small', textContent: 'Remove' });
+          remove.dataset.slot = String(slot);
+          remove.setAttribute('aria-label', `Remove ${name.textContent}`);
+          li.append(remove);
+        }
+        return li;
+      }),
+    );
+    const full = list.length >= MAX_SERVERS;
+    $('server-add').hidden = full || !first.url;
+    $('servers-help').hidden = list.length < 2;
+    $('servers-help').textContent = full ? 'Three servers is the most. Remove one to add another. One household limit applies to every poster, whichever server it came from.' : 'One household limit applies to every poster, whichever server it came from.';
+  }
+
+  /** Takes a server out of the sheet's list. Its libraries, a collection or playlist of its and a pin of its go with it; Save clears its cached posters and history. */
+  function removeServer(slot) {
+    const list = sheetServers();
+    const entry = list[slot];
+    if (!entry || list.length < 2) return;
+    removedNames.push({ id: entry.id, carried: entry.carried, name: nameOf(entry, slot) });
+    sel.libraries = sel.libraries.filter((l) => !belongsTo(l.key, entry));
+    if (sel.source && memberBelongsTo(`${sel.source.kind}:${sel.source.key}`, entry)) sel.source = null;
+    if (pendingPin.key && belongsTo(pendingPin.key, entry)) {
+      pendingPin = { key: '', title: '' };
+      $('pinned-title').textContent = 'none (unpinned on save)';
+      $('unpin-btn').hidden = true;
+    }
+    if (slot === 0) {
+      // The next server takes the first place: the form above now shows it.
+      const next = pending.servers.shift();
+      field('serverType').value = next.type;
+      field('plexToken').value = next.token;
+      field('serverUrl').value = next.url;
+      field('serverUserId').value = next.userId;
+      form.dataset.serverName = next.name;
+      promoted = { type: next.type, url: next.url, token: next.token, id: next.id };
+      held = {};
+      pending.id = next.id;
+      pending.carried = false;
+    } else {
+      pending.servers.splice(slot - 1, 1);
+    }
+    syncServerType();
+    offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
+    offerClient = null;
+    countRun++;
+    genreRun++;
+    sourceRun++;
+    renderSelection();
+    renderServers();
+    renderConnection();
+    if (field('plexToken').value && field('serverUrl').value) testConnection();
+  }
+
+  let addAbort = null;
+
+  function syncAddType() {
+    const type = form.querySelector('input[name="addTypePick"]:checked')?.value || 'plex';
+    $('add-plex').hidden = type !== 'plex';
+    $('add-mb').hidden = type === 'plex';
+    $('add-address').placeholder = 'http://192.168.1.10:8096';
+    $('add-status').textContent = '';
+  }
+
+  /** The server just signed in to: read its id with no token, refuse a duplicate by name, then keep it in the sheet's list. */
+  async function addServer({ type, url, token, userId = '' }) {
+    const status = $('add-status');
+    if (sheetServers().length >= MAX_SERVERS) {
+      status.textContent = 'Three servers is the most. Remove one to add another.';
+      return false;
+    }
+    status.textContent = 'Checking which server answers…';
+    const id = await readId(type, url);
+    if (!id) {
+      status.textContent = `Couldn't tell which server answers at ${url}. Check the address and try again.`;
+      return false;
+    }
+    let name = '';
+    try {
+      name = (await createSource({ serverType: type, serverUrl: url, plexToken: token, serverUserId: userId }, { clientId, version }).identity()).name;
+    } catch (err) {
+      status.textContent = `Signed in, but ${typeLabel(type)} would not answer with that sign-in: ${err.message}`;
+      return false;
+    }
+    // The first server's id is read now when the form has never recorded it, so adding the same server twice is found.
+    const firstId = pending.id || (await readId(field('serverType').value || 'plex', addressOf()));
+    const taken = [firstId, ...pending.servers.map((e) => e.id)].includes(id);
+    if (taken) {
+      status.textContent = `${name || typeLabel(type)} is already in the list.`;
+      return false;
+    }
+    if (!pending.id && firstId) pending.id = firstId;
+    pending.servers.push({ id, type, url: cleanAddress(url), token, userId, name: name || typeLabel(type) });
+    status.textContent = `Added ${name || typeLabel(type)}. Tick its libraries below to show its posters.`;
+    $('server-add').open = false;
+    renderServers();
+    await testConnection(); // loads every server's libraries
+    return true;
+  }
+
+  async function addPlex() {
+    addAbort?.abort();
+    const ctrl = new AbortController();
+    addAbort = ctrl;
+    const status = $('add-status');
+    $('add-plex-btn').disabled = true;
+    try {
+      $('add-prompt').hidden = false;
+      $('add-prompt').textContent = 'Asking plex.tv for a code…';
+      status.textContent = '';
+      const token = await pinSignIn(clientId, {
+        settings: { serverType: 'plex' },
+        signal: ctrl.signal,
+        version,
+        onCode: (code) => {
+          $('add-prompt').textContent = 'On any device, go to plex.tv/link and enter this code:';
+          $('add-code').hidden = false;
+          $('add-code').textContent = code;
+        },
+      });
+      if (ctrl.signal.aborted) return;
+      $('add-code').hidden = true;
+      if (!token) {
+        status.textContent = 'Code expired. Press Sign in with Plex to try again.';
+        return;
+      }
+      status.textContent = 'Signed in. Finding your servers…';
+      const found = await signInFlow({ serverType: 'plex' }).discoverServers(clientId, token, { secureOnly: location.protocol === 'https:' });
+      for (const server of found) {
+        const url = await signInFlow({ serverType: 'plex' }).firstReachable(server.connections, server.accessToken, clientId);
+        if (!url || ctrl.signal.aborted) continue;
+        if (await addServer({ type: 'plex', url, token: server.accessToken })) return;
+        if (/already in the list/.test(status.textContent)) continue; // try the next server on the account
+        return;
+      }
+      if (!ctrl.signal.aborted && !/already in the list|Three servers/.test(status.textContent)) status.textContent = 'Signed in, but no reachable server was found that is not in the list already.';
+    } catch (err) {
+      status.textContent = `Sign-in failed: ${err.message}`;
+    } finally {
+      $('add-plex-btn').disabled = false;
+      $('add-code').hidden = true;
+      $('add-prompt').hidden = true;
+      if (addAbort === ctrl) addAbort = null;
+    }
+  }
+
+  async function addMediaBrowser() {
+    const type = form.querySelector('input[name="addTypePick"]:checked').value;
+    const url = cleanAddress($('add-address').value);
+    const status = $('add-status');
+    if (!url) return void (status.textContent = 'Enter the server address first.');
+    if (!$('add-user').value.trim()) return void (status.textContent = 'Enter the user name.');
+    if (location.protocol === 'https:' && url.startsWith('http:')) return void (status.textContent = signInFlow({ serverType: type, serverUrl: url }).words.httpsBlocked);
+    status.textContent = 'Signing in…';
+    $('add-mb-btn').disabled = true;
+    try {
+      const { token, userId } = await signInFlow({ serverType: type, serverUrl: url }, { version }).signInWithPassword(clientId, $('add-user').value.trim(), $('add-pass').value);
+      if (await addServer({ type, url, token, userId })) {
+        $('add-user').value = '';
+        $('add-address').value = '';
+      }
+    } catch (err) {
+      status.textContent = err.kind === 'auth' ? 'That user name or password was not accepted.' : `Couldn't sign in to ${typeLabel(type)} at ${url}. (${err.message})`;
+    } finally {
+      $('add-pass').value = ''; // the password is used once and never kept
+      $('add-mb-btn').disabled = false;
     }
   }
 
@@ -1180,7 +1464,8 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     original = null;
     cancelSignIn();
     closeSheet();
-    onSave(s);
+    onSave(s, { removed: removedNames });
+    removedNames = [];
   });
 
   $('settings-cancel').addEventListener('click', closeSheet);
@@ -1189,6 +1474,8 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     closePreset();
     setTokenShown(false); // the token is hidden again whenever the sheet closes
     $('jf-pass').value = '';
+    $('add-pass').value = '';
+    addAbort?.abort();
     cancelSignIn();
     if (keepOriginal) {
       keepOriginal = false;
@@ -1270,6 +1557,20 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   $('preset-cancel').addEventListener('click', closePreset);
   $('preset-apply').addEventListener('click', applyPreset);
   $('signin-btn').addEventListener('click', () => signIn());
+  $('server-list').addEventListener('click', (e) => {
+    const button = e.target.closest('button[data-slot]');
+    if (button) removeServer(Number(button.dataset.slot));
+  });
+  for (const radio of form.querySelectorAll('input[name="addTypePick"]')) radio.addEventListener('change', syncAddType);
+  $('add-plex-btn').addEventListener('click', addPlex);
+  $('add-mb-btn').addEventListener('click', addMediaBrowser);
+  for (const input of [$('add-address'), $('add-user'), $('add-pass')]) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      $('add-mb-btn').click();
+    });
+  }
   $('connected-change').addEventListener('click', openConnection);
   $('library-list').addEventListener('change', () => {
     sel.libraries = readLibraries();

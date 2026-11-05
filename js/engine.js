@@ -78,7 +78,10 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
       keys.map(async (libraryKey, i) => {
         if (sizes[i] < 1) return [];
         const request = { libraryKey, unwatchedOnly: base.unwatchedOnly, size: sizes[i], maxContentRating: limit };
-        if (sel.genres.length) request.genres = sel.genres.map(genreRequestValue);
+        if (sel.genres.length) {
+          request.genres = sel.genres.map(genreRequestValue);
+          request.genreTitles = sel.genres.map((g) => g.title); // several servers: each looks the titles up in its own genre list (a key means nothing to another server)
+        }
         if (sel.ratings.length) request.ratings = ratings;
         return (await client.pool(request)).map((p) => ({ ...p, libraryKey }));
       }),
@@ -87,7 +90,13 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
     // problem too, not an empty selection to loosen (D112 item 1): the first rejection is reported, as when every library fails.
     const failed = settled.find((r) => r.status === 'rejected');
     const posters = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
-    if (failed && !posters.length) throw failed.reason;
+    if (failed && !posters.length) {
+      // With several servers every one that failed is named, not only the first library's: the messages of each (they name their server) are joined.
+      const reasons = settled.filter((r) => r.status === 'rejected').map((r) => r.reason);
+      const messages = [...new Set(reasons.map((e) => e?.message).filter(Boolean))];
+      if (client.multi && messages.length > 1) throw Object.assign(new Error(messages.join(' ')), { kind: failed.reason?.kind, ...(failed.reason?.status ? { status: failed.reason.status } : {}) });
+      throw failed.reason;
+    }
     partialNow = Boolean(failed);
     return posters;
   }
@@ -260,7 +269,14 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
 
       if (s.staticRatingKey) {
         if (!force && current?.ratingKey === s.staticRatingKey && current.source !== 'cache') return null;
-        return { poster: await client.item(s.staticRatingKey), reason: 'static poster' };
+        try {
+          return { poster: await client.item(s.staticRatingKey), reason: 'static poster' };
+        } catch (err) {
+          // With several servers a pin names one of them. A server that is gone, or an id it no longer holds, ends the pin: the error says
+          // so and the display unpins; the id is never looked up on another server (D122 1, D156 2).
+          if (client.multi && err?.kind === 'http' && err.status === 404) err.pinGone = true;
+          throw err;
+        }
       }
 
       const sel = selectionOf(s);

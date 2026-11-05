@@ -2,6 +2,8 @@
 // engine, Settings and the tests share one meaning. Weighting only reorders chances inside the pool the engine has already
 // filtered (the limit in force, the rating subset, the genres: D5); nothing here can let a title in.
 
+import { belongsTo } from './selection.js';
+
 export const WEIGHTINGS = ['off', 'unwatched', 'rated'];
 export const MAX_DAYS = 30;
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -108,6 +110,12 @@ export function createShownStore({ storage = null } = {}) {
       } catch {
         // blocked: nothing more to do
       }
+    },
+    /** Forgets the titles that came from one server entry `{ id, carried }` and no others (D157 1, 2); a bare key is the carried entry's. */
+    clearServer(server) {
+      const all = read();
+      const kept = Object.fromEntries(Object.entries(all).filter(([key]) => !belongsTo(key, server)));
+      if (Object.keys(kept).length !== Object.keys(all).length) write(kept);
     },
     /** The titles shown within the last `days` days, as a Map of rating key to time shown. What is older is pruned from storage. */
     windowed(days, now) {

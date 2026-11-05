@@ -10,6 +10,44 @@ const isText = (v) => typeof v === 'string' || (typeof v === 'number' && Number.
 const textOf = (v) => (isText(v) ? String(v).trim() : '');
 const lower = (s) => s.toLowerCase();
 
+// ---- which server an id belongs to (D156 2, D157 1, 12) ----
+// Every id a server gave (a poster's rating key, its thumb, a library, a collection or playlist) is either BARE, exactly as 2.4.0
+// stored it, or SCOPED: `@<server id>/<id>`. No server id contains "/" and no id a server gives starts with "@", so a bare id can
+// never be read as a scoped one. A bare id belongs to the one server entry carried over from 2.4.0 (D157 1), never to a list
+// position; every other server's ids are scoped by its own id (Plex `machineIdentifier`, the `Id` of Jellyfin's or Emby's public info).
+
+const SCOPED = /^@([A-Za-z0-9_-]{1,100})\/([\s\S]*)$/;
+
+/** A server id as it may be stored and put in a scoped id: letters, digits, "-" and "_" only; anything else is '' (not known). */
+export const cleanServerId = (v) => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(v.trim()) ? v.trim() : '');
+
+/** The scoped form of an id: `@<serverId>/<id>`. With no server id the id stays bare. */
+export const scopeKey = (serverId, key) => (cleanServerId(serverId) ? `@${cleanServerId(serverId)}/${key}` : String(key ?? ''));
+
+/** The id as a server entry `{ id, carried }` writes it: bare for the entry that owns the bare ids, scoped by its own id for every other (D157 1, D162 1). The one place this rule is written. */
+export const keyFor = (entry, key) => (entry.carried ? String(key ?? '') : scopeKey(entry.id, key));
+
+/** An id taken apart: `{ serverId, key }`; a bare id has `serverId: ''`. */
+export function splitKey(id) {
+  const m = SCOPED.exec(String(id ?? ''));
+  return m ? { serverId: m[1], key: m[2] } : { serverId: '', key: String(id ?? '') };
+}
+
+/**
+ * Does this id belong to the server entry `{ id, carried }`? A scoped id belongs to the entry whose server id it names (an entry that
+ * does not know its id owns none). A bare id belongs to the entry carried over from 2.4.0, and to no other.
+ */
+export function belongsTo(id, entry) {
+  const { serverId } = splitKey(id);
+  return serverId ? Boolean(entry?.id) && serverId === entry.id : Boolean(entry?.carried);
+}
+
+/** The same for a membership id (`collection:<id>` or `playlist:<id>`), whose id part may be scoped. */
+export function memberBelongsTo(member, entry) {
+  const at = String(member ?? '').indexOf(':');
+  return at < 0 ? false : belongsTo(String(member).slice(at + 1), entry);
+}
+
 // ---- the stored shapes: each sanitiser turns junk into "nothing chosen" ----
 
 /** Library keys: strings or numbers, trimmed, no blanks, no repeats. */
@@ -64,12 +102,13 @@ export function selectionOf(s) {
     : textOf(s.libraryKey)
       ? [{ key: textOf(s.libraryKey), name: typeof s.libraryName === 'string' ? s.libraryName : '' }]
       : [];
-  return { libraries, genres: cleanGenres(s.genres), ratings: cleanRatings(s.ratings), source: cleanSource(s.source) };
+  // `multi`: a second server is set, so the pool, the offline cache and the checks name libraries (D156 7). Without it nothing changes from 2.4.0.
+  return { libraries, genres: cleanGenres(s.genres), ratings: cleanRatings(s.ratings), source: cleanSource(s.source), ...(Array.isArray(s.servers) && s.servers.length ? { multi: true } : {}) };
 }
 
 /** Does the selection narrow the pool beyond one whole library? (More than one library, any genre, any rating subset, a collection or a playlist.) */
 export function narrows(sel) {
-  return sel.libraries.length > 1 || sel.genres.length > 0 || sel.ratings.length > 0 || sel.source !== null;
+  return sel.multi === true || sel.libraries.length > 1 || sel.genres.length > 0 || sel.ratings.length > 0 || sel.source !== null;
 }
 
 /** The id a cache entry records for membership of a collection or playlist. */

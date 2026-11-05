@@ -1,4 +1,4 @@
-// Recommended protection (R-PROT-5, D4, D5, D6, Q20) and the upgrade toast (R-UPG-4).
+// Recommended protection (R-PROT-5, D4, D5, D6, Q20) and the upgrade toast (R-UPG-5).
 // Every case names pixelShift: false and dailyReload: false (convention 7) unless it tests them.
 
 import assert from 'node:assert/strict';
@@ -153,7 +153,7 @@ const markerOnce = (page, value) =>
   }, value);
 const clearMarkerOnce = (page) => markerOnce(page, null);
 const toastState = (page) => page.evaluate(() => ({ hidden: document.getElementById('toast').hidden, text: document.getElementById('toast').textContent, buttons: [...document.querySelectorAll('#toast button')].map((b) => b.textContent) }));
-const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.4/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.4\.1/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
 
 await withApp({ settings: seed() }, async ({ page, app }) => {
   await clearMarkerOnce(page);
@@ -161,9 +161,8 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await waitToast(page);
   const t = await toastState(page);
   assert.ok(t.buttons.includes('Open settings'), `buttons: ${t.buttons}`);
-  assert.ok(t.text.includes("What's new in 2.4: show posters from a Jellyfin or Emby server as well as Plex."), `words: ${t.text}`);
-  assert.ok(/Jellyfin/.test(t.text) && /Emby/.test(t.text), 'the notice names Jellyfin and Emby');
-  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.4', 'marker written');
+  assert.ok(t.text.includes("What's new in 2.4.1: choose posters from more than one server."), `words: ${t.text}`);
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.4.1', 'marker written');
   await page.reload();
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
   await page.waitForTimeout(1500);
@@ -171,20 +170,20 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   check('upgrade toast shows once for a configured install');
 });
 
-// A 2.3 install (marker '2.3') is told about 2.4 once, and the marker moves on.
+// A 2.4 install (marker '2.4') is told about 2.4.1 once, and the marker moves on.
 await withApp({ settings: seed() }, async ({ page, app }) => {
-  await markerOnce(page, '2.3');
+  await markerOnce(page, '2.4');
   await page.goto(app.url);
   await waitToast(page);
-  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.4', 'marker becomes 2.4');
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.4.1', 'marker becomes 2.4.1');
   await page.reload();
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
   await page.waitForTimeout(1500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'not shown again after a reload');
-  check("marker '2.3': the 2.4 toast shows once and the marker becomes 2.4");
+  check("marker '2.4': the 2.4.1 toast shows once and the marker becomes 2.4.1");
 });
 
-// Waits until the server connection section is at the top of the sheet body. The connection test and the library, genre and collection requests have all
+// Waits until the server section is at the top of the sheet body. The connection test and the library, genre and collection requests have all
 // answered (the network is idle) and two frames have drawn, so the browser has finished moving the sheet's content; then the position
 // is read. The wait is on that state, not on a delay.
 const serverChoiceAtTop = async (page) => {
@@ -192,7 +191,7 @@ const serverChoiceAtTop = async (page) => {
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   await page.waitForFunction(
     () => {
-      const f = document.querySelector('#settings input[name="serverTypePick"]:checked').closest('fieldset').getBoundingClientRect();
+      const f = document.getElementById('servers-fieldset').closest('fieldset').getBoundingClientRect();
       const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
       return document.getElementById('settings').open && f.top >= body.top - 1 && f.top < body.top + 80;
     },
@@ -209,13 +208,15 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
   await serverChoiceAtTop(page).catch(() => {}); // the assertion below reports where it is if it never gets there
   const where = await page.evaluate(() => {
-    const f = document.querySelector('#settings input[name="serverTypePick"]:checked').closest('fieldset').getBoundingClientRect();
+    const f = document.getElementById('servers-fieldset').closest('fieldset').getBoundingClientRect();
     const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
-    return { top: f.top, bottom: f.bottom, bodyTop: body.top, bodyBottom: body.bottom };
+    const inView = (el) => { const r = el.getBoundingClientRect(); return r.top >= body.top - 1 && r.bottom <= body.bottom + 1; };
+    return { top: f.top, bottom: f.bottom, bodyTop: body.top, bodyBottom: body.bottom, headingInView: inView(document.querySelector('legend[data-srv="legend"]')), cardInView: inView(document.getElementById('connected-card')), addInView: inView(document.querySelector('#server-add summary')) };
   });
   assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyTop + 80, `server section at the top: ${JSON.stringify(where)}`);
-  assert.equal(await page.evaluate(() => document.activeElement?.name === 'serverTypePick' && document.activeElement.checked), true, 'focus is on the chosen server type');
-  check('Open settings opens Settings at the server choice, with focus on it');
+  assert.ok(where.headingInView && where.cardInView && where.addInView, `one server: the heading, the Connected card and Add a server are in view: ${JSON.stringify(where)}`);
+  assert.equal(await page.evaluate(() => document.activeElement?.closest('#servers-fieldset') !== null && document.activeElement.matches('summary')), true, 'focus is on the first control of the server list: Add a server');
+  check('Open settings opens Settings at the server section, with focus on the first control of its server list');
 });
 
 // D128 1: ticking "Household with children" reveals the limit, the schedule and the profiles. The toggle stays where it was on screen
@@ -253,7 +254,7 @@ for (const how of ['mouse', 'keyboard']) {
   });
 }
 
-// D128 1: a slow server answers the library, collection and playlist lists late. the notice's Open settings still lands at the server choice once they arrive,
+// D128 1: a slow server answers the library, collection and playlist lists late. the notice's Open settings still lands at the server section once they arrive,
 // and a sheet opened with the gear and scrolled by the reader does not move when they arrive.
 const slowLists = (page) =>
   page.route(/\/(library\/sections|playlists)/, async (route) => {
@@ -268,9 +269,9 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await page.click('#toast button:has-text("Open settings")');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
   await settled(page);
-  const where = await page.evaluate(() => ({ top: document.querySelector('#settings input[name="serverTypePick"]:checked').closest('fieldset').getBoundingClientRect().top, bodyTop: document.querySelector('#settings .sheet-body').getBoundingClientRect().top }));
+  const where = await page.evaluate(() => ({ top: document.getElementById('servers-fieldset').closest('fieldset').getBoundingClientRect().top, bodyTop: document.querySelector('#settings .sheet-body').getBoundingClientRect().top }));
   assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyTop + 80, `the server section is at the top once the late lists arrived: ${JSON.stringify(where)}`);
-  check('Open settings lands at the server choice when the lists arrive late');
+  check('Open settings lands at the server section when the lists arrive late');
 });
 await withApp({ settings: seed() }, async ({ page, app }) => {
   await slowLists(page);
@@ -296,7 +297,7 @@ await withApp({ settings: seed({ settingsPinHash: auth.hash, settingsPinSalt: au
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
   await serverChoiceAtTop(page).catch(() => {});
   const where = await page.evaluate(() => {
-    const f = document.querySelector('#settings input[name="serverTypePick"]:checked').closest('fieldset').getBoundingClientRect();
+    const f = document.getElementById('servers-fieldset').closest('fieldset').getBoundingClientRect();
     const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
     return { top: f.top, bottom: f.bottom, bodyTop: body.top, bodyBottom: body.bottom };
   });
@@ -304,12 +305,63 @@ await withApp({ settings: seed({ settingsPinHash: auth.hash, settingsPinSalt: au
   check('Open settings goes through the PIN gate');
 });
 
+// From two servers the list shows, and its first control is the first server's Remove button: Open settings lands on the list with focus there.
+await withApp({ settings: seed({ serverName: 'Mock Plex', servers: [{ id: '90000000000000000000000000000001', type: 'jellyfin', url: 'http://127.0.0.1:1', token: 'jf-demo-token', userId: '', name: 'Mock Jellyfin' }] }) }, async ({ page, app }) => {
+  await clearMarkerOnce(page);
+  await page.goto(app.url);
+  await waitToast(page);
+  await page.click('#toast button:has-text("Open settings")');
+  await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
+  await serverChoiceAtTop(page).catch(() => {});
+  const where = await page.evaluate(() => {
+    const f = document.getElementById('servers-fieldset').closest('fieldset').getBoundingClientRect();
+    const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
+    return { top: f.top, bodyTop: body.top, listShown: !document.getElementById('server-list').hidden, onRemove: document.activeElement === document.querySelector('#server-list button') };
+  });
+  assert.ok(where.listShown, 'two servers: the list shows');
+  assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyTop + 80, `server section at the top: ${JSON.stringify(where)}`);
+  assert.equal(where.onRemove, true, 'focus is on the first control of the server list: the first Remove button');
+  check('Open settings from two servers: the list at the top, focus on the first Remove button');
+});
+
+// D169 2: Settings keeps its scroll position, so a sheet opened with the gear, scrolled past the server section and cancelled is not at the section when the
+// notice's Open settings opens it again; the scroll in the handler is what brings the section back. The toast survives the gear open and Cancel.
+await withApp({ settings: seed() }, async ({ page, app }) => {
+  await clearMarkerOnce(page);
+  await page.goto(app.url);
+  await waitToast(page);
+  await page.keyboard.press('s');
+  await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
+  await settled(page);
+  const scrolled = await page.evaluate(() => {
+    const b = document.querySelector('#settings .sheet-body');
+    b.scrollTop = b.scrollHeight;
+    return b.scrollTop;
+  });
+  assert.ok(scrolled > 400, `the sheet is scrolled well past the server section: ${scrolled}`);
+  await page.click('#settings-cancel');
+  await page.waitForFunction(() => !document.getElementById('settings').open, null, { timeout: 5000 });
+  assert.equal((await toastState(page)).hidden, false, 'the toast is still up after the gear open and Cancel');
+  await page.click('#toast button:has-text("Open settings")');
+  await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
+  await serverChoiceAtTop(page).catch(() => {});
+  const where = await page.evaluate(() => {
+    const f = document.getElementById('servers-fieldset').closest('fieldset').getBoundingClientRect();
+    const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
+    const inView = (el) => { const r = el.getBoundingClientRect(); return r.top >= body.top - 1 && r.bottom <= body.bottom + 1; };
+    return { top: f.top, bodyTop: body.top, headingInView: inView(document.querySelector('legend[data-srv="legend"]')), cardInView: inView(document.getElementById('connected-card')), addInView: inView(document.querySelector('#server-add summary')) };
+  });
+  assert.ok(where.top >= where.bodyTop - 1 && where.top < where.bodyTop + 80, `server section at the top after a scrolled gear open and Cancel: ${JSON.stringify(where)}`);
+  assert.ok(where.headingInView && where.cardInView && where.addInView, `the heading, the Connected card and Add a server are in view: ${JSON.stringify(where)}`);
+  check('Open settings after a scrolled gear open and Cancel: the server section is back at the top');
+});
+
 await withApp({ settings: { pixelShift: false, dailyReload: false } }, async ({ page, app }) => {
   await clearMarkerOnce(page);
   await page.goto(app.url);
   await page.waitForTimeout(2500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'unconfigured: no toast');
-  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.4', 'unconfigured: marker written');
+  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.4.1', 'unconfigured: marker written');
   assert.ok(!(await page.evaluate(() => document.querySelector('#toast button'))) || (await toastState(page)).hidden);
   check('unconfigured install never shows the toast');
 });
@@ -337,7 +389,7 @@ await withApp({ settings: {} }, async ({ page, context, app }) => {
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
   await page.waitForTimeout(1500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'a fresh config.json install shows no upgrade toast');
-  assert.equal(await marker(page), '2.4', 'the marker is written');
+  assert.equal(await marker(page), '2.4.1', 'the marker is written');
   check('K60: a config.json-provisioned first boot writes the marker and shows no toast');
 });
 
@@ -347,6 +399,6 @@ await withApp({ settings: seed() }, async ({ page, context, app }) => {
   await clearMarkerOnce(page);
   await page.goto(app.url);
   await waitToast(page);
-  assert.equal(await marker(page), '2.4');
+  assert.equal(await marker(page), '2.4.1');
   check('K60: an upgraded stored install (config.json beside it) still shows the toast');
 });

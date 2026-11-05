@@ -694,7 +694,8 @@ pCase('14d while a profile is open a live control still previews, and its frame 
 });
 
 // 15. A draw that finishes after a boundary meets the selection in force then (D120 6): the Kids poster held until after 21:00 is not shown.
-pCase('15 a poster whose draw finishes after a boundary is checked against the new selection', { settings: seed(), clock: { time: '2026-01-05T20:58:00' } }, async ({ page, app }) => {
+// Playwright 1.64 runs AbortSignal.timeout on the fake clock: the held image (20 s timeout) must cross 21:00 and be released before it times out, so the clock starts 10 s before 21:00 and advances 10 s, which ends just after 21:00.
+pCase('15 a poster whose draw finishes after a boundary is checked against the new selection', { settings: seed(), clock: { time: '2026-01-05T20:59:50' } }, async ({ page, app }) => {
   await page.goto(app.url);
   await posterShown(page);
   assert.equal(isKids(await activeAlt(page)), true);
@@ -702,7 +703,7 @@ pCase('15 a poster whose draw finishes after a boundary is checked against the n
   await page.evaluate(() => document.querySelector('[data-action="refresh"]').click()); // a Kids poster is drawn, its image held
   for (let i = 0; i < 300 && images.heldCount() < 1; i++) await page.waitForTimeout(40);
   assert.ok(images.heldCount() >= 1, 'the image request is held');
-  await advance(page, 125_000); // 21:00:05: Adults (Movies, no limit); the Kids poster on screen is off
+  await advance(page, 10_000); // the release follows just after 21:00 (measured 21:00:00.2 to 21:00:00.4): Adults (Movies, no limit); the Kids poster on screen is off
   await page.evaluate(() => {
     window.__alts = [];
     new MutationObserver(() => {

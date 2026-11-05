@@ -1350,3 +1350,93 @@ Facts this section stands on (invocation probes, `.orchestrator/artifacts/resear
 | `release-2.4.0` | `emby-source` | docs, ui | 18480/18801 |
 
 Reviewers use 18680/19001 and 18780/19101. `carried-tidy-ups` and `mock-jellyfin` are the only concurrent pair (disjoint Outputs).
+
+## Run 10 — 2.4.1: multiple servers in poster selection, and the 2.4 follow-ups (D156)
+
+Drafted on the owner's word (2026-11-03, verbatim: "draft the run-10 plan for 2.4.x"). The policy answer is D156 ("defaults": items 1a–8a). Starting commit: `main` 0025b501, on branch `2.4.1`, pushed; no pull request, merge or tag unless the owner asks (D13, D79). Every later question answers itself with the defaults under the standing D44 rule, except the irreversible or outward-facing actions it lists. Conventions are as in runs 3–9. Tested against the mock servers (`scripts/mock-plex.mjs`, `scripts/mock-jellyfin.mjs` in its Jellyfin and Emby modes) only (D156 5).
+
+Facts this section stands on (invocation probes, 2026-11-03T16:38Z):
+- `npm test` at 0025b501 passes 880 of 880, and the full e2e suite passed 30 of 30 at afb417bc.
+- Of the Roadmap's 2.4.x list, the movie-night countdown needs the Poster playlist and the marquee captions, and birthday mode needs the Frame and marquee styles. None of those is built. The Picture frame main-screen choice ships with Browse first (3.0). So only multiple servers and Play now can be built now.
+- The HOME validation machine answers ssh, but nothing listens on 8096 (Jellyfin) or 32400 (Plex) there. Rootless podman still fails on the devbox.
+
+### 58. `followup-tidy-ups` — The D154 follow-ups and the inline scroll style
+- **Goal:** Every D154 item is closed and the first-run card's rotated-phone scroll style lives in `css/app.css` (D150 1). No behaviour changes.
+- **Rulings:** D154, D150 1, D148 1 · **Mode:** afk · **Tags:** docs · **Blocked by:** none
+- **Output:** `docs/spec.md`, `package.json`, `js/sources/index.js`, `js/sources/http.js` (new), `js/sources/plex.js`, `js/sources/jellyfin.js`, `js/sources/emby.js`, `sw.js`, `index.html`, `css/app.css`, `tests/sources.test.js`
+- **Acceptance criteria:**
+  1. `! grep -q "nothing is sent anywhere except to the user's own Plex server and plex.tv" docs/spec.md && grep -qE 'R-SRC-1' <(sed -n '/[Tt]raceability/,$p' docs/spec.md) && grep -qE 'R-SRC-3' <(sed -n '/[Tt]raceability/,$p' docs/spec.md) && grep -qi 'jellyfin' package.json`
+  2. `test -f js/sources/http.js && test -z "$(grep -lE "from '\./plex\.js'" js/sources/jellyfin.js js/sources/emby.js)" && node --test tests/sources.test.js`  (the shared HTTP helpers live in `js/sources/http.js`; no adapter imports another adapter; the `signInFlow` comment names each flow's members as the code has them)
+  3. `! grep -q 'style="[^"]*overflow-y' index.html && npm test && node tests/e2e/run.mjs first-run emby jellyfin smoke && node scripts/check-precache.mjs`
+  4. scope: only the Output paths changed.
+  5. narrated: the anchored documentation review APPROVE on disk.
+- **Notes/hazards:** No behaviour change: every existing spec passes unchanged. The security summary states where each token goes (the Plex token to Plex and plex.tv; a Jellyfin or Emby token to its own server, also as `api_key` in poster URLs; never to another server across a type change or an import, D142 2, D144 1).
+
+### 59. `multiple-servers` — Poster selection across more than one server
+- **Goal:** A household with more than one media server (up to three, any mix of Plex, Jellyfin and Emby, D156 7) can choose libraries, genres, ratings, a collection or a playlist across them, and gets one pool sampled fairly across them. Every child-safety rule holds per poster, whichever server it came from.
+- **Requirements:** new R-SRC-4 · **Rulings:** D5, D37, D73, D107, D134, D141, D142, D144, D147, D149, D156, D157, D160 · **Mode:** afk · **Tags:** architecture, risk:high, ui · **Blocked by:** `followup-tidy-ups` (shared `js/sources/` files)
+- **Output:** `js/settings.js`, `js/settings-ui.js`, `js/main.js`, `js/engine.js`, `js/selection.js`, `js/poster-cache.js`, `js/weighting.js`, `js/poster-pin.js`, `js/sources/index.js`, `index.html`, `css/app.css`, `sw.js`, `tests/settings.test.js`, `tests/engine.test.js`, `tests/selection.test.js`, `tests/poster-cache.test.js`, `tests/weighting.test.js`, `tests/sources.test.js`, `tests/e2e/multi-server.spec.mjs` (new), `docs/spec.md`, `docs/validation/real-server-extended.md`; added by D160: `js/sources/plex.js`, `js/sources/jellyfin.js`, `js/sources/emby.js`, `scripts/mock-plex.mjs`, `scripts/mock-jellyfin.mjs`, `tests/plex.test.js`, `tests/jellyfin.test.js`, `tests/emby.test.js`, `tests/mock-plex.test.js`, `tests/mock-jellyfin.test.js`
+- **Acceptance criteria:**
+  1. `node --test tests/settings.test.js tests/engine.test.js tests/selection.test.js tests/poster-cache.test.js tests/weighting.test.js tests/sources.test.js`  (cases:
+     - A 2.4.0 settings object loads as a one-server list, with nothing else changed and no stored key rewritten (D156 2). A fourth server is refused (D156 7).
+     - Every cached poster, the pin and the no-repeat history carry the id of the server their item came from; a bare key stored by 2.4.0 reads as the first server's, with nothing rewritten (D156 2). A server is known by its own id (Plex `machineIdentifier`, the `Id` of Jellyfin's or Emby's `/System/Info/Public`): a new address with the same server id keeps that server's entries, a different id clears them (D156 3).
+     - A pool over two servers samples each chosen library in proportion to its title count.
+     - A server that fails leaves the pool to the others.
+     - Every poster from every server passes `allows()` (D5).
+     - Removing a server, or a change of address or type that reveals a different server id (or none on Save), clears that server's cache entries, its pin and its history, and nothing of the others; a new address with the same id keeps them (D156 3, D157 2).
+     - D157 adds: entries stored by 2.4.0 belong to the server entry carried over from 2.4.0, never to a list position, and go with it when it is removed; after an address change the server id is read without a token before the token is sent; each entry has its own token in `SECRET_KEYS`; a duplicate server id is refused; a server that is down keeps its entries and contributes nothing; a fourth stored entry is dropped on load.
+     - Each server's token goes only to that server.)
+  2. `test -f tests/e2e/multi-server.spec.mjs && node tests/e2e/run.mjs multi-server`  (against the Plex mock and the Jellyfin mock at once:
+     - Settings adds a second server.
+     - Libraries from both are chosen.
+     - 30 picks under a PG limit show only G and PG titles from both servers.
+     - Now playing from either server.
+     - One server down leaves the other's posters and the offline cache within the limit.
+     - Removing a server takes its posters, pin and history away.
+     - The views at 1920×1080, on a phone and at rotation 90.)
+  3. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (the whole suite; a one-server household sees no change)
+  4. `grep -q '^\*\*R-SRC-4' docs/spec.md && grep -qi 'multiple servers\|two servers' docs/validation/real-server-extended.md`
+  5. scope: only the Output paths changed.
+  6. narrated: the anchored review, an independent cold review (risk:high), `/arch-review` of the server-list model, and a UX walk APPROVE on disk.
+- **Notes/hazards:**
+  - The household limit is one ceiling across every server; no server's own parental control is the gate.
+  - Ids are scoped by server id (D156 2, 3).
+  - Upgrade from 2.4.0 is not a switch, so nothing is cleared.
+  - A server's token never travels to another server (D142 2, D144 1).
+  - The pin is shown whatever its rating (D122 1), so a pin naming a server that is gone, or an id that server no longer holds, is cleared, never re-resolved elsewhere.
+  - D143 6 and D149 3 (same-type address changes, Plex server identity) are settled here by D156 3.
+
+### 60. `playwright-1.64` — Playwright 1.64.1 (Chromium build 1248)
+- **Goal:** The e2e harness runs on Playwright 1.64.1, pinned exactly, and the whole suite passes on it (D159 2).
+- **Rulings:** D159 · **Mode:** afk · **Tags:** (none: a build phase) · **Blocked by:** `multiple-servers` (the suite it runs includes `multi-server.spec.mjs`)
+- **Output:** `package.json`, `package-lock.json`, and only those `tests/e2e/*.mjs` files that a 1.64 breaking change forces to change, each named in the handback with the release-note line that forced it.
+- **Acceptance criteria:**
+  1. `grep -q '"playwright": "1.64.1"' package.json && node -e "const l=require('./package-lock.json');const v=l.packages['node_modules/playwright'].version;if(v!=='1.64.1')process.exit(1)"`
+  2. `node -e "import('playwright').then(m=>{const p=m.chromium.executablePath();console.log(p);if(!/-1248\//.test(p))process.exit(1)})"`
+  3. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, by the conductor, after the memory gate)
+  4. scope: only the Output paths changed.
+- **Notes/hazards:** Pin the exact version, never a range. Do not run `npx playwright uninstall` or delete any browser build: other sessions on this machine use them. The conductor removes build 1194 only after the commit and only after checking no other session needs it.
+
+### 61. `release-2.4.1` — Version 2.4.1, its notice and the docs
+- **Goal:** `VERSION` is 2.4.1, a configured display upgraded from 2.4 shows once "What's new in 2.4.1: choose posters from more than one server." (D156 4), and the README, Roadmap and spec describe what 2.4.1 shipped.
+- **Requirements:** new R-UPG-5 (supersedes R-UPG-4) · **Rulings:** D13, D79, D151, D152, D156 · **Mode:** afk · **Tags:** docs, ui · **Blocked by:** `playwright-1.64` (D159 2)
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `tests/e2e/release.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/followups.spec.mjs`, `tests/e2e/lib.mjs`, `Roadmap.md`, `README.md`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `grep -q "VERSION = '2.4.1'" sw.js && grep -q "VERSION = '2.4.1'" js/main.js && test "$(grep -c '"version": "2.4.1"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
+  2. `node tests/e2e/run.mjs release preset smoke followups`  (the notice: marker `'2.4.1'`; a configured display upgraded from 2.4 shows the D156 4 wording once with Open settings landing on the server list; a fresh install shows nothing but gets the marker; the harness seeds `'2.4.1'`)
+  3. `grep -qE '^## .*Done in 2\.4\.1' Roadmap.md && grep -qi 'multiple servers\|more than one server' README.md && grep -q '^\*\*R-SRC-4' docs/spec.md && grep -q '^\*\*R-UPG-5' docs/spec.md`
+  4. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, by the conductor, after the memory gate)
+  5. scope: only the Output paths changed.
+  6. narrated: keep-docs-current over `0025b501..HEAD` inside the phase; the anchored documentation review and a UX walk of the notice APPROVE on disk.
+- **Notes/hazards:** No tag, no GitHub release, no pull request and no merge into `main` unless the owner asks (D13, D79). Every spec file a suite criterion loads that names the notice is in the Output (D153's lesson).
+
+### Run 10 graph, tags and ports
+
+| Phase | Blocked by | Tags | Builder ports |
+|---|---|---|---|
+| `followup-tidy-ups` | — | docs | 18480/18801 |
+| `multiple-servers` | `followup-tidy-ups` | architecture, risk:high, ui | 18480/18801 |
+| `playwright-1.64` | `multiple-servers` | — | 18480/18801 |
+| `release-2.4.1` | `playwright-1.64` | docs, ui | 18480/18801 |
+
+Every reviewer gets its own pair: 18680/19001, 18580/18901, 18781/19102 and 18782/19103. The conductor uses 18780/19101.

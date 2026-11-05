@@ -656,3 +656,24 @@ test('watched is one rule in a collection and a playlist: UserData.Played, else 
     assert.equal((await source.sourceItems({ kind, key: 'k' }, { unwatchedOnly: false })).length, 5);
   }
 });
+
+// ---- the token-free identity (D157 3, D160 1) ----
+
+test('publicIdentity reads the public System/Info/Public and sends no token, and the id is the server Id', async () => {
+  const { source, calls } = connect();
+  assert.deepEqual(await source.publicIdentity(), { name: 'Mock Jellyfin', version: '10.10.0', machineIdentifier: '90000000000000000000000000000001' });
+  assert.equal(calls.length, 1, 'one request: the libraries are not asked for');
+  assert.equal(calls[0].url.pathname, '/System/Info/Public');
+  const header = calls[0].init.headers.Authorization;
+  assert.match(header, /^MediaBrowser Client="Now Showing"/);
+  assert.equal(header.includes('Token='), false, 'the Authorization header carries no token');
+  assert.equal(JSON.stringify(calls[0]).includes(TOKEN), false);
+  assert.equal(calls[0].url.search, '');
+});
+
+test('publicIdentity answers for a wrong token too, since it proves nothing about the token, and refuses a reply that is not server information', async () => {
+  const { source } = connect({ plexToken: 'wrong' });
+  assert.equal((await source.publicIdentity()).machineIdentifier, '90000000000000000000000000000001');
+  const bad = createSource({ serverType: 'jellyfin', serverUrl: 'http://j.test', plexToken: 't' }, { fetchImpl: async () => new Response('[]', { status: 200 }) });
+  await assert.rejects(() => bad.publicIdentity(), (err) => err.kind === 'parse');
+});

@@ -7,7 +7,7 @@ import { createEngine } from './engine.js';
 import { createHelper } from './helper.js';
 import { cornerZone, createHold, HOLD_MS, inZone, REVEAL_MS, shouldResetPin } from './kiosk.js';
 import { createPinGate } from './pin-gate.js';
-import { createSource, serverTypeOf, signInFlow } from './sources/index.js';
+import { createSource, createSources, needsSources, readServerId, serverTypeOf, signInFlow } from './sources/index.js';
 import { createPosterCache } from './poster-cache.js';
 import { createPosterPin } from './poster-pin.js';
 import { allows } from './ratings.js';
@@ -17,15 +17,15 @@ import { createLimitWatch } from './limit-schedule.js';
 import { anyWindow, resolveSettings } from './profiles.js';
 import { createShownStore } from './weighting.js';
 import { isPlausibleClock } from './schedule.js';
-import { posterMatches, selectionKey, selectionOf } from './selection.js';
+import { belongsTo, posterMatches, selectionKey, selectionOf } from './selection.js';
 import { applyServerText, createSettingsUI, pinSignIn } from './settings-ui.js';
-import { fromImport, isConfigured, load, save, STORAGE_KEY } from './settings.js';
+import { addressOf, fromImport, isConfigured, load, save, serverList, settleServers, STORAGE_KEY, withoutServers } from './settings.js';
 import { keyMap, listShortcuts, normalizeKey } from './shortcuts.js';
 import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.4.0';
+export const VERSION = '2.4.1';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -85,7 +85,8 @@ function rebuildClient() {
   const s = state.settings;
   sourceError = null;
   try {
-    client = isConfigured(s) ? createSource(s, { clientId: clientIdValue, version: VERSION }) : null;
+    // One server, the one carried over from 2.4.0, is the adapter itself: nothing differs from 2.4.0. Several servers (or a first one told apart by its id) are one source over them all.
+    client = isConfigured(s) ? (needsSources(s) ? createSources : createSource)(s, { clientId: clientIdValue, version: VERSION }) : null;
   } catch (err) {
     client = null; // never a Plex connection by default (D139 1): the card says what is wrong
     sourceError = err;
@@ -338,7 +339,18 @@ async function tick({ force = false, notify = false } = {}) {
   }
 }
 
+/** Is this id one of a server in the household's list (a server that is down still is)? An offline draw never takes one that is not. */
+const keyInList = (ratingKey) => serverList(state.settings).some((entry) => belongsTo(ratingKey, entry));
+
 async function handleFailure(err, { notify = false } = {}) {
+  if (err.pinGone) {
+    // The pinned poster's server is gone, or no longer holds it: the pin ends, and is never looked up on another server (D122 1, D156 2).
+    log.warn(err.message);
+    toast('The pinned poster is no longer on its server, so it was unpinned.');
+    state.forceAfter = true;
+    await applySettings({ ...state.settings, staticRatingKey: '', staticTitle: '' });
+    return;
+  }
   display.setNowPlaying(null); // what Plex last said about playback is no longer known
   state.lastError = err.message;
   const fatal = err.kind === 'auth' || err.kind === 'empty';
@@ -354,7 +366,7 @@ async function handleFailure(err, { notify = false } = {}) {
   const due = !current || Date.now() - (current.shownAt || 0) >= state.settings.rotateSeconds * 1000;
   if (due && !fatal && !state.asleep) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const cached = await cache.random(current?.ratingKey, limitNow(), selectionOf(inForceSettings())).catch(() => null);
+      const cached = await cache.random(current?.ratingKey, limitNow(), selectionOf(inForceSettings()), keyInList).catch(() => null);
       if (!cached) break;
       try {
         if (!(await showPoster(cached.poster, cached.blob))) continue; // no longer allowed: not drawn, not shown
@@ -376,7 +388,7 @@ async function handleFailure(err, { notify = false } = {}) {
     const stored = cache.entries();
     const limit = limitNow();
     const limited = limit && !fatal && stored.length > 0 && !stored.some((e) => allows(limit, e.contentRating));
-    showEmpty(true, limited ? `No posters within the household limit are available while ${signIn().label} is unreachable.` : err.message, err.kind);
+    showEmpty(true, limited ? `No posters within the household limit are available while ${serverLabels()} ${serverList(state.settings).length > 1 ? 'are' : 'is'} unreachable.` : err.message, err.kind);
   }
   // A refresh somebody asked for that fails with a poster still on screen has nothing else to say so: the toast carries the fixes.
   if (notify && fixesFor(err.kind).length) {
@@ -458,7 +470,7 @@ function statusText() {
   if (state.paused) text = 'Paused';
   if (state.offlineSince) {
     const retry = state.nextAt ? ` · retrying in ${formatDuration(state.nextAt - Date.now())}` : '';
-    text = `${navigator.onLine === false ? 'Offline' : `Can't reach ${signIn().label}`}${display.currentPoster ? ' · showing cached posters' : ''}${retry}`;
+    text = `${navigator.onLine === false ? 'Offline' : `Can't reach ${serverLabels()}`}${display.currentPoster ? ' · showing cached posters' : ''}${retry}`;
     if (state.paused) text = `Paused · ${text}`;
   }
   return text;
@@ -519,6 +531,48 @@ function setPaused(paused) {
 
 // ---------- Settings ----------
 
+/** What the servers in the list mean for the requests made: their ids, types, addresses and sign-ins (a server's name changes none). */
+const serversKey = (s) => JSON.stringify(serverList(s).map(({ name: _name, ...rest }) => rest));
+
+let lastSettled = null; // what the last Save did to the servers: { settled, before }, for the toast
+/** A server as people read it: its name, else its type's label. */
+const serverNameOf = (entry) => entry.name || signInFlow({ serverType: entry.type }).label;
+/** Every server type the household has, in words: "Plex and Jellyfin". The status pill and the empty card name them all while any is down. */
+function serverLabels() {
+  const labels = [...new Set(serverList(state.settings).map((e) => signInFlow({ serverType: e.type }).label))];
+  return labels.length ? labels.join(' and ') : signIn().label;
+}
+const joinNames = (names) => (names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
+
+/**
+ * What the Save toast says about the servers (D162 4), or '' when nothing about them changed. A removal names what was cleared and the
+ * servers whose posters show now; an added server is named, and the household is told to choose its libraries when none is chosen.
+ */
+function serversToast(info, saved, names = []) {
+  const after = serverList(saved);
+  // A removed server is named as the sheet showed it (`names`, from the Remove buttons pressed), else by its stored name or its type.
+  const nameFor = (e) => names.find((n) => (e.id && n.id === e.id) || (e.carried && n.carried))?.name || serverNameOf(e);
+  const gone = info.before.filter((e) => !after.some((n) => (e.id && n.id && e.id === n.id) || (e.carried && n.carried)));
+  const added = after.slice(1).filter((n) => n.id && !info.before.some((e) => e.id && e.id === n.id)); // the first server is never "added": it is the one the household had
+  const chosen = (e) => [...saved.libraryKeys, saved.source ? saved.source.key : ''].some((k) => k && belongsTo(k, e));
+  if (gone.length && after.length > 0 && info.before.length > 1) {
+    // Only a server that now gives posters is named: one with no library chosen gives none.
+    const giving = after.filter((e) => chosen(e) && e.token);
+    const signIn = after[0].token ? '' : ` Sign in to ${serverNameOf(after[0])} in Settings to show its posters.`; // the first server's sign-in was set aside
+    const where = giving.length ? `Posters now come from ${joinNames(giving.map(serverNameOf))}.${signIn}` : signIn.trim() || 'No library is chosen on the servers that stay: open Settings and choose one.';
+    const its = gone.length > 1 ? 'Their' : 'Its';
+    return `Removed ${joinNames(gone.map(nameFor))}. ${its} offline posters, ${its.toLowerCase()} pin and ${its.toLowerCase()} no-repeat history were cleared; nothing of ${after.length > 1 ? 'the other servers' : serverNameOf(after[0])} was. ${where}`;
+  }
+  if (added.length) {
+    const unchosen = added.filter((e) => !chosen(e));
+    return `Added ${joinNames(added.map(serverNameOf))}.${unchosen.length ? ` Open Settings and choose ${unchosen.length > 1 ? 'their' : 'its'} libraries to show ${unchosen.length > 1 ? 'their' : 'its'} posters.` : ''}`;
+  }
+  return '';
+}
+
+/** Who answers at an address, read without a token (js/sources/index.js `readServerId`), with this display's own client id. */
+const readId = (type, url) => readServerId(type, url, { clientId: clientIdValue, version: VERSION });
+
 async function applySettings(next, { persist = true, preview = false, restartIdle = true } = {}) {
   const prev = state.settings;
   const before = resolveSettings(prev, new Date()); // what was in force before this apply, at the same instant
@@ -532,7 +586,7 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
     const { maxContentRating, limitSlots, profiles, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
     const { pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime } = prev;
     const { libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source } = prev; // the selection (R-SEL-1, D101 ruling 6)
-    const { serverType, serverUrl, plexToken, serverUserId } = prev; // the connection keys are stored by Save, never before (D149 1): the Save compares the type, address, token and user id with the stored ones, and a preview never leaves the typed or imported ones in force
+    const { serverType, serverUrl, plexToken, serverUserId, serverId, serverCarried, servers } = prev; // the connection keys are stored by Save, never before (D149 1): the Save compares the type, address, token and user id with the stored ones, and a preview never leaves the typed or imported ones in force
     const { weighting, noRepeatDays } = prev; // an unsaved window of 0 must not reach the engine, which would clear the saved record (D114 1, D116 1)
     next = {
       ...next,
@@ -540,16 +594,38 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
       ...{ pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime },
       ...{ libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source },
       ...{ weighting, noRepeatDays },
-      serverType, serverUrl, plexToken, serverUserId,
+      serverType, serverUrl, plexToken, serverUserId, serverId, serverCarried, servers,
     };
   }
   // A Save that stores a different server type (an absent one counts as Plex) starts over: the pinned poster goes now, and the
   // offline cache and the no-repeat history go once the new client is built (D134 2, D141 3). A preview, a sign-in and a Cancel store nothing.
-  const switched = !preview && serverTypeOf(prev) !== serverTypeOf(next);
+  // The servers are settled first (D156 3, D157): who answers at a changed address is read without the token, the token stays only with the
+  // server it was made for, a server that is not the one it says is not kept, and the entries of every server that left the list go with it.
+  let settled = null;
+  if (!preview) {
+    // Every setting that is not a connection key, the limit first, takes effect now, before any server is asked who it is (D162 5): the
+    // reads can take seconds, and a limit lowered in this Save must not wait for them. Only the connection keys follow the reads.
+    // It runs on every Save that will read a server: one that changes the servers, and one that finds the first server's id unknown among several.
+    const willRead = serversKey(prev) !== serversKey(next) || (serverList(prev).length > 1 && !serverList(prev)[0].id);
+    if (persist && willRead) {
+      const keep = ['serverType', 'serverUrl', 'plexToken', 'serverUserId', 'serverName', 'serverId', 'serverCarried', 'servers']; // only the connection keys wait; the pin and the library selection do not (D162 5)
+      let early = { ...next, ...Object.fromEntries(keep.map((k) => [k, prev[k]])) };
+      // While the reads run the display must stay configured: the old connection with a selection the sheet cleared (the sign-in was set aside) reads
+      // as unconfigured and would open the first-run card for a server that is about to be replaced. The selection and the pin wait too, then.
+      if (isConfigured(prev) && !isConfigured(early)) early = { ...early, ...Object.fromEntries(['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'ratings', 'source', 'staticRatingKey', 'staticTitle'].map((k) => [k, prev[k]])) };
+      state.settings = save(storage, early);
+      enforceOnScreen();
+    }
+    settled = await settleServers(prev, next, readId);
+    lastSettled = { settled, before: serverList(prev) };
+    next = settled.next;
+    for (const note of settled.notes) toast(note);
+    if (settled.removed.length) next = withoutServers(next, settled.removed);
+  }
+  const switched = !preview && !settled.promoted && serverTypeOf(prev) !== serverTypeOf(next);
   // A Save that stores another address of the same type is another server too (D147 2): an id means nothing there, and a pinned poster shows
   // whatever its rating (D122 1), so the pin goes. The offline cache and the no-repeat history stay (D143 6): cached posters still pass the limit in force.
-  const addressOf = (s) => String(s?.serverUrl || '').trim().replace(/\/+$/, '');
-  const moved = !preview && !switched && addressOf(prev) !== addressOf(next);
+  const moved = !preview && !switched && !settled.promoted && !settled.sameRecorded && addressOf(prev.serverUrl) !== addressOf(next.serverUrl);
   if (switched || moved) next = { ...next, staticRatingKey: '', staticTitle: '' };
   state.settings = persist ? save(storage, next) : next;
   if (!preview) applyServerText(serverTypeOf(state.settings));
@@ -572,16 +648,29 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   // The poster selection compares by what it draws, not by object: every Save makes new lists.
   const connectionChanged =
     ['serverType', 'plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some((k) => prev[k] !== state.settings[k]) ||
+    serversKey(prev) !== serversKey(state.settings) ||
     selectionKey(selectionOf(before)) !== selectionKey(selectionOf(inForceSettings())); // what is drawn: the profile's selection while a slot names one
   if (connectionChanged || !engine) rebuildClient();
   if (switched) {
     blockPoster(); // the old server's poster does not stay up under the new server
-    if (engine) engine.clearShown();
-    if (!engine) createShownStore({ storage }).clear(); // no client to ask (not signed in to the new server yet): the record is in storage all the same
-    await cache.clear().catch((err) => log.warn(`Could not clear the poster cache: ${err.message}`));
+    // With other servers in the list only this one's entries go (below, by its id): nothing of the others (D157 2).
+    const alone = serverList(state.settings).length === 1;
+    if (alone && engine) engine.clearShown();
+    if (alone && !engine) createShownStore({ storage }).clear(); // no client to ask (not signed in to the new server yet): the record is in storage all the same
+    if (alone) await cache.clear().catch((err) => log.warn(`Could not clear the poster cache: ${err.message}`));
     updatePinButton();
     log.info(`Server type is now ${serverTypeOf(state.settings)}: the poster cache, the pinned poster and the no-repeat history were cleared.`);
   }
+  // Every server that left the list, or was replaced in its place, takes its own entries with it and nothing of the others (D157 1, 2, 9).
+  for (const entry of settled.gone) {
+    await cache.clearServer(entry).catch((err) => log.warn(`Could not clear the poster cache: ${err.message}`));
+    createShownStore({ storage }).clearServer(entry);
+    if (prev.staticRatingKey && belongsTo(prev.staticRatingKey, entry)) {
+      blockPoster(); // the poster on screen may be the pinned one of a server that is gone
+      updatePinButton();
+    }
+  }
+  if (settled.gone.length) log.info(`Servers changed: the poster cache, the pin and the no-repeat history of ${settled.gone.length} server(s) were cleared.`);
   if (moved && prev.staticRatingKey) {
     blockPoster(); // the old server's pinned poster does not stay up under the new address
     updatePinButton();
@@ -669,9 +758,14 @@ const settingsUI = createSettingsUI({
   version: VERSION,
   log,
   onPreview: (s) => applySettings(s, { persist: false, preview: true }),
-  onSave: (s) => {
+  onSave: async (s, { removed = [] } = {}) => {
     const was = serverTypeOf(state.settings);
-    applySettings(s);
+    lastSettled = null;
+    await applySettings(s); // the servers are settled (a read at a changed address) before the Save is stored
+    const about = lastSettled ? serversToast(lastSettled, state.settings, removed) : '';
+    if (about) return toast(about);
+    // With other servers in the list a type switch of the first one clears only its own entries: the toast below speaks of a lone server.
+    if (lastSettled && lastSettled.before.length > 1 && serverTypeOf(s) !== was) return toast(`${serverNameOf(serverList(state.settings)[0])} is now your first server. The old one's offline posters, its pin and its no-repeat history were cleared.`);
     // A switch of server type says so, naming the new server and what was cleared (D143 2).
     const now = serverTypeOf(s);
     if (was === now) return toast('Settings saved.');
@@ -1427,26 +1521,30 @@ async function boot() {
   announceWhatsNew();
 }
 
-// ---------- The upgrade notice (R-UPG-4) ----------
+// ---------- The upgrade notice (R-UPG-5) ----------
 
 const WHATS_NEW_KEY = 'plexPoster.whatsNew';
-const WHATS_NEW_VERSION = '2.4';
+const WHATS_NEW_VERSION = '2.4.1';
 
 /**
  * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new
- * and pointed at the server connection section (through the normal PIN gate), where the Plex | Jellyfin | Emby choice lives.
+ * and pointed at the server list (through the normal PIN gate), where "Add a server" lives.
  * An unconfigured one is a fresh install, not an upgrade, so it shows nothing. Either way the marker is written, so it
- * never shows again. The 2.3 notice is retired.
+ * never shows again. The 2.4 notice is retired.
  */
 function announceWhatsNew() {
   if (storage.getItem(WHATS_NEW_KEY) === WHATS_NEW_VERSION) return;
   storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION);
   if (!isConfigured(state.settings)) return;
-  toast("What's new in 2.4: show posters from a Jellyfin or Emby server as well as Plex.", {
+  toast("What's new in 2.4.1: choose posters from more than one server.", {
     action: 'Open settings',
     onAction: async () => {
-      await requestSettings({ section: 'server' }); // the sheet opens at its top, where the server connection section is
-      if (settingsUI.isOpen) document.querySelector('input[name="serverTypePick"]:checked')?.focus({ preventScroll: true });
+      await requestSettings(); // through the PIN gate; the sheet opens at its top
+      if (!settingsUI.isOpen) return;
+      const list = document.getElementById('servers-fieldset');
+      list.closest('fieldset').scrollIntoView({ block: 'start' }); // the whole server section (heading, connected card, list, Add a server; D168 1) at the top of the view,
+      const first = [...list.querySelectorAll('button, summary')].find((el) => el.getClientRects().length > 0); // and focus on its first control
+      (first ?? list).focus({ preventScroll: true });
     },
     ms: 20_000,
   });

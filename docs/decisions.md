@@ -952,3 +952,122 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   - There was no stash.
   - The seven `orch/*` branches each hold a phase worktree committed in place, with the same content on `main` (D138 2). The host's safety hook refuses their forced delete from this session, so Nathan deletes them.
   The open follow-up D154 stands for the next 2.4.x run.
+
+## Owner decision — 2026-11-03 (the run-10 policy, verbatim at 2026-11-03T16:58:48Z: "defaults"): D156
+
+- **D156 Run 10 builds 2.4.1: multiple servers in poster selection, and the 2.4 follow-ups.** The run-10 section of `docs/integration-plan.md` (phases 58–60) is the plan. The policy stop offered eight items with a recommended option each, and Nathan answered "defaults", which takes every recommended option.
+  1. **Scope (a).** Three phases: `followup-tidy-ups`, `multiple-servers` and `release-2.4.1`.
+     - Play now is left for a later 2.4.x run.
+     - The movie-night countdown, birthday mode and the Picture frame sources wait for prerequisites that are not built: the Poster playlist and marquee captions, the Frame and marquee styles, and Browse first (3.0).
+  2. **Ids across servers (a).** Every cached poster, the pin and each no-repeat entry carry the id of the server they came from. Keys stored by 2.4.0 have no server id and read as the first server's, with nothing rewritten. Adding a server clears nothing.
+  3. **Which server a setting belongs to (a).** A server is known by its own id: Plex's `machineIdentifier`, or the `Id` from Jellyfin's or Emby's `/System/Info/Public`.
+     - A new address with the same server id keeps that server's cache, pin and history, which closes D149 3.
+     - A different id clears that server's entries, which closes D143 6.
+  4. **The notice (a).** A one-time "What's new in 2.4.1: choose posters from more than one server." with marker `'2.4.1'`, and Open settings landing on the server list. R-UPG-5 supersedes R-UPG-4.
+  5. **Validation (a).** The run tests against mock servers only, with (verify) rows: the Plex mock and the Jellyfin mock in its Jellyfin and Emby modes, at once. At invocation, the HOME machine answered ssh, but nothing listened there on 8096 or 32400.
+  6. **Branch and record (a).** Branch `2.4.1` from `main` 0025b501, pushed. There is no pull request, merge or tag unless Nathan asks (D13, D79). The run-9 trail moved to `~/now-showing-run9-trail`. The plan section and this entry are committed separately.
+  7. **How many servers (a).** Up to three, in any mix of Plex, Jellyfin and Emby.
+  8. **The live-preview candidate (a).** It stays in the backlog (D138 1).
+  - **Floor check:** three phases, and `multiple-servers` is `risk:high`, so the orchestration loop runs.
+  - **Execution:** every question during the run answers itself with the defaults under the standing D44 rule. A pull request, a merge, a tag, a release, a force-push or deleting unique work still waits for Nathan's own words.
+
+## Conductor ruling — 2026-11-03 (run 10, `multiple-servers` pre-claim criteria probe; answered "defaults" under D44): D157
+
+- **D157 What the `multiple-servers` criteria leave open.** A cold probe of the phase text (`.orchestrator/artifacts/multiple-servers--criteria-probe-r1.md`, 14 findings) found inputs it leaves undecided or decides two ways. Each is ruled to the fail-closed reading, and criterion 1 is amended to name the cases.
+  1. **"The first server" (finding 1, Critical).** Entries stored by 2.4.0 belong to the server entry carried over from 2.4.0, never to a position in the list. Reordering moves nothing. Removing that entry clears those entries, the pin included. No other server can inherit them.
+  2. **An address or type change (finding 2).** D156 3 decides the case. A new address whose server reports the same server id keeps that server's entries. A different id clears them, and so does an id that cannot be read on Save. A change of type is always a different server. The criterion's "changing its address or type clears" is superseded by this rule.
+  3. **The token after an address change (finding 3).** The server's identity is read first, without a token. A Plex server answers its public `/identity`; Jellyfin and Emby answer `/System/Info/Public`. The token is sent only if the id matches the entry's. Otherwise the token is set aside and the household signs in, as D142 2 and D144 1 already rule.
+  4. **Tokens per server (finding 4).** Each server entry holds its own token, and every entry's token is in `SECRET_KEYS`. A token goes only to its own entry's address, so two servers of one type never share or overwrite a token.
+  5. **An id that cannot be read (finding 5).** A server that is down keeps its entries but contributes nothing to the pool. Its pin is not drawn while it is down, and no token is sent to a changed address until the id is read. At upgrade, rule 1 applies.
+  6. **A duplicate server id (finding 6).** Adding an entry whose server reports an id already in the list is refused with a message that names the server.
+  7. **The cache and the limit (finding 7).** As today (D37): every cached poster passes `allows()` with the limit in force when it is drawn, the slot and profile included.
+  8. **Now playing on two servers (finding 8).** The session that counts is chosen by Plex's `pickNowPlaying` rule: the user filter, then the first one playing. It is applied over all servers in list order, and the limit applies as today (D5, D141 6).
+  9. **Down is not gone (finding 9).** Only a removal or a different id clears a server's entries.
+  10. **Proportions and sources (finding 10).** Each chosen library is sampled in proportion to the title count its server reports, before the rating filter, as for one server today. A collection or playlist is one source on one server, and it replaces every chosen library (D107 1).
+  11. **More than three stored (finding 11).** Loading keeps the first three entries and drops the rest. Nothing is sent to a dropped entry.
+  12. **Old and new keys (finding 12).** A new stored key carries its server id in a form that no 2.4.0 key can have. A key without that form is a 2.4.0 key (rule 1).
+  13. **One film on two servers (finding 13).** These are two items; no-repeat applies per item.
+
+## Conductor ruling — 2026-11-03 (run 10, `followup-tidy-ups` r1 handback, question Q1; answered "defaults" under D44): D158
+
+- **D158 Emby keeps importing the shared MediaBrowser code from `js/sources/jellyfin.js` (Q1).** D154 5 asks that no adapter import another. `js/sources/emby.js` imports the MediaBrowser item mapping, the rating map and the header code from `js/sources/jellyfin.js`. That is the sharing the run-9 plan named in its `jellyfin-source` note: "Shared MediaBrowser code ... may live in `js/sources/jellyfin.js` for `emby-source` to import". Moving that code needs a new file outside this phase's Output. The generic HTTP helpers (`buildUrl`, `timeoutSignal`) move to `js/sources/http.js`, and the guard in `tests/sources.test.js` refuses every adapter-to-adapter import except emby → jellyfin. `js/sources/plex.js` re-exports `buildUrl` because the unchanged `tests/plex.test.js` imports it from there. A move of the MediaBrowser code to its own module is backlog for a later run.
+
+## Owner ruling — 2026-11-03 (run 10, `followup-tidy-ups` decision stop 1; Nathan answered "defaults" at 2026-11-03T20:52:33Z): D159
+
+- **D159 The documentation review's Critical is closed, and Playwright moves to 1.64.1 inside run 10.**
+  1. **The Critical (a).** Round 1 of the `followup-tidy-ups` documentation review rated `docs/spec.md:458` Critical: "A token is never sent to another server" went further than D142 2 and D144 1, because an address typed in Settings still receives the token. Round 2 names exactly the two cases where the token is set aside (a change of type, D142 2; an import that changes the server and carries no token, D144 1 and D149 2). The same reviewer approved round 2 at Ready 10/10. That fix closes the Critical.
+  2. **Playwright 1.64.1 (a).** The data-refinery session relayed a ruling it attributes to Nathan: every project locks to Playwright 1.64.1 (Chromium build 1248). Nathan's answer here is the authority for this repository, not the relay. A new run-10 phase, `playwright-1.64`, runs after `multiple-servers` and before `release-2.4.1`. It pins `playwright` to exactly `1.64.1`, runs the full e2e suite on build 1248, reads the release notes from 1.56.1 to 1.64.1 for breaking changes, and commits. Unregistering build 1194 from this machine comes after that commit and after no other session still needs 1194. The release's full suite then runs on 1.64.1.
+
+## Conductor ruling — 2026-11-03 (run 10, `multiple-servers` pre-flight; answered "defaults" under D44): D160
+
+- **D160 The `multiple-servers` Output gains the adapters, the two mocks and their tests.** The pre-flight (`.orchestrator/artifacts/multiple-servers--preflight-r1.out`) found that D157 cannot be built or tested inside the plan's Output:
+  1. **Plex identity without a token (D157 3, 5).** `js/sources/plex.js` `identity()` reads `GET /` with the token, and `scripts/mock-plex.mjs:208` refuses every route without the token. The Plex adapter gains a token-free identity read (`GET /identity`, whose `machineIdentifier` real Plex serves without a token: a (verify) row), and the mock serves `GET /identity` without a token with the same `machineIdentifier` as `GET /`. The Jellyfin and Emby adapters already read the public `/System/Info/Public`; a token-free identity method of the same name is added to each, and listed in the adapter interface in `js/sources/index.js`.
+  2. **One id for two modes (D157 6, D156 5).** `scripts/mock-jellyfin.mjs:209–210` reports the same `Id` in Jellyfin and Emby mode, so adding both from the shared mock is a duplicate id that D157 6 refuses. Emby mode reports an `Id` of its own, on `/System/Info/Public` and as every item's `ServerId`. Jellyfin mode is unchanged.
+  3. **Output.** Added to the phase's Output: `js/sources/plex.js`, `js/sources/jellyfin.js`, `js/sources/emby.js`, `scripts/mock-plex.mjs`, `scripts/mock-jellyfin.mjs`, `tests/plex.test.js`, `tests/jellyfin.test.js`, `tests/emby.test.js`, `tests/mock-plex.test.js`, `tests/mock-jellyfin.test.js`. No criterion text changes. Every other e2e spec stays out of the Output and must pass unchanged (criterion 3: a one-server household sees no change).
+
+## Conductor ruling — 2026-11-04 (run 10, `multiple-servers` r1 handback, questions Q2–Q4; answered "defaults" under D44): D161
+
+- **D161 How the carried server's ids, a 2.4.0 address change and the Add form behave.** The builder asked three questions and built on its proposed reading of each. Each reading is ruled the answer.
+  1. **The carried entry's ids (Q2).** The entry carried over from 2.4.0 keeps writing bare ids; a bare id means that entry (D157 1, 12). Every other server's ids are scoped `@<server id>/<id>`, a form no 2.4.0 key has. The carried entry's own server id is stored in `serverId` and used for the identity and duplicate checks only. Removing the carried entry clears the bare keys and any scoped key of its id.
+  2. **An address change on an entry whose server id was never recorded (Q3).** tests/e2e/emby.spec.mjs cases 18, 20 and 21 assert D147 2 (another address of the same type clears the pin; the cache and the history stay), and every existing spec stays unchanged (D160 3). An entry with a recorded server id follows D156 3 in full: the same id keeps the cache, the history, the pin and the token. An entry with no recorded id (a 2.4.0 object) is compared with the id read at its old address. When the two match, it keeps the token, the cache and the history, and the pin still goes, as in 2.4.0. A different or unreadable id makes it another server (D157 2). The id is recorded at the first such Save, or when a second server is added. Clearing the pin is the fail-closed side: the pin is the one poster shown whatever its rating (D122 1).
+  3. **The Add form (Q4).** A Plex server is added by the plex.tv code, the same sign-in as the first server. A Jellyfin or Emby server is added by address, user name and password. The Add form has no Quick Connect.
+
+## Conductor ruling — 2026-11-04 (run 10, `multiple-servers` r1 reviews, the spec-gap findings; answered "defaults" under D44): D162
+
+- **D162 What the `multiple-servers` r1 reviews left open.** The anchored, cold, architecture and UX-walk reviews (`.orchestrator/artifacts/multiple-servers--review-r1.md`, `--review-cold-r1.md`, `--review-arch-r1.md`, `--review-uxwalk-r1.md`) raised these spec gaps. Each is ruled to the fail-closed reading.
+  1. **What `serverCarried` means (architecture C2).** It marks the entry that owns the bare ids. That is the entry carried over from 2.4.0, or a server that replaced it in the first place while alone, after the bare entries were cleared. A server moved into the first place from `servers` (the first server was removed) keeps its scoped ids and is never carried. A display whose settings hold any scoped id uses the multi-server source, whatever the count. The comment in js/settings.js and docs/spec.md say this. This amends D161 1, which said only "the entry carried over from 2.4.0".
+  2. **Removing the carried server and the profiles (architecture I1).** A removed server's library keys, collection and pin are removed from every profile too, not only from the current selection. No server inherits them (D157 1).
+  3. **A server moved into the first place keeps its own token (anchored M-1).** Its token was checked at its own address when it was added, so it is not set aside. The set-aside of D157 3 applies only to an address or type change.
+  4. **Adding a server (UX walk I2).** After a Save that adds a server, the toast names the server and says to choose its libraries. The library list shows each server's libraries under that server's name. Nothing of the new server is chosen for the household.
+  5. **A lowered limit and a slow Save (cold M1).** The limit, and every other non-connection setting, takes effect at Save before any server-identity read. Only the connection keys wait for the reads.
+  6. **Now playing (cold M2).** D157 8 stands. When the first playing session is above the limit, nothing is shown as playing, even if a permitted title plays on another server. This is the safe side.
+  7. **A duplicate added while the first server is down (anchored M-2).** It stands as built. The duplicate is removed at the first Save at which the first server answers. A duplicate sends no token anywhere it does not already go.
+
+## Conductor ruling — 2026-11-04 (run 10, `multiple-servers` r3 reviews, the spec-gap finding; answered "defaults" under D44): D163
+
+- **D163 The profiles when the first server becomes another server.** The architecture review r3 (`.orchestrator/artifacts/multiple-servers--review-arch-r3.md`, I-1) found the first server's profile keys moved onto the server that replaced it, and asked whether the rule should differ for a lone server.
+  1. **A household with more than one server.** In such a household, a Save can find that the first server is now another server, because the address or type changed and the id read there differs or cannot be read. The old first server is then removed under D157 1 and D162 2. Its library keys, collection and pin leave the selection and every profile; no profile key is moved onto the new server. The Settings sheet offers the main selection again from the new server.
+  2. **A household with one server.** It keeps the 2.4.0 behaviour (R-SRC-2 "Switching"; plan criterion 3, a one-server household sees no change). The profiles and the slots keep their ids as stored. A key that matches nothing on the new server draws nothing, so this fails closed.
+  3. "More than one server" is judged on the settings before the Save. That means `servers` is not empty, or any scoped id is stored (D162 1).
+
+## Owner ruling — 2026-11-04 (run 10, `multiple-servers` stop 2, the re-dispatch cap; Nathan: "defaults"): D164
+
+- **D164 The `multiple-servers` re-dispatch cap is raised by two, to seven.** Round r4 (candidate A, which tied candidate B at COMPLETE 65/65) failed review on two Important findings: the anchored review's one-server token at Save, against the Q5 ruling, and the UX walk's first-run card after Remove-first, retype and Save. The rounds converge, and they recur on one path, where the first server changes. Candidate A's builder is resumed for one round, r6, with no branch. The seventh re-dispatch is held for a new Important found in r6. Not chosen: (b) forbidding Remove of the first server while others exist, and (c) taking the phase out of 2.4.1. The stop is saved in `.orchestrator/phases/multiple-servers.md` (stop message 2).
+
+## Conductor ruling — 2026-11-04 (run 10, `multiple-servers` r6 reviews, the remaining Minor findings; answered "defaults" under D44): D165
+
+- **D165 What the `multiple-servers` r6 reviews left open.** All four r6 reviews approve. These Minor findings remain, in `.orchestrator/artifacts/multiple-servers--review-r6.md`, `--review-cold-r6.md`, `--review-arch-r6.md` and `--review-uxwalk-r6.md`.
+  1. **The seconds while a Save reads the new server's id (architecture r6 m-2).** The early apply of D162 5 stands. The household limit applies at once to every poster. A library ticked from a new first server can be drawn from the old server for those seconds, and a reload in that window keeps the mix. This is accepted for 2.4.1 and recorded as a follow-up: hold back the selection in the early state when the first server's address or type changes.
+  2. **A new first server whose id cannot be read (architecture r6 m-3).** It is carried even beside other servers, because there is no id to scope its keys by. It inherits nothing from the server it replaced. This extends D162 1, which said "while alone".
+  3. **A token typed or pasted in the sheet (cold r6 R6-1).** In a one-server household, a type change with the old token pasted back by hand, then an address of another server, sends that token to the typed address. That is D142 2: a token the household types in Settings goes to the address it types, as in 2.4.0. It stands.
+  4. **Deferred to a later 2.4.x run, as follow-ups:**
+     - the pin restored with the old selection while a Save settles (anchored r6 m-1);
+     - the empty card's "Jellyfin" against the Settings line's own server name when every server is down (UX walk r6 m-3);
+     - one shared function for the token rule in `settleServers` and `tokenMayGo` (architecture M-1);
+     - a spec sentence saying the first server is not reordered (architecture M3).
+  5. **Now playing from another server (cold M2).** It stands under D162 6.
+
+## Conductor ruling — 2026-11-04 (run 10, `playwright-1.64` r1 review, the spec-gap findings; answered "defaults" under D44): D166
+
+- **D166 What the Playwright 1.64 upgrade forces, when no release note says so.** The anchored review r1 (`.orchestrator/artifacts/playwright-1.64--review-r1.md`) confirmed the builder's probe. From 1.64, `AbortSignal.timeout()` in the page runs on the fake clock that `page.clock.install` sets, so a held request times out after its simulated span. No release note from 1.57.0 to 1.64.1 names this change.
+  1. **A probe stands in for the release-note line (M-3).** The plan's Output allows a `tests/e2e/*.mjs` file "that a 1.64 breaking change forces to change", each "with the release-note line that forced it". A change that no note names may be cited by a probe in the handback instead. The probe must show the same check giving one result on 1.56.1 and another on 1.64.1. Here, `AbortSignal.timeout(20000)` with `clock.runFor(60000)` is not aborted on 1.56.1 and is aborted on 1.64.1.
+  2. **A spec that still passes but no longer tests its guard is forced too (I-1, I-2).** rating-schedule case 13 and profiles case 15 pass on 1.64.1 with the guard they test removed: `js/main.js:205` and `|| !inSelectionNow(poster)` at `js/main.js:227`. Each failed with that guard removed on 1.56.1. They are in this phase's Output under 1, and each must again fail with its guard removed. The fix keeps each held request pending across its boundary, ending before its own timeout fires. The app's timeouts are not changed.
+  3. **The Node floor (M-2).** Playwright 1.64.1 needs Node 20 or later. `package.json` `engines.node` becomes `>=20` in this phase, since the upgrade forces it and package.json is in the Output. Every other place that names a Node version is checked by keep-docs-current in `release-2.4.1`.
+  4. **Case 7 margins (M-1).** Case 7 stands as built, with the margin made wider. 04:00 and the release each fall at least 5 simulated seconds inside the 20 s timeout.
+
+## Owner ruling — 2026-11-04 (run 10, the open follow-ups; Nathan: "yes, add #4 to this release"): D167
+
+- **D167 The spec sentence that the first server is not reordered goes into 2.4.1.** This amends D165 4, which deferred it (architecture M3). Nathan asked for the open follow-ups and a recommendation for each. The recommendation was to do this one now, because it is one sentence in docs/spec.md, a file already in `release-2.4.1`'s Output, with no code risk. Nathan answered "yes, add #4 to this release". R-SRC-4 states that the server carried over from 2.4.0 is always first and that reordering the servers is not offered. The other four D165 follow-ups stay deferred to a later 2.4.x run: the selection and the pin in the early apply at Save, the all-down empty card's wording, and the shared token-rule function.
+
+## Conductor ruling — 2026-11-05 (run 10, `release-2.4.1` r1 reviews, the spec-gap and the deferred Minor; answered "defaults" under D44): D168
+
+- **D168 Where Open settings lands, and the two-server focus loss.** The UX walk r1 (`.orchestrator/artifacts/release-2.4.1--review-uxwalk-r1.md`) found that on a one-server display, which is every upgrade from 2.4, scrolling `#servers-fieldset` to the top hides the "Plex connection" heading, the "Connected to" card and the test result, and leaves a muted "Add a server" line first (I-1, spec-gap). The documentation review r1 (`--review-r1.md`, m-1) and the walk (Minor) confirm the builder's note that, with two servers and no saved serverName, a list redraw drops focus.
+  1. **"The server list" in R-UPG-5 and plan criterion 2 means the whole server section:** the enclosing fieldset, with its heading, the connected card, the list (when it shows) and "Add a server". Open settings scrolls that section to the top of the sheet and puts focus on its first control. The preset position checks follow.
+  2. **The two-server focus loss is deferred to a later 2.4.x run, as a follow-up.** No upgrade from 2.4 reaches it through the notice, since 2.4 displays have one server, and the fix is in `js/settings-ui.js`, outside this phase's Output. R-UPG-5 says nothing about it.
+
+## Conductor ruling — 2026-11-05 (run 10, `release-2.4.1` r2 reviews, the remaining Minor findings; answered "defaults" under D44): D169
+
+- **D169 What the `release-2.4.1` r2 reviews left open.** Both r2 reviews approve (`.orchestrator/artifacts/release-2.4.1--review-r2.md`, `--review-uxwalk-r2.md`). Before the commit, one inner fix (r2b, not a re-dispatch) closes:
+  1. **The focus wording (anchored m-7, UX Minor 2).** This amends D168 1: Open settings scrolls the whole server section to the top and puts focus on the first control of its server list ("Add a server", or the first Remove button when the list shows), not the section's first control (the server type choice). The code stands; R-UPG-5, its acceptance line and the preset messages say so.
+  2. **The scroll is a guard with a reachable case (anchored m-6).** The UX walk found no difference on a fresh open, but the anchored review reached one: Settings keeps its scroll position, so opening it with the gear, scrolling down and cancelling, then pressing the notice's Open settings, lands 1,650 px past the section without the scroll. A preset case for that path is added, so the line has a test.
+  3. **Roadmap.md:156 (anchored m-8)** still says whether 2.4 is merged is "not decided"; D155 merged it. The line names 2.4.1's state.

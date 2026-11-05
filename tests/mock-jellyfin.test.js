@@ -1,6 +1,6 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startMockJellyfin, jellyfinPortFor, TOKEN, EMBY_TOKEN, USER_ID, USERNAME, PASSWORD } from '../scripts/mock-jellyfin.mjs';
+import { startMockJellyfin, jellyfinPortFor, TOKEN, EMBY_TOKEN, EMBY_SERVER_ID, SERVER_ID, USER_ID, USERNAME, PASSWORD } from '../scripts/mock-jellyfin.mjs';
 
 let server;
 let base;
@@ -395,4 +395,18 @@ test('the mock holds an image for its series, so an episode session can draw its
   assert.match(res.headers.get('content-type'), /svg/);
   assert.match(await res.text(), /Harbor Lights/);
   assert.equal((await get(`/Items?Ids=${'f'.padEnd(31, '0')}1&Recursive=true`)).body.Items.length, 0, 'the series is still listed nowhere');
+});
+
+// ---- the Emby mode's own server id (D160 2, D157 6) ----
+
+test('Emby mode reports an Id of its own, on /System/Info/Public and as the ServerId of every item; Jellyfin mode is unchanged', async () => {
+  assert.notEqual(EMBY_SERVER_ID, SERVER_ID);
+  assert.match(EMBY_SERVER_ID, /^[0-9a-f]{32}$/);
+  const emby = { 'X-Emby-Authorization': 'Emby UserId="", Client="t", Device="t", DeviceId="d", Version="1"', 'X-Emby-Token': EMBY_TOKEN };
+  assert.equal((await get('/System/Info/Public', emby)).body.Id, EMBY_SERVER_ID);
+  assert.equal((await get('/System/Info/Public', {})).body.Id, SERVER_ID, 'Jellyfin mode keeps its id');
+  const embyItems = (await get('/Items?IncludeItemTypes=Movie&Recursive=true', emby)).body.Items;
+  assert.ok(embyItems.length > 0 && embyItems.every((i) => i.ServerId === EMBY_SERVER_ID), 'every Emby item names the Emby server');
+  const jfItems = (await get('/Items?IncludeItemTypes=Movie&Recursive=true')).body.Items;
+  assert.ok(jfItems.every((i) => i.ServerId === SERVER_ID), 'every Jellyfin item still names the Jellyfin server');
 });

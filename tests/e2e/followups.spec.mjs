@@ -47,7 +47,7 @@ const clearMarkerOnce = (page) =>
     sessionStorage.setItem('__markerCleared', '1');
     localStorage.removeItem('plexPoster.whatsNew');
   });
-const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.4/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.4\.1/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
 
 // ---------- 1. "Can't reach Plex" only when Plex did not answer ----------
 
@@ -180,15 +180,18 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await waitToast(page);
   await page.click('#toast button:has-text("Open settings")');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-  assert.equal(await page.evaluate(() => document.activeElement?.name === 'serverTypePick' && document.activeElement.checked), true, 'focus starts on the chosen server type');
+  // The connection test and the library lists have answered and two frames have drawn before focus is read, so a late redraw cannot move it under the check.
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  assert.equal(await page.evaluate(() => document.activeElement?.closest('#servers-fieldset') !== null && document.activeElement.matches('summary')), true, 'focus starts on the first control of the server list: Add a server');
   await page.keyboard.press('Tab');
   const where = await page.evaluate(() => {
     const el = document.activeElement;
-    const start = document.querySelector('#settings input[name="serverTypePick"]:checked');
+    const start = document.querySelector('#servers-fieldset summary');
     return { after: Boolean(start.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING), id: el?.id };
   });
-  assert.ok(where.after, `the first Tab moves on from the server choice: ${JSON.stringify(where)}`);
-  check('Open settings puts focus on the server choice');
+  assert.ok(where.after, `the first Tab moves on from the server list: ${JSON.stringify(where)}`);
+  check('Open settings puts focus on the first control of the server list');
 });
 
 // ---------- 7. The Settings sheet at 390 px does not scroll sideways ----------

@@ -232,3 +232,33 @@ test('chooseTitle: window 0 ignores the record, and an empty list is null', () =
   assert.equal(chooseTitle(items, base({ days: 0, shownAt })).ratingKey, 'a');
   assert.equal(chooseTitle([], base({ days: 3 })), null);
 });
+
+// ---- the history by server (D156 2, D157 1, 2) ----
+
+test('clearServer forgets one server\'s titles and nothing of the others; a bare key is the carried entry\'s', () => {
+  const m = memory();
+  const store = createShownStore({ storage: m });
+  const t = 1_000_000;
+  store.record('7', t, 5); // stored by 2.4.0
+  store.record('@jf-1/7', t, 5); // the same number on another server is another title
+  store.record('@em-1/9', t, 5);
+  store.clearServer({ id: 'jf-1', carried: false });
+  assert.deepEqual([...store.windowed(5, t).keys()].sort(), ['7', '@em-1/9']);
+  store.clearServer({ id: '', carried: true });
+  assert.deepEqual([...store.windowed(5, t).keys()], ['@em-1/9']);
+});
+
+test('clearServer writes nothing when the server has no title in the record', () => {
+  const writes = [];
+  const m = memory({ [HISTORY_KEY]: JSON.stringify({ '@em-1/9': 5 }) });
+  const store = createShownStore({ storage: { ...m, setItem: (k, v) => (writes.push(k), m.setItem(k, v)) } });
+  store.clearServer({ id: 'jf-1', carried: false });
+  assert.deepEqual(writes, []);
+});
+
+test('no-repeat applies per item: one film on two servers is two titles (D157 13)', () => {
+  const now = 10 * DAY_MS;
+  const shownAt = new Map([['@jf-1/5', now - 1000]]);
+  const pool = [T('@jf-1/5'), T('@em-1/5')];
+  for (let i = 0; i < 20; i++) assert.equal(chooseTitle(pool, { mode: 'off', days: 3, shownAt, now, random: Math.random }).ratingKey, '@em-1/5');
+});

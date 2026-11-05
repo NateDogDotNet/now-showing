@@ -1618,3 +1618,55 @@ test('decide() with a username set ignores another viewer\'s session (the real a
   const mine = setup({ username: 'someone' }, { sessions: NPS, pool: [poster('a')] });
   assert.equal((await mine.engine.decide({ sessions: NPS })).poster.source, 'now-playing');
 });
+
+// ---- several servers (R-SRC-4, D157) ----
+
+const SCOPED = (n) => `@jf-1/${n}`;
+
+test('a poster above the limit from the second server never passes, however the server filtered (D5)', async () => {
+  const pool = [
+    { ...poster('1'), contentRating: 'G' },
+    { ...poster(SCOPED('2')), contentRating: 'R' },
+    { ...poster(SCOPED('3')), contentRating: '' },
+    { ...poster(SCOPED('4')), contentRating: 'PG' },
+  ];
+  const { engine, client } = setup({ maxContentRating: 'PG', libraryKeys: ['1', SCOPED('b1')], libraryKey: '1', randomPoolSize: 10, servers: [{ id: 'jf-1', type: 'jellyfin', url: 'http://j', token: '' }] }, { pool }, Math.random);
+  client.libraryCount = async () => 5;
+  const seen = new Set();
+  for (let i = 0; i < 60; i++) seen.add((await engine.decide({ force: true })).poster.ratingKey);
+  assert.deepEqual([...seen].sort(), ['1', SCOPED('4')]);
+});
+
+test('each chosen library of each server is asked for in proportion to its title count, and a genre goes by its title too', async () => {
+  const asked = [];
+  const client = { ...fakeClient({ pool: [poster('a')] }), libraryCount: async (k) => ({ 1: 30, [SCOPED('b1')]: 10 })[k], pool: async (r) => (asked.push(r), [{ ...poster(`${r.libraryKey}-x`), libraryKey: undefined }]) };
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryKeys: ['1', SCOPED('b1')], randomPoolSize: 40, genres: [{ key: '11', title: 'Drama' }], servers: [{ id: 'jf-1', type: 'jellyfin', url: 'http://j', token: '' }] };
+  const engine = createEngine({ client, getSettings: () => settings });
+  await engine.decide({ force: true }).catch(() => {});
+  assert.deepEqual(asked.map((r) => [r.libraryKey, r.size]).sort(), [['1', 30], [SCOPED('b1'), 10]].sort());
+  for (const r of asked) assert.deepEqual([r.genres, r.genreTitles], [['11'], ['Drama']]);
+});
+
+test('with several servers a pin whose server or id is gone is marked gone; with one server nothing changes (D122 1)', async () => {
+  const gone = Object.assign(new Error('That library item no longer exists.'), { kind: 'http', status: 404 });
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', staticRatingKey: SCOPED('9'), showNowPlaying: false };
+  const several = { ...fakeClient(), multi: true, item: async () => Promise.reject(gone) };
+  await assert.rejects(() => createEngine({ client: several, getSettings: () => settings }).decide(), (err) => err.pinGone === true);
+  const one = { ...fakeClient(), item: async () => Promise.reject(Object.assign(new Error('x'), { kind: 'http', status: 404 })) };
+  await assert.rejects(() => createEngine({ client: one, getSettings: () => settings }).decide(), (err) => err.pinGone === undefined);
+  const other = { ...fakeClient(), multi: true, item: async () => Promise.reject(Object.assign(new Error('down'), { kind: 'network' })) };
+  await assert.rejects(() => createEngine({ client: other, getSettings: () => settings }).decide(), (err) => err.pinGone === undefined, 'a server that is only down keeps the pin');
+});
+
+test('with several servers a pool that fails everywhere names every server in its error, and a single server\'s error is its own (D157 5)', async () => {
+  const err = (message, kind = 'network') => Object.assign(new Error(message), { kind });
+  const make = (multi) => ({
+    ...fakeClient(),
+    multi,
+    libraryCount: async () => 5,
+    pool: async (r) => Promise.reject(r.libraryKey === '1' ? err('Could not reach Plex (network or CORS error).') : err('Could not reach Jellyfin (network or CORS error).')),
+  });
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryKeys: ['1', '@jf-1/b1'], showNowPlaying: false, servers: [{ id: 'jf-1', type: 'jellyfin', url: 'http://j', token: '' }] };
+  await assert.rejects(() => createEngine({ client: make(true), getSettings: () => settings }).decide({ force: true }), (e) => e.kind === 'network' && /Plex/.test(e.message) && /Jellyfin/.test(e.message));
+  await assert.rejects(() => createEngine({ client: make(false), getSettings: () => settings }).decide({ force: true }), (e) => /Plex/.test(e.message) && !/Jellyfin/.test(e.message), 'without the multi source the first error is the error, as in 2.4.0');
+});

@@ -1,12 +1,12 @@
 {
   "name": "now-showing",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "private": true,
-  "description": "Installable, offline-capable PWA that shows Plex movie posters full-screen inside a decorative frame.",
+  "description": "Installable, offline-capable PWA that shows movie posters from Plex, Jellyfin or Emby full-screen inside a decorative frame.",
   "type": "module",
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "start": "node scripts/serve.mjs",
@@ -15,6 +15,6 @@
     "test:e2e": "node tests/e2e/run.mjs"
   },
   "devDependencies": {
-    "playwright": "1.56.1"
+    "playwright": "1.64.1"
   }
 }

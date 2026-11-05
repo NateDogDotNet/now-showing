@@ -3,7 +3,7 @@
 // an index written by 2.3.1 has bare keys, which read as Plex entries: nothing is rewritten or migrated (D134 ruling 2).
 
 import { allows } from './ratings.js';
-import { entryInSelection } from './selection.js';
+import { belongsTo, entryInSelection } from './selection.js';
 
 const CACHE_NAME = 'plex-posters-v1';
 const INDEX_KEY = 'plexPoster.posterIndex';
@@ -126,6 +126,20 @@ export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = glo
       if (changed) writeIndex(list);
     },
 
+    /**
+     * Drops everything that belongs to one server entry `{ id, carried }` (D157 1, 2): its index entries and their blobs, and no entry of any
+     * other server. An id stored by 2.4.0 (no server id) is the carried entry's. Used when a server is removed or turns out to be another server.
+     */
+    async clearServer(server) {
+      const list = readIndex();
+      const gone = list.filter((e) => belongsTo(e.ratingKey, server));
+      if (!gone.length) return;
+      writeIndex(list.filter((e) => !belongsTo(e.ratingKey, server)));
+      if (!available) return;
+      const cache = await caches.open(CACHE_NAME);
+      await Promise.all(gone.map((e) => cache.delete(keyUrl(e.ratingKey))));
+    },
+
     /** Drops one poster (blob and index entry), e.g. when its stored blob proves undecodable. */
     async delete(ratingKey) {
       writeIndex(readIndex().filter((e) => e.ratingKey !== ratingKey));
@@ -161,9 +175,11 @@ export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = glo
      * A random cached poster other than `excludeKey`, with its blob. While `maxContentRating` is set, entries
      * above it and entries with no stored rating (cached before 2.1) are never returned. While `selection` narrows the pool
      * (js/selection.js), only entries that record belonging to it are (D107 ruling 4); an entry without the fields never is.
+     * `known(ratingKey)` says whether the entry's server is still in the household's list (default: yes), so an entry left by a server that
+     * is gone is never drawn, however it got there. A server that is only down is still in the list: its entries are drawn.
      */
-    async random(excludeKey, maxContentRating = '', selection = null) {
-      const list = readIndex().filter((e) => allows(maxContentRating, e.contentRating) && entryInSelection(e, selection, maxContentRating));
+    async random(excludeKey, maxContentRating = '', selection = null, known = () => true) {
+      const list = readIndex().filter((e) => known(e.ratingKey) && allows(maxContentRating, e.contentRating) && entryInSelection(e, selection, maxContentRating));
       const pool = list.length > 1 ? list.filter((e) => e.ratingKey !== excludeKey) : list;
       for (const meta of pool.sort(() => Math.random() - 0.5)) {
         const blob = await this.get(meta.ratingKey);

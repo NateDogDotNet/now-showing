@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults, fromImport, importWithConnection, isConfigured, load, sanitize, save, SECRET_KEYS, STORAGE_KEY, toExport } from '../js/settings.js';
+import { defaults, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, removedServers, sanitize, save, SECRET_KEYS, serverList, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -571,3 +571,351 @@ for (const type of ['plex', 'jellyfin', 'emby']) {
     assert.deepEqual([sameAddressOwnToken.settings.plexToken, sameAddressOwnToken.settings.serverUserId], ['theirs', ''], 'a new token for this address does not keep the old token\'s id');
   });
 }
+
+// ---- several servers (R-SRC-4, D156, D157) ----
+
+const JF = (extra = {}) => ({ id: 'jf-id-1', type: 'jellyfin', url: 'http://jf:8096', token: 'jf-token', userId: '', name: 'Den Jellyfin', ...extra });
+const EM = (extra = {}) => ({ id: 'em-id-1', type: 'emby', url: 'http://em:8096', token: 'em-token', userId: 'u1', name: 'Den Emby', ...extra });
+/** A settings object as 2.4.0 stored it: no server list, no server id, bare keys. */
+const v240 = () => ({ serverType: 'plex', serverUrl: 'http://plex:32400', plexToken: 'plex-token', libraryKey: '1', libraryKeys: ['1', '3'], libraryNames: ['Movies', 'Kids'], staticRatingKey: '42', staticTitle: 'Pinned' });
+
+test('a 2.4.0 settings object loads as a one-server list, and nothing is stored or rewritten (D156 2)', () => {
+  const raw = JSON.stringify(v240());
+  const writes = [];
+  const storage = { getItem: (k) => (k === STORAGE_KEY ? raw : null), setItem: (k) => writes.push(k), removeItem: (k) => writes.push(k) };
+  const { settings, source } = load(storage);
+  assert.equal(source, 'storage');
+  assert.deepEqual(writes, [], 'loading writes and removes nothing');
+  const list = serverList(settings);
+  assert.equal(list.length, 1);
+  assert.deepEqual([list[0].type, list[0].url, list[0].token, list[0].carried, list[0].id], ['plex', 'http://plex:32400', 'plex-token', true, ''], 'the entry carried over from 2.4.0, with no id yet');
+  assert.deepEqual([settings.libraryKeys, settings.staticRatingKey, settings.servers], [['1', '3'], '42', []], 'the bare keys are what 2.4.0 stored');
+});
+
+test('a fourth server is refused: only three are kept, and a fourth stored entry is dropped on load (D156 7, D157 11)', () => {
+  assert.equal(MAX_SERVERS, 3);
+  const many = [JF({ id: 'a1' }), EM({ id: 'a2' }), JF({ id: 'a3', url: 'http://third' }), JF({ id: 'a4', url: 'http://fourth' })];
+  const s = sanitize({ ...v240(), servers: many });
+  assert.deepEqual(s.servers.map((e) => e.id), ['a1', 'a2'], 'the first server plus two more');
+  assert.equal(serverList(s).length, 3);
+  const storage = { getItem: () => JSON.stringify({ ...v240(), servers: many }), setItem() {}, removeItem() {} };
+  assert.equal(serverList(load(storage).settings).length, 3, 'a fourth stored entry is dropped on load');
+});
+
+test('a server with no id, type or address is not a server', () => {
+  const s = sanitize({ servers: [JF({ id: '' }), JF({ type: '' }), JF({ url: '' }), 'x', null, JF()] });
+  assert.deepEqual(s.servers.map((e) => e.id), ['jf-id-1']);
+});
+
+test('a duplicate server id is refused: the later entry is dropped, also against the first server\'s id (D157 6)', () => {
+  assert.deepEqual(sanitize({ servers: [JF(), JF({ url: 'http://other' })] }).servers.map((e) => e.url), ['http://jf:8096']);
+  assert.deepEqual(sanitize({ ...v240(), serverId: 'jf-id-1', servers: [JF()] }).servers, [], "the first server's id counts");
+});
+
+test('every entry has its own token in SECRET_KEYS, and an export without secrets carries none of them (D157 4)', () => {
+  assert.ok(SECRET_KEYS.includes('plexToken') && SECRET_KEYS.includes('servers.token'));
+  const s = sanitize({ ...v240(), servers: [JF(), EM()] });
+  const plain = toExport(s).settings;
+  assert.equal('plexToken' in plain, false);
+  assert.deepEqual(plain.servers.map((e) => 'token' in e), [false, false]);
+  assert.deepEqual(plain.servers.map((e) => e.url), ['http://jf:8096', 'http://em:8096'], 'the addresses stay in the file');
+  const full = toExport(s, { includeSecrets: true }).settings;
+  assert.deepEqual([full.plexToken, ...full.servers.map((e) => e.token)], ['plex-token', 'jf-token', 'em-token']);
+  assert.equal(JSON.stringify(toExport(s)).includes('jf-token'), false);
+  assert.deepEqual(withoutSecrets({ plexToken: 'a', servers: [{ token: 'b', url: 'u' }] }), { servers: [{ url: 'u' }] });
+});
+
+test('an export carries no server id and no carried flag, and an import never takes them from a file (D157 1)', () => {
+  const s = sanitize({ ...v240(), serverId: 'mine', servers: [JF()] });
+  const out = toExport(s).settings;
+  for (const k of LOCAL_KEYS) assert.equal(k in out, false, k);
+  const merged = fromImport({ serverId: 'theirs', serverCarried: false, serverUrl: 'http://x:32400' }, s);
+  assert.deepEqual([merged.serverId, merged.serverCarried], ['mine', true]);
+});
+
+test('an import keeps the token of a server only when it is the same server at the same address (D157 4)', () => {
+  const current = sanitize({ ...v240(), servers: [JF()] });
+  const same = fromImport({ servers: [{ ...JF(), token: undefined }] }, current);
+  assert.equal(same.servers[0].token, 'jf-token', 'same id, type and address: the token stays');
+  const moved = fromImport({ servers: [{ ...JF({ url: 'http://elsewhere:8096' }), token: undefined }] }, current);
+  assert.equal(moved.servers[0].token, '', 'another address: no token travels there');
+  const given = fromImport({ servers: [JF({ url: 'http://elsewhere:8096', token: 'own' })] }, current);
+  assert.equal(given.servers[0].token, 'own');
+});
+
+test('removedServers: the carried entry is the same entry while it stays carried, a server is the same by its id (D157 1)', () => {
+  const before = serverList(sanitize({ ...v240(), servers: [JF()] }));
+  assert.deepEqual(removedServers(before, serverList(sanitize({ ...v240(), servers: [JF()] }))), []);
+  assert.deepEqual(removedServers(before, serverList(sanitize({ ...v240() }))).map((e) => e.id), ['jf-id-1'], 'removing the second server');
+  const promoted = sanitize({ serverType: 'jellyfin', serverUrl: 'http://jf:8096', plexToken: 'jf-token', serverId: 'jf-id-1', serverCarried: false });
+  assert.deepEqual(removedServers(before, serverList(promoted)).map((e) => e.carried), [true], 'removing the carried entry: its bare keys go with it, and the promoted server inherits none');
+});
+
+test('withoutServers takes a removed server\'s libraries, collection, pin and profile libraries, and nothing of the others (D157 1, 2)', () => {
+  const s = sanitize({
+    ...v240(),
+    libraryKeys: ['1', '@jf-id-1/b1', '@em-id-1/c1'],
+    libraryNames: ['Movies', 'JF', 'EM'],
+    source: { kind: 'collection', key: '@jf-id-1/d1', title: 'Box' },
+    staticRatingKey: '@jf-id-1/a1',
+    staticTitle: 'Pinned JF',
+    servers: [JF(), EM()],
+    profiles: [{ id: 'p1', name: 'Kids', libraryKeys: ['3', '@jf-id-1/b2'] }],
+  });
+  const jf = serverList(s)[1];
+  const out = withoutServers(s, [jf]);
+  assert.deepEqual(out.libraryKeys, ['1', '@em-id-1/c1']);
+  assert.deepEqual(out.libraryNames, ['Movies', 'EM']);
+  assert.equal(out.source, null);
+  assert.deepEqual([out.staticRatingKey, out.staticTitle], ['', '']);
+  assert.deepEqual(out.profiles[0].libraryKeys, ['3']);
+  const carried = withoutServers(s, [serverList(s)[0]]);
+  assert.deepEqual(carried.libraryKeys, ['@jf-id-1/b1', '@em-id-1/c1'], 'removing the carried entry takes the bare keys and no scoped one');
+  assert.equal(carried.staticRatingKey, '@jf-id-1/a1', 'a pin of another server stays');
+  const bare = withoutServers({ ...s, staticRatingKey: '42' }, [jf]);
+  assert.equal(bare.staticRatingKey, '42', 'a bare pin is the carried entry\'s, not the removed server\'s');
+});
+
+// settleServers: who answers at an address is read WITHOUT a token, and the token goes only to the server it was made for.
+const reader = (answers) => {
+  const asked = [];
+  const read = async (type, url) => (asked.push(`${type} ${url}`), answers[url] ?? null);
+  return { read, asked };
+};
+const settled = (s) => sanitize(s);
+
+test('settle: a new address whose server has the same id keeps the entries, the pin and the token (D156 3, D157 2)', async () => {
+  const prev = settled({ ...v240(), serverId: 'plex-id' });
+  const { read, asked } = reader({ 'http://new:32400': 'plex-id' });
+  const r = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400' }), read);
+  assert.deepEqual([r.removed, r.gone, r.sameRecorded, r.next.plexToken, r.next.serverCarried, r.next.serverId], [[], [], true, 'plex-token', true, 'plex-id']);
+  assert.deepEqual(asked, ['plex http://new:32400'], 'the id is read at the new address, with no token');
+});
+
+test('settle: a different id, or none on Save, makes it another server: its entries go and its token is set aside (D156 3, D157 2, 3)', async () => {
+  const prev = settled({ ...v240(), serverId: 'plex-id', libraryKeys: ['1'], libraryKey: '1' });
+  for (const answer of ['other-id', null]) {
+    const r = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400' }), reader({ 'http://new:32400': answer }).read);
+    assert.equal(r.gone.length, 1, `answer ${answer}: the old server's entries are cleared`);
+    assert.equal(r.gone[0].carried, true);
+    assert.deepEqual([r.next.plexToken, r.next.serverUserId, r.next.serverId], ['', '', answer || ''], `answer ${answer}: the token is not kept for another server`);
+    assert.equal(r.sameRecorded, false);
+  }
+});
+
+test('settle: a change of type is always another server, even with the same id (D157 2)', async () => {
+  const prev = settled({ ...v240(), serverId: 'same-id' });
+  const r = await settleServers(prev, settled({ ...prev, serverType: 'jellyfin', serverUrl: 'http://jf:8096' }), reader({ 'http://jf:8096': 'same-id' }).read);
+  assert.equal(r.gone.length, 1);
+  assert.equal(r.sameRecorded, false);
+});
+
+test('settle: an entry whose id was never recorded (2.4.0) is compared with the id read at its old address (D157 5)', async () => {
+  const prev = settled(v240()); // no serverId
+  const same = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400' }), reader({ 'http://plex:32400': 'm', 'http://new:32400': 'm' }).read);
+  assert.deepEqual([same.gone.length, same.next.serverId, same.next.plexToken, same.sameRecorded], [0, 'm', 'plex-token', false], 'the same server: it is recorded, the token stays; the pin still goes as in 2.4.0 (sameRecorded is false)');
+  const differ = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400' }), reader({ 'http://plex:32400': 'm', 'http://new:32400': 'n' }).read);
+  assert.deepEqual([differ.gone.length, differ.next.plexToken], [1, '']);
+  const unsure = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400' }), reader({ 'http://new:32400': 'n' }).read);
+  assert.deepEqual([unsure.gone.length, unsure.next.plexToken], [1, ''], 'the old address does not answer: it cannot be confirmed, so it is another server');
+});
+
+test('settle: an upgrade that changes nothing reads nothing and clears nothing (D156 2)', async () => {
+  const prev = settled(v240());
+  const { read, asked } = reader({});
+  const r = await settleServers(prev, settled({ ...prev, rotateSeconds: 60 }), read);
+  assert.deepEqual([asked, r.gone, r.removed, r.next.serverCarried, r.next.serverId, r.next.libraryKeys, r.next.staticRatingKey], [[], [], [], true, '', ['1', '3'], '42']);
+});
+
+test('settle: adding a server records the first one\'s id and keeps the new one only when it answers with its id (D157 6)', async () => {
+  const prev = settled(v240());
+  const next = settled({ ...prev, servers: [JF()] });
+  const ok = await settleServers(prev, next, reader({ 'http://plex:32400': 'plex-id', 'http://jf:8096': 'jf-id-1' }).read);
+  assert.deepEqual([ok.next.serverId, ok.next.servers.map((e) => e.id), ok.notes], ['plex-id', ['jf-id-1'], []]);
+  const liar = await settleServers(prev, next, reader({ 'http://plex:32400': 'plex-id', 'http://jf:8096': 'someone-else' }).read);
+  assert.deepEqual([liar.next.servers, liar.notes.length], [[], 1]);
+  const twin = await settleServers(prev, next, reader({ 'http://plex:32400': 'jf-id-1', 'http://jf:8096': 'jf-id-1' }).read);
+  assert.deepEqual([twin.next.servers, twin.notes.length], [[], 1], 'the same server twice is not added');
+});
+
+test('settle: another server in the first place is the carried entry when alone, and told apart by its id beside others', async () => {
+  const prev = settled({ ...v240(), serverId: 'plex-id', libraryKey: '1', libraryKeys: ['1'], libraryNames: ['Movies'] });
+  const alone = await settleServers(prev, settled({ ...prev, serverType: 'jellyfin', serverUrl: 'http://jf:8096', plexToken: 'jf-token' }), reader({ 'http://jf:8096': 'jf-id-1' }).read);
+  assert.deepEqual([alone.next.serverCarried, alone.next.serverId, alone.next.libraryKeys], [true, 'jf-id-1', ['1']], 'alone it keeps bare keys: nothing else is in the list');
+  const beside = await settleServers(prev, settled({ ...prev, serverType: 'jellyfin', serverUrl: 'http://jf:8096', plexToken: 'jf-token', servers: [EM()] }), reader({ 'http://jf:8096': 'jf-id-1', 'http://em:8096': 'em-id-1' }).read);
+  assert.deepEqual([beside.next.serverCarried, beside.next.serverId, beside.next.libraryKeys], [false, 'jf-id-1', ['@jf-id-1/1']], 'beside others its ids move to its own id');
+});
+
+test('settle: a first connection (no address before) reads nothing and clears nothing', async () => {
+  const prev = settled({});
+  const { read, asked } = reader({});
+  const r = await settleServers(prev, settled({ ...prev, serverUrl: 'http://plex:32400', plexToken: 't', libraryKey: '1' }), read);
+  assert.deepEqual([asked, r.gone, r.next.serverCarried, r.next.plexToken], [[], [], true, 't']);
+});
+
+// ---- removing the FIRST server (D162 1, 2, 3) ----
+
+/** The settings the sheet hands to Save after Remove on the first row: the first extra server in the first place, the old first one gone. */
+const afterRemovingFirst = (prev, rest = {}) => {
+  const e = prev.servers[0];
+  return sanitize({ ...prev, serverType: e.type, serverUrl: e.url, plexToken: e.token, serverUserId: e.userId, serverName: e.name, serverId: e.id, serverCarried: false, servers: prev.servers.slice(1), ...rest });
+};
+const noRead = async () => assert.fail('a server moved into the first place is not read again');
+
+test('removing the first of two: the server that stays is never carried, keeps its scoped ids, its pin and its own token, and the old first one is removed (D162 1, 3)', async () => {
+  const prev = sanitize({
+    ...v240(),
+    serverId: 'plex-id',
+    plexToken: 'shared-account-token',
+    libraryKeys: ['1', '@jf-id-1/b1'],
+    libraryNames: ['Movies', 'JF Movies'],
+    staticRatingKey: '@jf-id-1/a1',
+    servers: [JF({ token: 'shared-account-token' })], // an account token two servers share
+  });
+  const r = await settleServers(prev, afterRemovingFirst(prev, { libraryKeys: ['@jf-id-1/b1'], libraryNames: ['JF Movies'], libraryKey: '@jf-id-1/b1' }), noRead);
+  assert.deepEqual([r.next.serverCarried, r.next.serverId, r.next.serverType, r.next.servers, r.promoted], [false, 'jf-id-1', 'jellyfin', [], true]);
+  assert.equal(r.next.plexToken, 'shared-account-token', 'its own token stays, even when it equals the old first server\'s');
+  assert.deepEqual(r.removed.map((e) => [e.id, e.carried]), [['plex-id', true]], 'the old first server is the one removed');
+  assert.deepEqual(r.gone, r.removed);
+  const out = withoutServers(r.next, r.removed);
+  assert.deepEqual([out.libraryKeys, out.staticRatingKey], [['@jf-id-1/b1'], '@jf-id-1/a1'], 'its libraries and its pin survive');
+  assert.equal(serverList(out)[0].carried, false);
+});
+
+test('removing the first: the removed server\'s libraries leave every profile, with two servers and with three, and nothing is moved to another server (D162 2, D157 1)', async () => {
+  const profile = (libraryKeys) => ({ id: 'p1', name: 'Kids', libraryKeys, libraryNames: libraryKeys.map(() => 'L') });
+  // two servers
+  const two = sanitize({ ...v240(), serverId: 'plex-id', libraryKeys: ['1'], libraryKey: '1', servers: [JF()], profiles: [profile(['1', '@jf-id-1/b2'])] });
+  const r2 = await settleServers(two, afterRemovingFirst(two, { libraryKeys: [], libraryKey: '' }), noRead);
+  assert.deepEqual(withoutServers(r2.next, r2.removed).profiles[0].libraryKeys, ['@jf-id-1/b2'], 'the bare key was the removed first server\'s: it is gone, and it was not given to the server that stays');
+  // three servers
+  const three = sanitize({ ...v240(), serverId: 'plex-id', libraryKeys: ['1'], libraryKey: '1', servers: [JF(), EM()], profiles: [profile(['1', '@jf-id-1/b2', '@em-id-1/c1'])] });
+  const r3 = await settleServers(three, afterRemovingFirst(three, { libraryKeys: [], libraryKey: '' }), noRead);
+  assert.deepEqual([r3.next.serverCarried, r3.next.servers.map((e) => e.id)], [false, ['em-id-1']]);
+  assert.deepEqual(withoutServers(r3.next, r3.removed).profiles[0].libraryKeys, ['@jf-id-1/b2', '@em-id-1/c1'], 'with three servers the bare key is not rewritten into the promoted server\'s scope');
+});
+
+// ---- Remove the first server, then retype the promoted server's address (D162 1, 2, 3; D157 3) ----
+
+const retyped = (prev, url, rest = {}) => afterRemovingFirst(prev, { serverUrl: url, libraryKeys: [], libraryKey: '', ...rest });
+const promoteBase = () => sanitize({
+  ...v240(),
+  serverId: 'plex-id',
+  libraryKeys: ['1', '@jf-id-1/b1'],
+  libraryNames: ['Movies', 'JF Movies'],
+  libraryKey: '1',
+  servers: [JF()],
+  profiles: [{ id: 'p1', name: 'Kids', libraryKeys: ['1', '@jf-id-1/b2'], libraryNames: ['A', 'B'] }],
+});
+
+test('remove the first, retype the promoted server\'s address to another server: its token is set aside, it is not carried and inherits no bare key, and the old first server is removed (D162 1, 2, 3)', async () => {
+  const prev = promoteBase();
+  for (const answer of ['other-server-id', null]) {
+    const { read, asked } = reader({ 'http://elsewhere:8096': answer });
+    const r = await settleServers(prev, retyped(prev, 'http://elsewhere:8096', { libraryKeys: ['@jf-id-1/b1'], libraryKey: '@jf-id-1/b1' }), read);
+    assert.deepEqual(asked, ['jellyfin http://elsewhere:8096'], 'the id is read at the new address without a token');
+    assert.equal(r.next.plexToken, '', `answer ${answer}: its token is not kept for the new address`);
+    assert.equal(r.next.serverCarried, false, `answer ${answer}: it is never carried`);
+    assert.equal(r.next.serverId, answer || '');
+    assert.deepEqual(r.removed.map((e) => e.carried).sort(), [false, true], 'the old first server and the server that was retyped are both removed');
+    assert.ok(r.gone.some((e) => e.carried), 'the old first server is counted as removed');
+    const out = withoutServers(r.next, r.removed);
+    assert.deepEqual(out.profiles[0].libraryKeys, [], `answer ${answer}: the removed first server's bare profile key '1' is gone, the retyped server's own key is gone, and nothing moved onto the new server (D163 1)`);
+    assert.equal(r.promoted, false);
+  }
+});
+
+test('remove the first, retype the promoted server\'s address to the same server: the id read there matches, so it keeps its token, its pin and its scoped ids (D157 3)', async () => {
+  const prev = promoteBase();
+  const r = await settleServers(prev, retyped(prev, 'http://other-name:8096', { libraryKeys: ['@jf-id-1/b1'], libraryKey: '@jf-id-1/b1', staticRatingKey: '@jf-id-1/a1' }), reader({ 'http://other-name:8096': 'jf-id-1' }).read);
+  assert.deepEqual([r.next.plexToken, r.next.serverCarried, r.next.serverId, r.promoted, r.next.staticRatingKey], ['jf-token', false, 'jf-id-1', true, '@jf-id-1/a1']);
+  assert.deepEqual(r.removed.map((e) => e.carried), [true], 'only the old first server is removed');
+  assert.deepEqual(withoutServers(r.next, r.removed).profiles[0].libraryKeys, ['@jf-id-1/b2'], 'the bare key of the removed first server is gone; the staying server keeps its own');
+});
+
+test('a Save that changes nothing about any server asks no server anything when the first server\'s id is known, or when there are no other servers (cold M1)', async () => {
+  const known = settled({ ...v240(), serverId: 'plex-id', servers: [JF()] });
+  const a = reader({});
+  const r = await settleServers(known, settled({ ...known, rotateSeconds: 60, staticRatingKey: '' }), a.read);
+  assert.deepEqual([a.asked, r.removed, r.gone], [[], [], []]);
+  const alone = settled(v240()); // one server, id never recorded
+  const b = reader({});
+  await settleServers(alone, settled({ ...alone, rotateSeconds: 60 }), b.read);
+  assert.deepEqual(b.asked, [], 'a one-server household reads nothing');
+});
+
+test('a duplicate added while the first server was down is removed at the first Save at which the first server answers (D162 7)', async () => {
+  const prev = settled({ ...v240(), servers: [JF({ id: 'aaa', url: 'http://a2:32400', name: 'Same as first' })] }); // the first server's id was never recorded
+  const { read, asked } = reader({ 'http://plex:32400': 'aaa' });
+  const r = await settleServers(prev, settled({ ...prev, rotateSeconds: 60 }), read);
+  assert.deepEqual(asked, ['plex http://plex:32400'], 'the first server is asked who it is');
+  assert.deepEqual([r.next.serverId, r.next.servers, r.notes.length], ['aaa', [], 1]);
+  assert.match(r.notes[0], /same server as your first one/);
+});
+
+test('when the first server turns out to be another server: in a household with several servers no profile key moves onto it and its keys leave every profile; a one-server household keeps its profiles as stored (D163)', async () => {
+  const profile = { id: 'p1', name: 'Kids', libraryKeys: ['5'], libraryNames: ['Kids'] };
+  const multi = sanitize({ ...v240(), serverId: 'plex-id', libraryKeys: ['5'], libraryKey: '5', servers: [JF()], profiles: [profile] });
+  const m = await settleServers(multi, settled({ ...multi, serverUrl: 'http://new:32400' }), reader({ 'http://new:32400': 'new-id' }).read);
+  assert.deepEqual(m.next.profiles[0].libraryKeys, [], 'the Plex profile key 5 does not become @new-id/5');
+  assert.equal(m.gone.length > 0, true);
+  const scopedOnly = sanitize({ ...v240(), serverId: 'plex-id', libraryKeys: ['5'], libraryKey: '5', profiles: [{ ...profile, libraryKeys: ['5', '@jf-id-1/b2'] }] });
+  const sc = await settleServers(scopedOnly, settled({ ...scopedOnly, serverUrl: 'http://new:32400' }), reader({ 'http://new:32400': 'new-id' }).read);
+  assert.deepEqual(sc.next.profiles[0].libraryKeys, ['@jf-id-1/b2'], 'a scoped id stored means several servers: the first server\'s key leaves, another server\'s stays');
+  const one = sanitize({ ...v240(), serverId: 'plex-id', libraryKeys: ['5'], libraryKey: '5', profiles: [profile] });
+  const o = await settleServers(one, settled({ ...one, serverUrl: 'http://new:32400' }), reader({ 'http://new:32400': 'new-id' }).read);
+  assert.deepEqual([o.next.profiles[0].libraryKeys, o.next.serverCarried, o.next.libraryKeys], [['5'], true, ['5']], 'one server: the 2.4.0 behaviour');
+});
+
+test('several servers: the old token goes when the first server is found to be another server, whatever changed, the type included; a fresh sign-in is kept (cold r3 N1, D163 3)', async () => {
+  const prev = settled({ ...v240(), serverId: 'plex-id', servers: [JF()] });
+  const r = await settleServers(prev, settled({ ...prev, serverType: 'jellyfin', serverUrl: 'http://jf2:8096' }), reader({ 'http://jf2:8096': 'jf-id-2' }).read);
+  assert.equal(r.next.plexToken, '', 'the Plex token is not left on the Jellyfin server');
+  const unknown = await settleServers(prev, settled({ ...prev, serverType: 'kodi', serverUrl: 'http://k:1' }), reader({}).read);
+  assert.equal(unknown.next.plexToken, '', 'with several servers an unknown type does not keep the old token either');
+  const fresh = await settleServers(prev, settled({ ...prev, serverType: 'jellyfin', serverUrl: 'http://jf2:8096', plexToken: 'signed-in-fresh' }), reader({ 'http://jf2:8096': 'jf-id-2' }).read);
+  assert.equal(fresh.next.plexToken, 'signed-in-fresh', 'a sign-in made for the new server is kept');
+});
+
+test('one server: a Save that changes only the type keeps the token as in 2.4.0, and an address change to another server still sets it aside (D163 2, Q5)', async () => {
+  const prev = settled({ ...v240(), serverId: 'plex-id' });
+  const kodi = await settleServers(prev, settled({ ...prev, serverType: 'kodi', serverUrl: 'http://k:1' }), reader({}).read);
+  assert.deepEqual([kodi.next.serverType, kodi.next.plexToken], ['kodi', 'plex-token'], 'the imported type and the token stay as written (jellyfin.spec 13b)');
+  const jf = await settleServers(prev, settled({ ...prev, serverType: 'jellyfin', serverUrl: 'http://jf:8096' }), reader({ 'http://jf:8096': 'jf-id-1' }).read);
+  assert.equal(jf.next.plexToken, 'plex-token', 'a one-server household keeps the 2.4.0 behaviour on a type change');
+  const moved = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400' }), reader({ 'http://new:32400': 'other-id' }).read);
+  assert.equal(moved.next.plexToken, '', 'another address of the same type that answers as another server sets the token aside (D157 3)');
+});
+
+test('several servers, a retype to another server: the main selection follows the new server only with a fresh sign-in; with the old token the old first server\'s keys leave the main selection too (D163 1)', async () => {
+  const prev = sanitize({ ...v240(), serverId: 'plex-id', libraryKeys: ['5'], libraryKey: '5', libraryNames: ['Kids'], servers: [JF()] });
+  const answers = { 'http://new:32400': 'new-id' };
+  const stale = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400' }), reader(answers).read);
+  assert.deepEqual([stale.next.libraryKeys, stale.next.libraryKey], [[], ''], 'saved with the old token and no test: the old first server\'s key 5 is gone');
+  const fresh = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400', plexToken: 'signed-in-fresh' }), reader(answers).read);
+  assert.deepEqual(fresh.next.libraryKeys, ['@new-id/5'], 'a sign-in made in the sheet: the ticks made there follow the new server');
+});
+
+test('a promoted server stored with serverCarried: true is stored not carried, and no profile keeps the removed first server\'s bare key (the carried guard)', async () => {
+  const prev = promoteBase();
+  const next = afterRemovingFirst(prev, { libraryKeys: ['@jf-id-1/b1'], libraryKey: '@jf-id-1/b1', serverCarried: true });
+  assert.equal(next.serverCarried, true, 'the sheet handed in a carried flag');
+  const r = await settleServers(prev, next, noRead);
+  assert.equal(r.next.serverCarried, false);
+  assert.deepEqual(withoutServers(r.next, r.removed).profiles[0].libraryKeys, ['@jf-id-1/b2'], 'the bare key of the removed first server is gone');
+});
+
+test('several servers, a retype to another server saved with a FRESH sign-in: the main selection follows the new server, and no profile keeps the old first server\'s key or gains a moved copy of it (D163 1)', async () => {
+  const prev = sanitize({
+    ...v240(),
+    serverId: 'plex-id',
+    libraryKeys: ['5'],
+    libraryKey: '5',
+    libraryNames: ['Kids'],
+    servers: [JF()],
+    profiles: [{ id: 'p1', name: 'Kids', libraryKeys: ['5', '@jf-id-1/b2'], libraryNames: ['Kids', 'JF Kids'] }],
+  });
+  const r = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400', plexToken: 'signed-in-fresh' }), reader({ 'http://new:32400': 'new-id' }).read);
+  assert.deepEqual(r.next.libraryKeys, ['@new-id/5'], 'the main selection, ticked in the sheet from the new server, follows it');
+  assert.deepEqual(r.next.profiles[0].libraryKeys, ['@jf-id-1/b2'], 'the profile keeps no key of the old first server, and no @new-id/5 was made from it; another server\'s key stays');
+});

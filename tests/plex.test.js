@@ -724,3 +724,26 @@ test('the pool and a collection or playlist hand the weights their fields', asyn
   const [c] = await client.sourceItems({ kind: 'collection', key: '9' }, { unwatchedOnly: false });
   assert.deepEqual([c.viewCount, c.audienceRating, c.rating], [1, 8, 7]);
 });
+
+// ---- the token-free identity (D157 3, D160 1) ----
+
+test('publicIdentity asks GET /identity and sends no token, and reads machineIdentifier and version', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => (seen.push({ url: new URL(url), init }), jsonResponse({ MediaContainer: { machineIdentifier: 'abc123', version: '1.40.1', claimed: true } }));
+  const client = createPlexClient({ serverUrl: 'http://plex.test:32400', token: 'SECRET-TOKEN', clientId: 'cid', fetchImpl });
+  assert.deepEqual(await client.publicIdentity(), { name: '', version: '1.40.1', machineIdentifier: 'abc123' });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].url.pathname, '/identity');
+  assert.equal(seen[0].url.searchParams.get('X-Plex-Client-Identifier'), 'cid');
+  assert.equal(seen[0].url.searchParams.has('X-Plex-Token'), false, 'no token in the query');
+  assert.equal(JSON.stringify(seen[0]).includes('SECRET-TOKEN'), false, 'no token anywhere in the request');
+});
+
+test('publicIdentity reports an unreachable address and an HTTP error as errors, and an empty reply as no id', async () => {
+  const unreachable = createPlexClient({ serverUrl: 'http://x', token: 't', clientId: 'c', fetchImpl: async () => Promise.reject(new TypeError('failed')) });
+  await assert.rejects(() => unreachable.publicIdentity(), (err) => err.kind === 'network');
+  const refused = createPlexClient({ serverUrl: 'http://x', token: 't', clientId: 'c', fetchImpl: async () => jsonResponse({}, 500) });
+  await assert.rejects(() => refused.publicIdentity(), (err) => err.kind === 'http');
+  const empty = createPlexClient({ serverUrl: 'http://x', token: 't', clientId: 'c', fetchImpl: async () => jsonResponse({ MediaContainer: {} }) });
+  assert.equal((await empty.publicIdentity()).machineIdentifier, '');
+});

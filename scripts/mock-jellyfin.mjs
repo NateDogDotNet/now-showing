@@ -46,6 +46,9 @@ export const jellyfinPortFor = (plexMockPort) => (Number(plexMockPort) + 1000 > 
 
 const hex = (prefix, n) => prefix + String(n).padStart(31, '0'); // a 32-hex-digit id, as Jellyfin writes a Guid with no dashes
 const SERVER_ID = hex('9', 1);
+// Emby mode reports an id of its own (D160 2), on /System/Info/Public and as every item's ServerId, so a household that adds both from this one mock does not meet a duplicate server id (D157 6).
+export const EMBY_SERVER_ID = hex('9', 2);
+export { SERVER_ID };
 export const USER_ID = hex('8', 1);
 const SERIES_ID = hex('f', 1);
 const EPISODE_ID = hex('f', 2);
@@ -145,7 +148,8 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
     const cors = { 'Access-Control-Allow-Origin': '*' };
     const json = (status, body) => {
       res.writeHead(status, { ...cors, 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(body));
+      const text = JSON.stringify(body);
+      res.end(emby ? text.replaceAll(SERVER_ID, EMBY_SERVER_ID) : text); // an Emby request reads the Emby server's id wherever the server names itself
     };
     const body = async () => {
       let text = '';

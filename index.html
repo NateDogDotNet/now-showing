@@ -59,8 +59,8 @@
       </aside>
     </div>
     <div id="empty" class="empty" hidden>
-      <!-- The card never grows taller than the screen as the viewer sees it (--vh, js/display.js, which already counts a rotated screen); a form longer than that scrolls inside the card, so its buttons stay reachable (D147 4). -->
-      <div class="empty-card" style="max-height: calc(var(--vh) - 48px); overflow-y: auto">
+      <!-- The card never grows taller than the screen as the viewer sees it (--vh, js/display.js, which already counts a rotated screen); a form longer than that scrolls inside the card, so its buttons stay reachable (D147 4); the rule is `.empty-card` in css/app.css. -->
+      <div class="empty-card">
         <img src="assets/icons/icon.svg" alt="" width="72" height="72" />
         <h1>Now Showing</h1>
         <p id="empty-message">Connect to your Plex server to get started.</p>
@@ -190,6 +190,38 @@
             <button type="button" class="btn" id="test-btn">Test connection</button>
           </div>
           <p id="test-result" class="test-result muted small" aria-live="polite"></p>
+        <div id="servers-fieldset" class="servers" role="group" aria-label="Media servers">
+          <p id="servers-help" class="muted small" hidden>Posters can come from up to three servers, in any mix of Plex, Jellyfin and Emby. One household limit applies to every poster, whichever server it came from.</p>
+          <ul id="server-list" class="server-list" aria-label="Your media servers"></ul>
+          <details id="server-add" class="server-add">
+            <summary>Add a server</summary>
+            <div class="seg add-type" role="radiogroup" aria-label="Type of the server to add">
+              <label class="seg-opt"><input type="radio" name="addTypePick" value="plex" checked /><span>Plex</span></label>
+              <label class="seg-opt"><input type="radio" name="addTypePick" value="jellyfin" /><span>Jellyfin</span></label>
+              <label class="seg-opt"><input type="radio" name="addTypePick" value="emby" /><span>Emby</span></label>
+            </div>
+            <div id="add-plex">
+              <button type="button" class="btn primary" id="add-plex-btn">Sign in with Plex</button>
+              <p id="add-prompt" class="muted small" aria-live="polite" hidden></p>
+              <p id="add-code" class="pin-code" aria-live="polite" hidden>····</p>
+            </div>
+            <div id="add-mb" hidden>
+              <label>Server address
+                <input id="add-address" type="url" placeholder="http://192.168.1.10:8096" autocomplete="off" spellcheck="false" />
+              </label>
+              <label>User name
+                <input id="add-user" type="text" autocomplete="off" spellcheck="false" />
+              </label>
+              <label>Password
+                <input id="add-pass" type="password" autocomplete="off" />
+              </label>
+              <div class="input-row">
+                <button type="button" class="btn primary" id="add-mb-btn">Add server</button>
+              </div>
+            </div>
+          </details>
+          <p id="add-status" class="muted small" aria-live="polite"></p>
+        </div>
         </fieldset>
 
         <fieldset id="selection-fieldset">

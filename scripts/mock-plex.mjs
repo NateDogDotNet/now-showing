@@ -2,6 +2,7 @@
 // endpoints the app uses and returns generated SVG "posters".
 //
 // Control endpoints (no token needed):
+// Public (no token): GET /identity (D160 1) and the /__mock control routes. Every other route needs the token.
 //   POST /__mock/play?ratingKey=3&user=demo&offset=600000&duration=6000000&player=Living%20Room&state=paused
 //                                             start a fake session (offset/duration in ms, default 0 and the title's
 //                                             runtime; player is Player.title, default "Mock Player"; state default playing)
@@ -34,6 +35,7 @@
 import { createServer } from 'node:http';
 
 export const TOKEN = 'demo-token';
+const MACHINE_ID = 'mock'; // what GET / and the token-free GET /identity both report
 
 const LIB1 = [
   ['The Grand Marquee', 1954, '#8b1e3f', 'G', 5_400_000, 'On the last night of the season, the owner of a failing picture palace stages one grand show to save it.'],
@@ -205,6 +207,8 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
       res.writeHead(204, { ...cors, 'Access-Control-Allow-Headers': '*' });
       return res.end();
     }
+    // (verify) Real Plex serves GET /identity without a token (machineIdentifier, version, claimed); the mock answers it with the same machineIdentifier as GET / (D160 1).
+    if (url.pathname === '/identity') return json(200, { MediaContainer: { size: 0, claimed: true, machineIdentifier: MACHINE_ID, version: '1.40.0.0000-mock' } });
     if (url.searchParams.get('X-Plex-Token') !== TOKEN) return json(401, { error: 'Unauthorized' });
     stats[url.pathname === '/photo/:/transcode' ? 'transcode' : 'other']++;
     const query = new URLSearchParams(url.searchParams);
@@ -213,7 +217,7 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
 
     const strip = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'color' && k !== 'lib'));
     const path = url.pathname;
-    if (path === '/') return json(200, { MediaContainer: { friendlyName: 'Mock Plex', version: '1.40.0.0000-mock', machineIdentifier: 'mock' } });
+    if (path === '/') return json(200, { MediaContainer: { friendlyName: 'Mock Plex', version: '1.40.0.0000-mock', machineIdentifier: MACHINE_ID } });
     if (path === '/library/sections') {
       return json(200, { MediaContainer: { Directory: [{ key: '1', title: 'Movies', type: 'movie' }, { key: '2', title: 'Music', type: 'artist' }, { key: '3', title: 'Kids Movies', type: 'movie' }] } });
     }
