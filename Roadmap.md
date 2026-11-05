@@ -132,9 +132,9 @@ Several servers in one household's poster selection, the 2.4 follow-ups, and the
 - **Version**: 2.4.1 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`.
 - **Not in 2.4.1**: Play now, the movie-night countdown, birthday and occasion mode, and the Picture frame sources wait for a later 2.4.x run or later (D156 1).
 
-## ✅ Done in 2.4.2 (run 11, on the branch `2.4.2`, not merged)
+## ✅ Done in 2.4.2 (run 11, on `main`)
 
-The 2.4.1 follow-ups (D171). Version 2.4.2 is on the branch `2.4.2` and is not merged: no pull request, tag or GitHub release (D13, D79). It is tested against mock servers only, and nothing has been run on a Raspberry Pi. It has no upgrade notice: the marker stays `'2.4.1'` (D171 2).
+The 2.4.1 follow-ups (D171). Version 2.4.2 is on `main`, merged on 2026-11-05 from the branch `2.4.2` (D180): no pull request, tag or GitHub release (D13, D79). It is tested against mock servers only, and nothing has been run on a Raspberry Pi. It has no upgrade notice: the marker stays `'2.4.1'` (D171 2).
 
 - **A Save that changes the first server (R-SRC-4)**: while it reads who answers at the new first server, the display keeps the old selection, the old pin and each profile's selection. The limit and every other setting apply at once. An unpin applies at once, except where it would leave the display unconfigured. The first-run card never opens while a Save settles (D172 to D176).
 - **One rule for the old sign-in**: one shared rule decides when the old token may go, for Save and for Test connection, with no change in behaviour. Households see nothing new (D165 3, D177, D178).
@@ -156,14 +156,14 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Next
 
-2.2.0 to 2.4.1 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4" and "Done in 2.4.1" sections above); 2.4.2 is done on the branch `2.4.2` and not merged (see "Done in 2.4.2"); nothing is in progress. The next feature follows the suggested order:
+2.2.0 to 2.4.2 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1" and "Done in 2.4.2" sections above); nothing is in progress. The next feature follows the suggested order:
 
 1. **2.5, the no-server mode:** the TMDB adapter, on the adapter layer 2.4 built.
 
 Still ahead: for a later 2.4.x run (D134 1), Play now, the movie-night countdown, birthday and occasion mode and the Picture frame sources; with no release number, "On this day", the playlist with Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music.
 
 - **Optional:** "Validate on a Raspberry Pi", whenever a Pi is at hand (D79), and the Jellyfin and Emby rows (sections I and J of `docs/validation/real-server-extended.md`) and the multiple-servers rows (section K) on real servers.
-- **Not decided:** whether 2.4.1 is tagged or released. It was merged to `main` (D170), as 2.4.0 was (D155). Whether 2.4.2 is merged, tagged or released is not decided either.
+- **Not decided:** whether 2.4.1 or 2.4.2 is tagged or released. Both were merged to `main` (D170, D180), as 2.4.0 was (D155).
 
 ### Gap fill inside the frame: the deferred styles
 Still deferred from 2.2 (D88), and not part of the next steps above. The Gap fill setting ships with **Off**, **Dimmed blurred poster** and **Colour matte**. D67 specifies more choices for the same gap (when the poster does not match the frame window's shape: "Fit inside window", or a poster scaled or offset smaller than the window):
