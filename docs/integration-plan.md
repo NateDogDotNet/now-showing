@@ -1505,9 +1505,9 @@ Facts this section stands on (invocation probes, 2026-11-05):
 
 Serial: every phase touches `js/settings.js`, `js/settings-ui.js` or `js/main.js` of the one before. Every reviewer gets its own pair: 18680/19001, 18580/18901, 18782/19103. The conductor uses 18780/19101.
 
-## Run 12 — 2.4.3: Play now on a Plex player, the live preview fix, and the 2.4.2 follow-ups (DRAFT, waits for the policy answer)
+## Run 12 — 2.4.3: Play now on a Plex player, the live preview fix, and the 2.4.2 follow-ups (D181)
 
-Drafted on the owner's word (2026-11-05, verbatim: "draft the plan for the next 2.4.x run. include the follow-ups and Play now, the live settings preview fix."). The policy answer will be D181. Starting commit: `main` 984cd0a0, on branch `2.4.3`. No pull request, merge or tag unless the owner asks (D13, D79). Conventions are as in runs 3–11. Tested against the mock servers only; every Play now request to a real Plex server or player is a **(verify)** item.
+Drafted on the owner's word (2026-11-05, verbatim: "draft the plan for the next 2.4.x run. include the follow-ups and Play now, the live settings preview fix."). The policy answer is D181 ("defaults"). Starting commit: `main` 984cd0a0, on branch `2.4.3`. No pull request, merge or tag unless the owner asks (D13, D79). Conventions are as in runs 3–11. Tested against the mock servers only; every Play now request to a real Plex server or player is a **(verify)** item.
 
 Facts this section stands on (invocation probes, 2026-11-05; `.orchestrator/artifacts/research--play-now-r1.md` and `research--preview-and-followups-r1.md`):
 - `npm test` passes 977 of 977 on `main` (the D180 merge check).

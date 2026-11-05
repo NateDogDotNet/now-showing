@@ -1142,3 +1142,17 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner ruling — 2026-11-05 (after run 11; Nathan: "merge 2.4.2 into main, push, and clean up branches"): D180
 
 - **D180 2.4.2 is merged into `main`.** The branch `2.4.2` (tip 09a9d461, run 11 closed with `closer close` r2 ok) was merged with a merge commit, 1043e292, after `npm test` passed 977 of 977 on the merged tree, which is identical to the tree at 09a9d461. There is no pull request, tag or GitHub release (D13, D79). README and Roadmap now say 2.4.2 is on `main`. The branch `2.4.2` is deleted locally and on origin.
+
+## Owner decision — 2026-11-05 (the run-12 policy; Nathan: "defaults"): D181
+
+- **D181 Run 12 builds 2.4.3: Play now on a Plex player, the live preview fix and the 2.4.2 follow-ups.** The run-12 section of `docs/integration-plan.md` (phases 66–70: `followup-fixes`, `live-preview`, `play-now-players`, `play-now-plex`, `release-2.4.3`) is the plan. The policy stop offered ten items with a recommended option each; Nathan answered "defaults".
+  1. **Scope:** the five phases. Out of scope: "Here" (local playback in the display's browser; untestable without real devices, and no token-safe media URL yet); Play now on Jellyfin and Emby (a later run, per adapter); the double tap and long press entry (touch gestures are not built).
+  2. **Live preview (reverses D138 1):** a live change previews only the live values over the saved settings; an unsaved non-live value never reaches the display before Save.
+  3. **Route:** the play command goes through the poster's own Plex server, which forwards it to the player (verify on a real server).
+  4. **Players listed:** every player on the Plex account (a resource whose `provides` names `player`); one that cannot be reached shows as unavailable.
+  5. **Resume:** from the saved position when there is one, with a "Play from start" choice.
+  6. **PIN:** asked before every Play now whenever a PIN is set; no PIN set, no prompt.
+  7. **The button:** hidden while no device is allowed and on Jellyfin and Emby posters.
+  8. **Notice:** a "What's new in 2.4.3" notice names Play now.
+  9. **Pill wording:** the status pill and the limited empty card name servers by the all-down card's rule, through the card's own helper.
+  10. **Run:** AFK on branch `2.4.3` from `main` 984cd0a0; every later question answers itself with these defaults under D44; a pull request, a merge into `main`, a tag, a GitHub release, a force-push and deleting unique work still wait for Nathan's own words (D13, D79). The run-11 trail moved to `/home/nathan/now-showing-run11-trail/`.
