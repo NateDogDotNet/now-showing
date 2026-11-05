@@ -1085,3 +1085,14 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   4. **Branch:** `2.4.2` from `main` 217cdbe9, pushed.
   5. **Trail:** the run-10 `.orchestrator/` moves to `/home/nathan/now-showing-run10-trail/` before run 11 starts.
   6. **Phases:** `save-settle` and `token-rule-shared` stay separate, so the refactor gets its own cold review.
+
+## Conductor ruling — 2026-11-05 (run 11, `save-settle` criteria probe; answered "defaults" under D44, D171 3): D172
+
+- **D172 What the interim state of a Save holds.** The criteria probe (`.orchestrator/artifacts/save-settle--criteria-probe-r1.md`, read from the criteria text alone) found inputs the `save-settle` criteria left undecided. Each is ruled with the probe's recommended reading:
+  1. **The trigger (probe 2, 4, 5).** The hold applies when the old settings are configured and the first entry of the server list changes: its type, or its address as `addressOf` compares it (js/settings.js:31: trimmed, trailing slashes dropped), or a different server is now first (a Remove of the first server). A token or name change alone, a change to the second or third server only, and a Save that finds the first id unknown with no first-entry change apply the new selection and pin at once, as in 2.4.1. A first configure (old settings unconfigured) holds nothing.
+  2. **The pin (probe 1, 6, 7).** The pin is held whenever the selection is held: the early state carries the old selection and the old pin (`staticRatingKey`, `staticTitle`, `source`), as a set. This amends D165 4's wording ("only when the pin alone made the old settings configured"), which described the 2.4.1 fallback at js/main.js:615; the narrower rule would let a new pin show from the new server during the read.
+  3. **The limit wins (probe 8).** Every non-connection setting still applies at once (D162 5), the limit first. A held pin or a held-selection poster over the new limit does not show during the read (the existing `enforceOnScreen` rule).
+  4. **The whole old selection is held (probe 3).** The held selection is the old one in full, including keys scoped to other servers, until the settle; the settle then applies `withoutServers` as today.
+  5. **No fallback (probe 9).** The hold stands when the old first server is down; the display shows what it shows today for an unreachable server.
+  6. **Out of this phase, unchanged from 2.4.1 (probe 10, 11).** A second Save during the read, and a reload during the read, behave as in 2.4.1; the early state that a reload finds is now the held one (the old server with its old selection and pin). Recorded as an unknown, not tested here.
+  7. **The e2e case discriminates (probe 12).** The old and new selections use disjoint libraries on servers with different ids, and the old pin is a title only the old selection holds; the case checks that no poster and no pin from the new selection shows during the read.
