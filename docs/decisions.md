@@ -1075,3 +1075,13 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner ruling — 2026-11-05 (after run 10; Nathan: "merge 2.4.1 into main, push, and clean up branches"): D170
 
 - **D170 2.4.1 is merged into `main`.** The branch `2.4.1` (tip a32a2d22, run 10 closed with `closer close` r7 ok) was merged with a merge commit, be98faed, after `npm test` passed 953 of 953 on the merged tree's parent. There is no pull request, tag or GitHub release (D13, D79). README and Roadmap now say 2.4.1 is on `main`. The branch `2.4.1` is deleted locally and on origin.
+
+## Owner decision — 2026-11-05 (the run-11 policy; Nathan: "defaults"): D171
+
+- **D171 Run 11 builds 2.4.2: the 2.4.1 follow-ups.** The run-11 section of `docs/integration-plan.md` (phases 62–65: `save-settle`, `token-rule-shared`, `server-ui-fixes`, `release-2.4.2`) is the plan. The policy stop offered six items with a recommended option each; Nathan answered "defaults".
+  1. **Scope:** the five open follow-ups only (D165 1; D165 4: the pin, the all-down card wording, the shared token rule; D168 2). Play now is not in this run; it is offered as its own run, 2.4.3.
+  2. **No upgrade notice:** the marker stays `'2.4.1'`; 2.4.2 only fixes.
+  3. **AFK:** every later question answers itself with the defaults, as under D134 7 and D156; a pull request, a merge into `main`, a tag, a GitHub release, a force-push and deleting unique work still wait for Nathan's own words (D13, D79).
+  4. **Branch:** `2.4.2` from `main` 217cdbe9, pushed.
+  5. **Trail:** the run-10 `.orchestrator/` moves to `/home/nathan/now-showing-run10-trail/` before run 11 starts.
+  6. **Phases:** `save-settle` and `token-rule-shared` stay separate, so the refactor gets its own cold review.
