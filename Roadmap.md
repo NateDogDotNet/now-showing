@@ -383,4 +383,3 @@ Optional, whenever a Pi is at hand; 2.1 was closed without it (D79). The real-se
 ### Carried from 2.4
 
 - **A live Settings preview carries unsaved household values that do not preview live, such as Cross-fade.** A candidate for a later release; no change in 2.4 (D138 1).
-- **Move the first-run card's rotated-phone scroll style from `index.html` into `css/app.css`.** It stays inline in 2.4 (D150 1).
