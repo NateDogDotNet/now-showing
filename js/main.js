@@ -25,7 +25,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.4.0';
+export const VERSION = '2.4.1';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -1521,26 +1521,30 @@ async function boot() {
   announceWhatsNew();
 }
 
-// ---------- The upgrade notice (R-UPG-4) ----------
+// ---------- The upgrade notice (R-UPG-5) ----------
 
 const WHATS_NEW_KEY = 'plexPoster.whatsNew';
-const WHATS_NEW_VERSION = '2.4';
+const WHATS_NEW_VERSION = '2.4.1';
 
 /**
  * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new
- * and pointed at the server connection section (through the normal PIN gate), where the Plex | Jellyfin | Emby choice lives.
+ * and pointed at the server list (through the normal PIN gate), where "Add a server" lives.
  * An unconfigured one is a fresh install, not an upgrade, so it shows nothing. Either way the marker is written, so it
- * never shows again. The 2.3 notice is retired.
+ * never shows again. The 2.4 notice is retired.
  */
 function announceWhatsNew() {
   if (storage.getItem(WHATS_NEW_KEY) === WHATS_NEW_VERSION) return;
   storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION);
   if (!isConfigured(state.settings)) return;
-  toast("What's new in 2.4: show posters from a Jellyfin or Emby server as well as Plex.", {
+  toast("What's new in 2.4.1: choose posters from more than one server.", {
     action: 'Open settings',
     onAction: async () => {
-      await requestSettings({ section: 'server' }); // the sheet opens at its top, where the server connection section is
-      if (settingsUI.isOpen) document.querySelector('input[name="serverTypePick"]:checked')?.focus({ preventScroll: true });
+      await requestSettings(); // through the PIN gate; the sheet opens at its top
+      if (!settingsUI.isOpen) return;
+      const list = document.getElementById('servers-fieldset');
+      list.closest('fieldset').scrollIntoView({ block: 'start' }); // the whole server section (heading, connected card, list, Add a server; D168 1) at the top of the view,
+      const first = [...list.querySelectorAll('button, summary')].find((el) => el.getClientRects().length > 0); // and focus on its first control
+      (first ?? list).focus({ preventScroll: true });
     },
     ms: 20_000,
   });

@@ -121,6 +121,17 @@ Jellyfin and Emby as poster sources beside Plex, and the upgrade notice (D134). 
 - **Version**: 2.4.0 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`.
 - **Not in 2.4**: the Roadmap's other 2.4 items did not ship and move to a later 2.4.x run (D134 1; see "Suggested order"): multiple servers in poster selection, Play now, the movie-night countdown, birthday and occasion mode, and the Picture frame sources. TMDB stays 2.5.
 
+## ✅ Done in 2.4.1 (run 10, on the branch `2.4.1`)
+
+Several servers in one household's poster selection, the 2.4 follow-ups, and the Playwright upgrade (D156; the Playwright upgrade is D159 2). The branch `2.4.1` is not merged into `main`; there is no pull request, tag or GitHub release unless the owner asks (D13, D79). It is tested against mock servers only (the mock Plex server, and `scripts/mock-jellyfin.mjs` for Jellyfin and Emby), and nothing has been run on a Raspberry Pi. The multiple-servers rows to run on real servers are in `docs/validation/real-server-extended.md`, section K, all (verify).
+
+- **Multiple servers (R-SRC-4)**: **Add a server** in Settings adds up to two more servers, in any mix of Plex, Jellyfin and Emby (up to three). Plex is added by the plex.tv code, and Jellyfin or Emby by address, user name and password. The library list groups each server's libraries under its name, and **Remove** takes a server out. Every poster from every server passes the household limit. Cached posters, the pin and the no-repeat history carry the id of their server. A household with one server sees no change. The server carried over from 2.4.0 is always the first server, and reordering is not offered.
+- **The 2.4 follow-ups**: the security and privacy summary in the spec says where each token goes; the package description names Jellyfin and Emby; `buildUrl` and `timeoutSignal` are shared by the adapters in `js/sources/http.js`; a test refuses every adapter-to-adapter import except Emby from Jellyfin; and the first-run card's scroll style moves from an inline style to the stylesheet. No behaviour change.
+- **Playwright 1.64.1 and Node 20**: the e2e harness is pinned exactly at Playwright 1.64.1 (Chromium build 1248), and `engines.node` is `>=20`, which that version needs (D159 2, D166). Three specs were adjusted so that each held request crosses its boundary before its own timeout; no app timeout changed.
+- **Upgrade notice (R-UPG-5)**: a configured display upgraded from 2.4 shows a one-time "What's new in 2.4.1: choose posters from more than one server." toast; **Open settings** opens Settings (behind the PIN when one is set) at the server list, with focus on its first control. A new, unconfigured display shows nothing. It replaces the 2.4 notice.
+- **Version**: 2.4.1 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`.
+- **Not in 2.4.1**: Play now, the movie-night countdown, birthday and occasion mode, and the Picture frame sources wait for a later 2.4.x run or later (D156 1).
+
 ## 🧭 Suggested order
 
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
@@ -128,21 +139,21 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 1. **2.1.x:** done (2.1.1), including the `js/main.js` split that the source-adapter work needed first.
 2. **2.2:** done: drag-and-nudge positioning, the landscape fill and the gap fill (2.2.0), and the point releases 2.2.1 to 2.2.3 (polish, and the controls on mouse, keyboard and TV remote), all on `main`.
 3. **2.3:** done, on `main`: the rating schedule, poster selection (Step 1), weighting and no repeats, and viewer profiles, with the "What's new in 2.3" notice. What the 2.2 plan listed after these ("On this day", the playlist and Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music) was not part of 2.3 and is still ahead, with no release number yet.
-4. **2.4:** done, on `main`: the source-adapter refactor with Plex as the first adapter, then Jellyfin and Emby, each mapping its own ratings for the household limit and failing closed. Multiple servers in poster selection, Play now, the movie-night countdown, birthday and occasion mode, and the Picture frame sources (Plex Photos first, then a folder and Immich, then museum art) did not ship in 2.4 and are still ahead, for a later 2.4.x run (D134 1).
+4. **2.4:** done, on `main`: the source-adapter refactor with Plex as the first adapter, then Jellyfin and Emby, each mapping its own ratings for the household limit and failing closed. Multiple servers in poster selection did not ship in 2.4; it shipped in 2.4.1 (see "Done in 2.4.1"). Play now, the movie-night countdown, birthday and occasion mode, and the Picture frame sources (Plex Photos first, then a folder and Immich, then museum art) did not ship in 2.4 and are still ahead, for a later 2.4.x run (D134 1).
 5. **2.5:** the no-server mode as a TMDB adapter. It needs the adapter layer, a TMDB key the user supplies (stored like the Plex token), TMDB's attribution, a certification mapping for the household limit, and it has no now-playing. Clear-logo marquees, poster artwork sources and the filter on any production house come with it; Coming Soon for titles not in the library comes after 2.5.
 6. **3.0:** Browse first mode (with the Browse button in poster mode), the main-screen choice (Posters, Browse first, Picture frame, Home controls) and Home controls. It is built from Find a poster, the gestures and Play now, so it comes after them.
 7. **Later:** the rest of the Ideas. Multiple displays comes last among the large features, lowest risk first (Change together and Mirror, then Chain, then Controller), because Controller opens the largest attack surface. It needs the source adapters' item IDs first (the `js/main.js` split is done in 2.1.1).
 
 ## ⏭ Next
 
-2.2.0 to 2.4.0 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1" and "Done in 2.4" sections above); nothing is in progress. The next feature follows the suggested order:
+2.2.0 to 2.4.0 are on `main`, and 2.4.1 is on the branch `2.4.1` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4" and "Done in 2.4.1" sections above); nothing is in progress. The next feature follows the suggested order:
 
 1. **2.5, the no-server mode:** the TMDB adapter, on the adapter layer 2.4 built.
 
-Still ahead: for a later 2.4.x run (D134 1), multiple servers in poster selection, Play now, the movie-night countdown, birthday and occasion mode and the Picture frame sources; with no release number, "On this day", the playlist with Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music.
+Still ahead: for a later 2.4.x run (D134 1), Play now, the movie-night countdown, birthday and occasion mode and the Picture frame sources; with no release number, "On this day", the playlist with Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music.
 
-- **Optional:** "Validate on a Raspberry Pi", whenever a Pi is at hand (D79), and the Jellyfin and Emby rows (sections I and J of `docs/validation/real-server-extended.md`) on real servers.
-- **Not decided:** whether 2.4 is merged to `main`, tagged or released. It is the owner's call (D13, D79).
+- **Optional:** "Validate on a Raspberry Pi", whenever a Pi is at hand (D79), and the Jellyfin and Emby rows (sections I and J of `docs/validation/real-server-extended.md`) and the multiple-servers rows (section K) on real servers.
+- **Not decided:** whether 2.4.1 is merged to `main`, tagged or released. It is on the branch `2.4.1`, and merging it waits for the owner (D13, D79). 2.4.0 was merged to `main` (D155).
 
 ### Gap fill inside the frame: the deferred styles
 Still deferred from 2.2 (D88), and not part of the next steps above. The Gap fill setting ships with **Off**, **Dimmed blurred poster** and **Colour matte**. D67 specifies more choices for the same gap (when the poster does not match the frame window's shape: "Fit inside window", or a poster scaled or offset smaller than the window):
@@ -191,7 +202,7 @@ Named bundles (Kids, Teens, Adults) of household limit, poster selection, frame 
 - **Constraints:** the household ceiling of a profile can only be changed behind the PIN. Order: after the Rating schedule and Poster selection, because a profile bundles a selection and a limit (done in 2.3).
 
 ### Poster selection
-Step 1 shipped in 2.3 (libraries, genres, ratings, one collection or playlist; see "Done in 2.3"). Step 2 and multiple servers are still open.
+Step 1 shipped in 2.3 (libraries, genres, ratings, one collection or playlist; see "Done in 2.3"). Multiple servers shipped in 2.4.1 (see "Done in 2.4.1"). Step 2 is still open.
 
 Choose posters by multi-select servers, libraries, genres and ratings, not just one library and one rating (D60, D63). This merges the earlier ideas "Multiple libraries" (mix movies and TV in the pool) and "Collections & filters" (limit the pool to a collection, genre or decade).
 
@@ -199,7 +210,7 @@ Choose posters by multi-select servers, libraries, genres and ratings, not just 
   - **Step 1 (2.3, done):** choose a Plex **smart collection** or playlist as a source. Plex builds those from any field it filters on (actor, director, writer, studio, country, year, critic or audience rating, resolution, label and more), so "movies with this actor rated 7 or higher" is made once in Plex and the display only reads it.
   - **Step 2 (not in 2.3, D101; later):** an in-app rule builder for the common fields (actor, director, writer, studio, genre, decade, critic and audience rating, label), each rule a field, a comparison and a value, combined with all-of or any-of, and saved per Rating schedule slot. With source adapters each adapter maps the fields it supports and says which it does not.
 - **Constraints:** the household limit stays a ceiling and wins: the rating multi-select only picks among ratings at or under the limit in force, and it can never let in an unrated or above-limit title. A multi-library pool samples each library in proportion to its title count, so one large library does not crowd out a small one unless the user says so. The Plex `genre` filter parameter and its multi-value form, and the exact filter parameter for each metadata field, are (verify) items checked on the real server like `contentRating` was. "Movie score from" is read two ways: a critic or audience rating threshold, which Plex stores and filters on; or the score's composer, which Plex does not usually store, so that one depends on the metadata agent and is checked before it is promised. Studio is one value per title (for example "Pixar"); a title's full list of production companies is not in Plex's metadata as usually stored, so filtering on any production house comes with the TMDB source or a TMDB lookup by the title's TMDB ID.
-- **Order:** libraries, genres and ratings (done in 2.3) right after the Rating schedule and before Viewer profiles (they share the Settings section and the pool request); multiple servers: a later 2.4.x run (it was listed for 2.4 and did not ship, D134 1).
+- **Order:** libraries, genres and ratings (done in 2.3) right after the Rating schedule and before Viewer profiles (they share the Settings section and the pool request); multiple servers: done in 2.4.1 (it was listed for 2.4 and did not ship there, D134 1; see "Done in 2.4.1").
 
 ### Weighting and no repeats
 Shipped in 2.3 (see "Done in 2.3"); what follows is the original idea.
