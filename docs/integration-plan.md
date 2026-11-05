@@ -1463,8 +1463,8 @@ Facts this section stands on (invocation probes, 2026-11-05):
 
 ### 63. `token-rule-shared` — One function decides when the old token may go
 - **Goal:** `settleServers` (js/settings.js) and `tokenMayGo` (js/settings-ui.js) take the token decision from one exported function, with no change in behaviour. Closes the D165 4 (shared token rule) follow-up.
-- **Requirements:** R-SRC-4 · **Rulings:** D142 2, D163, D165 3 · **Mode:** afk · **Tags:** risk:high · **Blocked by:** `save-settle` (the same function)
-- **Output:** `js/settings.js`, `js/settings-ui.js`, `tests/settings.test.js`
+- **Requirements:** R-SRC-4 · **Rulings:** D142 2, D163, D165 3, D177 · **Mode:** afk · **Tags:** risk:high · **Blocked by:** `save-settle` (the same function)
+- **Output:** `js/settings.js`, `js/settings-ui.js`, `tests/settings.test.js`, `tests/e2e/settings-sheet.spec.mjs` (D177)
 - **Acceptance criteria:**
   1. `npm test` (a table test of the shared function over the cases both callers decide today: same server, type change in a one-server household, type change beside other servers, a scoped id held, a pasted token).
   2. `node tests/e2e/run.mjs multi-server jellyfin emby settings-sheet` (no behaviour change).
