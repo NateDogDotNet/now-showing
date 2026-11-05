@@ -128,9 +128,19 @@ Several servers in one household's poster selection, the 2.4 follow-ups, and the
 - **Multiple servers (R-SRC-4)**: **Add a server** in Settings adds up to two more servers, in any mix of Plex, Jellyfin and Emby (up to three). Plex is added by the plex.tv code, and Jellyfin or Emby by address, user name and password. The library list groups each server's libraries under its name, and **Remove** takes a server out. Every poster from every server passes the household limit. Cached posters, the pin and the no-repeat history carry the id of their server. A household with one server sees no change. The server carried over from 2.4.0 is always the first server, and reordering is not offered.
 - **The 2.4 follow-ups**: the security and privacy summary in the spec says where each token goes; the package description names Jellyfin and Emby; `buildUrl` and `timeoutSignal` are shared by the adapters in `js/sources/http.js`; a test refuses every adapter-to-adapter import except Emby from Jellyfin; and the first-run card's scroll style moves from an inline style to the stylesheet. No behaviour change.
 - **Playwright 1.64.1 and Node 20**: the e2e harness is pinned exactly at Playwright 1.64.1 (Chromium build 1248), and `engines.node` is `>=20`, which that version needs (D159 2, D166). Three specs were adjusted so that each held request crosses its boundary before its own timeout; no app timeout changed.
-- **Upgrade notice (R-UPG-5)**: a configured display upgraded from 2.4 shows a one-time "What's new in 2.4.1: choose posters from more than one server." toast; **Open settings** opens Settings (behind the PIN when one is set) at the server list, with focus on its first control. A new, unconfigured display shows nothing. It replaces the 2.4 notice.
+- **Upgrade notice (R-UPG-5)**: a configured display upgraded from 2.4 shows a one-time "What's new in 2.4.1: choose posters from more than one server." toast; **Open settings** opens Settings (behind the PIN when one is set) at the server list, with focus on the first control of the server list ("Add a server", or the first Remove button when the list shows). A new, unconfigured display shows nothing. It replaces the 2.4 notice.
 - **Version**: 2.4.1 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`.
 - **Not in 2.4.1**: Play now, the movie-night countdown, birthday and occasion mode, and the Picture frame sources wait for a later 2.4.x run or later (D156 1).
+
+## ✅ Done in 2.4.2 (run 11, on the branch `2.4.2`, not merged)
+
+The 2.4.1 follow-ups (D171). Version 2.4.2 is on the branch `2.4.2` and is not merged: no pull request, tag or GitHub release (D13, D79). It is tested against mock servers only, and nothing has been run on a Raspberry Pi. It has no upgrade notice: the marker stays `'2.4.1'` (D171 2).
+
+- **A Save that changes the first server (R-SRC-4)**: while it reads who answers at the new first server, the display keeps the old selection, the old pin and each profile's selection. The limit and every other setting apply at once. An unpin applies at once, except where it would leave the display unconfigured. The first-run card never opens while a Save settles (D172 to D176).
+- **One rule for the old sign-in**: one shared rule decides when the old token may go, for Save and for Test connection, with no change in behaviour. Households see nothing new (D165 3, D177, D178).
+- **With every server down**: the empty card names each server once, as the Settings line does, with or without a genre (D165 4, D179 1, 3). The same holds when two or more servers fail and the rest return no posters; with one server down and the rest empty, the card keeps that server's own message, as before. In the server list, focus stays on the same server's Remove button when the list redraws, and after a Remove it goes to "Add a server" when that shows (D168 2, D179 2).
+- **Still open**: the status pill names server types while the card names servers; at rotation 90 the first Remove button that Open settings focuses sits behind the sheet's footer (D179 4); `addressOf` is not yet idempotent (D178 2).
+- **Version**: 2.4.2 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new" notice stays at 2.4.1.
 
 ## 🧭 Suggested order
 
@@ -146,14 +156,14 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Next
 
-2.2.0 to 2.4.1 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4" and "Done in 2.4.1" sections above); nothing is in progress. The next feature follows the suggested order:
+2.2.0 to 2.4.1 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4" and "Done in 2.4.1" sections above); 2.4.2 is done on the branch `2.4.2` and not merged (see "Done in 2.4.2"); nothing is in progress. The next feature follows the suggested order:
 
 1. **2.5, the no-server mode:** the TMDB adapter, on the adapter layer 2.4 built.
 
 Still ahead: for a later 2.4.x run (D134 1), Play now, the movie-night countdown, birthday and occasion mode and the Picture frame sources; with no release number, "On this day", the playlist with Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music.
 
 - **Optional:** "Validate on a Raspberry Pi", whenever a Pi is at hand (D79), and the Jellyfin and Emby rows (sections I and J of `docs/validation/real-server-extended.md`) and the multiple-servers rows (section K) on real servers.
-- **Not decided:** whether 2.4.1 is tagged or released. It was merged to `main` (D170), as 2.4.0 was (D155).
+- **Not decided:** whether 2.4.1 is tagged or released. It was merged to `main` (D170), as 2.4.0 was (D155). Whether 2.4.2 is merged, tagged or released is not decided either.
 
 ### Gap fill inside the frame: the deferred styles
 Still deferred from 2.2 (D88), and not part of the next steps above. The Gap fill setting ships with **Off**, **Dimmed blurred poster** and **Colour matte**. D67 specifies more choices for the same gap (when the poster does not match the frame window's shape: "Fit inside window", or a poster scaled or offset smaller than the window):
