@@ -121,9 +121,9 @@ Jellyfin and Emby as poster sources beside Plex, and the upgrade notice (D134). 
 - **Version**: 2.4.0 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`.
 - **Not in 2.4**: the Roadmap's other 2.4 items did not ship and move to a later 2.4.x run (D134 1; see "Suggested order"): multiple servers in poster selection, Play now, the movie-night countdown, birthday and occasion mode, and the Picture frame sources. TMDB stays 2.5.
 
-## ✅ Done in 2.4.1 (run 10, on the branch `2.4.1`)
+## ✅ Done in 2.4.1 (run 10, on `main`)
 
-Several servers in one household's poster selection, the 2.4 follow-ups, and the Playwright upgrade (D156; the Playwright upgrade is D159 2). The branch `2.4.1` is not merged into `main`; there is no pull request, tag or GitHub release unless the owner asks (D13, D79). It is tested against mock servers only (the mock Plex server, and `scripts/mock-jellyfin.mjs` for Jellyfin and Emby), and nothing has been run on a Raspberry Pi. The multiple-servers rows to run on real servers are in `docs/validation/real-server-extended.md`, section K, all (verify).
+Several servers in one household's poster selection, the 2.4 follow-ups, and the Playwright upgrade (D156; the Playwright upgrade is D159 2). It was merged into `main` on 2026-11-05 from the branch `2.4.1`, with no pull request, tag or GitHub release (D13, D79, D170). It is tested against mock servers only (the mock Plex server, and `scripts/mock-jellyfin.mjs` for Jellyfin and Emby), and nothing has been run on a Raspberry Pi. The multiple-servers rows to run on real servers are in `docs/validation/real-server-extended.md`, section K, all (verify).
 
 - **Multiple servers (R-SRC-4)**: **Add a server** in Settings adds up to two more servers, in any mix of Plex, Jellyfin and Emby (up to three). Plex is added by the plex.tv code, and Jellyfin or Emby by address, user name and password. The library list groups each server's libraries under its name, and **Remove** takes a server out. Every poster from every server passes the household limit. Cached posters, the pin and the no-repeat history carry the id of their server. A household with one server sees no change. The server carried over from 2.4.0 is always the first server, and reordering is not offered.
 - **The 2.4 follow-ups**: the security and privacy summary in the spec says where each token goes; the package description names Jellyfin and Emby; `buildUrl` and `timeoutSignal` are shared by the adapters in `js/sources/http.js`; a test refuses every adapter-to-adapter import except Emby from Jellyfin; and the first-run card's scroll style moves from an inline style to the stylesheet. No behaviour change.
@@ -146,14 +146,14 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Next
 
-2.2.0 to 2.4.0 are on `main`, and 2.4.1 is on the branch `2.4.1` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4" and "Done in 2.4.1" sections above); nothing is in progress. The next feature follows the suggested order:
+2.2.0 to 2.4.1 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4" and "Done in 2.4.1" sections above); nothing is in progress. The next feature follows the suggested order:
 
 1. **2.5, the no-server mode:** the TMDB adapter, on the adapter layer 2.4 built.
 
 Still ahead: for a later 2.4.x run (D134 1), Play now, the movie-night countdown, birthday and occasion mode and the Picture frame sources; with no release number, "On this day", the playlist with Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music.
 
 - **Optional:** "Validate on a Raspberry Pi", whenever a Pi is at hand (D79), and the Jellyfin and Emby rows (sections I and J of `docs/validation/real-server-extended.md`) and the multiple-servers rows (section K) on real servers.
-- **Not decided:** whether 2.4.1 is merged to `main`, tagged or released. It is on the branch `2.4.1`, and merging it waits for the owner (D13, D79). 2.4.0 was merged to `main` (D155).
+- **Not decided:** whether 2.4.1 is tagged or released. It was merged to `main` (D170), as 2.4.0 was (D155).
 
 ### Gap fill inside the frame: the deferred styles
 Still deferred from 2.2 (D88), and not part of the next steps above. The Gap fill setting ships with **Off**, **Dimmed blurred poster** and **Colour matte**. D67 specifies more choices for the same gap (when the poster does not match the frame window's shape: "Fit inside window", or a poster scaled or offset smaller than the window):

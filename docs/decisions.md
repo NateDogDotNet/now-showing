@@ -1071,3 +1071,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   1. **The focus wording (anchored m-7, UX Minor 2).** This amends D168 1: Open settings scrolls the whole server section to the top and puts focus on the first control of its server list ("Add a server", or the first Remove button when the list shows), not the section's first control (the server type choice). The code stands; R-UPG-5, its acceptance line and the preset messages say so.
   2. **The scroll is a guard with a reachable case (anchored m-6).** The UX walk found no difference on a fresh open, but the anchored review reached one: Settings keeps its scroll position, so opening it with the gear, scrolling down and cancelling, then pressing the notice's Open settings, lands 1,650 px past the section without the scroll. A preset case for that path is added, so the line has a test.
   3. **Roadmap.md:156 (anchored m-8)** still says whether 2.4 is merged is "not decided"; D155 merged it. The line names 2.4.1's state.
+
+## Owner ruling — 2026-11-05 (after run 10; Nathan: "merge 2.4.1 into main, push, and clean up branches"): D170
+
+- **D170 2.4.1 is merged into `main`.** The branch `2.4.1` (tip a32a2d22, run 10 closed with `closer close` r7 ok) was merged with a merge commit, be98faed, after `npm test` passed 953 of 953 on the merged tree's parent. There is no pull request, tag or GitHub release (D13, D79). README and Roadmap now say 2.4.1 is on `main`. The branch `2.4.1` is deleted locally and on origin.
