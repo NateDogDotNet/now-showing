@@ -669,6 +669,38 @@ sheetCase('K31 Frame brightness shows its value unsigned, and the 10–100 % hin
   check('K31 brightness output and unwrapped hint');
 });
 
+// ---- D177: the sheet sets the old sign-in aside on a change of type, in a household of one server (D142 2, D163) ----
+
+sheetCase('D177 Test connection after the first server is retyped to Jellyfin, with the Plex sign-in still in the sheet, sets the sign-in aside and sends it to no Jellyfin address', { settings: seed() }, async ({ page, app }) => {
+  const jellyfin = `http://127.0.0.1:${app.jellyfinPort}`;
+  const toJellyfin = [];
+  page.on('request', (r) => {
+    const u = new URL(r.url());
+    if (u.port === String(app.jellyfinPort)) toJellyfin.push(`${r.method()} ${u.pathname}${u.search} ${JSON.stringify(r.headers())} ${r.postData() || ''}`);
+  });
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  // The type is retyped the way an imported file retypes it (jellyfin.spec 13b): the token field is not emptied, as the type buttons would.
+  await page.evaluate((url) => {
+    for (const [name, value] of [['serverType', 'jellyfin'], ['serverUrl', url]]) {
+      const el = document.querySelector(`input[name="${name}"]`);
+      el.value = value;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, jellyfin);
+  assert.equal(await page.inputValue('input[name="plexToken"]'), 'demo-token', 'the old sign-in is still in the sheet');
+  await page.click('#test-btn');
+  await settleTest(page);
+  const result = await page.textContent('#test-result');
+  assert.match(result, /not the server your sign-in was made for/, 'the sheet says the sign-in was not sent');
+  assert.match(result, /Sign in to Jellyfin/, 'and asks to sign in to Jellyfin');
+  assert.equal(await page.inputValue('input[name="plexToken"]'), '', 'the sheet set the token aside');
+  assert.ok(!toJellyfin.some((line) => line.includes('demo-token')), 'no request to the Jellyfin address carried the Plex sign-in');
+  await page.click('#settings-cancel');
+  check('D177 a retype to Jellyfin with the old sign-in: it is set aside and sent nowhere');
+});
+
 // ---- SSA2: the K48 guard counts a plex.tv request as routed only when a handler answered it ----
 
 /** A stand-in browser context: `route()` collects handlers, `send()` plays one request through them like Playwright does. */

@@ -438,10 +438,82 @@ function moveSelection(settings, from, to) {
   return out;
 }
 
+const EARLY_CONNECTION = ['serverType', 'serverUrl', 'plexToken', 'serverUserId', 'serverName', 'serverId', 'serverCarried', 'servers']; // only the connection keys wait for the reads (D162 5)
+const EARLY_SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'ratings', 'source'];
+const EARLY_PIN = ['staticRatingKey', 'staticTitle'];
+const EARLY_PROFILE_SELECTION = ['libraryKeys', 'libraryNames', 'genres', 'ratings', 'source']; // what a viewer profile draws from; its limit and the rest of its bundle do not wait
+const takeFrom = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
+
+/** Is a different server now first (D172 1)? Its type, its address as `addressOf` compares it, or its id (a Remove of the first server) differs from the first server's before the Save. */
+function firstEntryChanged(prev, next) {
+  const [a, b] = [serverList(prev)[0], serverList(next)[0]];
+  return a.type !== b.type || a.url !== b.url || Boolean(a.id && b.id && a.id !== b.id);
+}
+
+/**
+ * The settings shown while a Save reads who answers at a server (D162 5, D172, D173): every setting that is not a connection key applies
+ * at once, the limit first, and the connection keys stay as they were until the reads answer. When the old settings are configured and the
+ * first entry of the server list changes, the old selection (the libraries, genres, ratings and the collection or playlist) waits with the
+ * connection, and so does the old pin, and so does what each viewer profile draws from, so no poster and no pin of the new selection is drawn from the old server (D165 1, 4; D174 1). A Save that unpins
+ * applies the unpin at once (D173 1), except when the display would then read unconfigured (D176 1). The pin keeps its exemption from the household limit (D122 1), so nothing here hides it for the limit.
+ * Nothing is stored here.
+ */
+export function earlySettings(prev, next) {
+  let early = { ...next, ...takeFrom(prev, EARLY_CONNECTION) };
+  if (!isConfigured(prev)) return early; // a first configure holds nothing
+  if (firstEntryChanged(prev, next)) {
+    early = { ...early, ...takeFrom(prev, EARLY_SELECTION), ...(next.staticRatingKey ? takeFrom(prev, EARLY_PIN) : {}) };
+    // A viewer profile in force replaces the selection (R-PROF-1), so each profile keeps the selection it had before the Save (D174 1). Its limit and the
+    // rest of its bundle, and the slots, apply at once (D162 5): a lowered limit must not wait. A profile that did not exist before the Save holds only
+    // the new server's selection, so it is left out until the settle; a slot naming it gives G meanwhile (D120 2) and shows the held household selection.
+    const old = new Map((Array.isArray(prev.profiles) ? prev.profiles : []).map((p) => [p?.id, p]));
+    if (Array.isArray(early.profiles)) early.profiles = early.profiles.filter((p) => old.has(p?.id)).map((p) => ({ ...p, ...takeFrom(old.get(p.id), EARLY_PROFILE_SELECTION) }));
+  }
+  // D176 1, which extends D174 2 to every branch: while the reads run the display must stay configured. The old connection with a selection the sheet
+  // cleared (the sign-in was set aside), or with a pin-only display unpinned in the same Save, reads as unconfigured and would open the first-run card
+  // (and a plex.tv sign-in) for a server that is about to be replaced. The old selection and the old pin wait, then. This is the one place an unpin waits
+  // for the settle (D173 1 stands everywhere else).
+  if (!isConfigured(early)) early = { ...early, ...takeFrom(prev, [...EARLY_SELECTION, ...EARLY_PIN]) };
+  return early;
+}
+
 /** Does the settings object hold any scoped id (the selection, a pin, a profile)? Then it already had more than one server's worth of ids (D162 1, D163 3). */
 function holdsScopedId(s) {
   const keysOf = (o) => [...(Array.isArray(o?.libraryKeys) ? o.libraryKeys : []), o?.libraryKey, o?.source?.key];
   return [...keysOf(s), s?.staticRatingKey, ...(Array.isArray(s?.profiles) ? s.profiles.flatMap(keysOf) : [])].some((k) => splitKey(k).serverId);
+}
+
+/**
+ * May the sign-in made for `basis` go to the server of `type` at `url`? The one rule Save (`settleServers`) and Test connection (the Settings
+ * sheet) both follow (D157 3, D162 3, D163, D165 3). `basis` is the server the sign-in was made for, `{ type, url, token, id }` (the saved first
+ * server, or the server Remove moved into its place). `readId(type, url)` asks who answers WITHOUT a token (see `settleServers`).
+ *  - A token that is not `basis`'s (typed or pasted in the sheet, or made for the new server) belongs to the address it was made at: it may go.
+ *  - The same type at the same address is the same server: it may go, and nothing is read. Save never takes this shortcut (`needsAnswer`): it has
+ *    already found the address changed on the raw comparison, and `addressOf` is not idempotent (`"x /"` gives `"x "`), so the cleaned forms can
+ *    be equal when the stored ones are not. Save then reads the id there, as it always has (D178 1).
+ *  - Otherwise it may go only when the same type answers there with `basis`'s own id (`basis.id`, or the id read at `basis.url` when none was
+ *    recorded). A change of type is always another server (D157 2).
+ *  - Another server is told the token only when the caller says a change of type alone keeps it: `keepsTypeChange`, which Save sets for a household
+ *    of one server (D163 2, Q5); the sheet never does.
+ *  - `needsAnswer`: Save. It records the id read at `url` whatever the token and the type, so it is read even when the verdict does not need it.
+ * Returns `{ go, same, answered }`: `same` is whether the server at `url` is `basis`'s, `answered` the id read there (null when nothing answered,
+ * undefined when nothing was read). A verdict that needs no read is returned as it is, not as a promise; one that needs a read comes back as a
+ * promise of it. The sheet relies on that: its Test connection goes on in the same turn when nothing is to be read, as it did before the rule was
+ * shared, and the redraw it makes does not land after the scroll that Open settings in js/main.js makes right after the sheet opens.
+ */
+export function oldTokenMayGo({ basis, type, url, token, keepsTypeChange = false, needsAnswer = false }, readId) {
+  const sameType = type === basis.type;
+  if (!needsAnswer && sameType && addressOf(url) === addressOf(basis.url)) return { go: true, same: true, answered: undefined };
+  const holds = Boolean(token) && token === basis.token;
+  if (!holds && !needsAnswer) return { go: true, same: false, answered: undefined };
+  const verdict = (answered, recorded) => {
+    const same = Boolean(recorded) && answered === recorded; // `recorded` is null after a change of type: always another server (D157 2)
+    return { go: same || !holds || (!sameType && keepsTypeChange), same, answered };
+  };
+  const readsNew = needsAnswer || sameType;
+  const readsOld = sameType && !basis.id;
+  if (!readsNew && !readsOld) return verdict(undefined, sameType ? basis.id : null);
+  return Promise.all([readsNew ? readId(type, url) : undefined, sameType ? basis.id || readId(type, basis.url) : null]).then(([answered, recorded]) => verdict(answered, recorded));
 }
 
 /**
@@ -477,25 +549,19 @@ export async function settleServers(prev, next, readId) {
   const urlChanged = base.url !== address;
   let another = null; // set when the first server is now another server: { id }
   let freshToken = false; // the token at Save is a sign-in made for the new server, not the old first server's
+  // More than one server before this Save (D163 3): `servers` is not empty, or any scoped id is stored.
+  const multi = prior.length > 1 || holdsScopedId(prev);
   // A first connection (the first server had no address) has nothing to compare with and nothing to clear: no read is made.
   if (address && base.url && (typeChanged || urlChanged)) {
-    const answered = await readId(type, address);
-    let same = false;
-    if (!typeChanged) {
-      if (base.id) same = answered !== null && answered === base.id;
-      else {
-        const old = await readId(type, base.url);
-        same = answered !== null && old !== null && answered === old;
-      }
-    }
+    // The old token was made for another server: it goes whatever changed, the type included, in a household with more than one server
+    // (D163 3). A one-server household that changes only the type keeps the 2.4.0 behaviour (D163 2, Q5; tests/e2e/jellyfin.spec.mjs 13b).
+    const { go, same, answered } = await oldTokenMayGo({ basis: base, type, url: address, token: out.plexToken, keepsTypeChange: !multi, needsAnswer: true }, readId);
     if (same) out.serverId = answered;
     else {
       another = { id: answered || '' };
       // A sign-in the sheet made for the new server differs from the old first server's token; one that is the same is the old server's.
       freshToken = Boolean(out.plexToken) && out.plexToken !== base.token;
-      // The old token was made for another server: it goes whatever changed, the type included, in a household with more than one server
-      // (D163 3). A one-server household that changes only the type keeps the 2.4.0 behaviour (D163 2, Q5; tests/e2e/jellyfin.spec.mjs 13b).
-      if (out.plexToken && out.plexToken === base.token && (!typeChanged || prior.length > 1 || holdsScopedId(prev))) Object.assign(out, { plexToken: '', serverUserId: '', serverName: '' });
+      if (!go) Object.assign(out, { plexToken: '', serverUserId: '', serverName: '' });
     }
   } else if (address && !out.serverCarried && !out.serverId) {
     out.serverId = (await readId(type, address)) || '';
@@ -519,7 +585,6 @@ export async function settleServers(prev, next, readId) {
     // More than one server before this Save (D163 3): the first server's keys leave every profile and none moves onto the new server (D163 1);
     // the main selection moves, as the sheet holds the household's own choice from the new address. One server keeps the 2.4.0 behaviour: the
     // profiles keep their ids as stored (D163 2).
-    const multi = prior.length > 1 || holdsScopedId(prev);
     const profiles = out.profiles;
     // The main selection follows the new server only when the household signed in to it in this sheet (a fresh token). A retype saved with the old
     // token, never signed in, leaves the old first server's keys in the main selection too: they go (D163 1).

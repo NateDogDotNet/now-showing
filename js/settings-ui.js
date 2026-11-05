@@ -9,7 +9,7 @@ import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describe
 import { parseHHMM } from './schedule.js';
 import { LIMITS } from './ratings.js';
 import { belongsTo, genreRequestValue, memberBelongsTo, offeredRatings, selectionOf } from './selection.js';
-import { addressOf as cleanAddress, defaults, importWithConnection, isConfigured, MAX_SERVERS, sanitize, serverList, toExport } from './settings.js';
+import { addressOf as cleanAddress, defaults, importWithConnection, isConfigured, MAX_SERVERS, oldTokenMayGo, sanitize, serverList, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
 const LAYOUT_KEYS = ['posterScale', 'posterOffsetX', 'posterOffsetY'];
@@ -958,8 +958,9 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   }
 
   /**
-   * The sign-in the sheet holds was made for the saved server. At another address (or type) it goes only after the server there is read,
-   * without it, and found to be the same one (D157 3). Otherwise it is set aside and the household signs in to that server.
+   * The sign-in the sheet holds was made for the saved server. Test connection asks `oldTokenMayGo` (js/settings.js, the rule Save follows too)
+   * whether it may go to the address and type in the sheet: at the same address, or at another one whose server, read without it, is found to be
+   * the same one (D157 3). Otherwise it is set aside here, and the household signs in to that server. A change of type is always another server.
    */
   async function tokenMayGo(s) {
     const type = s.serverType || 'plex';
@@ -967,11 +968,11 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     // into the first place, that server (its own token, checked at its own address, D162 3). Anywhere else it goes only after the server
     // there is read without it and found to be the same one (D157 3).
     const basis = promoted || (original && { type: original.serverType || 'plex', url: original.serverUrl, token: original.plexToken, id: original.serverId });
-    if (!basis || !s.plexToken || s.plexToken !== basis.token) return true; // a sign-in made in this sheet belongs to the address it was made at
-    const sameType = type === basis.type;
-    if (sameType && cleanAddress(s.serverUrl) === cleanAddress(basis.url)) return true;
-    const [now, then] = sameType ? await Promise.all([readId(type, s.serverUrl), basis.id || readId(type, basis.url)]) : [null, null];
-    if (now && then && now === then) return true;
+    if (!basis) return true;
+    // A verdict that needs no read comes back at once: awaiting it anyway would put Test connection one turn later than it ran before the rule
+    // was shared, and the redraw it makes would land after the scroll that Open settings in js/main.js makes as the sheet opens.
+    const verdict = oldTokenMayGo({ basis, type, url: s.serverUrl, token: s.plexToken }, readId);
+    if ((verdict instanceof Promise ? await verdict : verdict).go) return true;
     field('plexToken').value = '';
     field('serverUserId').value = '';
     // With several servers, or a first server that is not the carried one, the library ticked for the server whose sign-in was set aside and its
@@ -1061,6 +1062,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   const sheetServers = () => serverList(read());
 
   let serversShown = '';
+  let serversPlaced = []; // the server (its type and address) at each place of the list as last drawn
   function renderServers() {
     const list = sheetServers();
     const first = list[0];
@@ -1072,6 +1074,12 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     const shown = JSON.stringify([list.map((e) => [e.name, e.type, e.url]), form.dataset.serverName || '']);
     if (shown === serversShown) return;
     serversShown = shown;
+    // A rebuild takes focus with the button that had it (the connection test names the first server a moment after the sheet opens, D168 2): the
+    // Remove button of the same place gets it back. Nothing else is moved: focus elsewhere in the sheet is not the list's to take.
+    const held = document.activeElement?.closest?.('#server-list') ? document.activeElement.dataset?.slot : undefined;
+    const placed = list.map((e) => `${e.type} ${e.url}`);
+    const sameServer = held !== undefined && placed[held] !== undefined && placed[held] === serversPlaced[held]; // a Remove moves the next server into the place: its button is not the one that had focus
+    serversPlaced = placed;
     $('server-list').replaceChildren(
       ...list.map((entry, slot) => {
         const li = document.createElement('li');
@@ -1088,6 +1096,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
         return li;
       }),
     );
+    if (sameServer) $('server-list').querySelector(`button[data-slot="${held}"]`)?.focus({ preventScroll: true });
     const full = list.length >= MAX_SERVERS;
     $('server-add').hidden = full || !first.url;
     $('servers-help').hidden = list.length < 2;
@@ -1130,6 +1139,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     sourceRun++;
     renderSelection();
     renderServers();
+    if (!$('server-add').hidden) $('server-add').querySelector('summary')?.focus({ preventScroll: true }); // the button that had focus is gone: a held or double Enter must not reach another server's Remove (D179 2)
     renderConnection();
     if (field('plexToken').value && field('serverUrl').value) testConnection();
   }

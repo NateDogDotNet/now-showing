@@ -93,7 +93,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
     if (failed && !posters.length) {
       // With several servers every one that failed is named, not only the first library's: the messages of each (they name their server) are joined.
       const reasons = settled.filter((r) => r.status === 'rejected').map((r) => r.reason);
-      const messages = [...new Set(reasons.map((e) => e?.message).filter(Boolean))];
+      const messages = [...new Set(reasons.map((e) => e?.serverMessage ?? e?.message).filter(Boolean))]; // a several-server source gives the message with its server named (serverMessage), as the Settings line says it
       if (client.multi && messages.length > 1) throw Object.assign(new Error(messages.join(' ')), { kind: failed.reason?.kind, ...(failed.reason?.status ? { status: failed.reason.status } : {}) });
       throw failed.reason;
     }

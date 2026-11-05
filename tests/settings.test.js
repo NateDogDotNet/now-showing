@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, removedServers, sanitize, save, SECRET_KEYS, serverList, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
+import { defaults, earlySettings, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, oldTokenMayGo, removedServers, sanitize, save, SECRET_KEYS, serverList, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -887,6 +887,193 @@ test('one server: a Save that changes only the type keeps the token as in 2.4.0,
   assert.equal(moved.next.plexToken, '', 'another address of the same type that answers as another server sets the token aside (D157 3)');
 });
 
+// ---- the token rule, one table (D142 2, D157 3, D162 3, D163, D165 3) ----
+// Each row is a household, a change and the answers that come back. `settle` is what Save does with the old token (kept or set aside) and the
+// ids it asks for; `sheet` is what Test connection does (may the token go to the address, true or false) and the ids it asks for.
+// The two agree on whether the server is the same one. They differ in one case: the type changes in a one-server household (D163 2).
+const TOKEN_ROWS = [
+  {
+    name: 'same server, same address: nothing is asked',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { rotateSeconds: 60 }, answers: {},
+    settle: { keeps: true, asked: [] }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'same server at another address (recorded id): the id there matches',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverUrl: 'http://new:32400' }, answers: { 'http://new:32400': 'plex-id' },
+    settle: { keeps: true, asked: ['plex http://new:32400'] }, sheet: { go: true, asked: ['plex http://new:32400'] },
+  },
+  {
+    name: 'same server at another address (id never recorded): both addresses are read and match',
+    prev: () => settled(v240()), change: { serverUrl: 'http://new:32400' }, answers: { 'http://plex:32400': 'm', 'http://new:32400': 'm' },
+    settle: { keeps: true, asked: ['plex http://new:32400', 'plex http://plex:32400'] }, sheet: { go: true, asked: ['plex http://new:32400', 'plex http://plex:32400'] },
+  },
+  {
+    name: 'another address that answers as another server (one server)',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverUrl: 'http://new:32400' }, answers: { 'http://new:32400': 'other-id' },
+    settle: { keeps: false, asked: ['plex http://new:32400'] }, sheet: { go: false, asked: ['plex http://new:32400'] },
+  },
+  {
+    name: 'another address that does not answer (one server)',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverUrl: 'http://new:32400' }, answers: {},
+    settle: { keeps: false, asked: ['plex http://new:32400'] }, sheet: { go: false, asked: ['plex http://new:32400'] },
+  },
+  {
+    name: 'another address, id never recorded, the old address does not answer: it cannot be confirmed',
+    prev: () => settled(v240()), change: { serverUrl: 'http://new:32400' }, answers: { 'http://new:32400': 'n' },
+    settle: { keeps: false, asked: ['plex http://new:32400', 'plex http://plex:32400'] }, sheet: { go: false, asked: ['plex http://new:32400', 'plex http://plex:32400'] },
+  },
+  {
+    name: 'type change in a one-server household, the old token: Save keeps it (D163 2), the sheet sets it aside',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverType: 'jellyfin', serverUrl: 'http://jf:8096' }, answers: { 'http://jf:8096': 'jf-id-1' },
+    settle: { keeps: true, asked: ['jellyfin http://jf:8096'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'type change in a one-server household, id never recorded: the old address is not read',
+    prev: () => settled(v240()), change: { serverType: 'jellyfin', serverUrl: 'http://jf:8096' }, answers: { 'http://jf:8096': 'jf-id-1' },
+    settle: { keeps: true, asked: ['jellyfin http://jf:8096'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'type change beside other servers, the new type answers with the id the old server has: still another server',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', servers: [JF()] }), change: { serverType: 'emby', serverUrl: 'http://em2:8096' }, answers: { 'http://em2:8096': 'plex-id' },
+    settle: { keeps: false, asked: ['emby http://em2:8096'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'type change to a type nobody knows in a one-server household: the same split',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverType: 'kodi', serverUrl: 'http://k:1' }, answers: {},
+    settle: { keeps: true, asked: ['kodi http://k:1'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'type change beside other servers: set aside in both',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', servers: [JF()] }), change: { serverType: 'jellyfin', serverUrl: 'http://jf2:8096' }, answers: { 'http://jf2:8096': 'jf-id-2' },
+    settle: { keeps: false, asked: ['jellyfin http://jf2:8096'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'type change with a scoped id held (no server in the list): set aside in both (D163 3)',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', libraryKeys: ['1', '@jf-id-1/b1'], libraryNames: ['Movies', 'JF Movies'] }),
+    change: { serverType: 'jellyfin', serverUrl: 'http://jf:8096' }, answers: { 'http://jf:8096': 'jf-id-1' },
+    settle: { keeps: false, asked: ['jellyfin http://jf:8096'] }, sheet: { go: false, asked: [] },
+  },
+  {
+    name: 'a pasted token (not the old one) at another server of the same type: it goes where it is typed (D142 2)',
+    prev: () => settled({ ...v240(), serverId: 'plex-id' }), change: { serverUrl: 'http://new:32400', plexToken: 'pasted' }, answers: { 'http://new:32400': 'other-id' },
+    settle: { keeps: true, asked: ['plex http://new:32400'] }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'a pasted token with a type change, beside other servers: it goes where it is typed',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', servers: [JF()] }), change: { serverType: 'jellyfin', serverUrl: 'http://jf2:8096', plexToken: 'pasted' }, answers: { 'http://jf2:8096': 'jf-id-2' },
+    settle: { keeps: true, asked: ['jellyfin http://jf2:8096'] }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'no token at all: nothing to set aside',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', plexToken: '' }), change: { serverUrl: 'http://new:32400' }, answers: { 'http://new:32400': 'other-id' },
+    settle: { keeps: true, asked: ['plex http://new:32400'] }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'the server Remove moved into the first place, retyped to the same server: its own token stays (D162 3)',
+    prev: () => promoteBase(), promote: true, change: { serverUrl: 'http://other-name:8096' }, answers: { 'http://other-name:8096': 'jf-id-1' },
+    settle: { keeps: true, asked: ['jellyfin http://other-name:8096'] }, sheet: { go: true, asked: ['jellyfin http://other-name:8096'] },
+  },
+  {
+    name: 'the server Remove moved into the first place, retyped to another server: its token is set aside',
+    prev: () => promoteBase(), promote: true, change: { serverUrl: 'http://elsewhere:8096' }, answers: { 'http://elsewhere:8096': 'other-server-id' },
+    settle: { keeps: false, asked: ['jellyfin http://elsewhere:8096'] }, sheet: { go: false, asked: ['jellyfin http://elsewhere:8096'] },
+  },
+  // addressOf is not idempotent ("x /" gives "x "), so an address can differ from the stored one in its raw form and not in its cleaned form.
+  // Save enters its read on the raw comparison and never takes the sheet's same-address shortcut (D178 1): the id is read and recorded (`after`).
+  {
+    name: 'a promoted server stored as "http://jf:8096 /", retyped to "http://jf:8096": Save reads its id and keeps it; the sheet sees the same address',
+    prev: () => sanitize({ ...promoteBase(), servers: [JF({ url: 'http://jf:8096 /' })] }), promote: true, change: { serverUrl: 'http://jf:8096' }, answers: { 'http://jf:8096': 'jf-id-1' },
+    settle: { keeps: true, asked: ['jellyfin http://jf:8096'], after: { serverId: 'jf-id-1', promoted: true, sameRecorded: false, gone: ['plex-id'] } }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'a first address stored as "http://plex:32400 / /", corrected to "http://plex:32400" (recorded id): Save reads the id and records the same server',
+    prev: () => settled({ ...v240(), serverId: 'plex-id', serverUrl: 'http://plex:32400 / /' }), change: { serverUrl: 'http://plex:32400' }, answers: { 'http://plex:32400': 'plex-id' },
+    settle: { keeps: true, asked: ['plex http://plex:32400'], after: { serverId: 'plex-id', promoted: false, sameRecorded: true, gone: [] } }, sheet: { go: true, asked: [] },
+  },
+  {
+    name: 'the same, id never recorded: Save reads both forms of the address and records the id',
+    prev: () => settled({ ...v240(), serverUrl: 'http://plex:32400 / /' }), change: { serverUrl: 'http://plex:32400' }, answers: { 'http://plex:32400': 'm', 'http://plex:32400 ': 'm' },
+    settle: { keeps: true, asked: ['plex http://plex:32400', 'plex http://plex:32400 '], after: { serverId: 'm', promoted: false, sameRecorded: false, gone: [] } }, sheet: { go: true, asked: [] },
+  },
+];
+/** The settings before a row's Save, the settings it hands in, and the server the sheet's sign-in was made for (the promoted one after Remove). */
+const rowInputs = (row) => {
+  const prev = row.prev();
+  const basis = serverList(prev)[row.promote ? 1 : 0];
+  const next = row.promote ? retyped(prev, row.change.serverUrl, { libraryKeys: ['@jf-id-1/b1'], libraryKey: '@jf-id-1/b1' }) : settled({ ...prev, ...row.change });
+  return { prev, basis: { type: basis.type, url: basis.url, token: basis.token, id: basis.id }, next };
+};
+
+test('the token rule, Save: the old token is kept or set aside in each household and change (table)', async () => {
+  for (const row of TOKEN_ROWS) {
+    const { prev, next } = rowInputs(row);
+    const { read, asked } = reader(row.answers);
+    const r = await settleServers(prev, next, read);
+    assert.equal(r.next.plexToken, row.settle.keeps ? next.plexToken : '', `${row.name}: token ${row.settle.keeps ? 'kept' : 'set aside'}`);
+    assert.deepEqual(asked, row.settle.asked, `${row.name}: ids asked`);
+    if (row.settle.after) {
+      const { serverId, promoted, sameRecorded, gone } = row.settle.after;
+      assert.deepEqual([r.next.serverId, r.promoted, r.sameRecorded, r.gone.map((e) => e.id)], [serverId, promoted, sameRecorded, gone], `${row.name}: the id recorded, what is kept and what goes`);
+    }
+  }
+});
+
+test('the token rule, Test connection: the sign-in may go to the address or is set aside, and the ids asked (table)', async () => {
+  for (const row of TOKEN_ROWS) {
+    const { basis, next } = rowInputs(row);
+    const { read, asked } = reader(row.answers);
+    const verdict = await oldTokenMayGo({ basis, type: next.serverType || 'plex', url: next.serverUrl, token: next.plexToken }, read);
+    assert.equal(verdict.go, row.sheet.go, `${row.name}: may go`);
+    assert.deepEqual(asked, row.sheet.asked, `${row.name}: ids asked`);
+  }
+});
+
+test('the token rule: what the caller asks for changes what is read and what a change of type alone does, never whether the server is the same one', async () => {
+  const basis = { type: 'plex', url: 'http://plex:32400', token: 'plex-token', id: 'plex-id' };
+  const ask = async (input, answers) => {
+    const { read, asked } = reader(answers);
+    return { verdict: await oldTokenMayGo({ basis, token: 'plex-token', ...input }, read), asked };
+  };
+  // the same type at the same address: the same server, nothing read. Save (needsAnswer) never takes this shortcut and reads the id (D178 1)
+  const idle = await ask({ type: 'plex', url: 'http://plex:32400/' }, {});
+  assert.deepEqual([idle.verdict, idle.asked], [{ go: true, same: true, answered: undefined }, []]);
+  const reads = await ask({ type: 'plex', url: 'http://plex:32400/', needsAnswer: true }, { 'http://plex:32400/': 'plex-id' });
+  assert.deepEqual([reads.verdict, reads.asked], [{ go: true, same: true, answered: 'plex-id' }, ['plex http://plex:32400/']]);
+  // a token that is not the basis's: it may go. Save still wants the id read there; the sheet reads nothing
+  const pasted = { type: 'plex', url: 'http://new:32400', token: 'pasted' };
+  const save = await ask({ ...pasted, needsAnswer: true }, { 'http://new:32400': 'other-id' });
+  assert.deepEqual([save.verdict, save.asked], [{ go: true, same: false, answered: 'other-id' }, ['plex http://new:32400']]);
+  const sheet = await ask(pasted, { 'http://new:32400': 'other-id' });
+  assert.deepEqual([sheet.verdict, sheet.asked], [{ go: true, same: false, answered: undefined }, []]);
+  // a change of type alone: kept only when the caller says so; the server is another one either way
+  const retyped = { type: 'jellyfin', url: 'http://jf:8096' };
+  const keeps = await ask({ ...retyped, keepsTypeChange: true, needsAnswer: true }, { 'http://jf:8096': 'plex-id' });
+  assert.deepEqual([keeps.verdict, keeps.asked], [{ go: true, same: false, answered: 'plex-id' }, ['jellyfin http://jf:8096']]);
+  const sets = await ask({ ...retyped, needsAnswer: true }, { 'http://jf:8096': 'plex-id' });
+  assert.deepEqual([sets.verdict.go, sets.verdict.same], [false, false]);
+  // the same type at another address: the caller's keepsTypeChange does not decide it
+  const elsewhere = await ask({ type: 'plex', url: 'http://new:32400', keepsTypeChange: true }, { 'http://new:32400': 'other-id' });
+  assert.deepEqual([elsewhere.verdict.go, elsewhere.verdict.same], [false, false]);
+});
+
+test('the token rule: a verdict that needs no read is returned at once, one that needs a read as a promise (Open settings scrolls the sheet right after it opens)', () => {
+  // The sheet's Test connection starts when Settings opens. If this answered a turn later, its redraw would land after the scroll that
+  // Open settings makes in js/main.js and move the server section out of place (the preset spec, "server section at the top").
+  const basis = { type: 'plex', url: 'http://plex:32400', token: 'plex-token', id: 'plex-id' };
+  const never = () => assert.fail('nothing is read in these cases');
+  const at = (input, readId = never) => oldTokenMayGo({ basis, token: 'plex-token', ...input }, readId);
+  const same = at({ type: 'plex', url: 'http://plex:32400/' });
+  assert.deepEqual([same instanceof Promise, same.go], [false, true], 'the same address');
+  const pasted = at({ type: 'plex', url: 'http://new:32400', token: 'pasted' });
+  assert.deepEqual([pasted instanceof Promise, pasted.go], [false, true], 'a token that is not the basis\'s');
+  const retyped = at({ type: 'jellyfin', url: 'http://jf:8096' });
+  assert.deepEqual([retyped instanceof Promise, retyped.go], [false, false], 'a change of type reads nothing');
+  const recorded = at({ type: 'plex', url: 'http://new:32400' }, async () => 'plex-id');
+  assert.equal(recorded instanceof Promise, true, 'another address of the same type is read');
+  const save = at({ type: 'plex', url: 'http://plex:32400', needsAnswer: true, keepsTypeChange: false }, async () => 'plex-id');
+  assert.equal(save instanceof Promise, true, 'Save always reads');
+});
+
 test('several servers, a retype to another server: the main selection follows the new server only with a fresh sign-in; with the old token the old first server\'s keys leave the main selection too (D163 1)', async () => {
   const prev = sanitize({ ...v240(), serverId: 'plex-id', libraryKeys: ['5'], libraryKey: '5', libraryNames: ['Kids'], servers: [JF()] });
   const answers = { 'http://new:32400': 'new-id' };
@@ -918,4 +1105,225 @@ test('several servers, a retype to another server saved with a FRESH sign-in: th
   const r = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400', plexToken: 'signed-in-fresh' }), reader({ 'http://new:32400': 'new-id' }).read);
   assert.deepEqual(r.next.libraryKeys, ['@new-id/5'], 'the main selection, ticked in the sheet from the new server, follows it');
   assert.deepEqual(r.next.profiles[0].libraryKeys, ['@jf-id-1/b2'], 'the profile keeps no key of the old first server, and no @new-id/5 was made from it; another server\'s key stays');
+});
+
+// ---- earlySettings: what the display shows while a Save reads who answers at the first server (D162 5, D165 1, D165 4, D172, D173) ----
+
+/** Before the Save: Plex first (the old selection and an old pin of its own), Jellyfin second, the first id recorded. */
+const heldBase = () =>
+  sanitize({
+    ...v240(),
+    serverId: 'plex-id',
+    libraryKey: '1',
+    libraryKeys: ['1', '@jf-id-1/b1'],
+    libraryNames: ['Movies', 'JF Movies'],
+    genres: ['Drama'],
+    ratings: ['PG'],
+    source: { kind: 'collection', key: '77', title: 'Old collection' },
+    staticRatingKey: '42',
+    staticTitle: 'Old pin',
+    maxContentRating: 'PG-13',
+    servers: [JF()],
+  });
+/** What the sheet hands in for a Save: the new selection and pin (ids of the new server), the connection keys as typed. */
+const newPicks = { libraryKey: '5', libraryKeys: ['5'], libraryNames: ['New Movies'], genres: ['Horror'], ratings: ['R'], source: { kind: 'playlist', key: '88', title: 'New list' }, staticRatingKey: '99', staticTitle: 'New pin' };
+const SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'ratings', 'source'];
+const PIN = ['staticRatingKey', 'staticTitle'];
+const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
+const CONNECTION = ['serverType', 'serverUrl', 'plexToken', 'serverUserId', 'serverName', 'serverId', 'serverCarried', 'servers'];
+
+test('early: a first server at another address holds the old selection and the old pin together, and the old connection (D172 1, 2)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400' });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early, SELECTION), pick(prev, SELECTION), 'the old selection, in full');
+  assert.deepEqual(pick(early, PIN), pick(prev, PIN), 'the old pin');
+  assert.deepEqual(pick(early, CONNECTION), pick(prev, CONNECTION), 'the old connection');
+});
+
+test('early: the first server\'s type, or a different server in the first place, holds the same set (D172 1)', () => {
+  const prev = heldBase();
+  const retyped = sanitize({ ...prev, ...newPicks, serverType: 'jellyfin' });
+  const swapped = sanitize({ ...prev, ...newPicks, serverUrl: 'http://jf:8096', serverId: 'jf-id-1', serverType: 'jellyfin', plexToken: 'jf-token', serverCarried: false, servers: [] });
+  for (const [what, next] of [['type', retyped], ['another server first', swapped]]) {
+    const early = earlySettings(prev, next);
+    assert.deepEqual([pick(early, SELECTION), pick(early, PIN)], [pick(prev, SELECTION), pick(prev, PIN)], `${what}: the old selection and pin`);
+  }
+});
+
+test('early: a different server in the first place at the same address and type holds the same set (D172 1)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, ...newPicks, serverId: 'another-id', serverCarried: false });
+  const early = earlySettings(prev, next);
+  assert.deepEqual([pick(early, SELECTION), pick(early, PIN)], [pick(prev, SELECTION), pick(prev, PIN)]);
+});
+
+test('early: an address that addressOf reads as the same (trailing slashes, spaces) holds nothing (D172 1)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: ' http://plex:32400/// ' });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early, [...SELECTION, ...PIN]), pick(next, [...SELECTION, ...PIN]), 'the new selection and pin apply at once');
+});
+
+test('early: a token-only or name-only change, a change to the second or third server only, and an unknown first id hold nothing (D172 1)', () => {
+  const prev = heldBase();
+  const unknownId = sanitize({ ...prev, serverId: '' });
+  const changes = [
+    ['token', sanitize({ ...prev, ...newPicks, plexToken: 'another-token' })],
+    ['name', sanitize({ ...prev, ...newPicks, serverName: 'Renamed' })],
+    ['second server address', sanitize({ ...prev, ...newPicks, servers: [JF({ url: 'http://jf-moved:8096' })] })],
+    ['second server removed', sanitize({ ...prev, ...newPicks, servers: [] })],
+    ['a third server added', sanitize({ ...prev, ...newPicks, servers: [JF(), EM()] })],
+  ];
+  for (const [what, next] of changes) {
+    const early = earlySettings(prev, next);
+    assert.deepEqual(pick(early, [...SELECTION, ...PIN]), pick(next, [...SELECTION, ...PIN]), `${what}: the new selection and pin apply at once`);
+  }
+  const unknownNext = sanitize({ ...unknownId, ...newPicks, servers: [JF(), EM()] });
+  const unknown = earlySettings(unknownId, unknownNext);
+  assert.deepEqual(pick(unknown, [...SELECTION, ...PIN]), pick(unknownNext, [...SELECTION, ...PIN]), 'an unknown first id with no first-entry change: no hold');
+});
+
+test('early: a first configure (the old settings unconfigured) holds nothing (D172 1)', () => {
+  const prev = sanitize({ ...defaults() });
+  assert.equal(isConfigured(prev), false);
+  const next = sanitize({ ...prev, ...newPicks, serverType: 'plex', serverUrl: 'http://new:32400', plexToken: 'fresh' });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early, [...SELECTION, ...PIN]), pick(next, [...SELECTION, ...PIN]), 'the new selection and pin apply at once');
+  assert.deepEqual(pick(early, ['serverUrl', 'plexToken']), pick(prev, ['serverUrl', 'plexToken']), 'the connection still waits for the reads');
+});
+
+test('early: an unpin applies at once even while the selection is held (D173 1)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, ...newPicks, staticRatingKey: '', staticTitle: '', serverUrl: 'http://new:32400' });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early, SELECTION), pick(prev, SELECTION), 'the selection is held');
+  assert.deepEqual(pick(early, PIN), { staticRatingKey: '', staticTitle: '' }, 'the pin is gone at once');
+});
+
+test('early: a Save that keeps the pin holds it, and one that sets a pin where there was none holds none (D173 1)', () => {
+  const prev = heldBase();
+  const kept = earlySettings(prev, sanitize({ ...prev, ...newPicks, staticRatingKey: '42', staticTitle: 'Old pin', serverUrl: 'http://new:32400' }));
+  assert.deepEqual(pick(kept, PIN), pick(prev, PIN), 'the kept pin');
+  const unpinned = sanitize({ ...prev, staticRatingKey: '', staticTitle: '' });
+  const fresh = earlySettings(unpinned, sanitize({ ...unpinned, ...newPicks, serverUrl: 'http://new:32400' }));
+  assert.deepEqual(pick(fresh, PIN), { staticRatingKey: '', staticTitle: '' }, 'a new pin from the new server does not show during the read');
+  assert.deepEqual(pick(fresh, SELECTION), pick(unpinned, SELECTION));
+});
+
+test('early: every other setting, the limit first, applies at once in a held Save (D162 5, D172 3)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400', maxContentRating: 'G', rotateSeconds: 77, showNowPlaying: false });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early, ['maxContentRating', 'rotateSeconds', 'showNowPlaying']), pick(next, ['maxContentRating', 'rotateSeconds', 'showNowPlaying']));
+  assert.equal(early.maxContentRating, 'G');
+});
+
+test('early: a Save that only lowers the limit applies it at once with the selection, pin and connection as they were (D162 5)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, maxContentRating: 'G' });
+  const early = earlySettings(prev, next);
+  assert.equal(early.maxContentRating, 'G');
+  assert.deepEqual(pick(early, [...SELECTION, ...PIN, ...CONNECTION]), pick(prev, [...SELECTION, ...PIN, ...CONNECTION]));
+});
+
+test('early: the display stays configured when a Save cleared the selection and the pin and only a second server changed (the 2.4.1 fallback)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, libraryKey: '', libraryKeys: [], libraryNames: [], source: null, staticRatingKey: '', staticTitle: '', servers: [JF(), EM()] });
+  const early = earlySettings(prev, next);
+  assert.equal(isConfigured(early), true);
+  assert.deepEqual(pick(early, SELECTION), pick(prev, SELECTION));
+});
+
+// ---- earlySettings and the viewer profiles / rating-schedule slots (D174 1) ----
+
+const kidsProfile = (extra = {}) => ({ id: 'p1', name: 'Kids', maxContentRating: 'G', limitNowPlaying: true, libraryKeys: ['1'], libraryNames: ['Movies'], genres: ['Drama'], ratings: ['G'], source: { kind: 'collection', key: '77', title: 'Old collection' }, weighting: 'off', noRepeatDays: 0, frameId: 'marquee', ...extra });
+const PROFILE_SELECTION = ['libraryKeys', 'libraryNames', 'genres', 'ratings', 'source'];
+const withProfile = () => sanitize({ ...heldBase(), maxContentRating: 'PG', limitSlots: [{ start: '00:00', profile: 'p1' }], profiles: [kidsProfile()] });
+const sheetProfile = (extra = {}) => kidsProfile({ libraryKeys: ['5'], libraryNames: ['New Movies'], genres: ['Horror'], ratings: ['R'], source: { kind: 'playlist', key: '88', title: 'New list' }, ...extra });
+
+test('early: a held Save keeps the old selection of each profile in force, and the profile\'s limit and other settings apply at once (D174 1, D162 5)', () => {
+  const prev = withProfile();
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400', profiles: [sheetProfile({ maxContentRating: 'PG', weighting: 'unwatched', frameId: 'other' })] });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early.profiles[0], PROFILE_SELECTION), pick(prev.profiles[0], PROFILE_SELECTION), 'the profile draws from the old selection');
+  assert.deepEqual(pick(early.profiles[0], ['id', 'name', 'maxContentRating', 'weighting', 'frameId']), pick(next.profiles[0], ['id', 'name', 'maxContentRating', 'weighting', 'frameId']), 'its limit and the rest of its bundle apply at once');
+});
+
+test('early: a held Save leaves the slots as handed in, so a lowered slot limit applies at once, and a profile made in this Save is not shown (D174 1, D162 5)', () => {
+  const prev = withProfile();
+  const made = sheetProfile({ id: 'p2', name: 'New one' });
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400', limitSlots: [{ start: '00:00', profile: 'p2' }, { start: '20:00', limit: 'G' }], profiles: [sheetProfile(), made] });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(early.limitSlots, next.limitSlots);
+  assert.deepEqual(early.profiles.map((p) => p.id), ['p1'], 'a profile that did not exist before the Save has only the new server\'s selection, so it waits');
+});
+
+test('early: without a first-entry change the profiles apply at once (D174 1)', () => {
+  const prev = withProfile();
+  const next = sanitize({ ...prev, ...newPicks, plexToken: 'another-token', profiles: [sheetProfile(), sheetProfile({ id: 'p2', name: 'New one' })] });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(early.profiles, next.profiles);
+  assert.deepEqual(early.limitSlots, next.limitSlots);
+});
+
+test('early: a first configure holds no profile (D174 1)', () => {
+  const prev = sanitize({ ...defaults() });
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400', plexToken: 'fresh', profiles: [sheetProfile()] });
+  assert.deepEqual(earlySettings(prev, next).profiles, next.profiles);
+});
+
+// ---- the stay-configured rule wins in every branch (D176 1) ----
+
+/** A display configured by its pin alone: a connection, no library, no collection, a pin of its own. */
+const pinOnly = () => sanitize({ ...heldBase(), libraryKey: '', libraryKeys: [], libraryNames: [], genres: [], ratings: [], source: null, profiles: [], limitSlots: [] });
+
+test('early: a pin-only display saved with a first-server change and an unpin is never stored unconfigured; the old pin waits for the settle (D176 1)', () => {
+  const prev = pinOnly();
+  assert.equal(isConfigured(prev), true);
+  const next = sanitize({ ...prev, ...newPicks, staticRatingKey: '', staticTitle: '', serverUrl: 'http://new:32400' });
+  const early = earlySettings(prev, next);
+  assert.equal(isConfigured(early), true, 'the first-run card never opens during the read');
+  assert.deepEqual(pick(early, PIN), pick(prev, PIN), 'the pin is restored for the read');
+  assert.deepEqual(pick(early, SELECTION), pick(prev, SELECTION), 'and the old (empty) selection is held');
+});
+
+test('early: a pin-only display with a first-server change that keeps its pin is configured, and an unpin that leaves a library is applied at once (D176 1, D173 1)', () => {
+  const prev = pinOnly();
+  const kept = earlySettings(prev, sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400' }));
+  assert.deepEqual([isConfigured(kept), kept.staticRatingKey], [true, '42']);
+  const held = heldBase();
+  const unpinned = earlySettings(held, sanitize({ ...held, ...newPicks, staticRatingKey: '', staticTitle: '', serverUrl: 'http://new:32400' }));
+  assert.deepEqual(pick(unpinned, PIN), { staticRatingKey: '', staticTitle: '' }, 'the old selection keeps the display configured, so the unpin stands');
+});
+
+test('early: addresses that differ only as addressOf trims them (a trailing slash, surrounding spaces) hold nothing, compared without sanitize (D172 1)', () => {
+  const prev = heldBase();
+  for (const typed of ['http://plex:32400/', '  http://plex:32400  ', ' http://plex:32400// ']) {
+    const next = { ...prev, ...newPicks, serverUrl: typed };
+    const early = earlySettings(prev, next);
+    assert.deepEqual(pick(early, [...SELECTION, ...PIN]), pick(next, [...SELECTION, ...PIN]), `"${typed}": the new selection and pin apply at once`);
+  }
+});
+
+test('early: the stay-configured restore brings back only the old selection and pin, and leaves the limit, the slots and the profiles as the Save handed them in (D176 1, D162 5)', () => {
+  const prev = sanitize({ ...pinOnly(), maxContentRating: 'PG-13', limitSlots: [{ start: '08:00', limit: 'PG' }, { start: '20:00', profile: 'p1' }], profiles: [kidsProfile({ maxContentRating: 'PG' })] });
+  assert.equal(isConfigured(prev), true);
+  const next = sanitize({
+    ...prev,
+    ...newPicks,
+    staticRatingKey: '',
+    staticTitle: '',
+    serverUrl: 'http://new:32400',
+    maxContentRating: 'G',
+    limitSlots: [{ start: '09:00', limit: 'G' }, { start: '21:00', profile: 'p1' }],
+    profiles: [sheetProfile({ maxContentRating: 'G', weighting: 'unwatched' })],
+  });
+  const early = earlySettings(prev, next);
+  assert.equal(isConfigured(early), true, 'the restore ran');
+  assert.deepEqual([pick(early, PIN), pick(early, SELECTION)], [pick(prev, PIN), pick(prev, SELECTION)], 'the old pin and selection came back');
+  assert.equal(early.maxContentRating, 'G', 'the lowered limit applies at once');
+  assert.deepEqual(early.limitSlots, next.limitSlots, 'the slots are the Save\'s');
+  assert.deepEqual(early.profiles.map((p) => [p.id, p.maxContentRating, p.weighting]), [['p1', 'G', 'unwatched']], 'the profile\'s limit and bundle are the Save\'s');
+  assert.deepEqual(pick(early.profiles[0], PROFILE_SELECTION), pick(prev.profiles[0], PROFILE_SELECTION), 'a profile still draws from its old selection');
 });
