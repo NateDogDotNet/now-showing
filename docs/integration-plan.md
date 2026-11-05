@@ -1452,12 +1452,12 @@ Facts this section stands on (invocation probes, 2026-11-05):
 
 ### 62. `save-settle` — No interim state of a Save mixes the old server with the new selection
 - **Goal:** while a Save reads who answers at a changed first server (D162 5), the display shows the settings before the Save for the connection, the selection and the pin, and applies every other setting (the limit first) at once. Closes the D165 1 and D165 4 (pin) follow-ups.
-- **Requirements:** R-SRC-4 · **Rulings:** D157, D162 5, D163, D165 1, D165 4 · **Mode:** afk · **Tags:** risk:high · **Blocked by:** —
+- **Requirements:** R-SRC-4 · **Rulings:** D157, D162 5, D163, D165 1, D165 4, D172 · **Mode:** afk · **Tags:** risk:high · **Blocked by:** —
 - **Output:** `js/main.js`, `js/settings.js`, `tests/settings.test.js`, `tests/e2e/multi-server.spec.mjs`, `docs/spec.md`
 - **Acceptance criteria:**
-  1. `npm test` (the new unit cases: a Save that changes the first server's address or type keeps the old selection and pin in the early state; a Save that changes neither applies the new selection and pin at once, as 2.4.1 does).
-  2. `node tests/e2e/run.mjs multi-server` (a new case: a slow id read at a changed first server; during the read no poster comes from a library of the new selection, the lowered limit applies at once, and after the read the settled settings show).
-  3. `grep -q 'D165 1' docs/spec.md` (R-SRC-4 states the rule for the interim state).
+  1. `npm test` (the new unit cases, D172 1–2: with configured old settings, a Save whose first server entry changes — type, address as `addressOf` compares it, or a different server first — keeps the old selection and pin together in the early state; a token-only or name-only change, a change to the second or third server only, an unknown first id with no first-entry change, and a first configure apply the new selection and pin at once, as 2.4.1 does).
+  2. `node tests/e2e/run.mjs multi-server` (a new case, D172 3 and 7: a slow id read at a changed first server, with disjoint old and new libraries on servers with different ids and an old pin only the old selection holds; during the read no poster and no pin from the new selection shows, the lowered limit applies at once and hides a held poster above it, and after the read the settled settings show).
+  3. `grep -q 'D172' docs/spec.md` (R-SRC-4 states the rule for the interim state).
   4. scope: only the Output paths changed.
 - **Notes/hazards:** `settleServers` took seven rounds in run 10 (D160–D165). Keep its return shape. The early apply's limit-first rule (D162 5) must still hold: a Save that only lowers the limit applies it before any read answers (the existing test stays).
 
