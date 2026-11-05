@@ -780,6 +780,114 @@ for (const [label, viewport, extra, touch] of [
   });
 }
 
+// ---------- every server down: the empty card names each server as the Settings line does (D165 4) ----------
+
+msCase('24 with every server down the empty card names each server once, as the Settings line does', { settings: twoServers({ serverName: 'Mock Plex' }) }, async ({ page, app }) => {
+  await page.route(`${plexUrl(app)}/**`, (route) => route.abort());
+  await page.route(`${jfUrl(app)}/**`, (route) => route.abort());
+  await page.goto(app.url);
+  await page.waitForFunction(() => !document.getElementById('empty').hidden && /reach/i.test(document.getElementById('empty-message').textContent), null, { timeout: 20000 });
+  const card = (await page.textContent('#empty-message')).trim();
+  await openSettings(page);
+  await page.click('#test-btn');
+  await page.waitForFunction(() => /reach/i.test(document.getElementById('test-result').textContent), null, { timeout: 20000 });
+  const line = (await page.textContent('#test-result')).trim();
+  const count = (text, needle) => text.split(needle).length - 1;
+  for (const [what, text] of [['card', card], ['Settings line', line]]) {
+    assert.equal(count(text, 'Mock Plex'), 1, `the ${what} names Mock Plex once: ${text}`);
+    assert.equal(count(text, 'Mock Jellyfin'), 1, `the ${what} names Mock Jellyfin once: ${text}`);
+  }
+  assert.ok(!/reach Jellyfin|reach Plex/.test(card), `the card says no server's type where it means its name: ${card}`);
+  check('every server down: the card names Mock Plex and Mock Jellyfin once each, as the Settings line does');
+});
+
+msCase('25 with one server alone down the card keeps the adapter\'s own words', { settings: oneServer({ serverName: 'Mock Plex' }) }, async ({ page, app }) => {
+  await page.route(`${plexUrl(app)}/**`, (route) => route.abort());
+  await page.goto(app.url);
+  await page.waitForFunction(() => !document.getElementById('empty').hidden && /reach/i.test(document.getElementById('empty-message').textContent), null, { timeout: 20000 });
+  assert.match((await page.textContent('#empty-message')).trim(), /^Could not reach Plex \(network or CORS error\)\./, 'one server: the adapter\'s own words, as today');
+  check('one server down alone: the card keeps the adapter\'s own words');
+});
+
+msCase('26 with one of two servers down and only its library chosen, the card keeps the adapter\'s own words, not the server\'s name (D165 4)', { settings: twoServers({ serverName: 'Mock Plex', libraryKey: '3', libraryKeys: ['3'], libraryNames: ['Kids Movies'] }) }, async ({ page, app }) => {
+  await page.route(`${plexUrl(app)}/**`, (route) => route.abort());
+  await page.goto(app.url);
+  await page.waitForFunction(() => !document.getElementById('empty').hidden && /reach/i.test(document.getElementById('empty-message').textContent), null, { timeout: 20000 });
+  assert.match((await page.textContent('#empty-message')).trim(), /^Could not reach Plex \(network or CORS error\)\./, 'a single failing server keeps the error\'s own message');
+  check('one failing server among two: the card keeps the error\'s own words');
+});
+
+/** The empty card's text with the mock servers aborted (the Jellyfin one only when `jellyfinDown`), once the card says it could not reach them. */
+async function downCard(page, app, { jellyfinDown = true } = {}) {
+  await page.route(`${plexUrl(app)}/**`, (route) => route.abort());
+  if (jellyfinDown) await page.route(`${jfUrl(app)}/**`, (route) => route.abort());
+  await page.goto(app.url);
+  await page.waitForFunction(() => !document.getElementById('empty').hidden && /reach/i.test(document.getElementById('empty-message').textContent), null, { timeout: 20000 });
+  return (await page.textContent('#empty-message')).trim();
+}
+const times = (text, needle) => text.split(needle).length - 1;
+const GENRE = [{ key: '6', title: 'Animation' }];
+const PLEX_TWO = (extra = {}) => ({ id: hex('8', 1), type: 'plex', url: 'http://127.0.0.1:1', token: 'second-token', userId: '', name: 'Second Plex', ...extra });
+
+msCase('27 with a genre chosen and every server down the card names each server once (D179 1)', { settings: twoServers({ serverName: 'Mock Plex', genres: GENRE }) }, async ({ page, app }) => {
+  const card = await downCard(page, app);
+  assert.equal(times(card, 'Mock Plex'), 1, `the card names Mock Plex once: ${card}`);
+  assert.equal(times(card, 'Mock Jellyfin'), 1, `the card names Mock Jellyfin once: ${card}`);
+  assert.ok(!/reach Jellyfin|reach Plex/.test(card), `no server is named by its type: ${card}`);
+  check('a genre chosen, every server down: the card names Mock Plex and Mock Jellyfin once each');
+});
+
+msCase('28 two servers of one type, a genre chosen, all down: the card names both, not one (D179 1)', {
+  settings: twoServers({ serverName: 'Mock Plex', genres: GENRE, servers: [PLEX_TWO()], libraryKeys: ['3', `@${hex('8', 1)}/3`], libraryNames: ['Kids Movies', 'Kids Movies'] }),
+}, async ({ page, app }) => {
+  const card = await downCard(page, app);
+  assert.equal(times(card, 'Mock Plex'), 1, `the card names Mock Plex once: ${card}`);
+  assert.equal(times(card, 'Second Plex'), 1, `the card names Second Plex once: ${card}`);
+  check('two servers of one type, a genre chosen, all down: both are named, once each');
+});
+
+msCase('29 two of three servers down while the third has nothing to show: the card names both failing servers (D179 3)', {
+  settings: (app) => twoServers({ serverName: 'Mock Plex', genres: [{ key: '99', title: 'Zzz Not A Genre' }], servers: [jfEntry(app), PLEX_TWO()], libraryKeys: ['3', `@${JF_ID}/${JF_MOVIES}`, `@${hex('8', 1)}/3`], libraryNames: ['Kids Movies', 'Movies', 'Kids Movies'] })(app),
+}, async ({ page, app }) => {
+  const card = await downCard(page, app, { jellyfinDown: false });
+  assert.equal(times(card, 'Mock Plex'), 1, `the card names Mock Plex once: ${card}`);
+  assert.equal(times(card, 'Second Plex'), 1, `the card names Second Plex once: ${card}`);
+  assert.ok(!card.includes('Mock Jellyfin'), `the server that answered is not named: ${card}`);
+  check('two of three servers down, the third answering with nothing: both failing servers are named');
+});
+
+msCase('30 three servers: Enter on the first Remove takes it out and leaves focus on no Remove button, so a second Enter removes nothing (D179 2)', {
+  settings: (app) => twoServers({ serverName: 'Mock Plex', servers: [jfEntry(app), PLEX_TWO()], libraryKeys: ['3'], libraryNames: ['Kids Movies'] })(app),
+}, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await page.waitForFunction(() => document.querySelectorAll('#server-list li').length === 3, null, { timeout: 10000 });
+  await page.focus('#server-list li:nth-child(1) button');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelectorAll('#server-list li').length === 2, null, { timeout: 10000 });
+  const onRemove = () => page.evaluate(() => Boolean(document.activeElement?.closest('#server-list')));
+  assert.equal(await onRemove(), false, 'focus is not on any Remove button after a Remove');
+  assert.equal(await page.evaluate(() => document.activeElement?.closest('#server-add') !== null), true, 'focus is on "Add a server"');
+  await page.keyboard.press('Enter'); // a held or doubled key
+  assert.equal(await page.evaluate(() => document.querySelectorAll('#server-list li').length), 2, 'the second Enter removed nothing (it opened the Add form)');
+  check('after a Remove focus is on "Add a server", not on another server\'s Remove');
+});
+
+msCase('31 a Remove with "Add a server" not shown still leaves focus on no Remove button: the next server never inherits the place (D179 2)', {
+  settings: (app) => twoServers({ serverName: '', serverUrl: '', plexToken: '', servers: [jfEntry(app), PLEX_TWO()], libraryKeys: [], libraryNames: [] })(app),
+}, async ({ page, app }) => {
+  await page.goto(app.url);
+  await openSettings(page);
+  await page.waitForFunction(() => document.querySelectorAll('#server-list li').length === 3, null, { timeout: 10000 });
+  assert.equal(await page.evaluate(() => document.getElementById('server-add').hidden), true, 'the Add form is hidden while the first server has no address');
+  await page.focus('#server-list li:nth-child(2) button');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelectorAll('#server-list li').length === 2, null, { timeout: 10000 });
+  assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('#server-list'))), false, 'focus did not move to the Remove button of the server that took the place');
+  check('with no "Add a server" to go to, a Remove leaves focus on no other server\'s Remove');
+});
+
 // ---------- run ----------
 
 const WORKERS = Number(process.env.E2E_MULTI_WORKERS || 3);

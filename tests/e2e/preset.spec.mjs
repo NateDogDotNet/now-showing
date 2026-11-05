@@ -324,6 +324,46 @@ await withApp({ settings: seed({ serverName: 'Mock Plex', servers: [{ id: '90000
   check('Open settings from two servers: the list at the top, focus on the first Remove button');
 });
 
+// D168 2: with two servers and no saved serverName the connection test names the first server a moment after the sheet opens, and the list is redrawn with
+// that name. The redraw must leave focus where it was: on the first Remove button. The test's answer is held until the page has been seen with focus on the
+// button, so the redraw comes after (a slow server), and the wait is on the redrawn name, not on a delay. The keyboard then goes on from there.
+await withApp({ settings: seed({ servers: [{ id: '90000000000000000000000000000001', type: 'jellyfin', url: 'http://127.0.0.1:1', token: 'jf-demo-token', userId: '', name: 'Mock Jellyfin' }] }) }, async ({ page, app }) => {
+  let release;
+  const held = new Promise((go) => (release = go));
+  await page.route((u) => u.port === String(app.mockPort) && u.pathname === '/', async (route) => {
+    await held;
+    await route.continue();
+  });
+  await clearMarkerOnce(page);
+  await page.goto(app.url);
+  await waitToast(page);
+  await page.click('#toast button:has-text("Open settings")');
+  await page.waitForFunction(() => document.getElementById('settings').open && !document.getElementById('server-list').hidden, null, { timeout: 5000 });
+  const focused = () => page.evaluate(() => ({ label: document.activeElement?.getAttribute('aria-label') || document.activeElement?.tagName, first: document.activeElement === document.querySelector('#server-list button') }));
+  await page.waitForFunction(() => document.activeElement === document.querySelector('#server-list button'), null, { timeout: 5000 });
+  assert.equal((await page.textContent('#server-list .server-name')).trim(), 'Plex', 'before the answer the first row has the type for a name');
+  // The household has read on, away from the list, with focus still on the Remove button: the late redraw must not pull the sheet back to it.
+  const scrolled = await page.evaluate(() => {
+    const b = document.querySelector('#settings .sheet-body');
+    b.scrollTop = b.scrollHeight;
+    return b.scrollTop;
+  });
+  assert.ok(scrolled > 300, `the sheet is scrolled well away from the server list: ${scrolled}`);
+  assert.equal((await focused()).first, true, 'focus is still on the first Remove button');
+  release();
+  await page.waitForFunction(() => document.querySelector('#server-list .server-name')?.textContent.trim() === 'Mock Plex', null, { timeout: 15000 });
+  const after = await focused();
+  assert.equal(after.first, true, `focus is still on the first Remove button after the list was redrawn: ${JSON.stringify(after)}`);
+  assert.equal(after.label, 'Remove Mock Plex', 'it is the redrawn button, with the new name');
+  const away = await page.evaluate(() => document.querySelector('#server-list').getBoundingClientRect().bottom < document.querySelector('#settings .sheet-body').getBoundingClientRect().top);
+  assert.equal(away, true, 'the redraw did not scroll the sheet back to the list (focus is restored without scrolling)');
+  await page.keyboard.press('Tab');
+  assert.equal((await focused()).label, 'Remove Mock Jellyfin', 'Tab goes on to the second Remove button');
+  await page.keyboard.press('Shift+Tab');
+  assert.equal((await focused()).label, 'Remove Mock Plex', 'Shift+Tab comes back to the first');
+  check('Open settings from two servers, no saved serverName: the list redraw keeps focus on the first Remove button (slow server, keyboard)');
+});
+
 // D169 2: Settings keeps its scroll position, so a sheet opened with the gear, scrolled past the server section and cancelled is not at the section when the
 // notice's Open settings opens it again; the scroll in the handler is what brings the section back. The toast survives the gear open and Cancel.
 await withApp({ settings: seed() }, async ({ page, app }) => {

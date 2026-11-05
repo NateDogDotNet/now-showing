@@ -1670,3 +1670,14 @@ test('with several servers a pool that fails everywhere names every server in it
   await assert.rejects(() => createEngine({ client: make(true), getSettings: () => settings }).decide({ force: true }), (e) => e.kind === 'network' && /Plex/.test(e.message) && /Jellyfin/.test(e.message));
   await assert.rejects(() => createEngine({ client: make(false), getSettings: () => settings }).decide({ force: true }), (e) => /Plex/.test(e.message) && !/Jellyfin/.test(e.message), 'without the multi source the first error is the error, as in 2.4.0');
 });
+
+test('with several servers a pool that fails everywhere names each server by its own name, once; an error that names no server keeps its words (D165 4)', async () => {
+  const err = (message, serverMessage) => Object.assign(new Error(message), { kind: 'network', ...(serverMessage ? { serverMessage } : {}) });
+  const make = (plex, jelly) => ({ ...fakeClient(), multi: true, libraryCount: async () => 5, pool: async (r) => Promise.reject(r.libraryKey === '1' ? plex : jelly) });
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryKeys: ['1', '@jf-1/b1'], showNowPlaying: false, servers: [{ id: 'jf-1', type: 'jellyfin', url: 'http://j', token: '' }] };
+  const failure = (client) => createEngine({ client, getSettings: () => settings }).decide({ force: true }).then(() => null, (e) => e.message);
+  const named = make(err('Could not reach Plex (network or CORS error).', 'Could not reach Home Plex (network or CORS error).'), err('Could not reach Jellyfin (network or CORS error).', 'Could not reach Mock Jellyfin (network or CORS error).'));
+  assert.equal(await failure(named), 'Could not reach Home Plex (network or CORS error). Could not reach Mock Jellyfin (network or CORS error).');
+  const plain = make(err('Could not reach Plex (network or CORS error).'), err('Could not reach Jellyfin (network or CORS error).'));
+  assert.equal(await failure(plain), 'Could not reach Plex (network or CORS error). Could not reach Jellyfin (network or CORS error).', 'an error that names no server is joined as it is');
+});

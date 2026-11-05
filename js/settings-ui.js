@@ -1062,6 +1062,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   const sheetServers = () => serverList(read());
 
   let serversShown = '';
+  let serversPlaced = []; // the server (its type and address) at each place of the list as last drawn
   function renderServers() {
     const list = sheetServers();
     const first = list[0];
@@ -1073,6 +1074,12 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     const shown = JSON.stringify([list.map((e) => [e.name, e.type, e.url]), form.dataset.serverName || '']);
     if (shown === serversShown) return;
     serversShown = shown;
+    // A rebuild takes focus with the button that had it (the connection test names the first server a moment after the sheet opens, D168 2): the
+    // Remove button of the same place gets it back. Nothing else is moved: focus elsewhere in the sheet is not the list's to take.
+    const held = document.activeElement?.closest?.('#server-list') ? document.activeElement.dataset?.slot : undefined;
+    const placed = list.map((e) => `${e.type} ${e.url}`);
+    const sameServer = held !== undefined && placed[held] !== undefined && placed[held] === serversPlaced[held]; // a Remove moves the next server into the place: its button is not the one that had focus
+    serversPlaced = placed;
     $('server-list').replaceChildren(
       ...list.map((entry, slot) => {
         const li = document.createElement('li');
@@ -1089,6 +1096,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
         return li;
       }),
     );
+    if (sameServer) $('server-list').querySelector(`button[data-slot="${held}"]`)?.focus({ preventScroll: true });
     const full = list.length >= MAX_SERVERS;
     $('server-add').hidden = full || !first.url;
     $('servers-help').hidden = list.length < 2;
@@ -1131,6 +1139,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     sourceRun++;
     renderSelection();
     renderServers();
+    if (!$('server-add').hidden) $('server-add').querySelector('summary')?.focus({ preventScroll: true }); // the button that had focus is gone: a held or double Enter must not reach another server's Remove (D179 2)
     renderConnection();
     if (field('plexToken').value && field('serverUrl').value) testConnection();
   }

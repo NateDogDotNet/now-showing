@@ -226,12 +226,18 @@ export function createSources(settings, opts = {}) {
     async pool(request) {
       const [m, library] = route(request.libraryKey);
       const { genreTitles = [], genres = [], ...rest } = request;
-      let own = genres;
-      if (genreTitles.length) {
-        own = await ownGenres(m, library, genreTitles);
-        if (!own.length) return []; // this server lists none of the genres: no title of its can match
+      try {
+        let own = genres;
+        if (genreTitles.length) {
+          own = await ownGenres(m, library, genreTitles);
+          if (!own.length) return []; // this server lists none of the genres: no title of its can match
+        }
+        return (await m.source.pool({ ...rest, libraryKey: library, genres: own })).map((p) => scoped(m, p));
+      } catch (error) {
+        // The engine joins the failures of every server when all fail; each is worded with the server's own name (D165 4), the genre lookup's too (D179 1). The error's own message is left as it was.
+        if (error && typeof error === 'object') error.serverMessage = named(m, error);
+        throw error;
       }
-      return (await m.source.pool({ ...rest, libraryKey: library, genres: own })).map((p) => scoped(m, p));
     },
 
     async sourceItems({ kind, key }, options) {
