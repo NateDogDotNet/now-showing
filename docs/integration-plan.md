@@ -1440,3 +1440,67 @@ Facts this section stands on (invocation probes, 2026-11-03T16:38Z):
 | `release-2.4.1` | `playwright-1.64` | docs, ui | 18480/18801 |
 
 Every reviewer gets its own pair: 18680/19001, 18580/18901, 18781/19102 and 18782/19103. The conductor uses 18780/19101.
+
+## Run 11 — 2.4.2: the 2.4.1 follow-ups (D171)
+
+Drafted on the owner's word (2026-11-05, verbatim: "draft the plan for the next 2.4.x run"). The policy answer is D171 ("defaults": items 1a–6a). Every later question answers itself with the defaults under the standing D44 rule, except the actions that wait for the owner's own words. Starting commit: `main` 217cdbe9, on branch `2.4.2`. No pull request, merge or tag unless the owner asks (D13, D79). Conventions are as in runs 3–10. Tested against the mock servers (`scripts/mock-plex.mjs`, `scripts/mock-jellyfin.mjs` in its Jellyfin and Emby modes) only.
+
+Facts this section stands on (invocation probes, 2026-11-05):
+- `npm test` at be98faed's parent a32a2d22 passed 953 of 953 (the D170 merge check), and the full e2e suite passed 31 of 31 at release-2.4.1's Step 4 r2 (`release-2.4.1--ac4-r2.json`).
+- The five open follow-ups in `.orchestrator/state.md` (run 10): D165 1 (the selection in the early apply), D165 4 (the pin in the early apply, the all-down empty card's wording, one shared token-rule function) and D168 2 (the two-server focus loss).
+- Of the Roadmap's 2.4.x list, only Play now can be built now (run 10's facts still hold: the countdown needs the Poster playlist and the marquee captions, birthday mode needs the Frame and marquee styles, and the Picture frame main-screen choice ships with Browse first, 3.0). Play now is not in this run (D171 1); it is offered as its own run, 2.4.3.
+
+### 62. `save-settle` — No interim state of a Save mixes the old server with the new selection
+- **Goal:** while a Save reads who answers at a changed first server (D162 5), the display shows the settings before the Save for the connection, the selection and the pin, and applies every other setting (the limit first) at once. Closes the D165 1 and D165 4 (pin) follow-ups.
+- **Requirements:** R-SRC-4 · **Rulings:** D157, D162 5, D163, D165 1, D165 4 · **Mode:** afk · **Tags:** risk:high · **Blocked by:** —
+- **Output:** `js/main.js`, `js/settings.js`, `tests/settings.test.js`, `tests/e2e/multi-server.spec.mjs`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `npm test` (the new unit cases: a Save that changes the first server's address or type keeps the old selection and pin in the early state; a Save that changes neither applies the new selection and pin at once, as 2.4.1 does).
+  2. `node tests/e2e/run.mjs multi-server` (a new case: a slow id read at a changed first server; during the read no poster comes from a library of the new selection, the lowered limit applies at once, and after the read the settled settings show).
+  3. `grep -q 'D165 1' docs/spec.md` (R-SRC-4 states the rule for the interim state).
+  4. scope: only the Output paths changed.
+- **Notes/hazards:** `settleServers` took seven rounds in run 10 (D160–D165). Keep its return shape. The early apply's limit-first rule (D162 5) must still hold: a Save that only lowers the limit applies it before any read answers (the existing test stays).
+
+### 63. `token-rule-shared` — One function decides when the old token may go
+- **Goal:** `settleServers` (js/settings.js) and `tokenMayGo` (js/settings-ui.js) take the token decision from one exported function, with no change in behaviour. Closes the D165 4 (shared token rule) follow-up.
+- **Requirements:** R-SRC-4 · **Rulings:** D142 2, D163, D165 3 · **Mode:** afk · **Tags:** risk:high · **Blocked by:** `save-settle` (the same function)
+- **Output:** `js/settings.js`, `js/settings-ui.js`, `tests/settings.test.js`
+- **Acceptance criteria:**
+  1. `npm test` (a table test of the shared function over the cases both callers decide today: same server, type change in a one-server household, type change beside other servers, a scoped id held, a pasted token).
+  2. `node tests/e2e/run.mjs multi-server jellyfin emby settings-sheet` (no behaviour change).
+  3. `grep -q 'oldTokenMayGo' js/settings-ui.js && test "$(grep -c 'oldTokenMayGo(' js/settings.js)" -ge 2` (one exported function, `oldTokenMayGo`, defined in js/settings.js and called by `settleServers` there and by `tokenMayGo` in js/settings-ui.js).
+  4. scope: only the Output paths changed.
+- **Notes/hazards:** a refactor; the conductor's mutation sweep runs each old rule's case against the shared function. A cold review reads the diff without the plan.
+
+### 64. `server-ui-fixes` — The all-down card names each server, and focus survives a list redraw
+- **Goal:** with every server down, the empty card names each server as the Settings line does (D165 4); with two or more servers and no saved serverName, focus after Open settings stays on the first Remove button when the list redraws (D168 2).
+- **Requirements:** R-SRC-4, R-UPG-5 · **Rulings:** D165 4, D168 · **Mode:** afk · **Tags:** ui · **Blocked by:** `token-rule-shared` (js/settings-ui.js)
+- **Output:** `js/engine.js`, `js/sources/index.js`, `js/settings-ui.js`, `tests/e2e/multi-server.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/engine.test.js`
+- **Acceptance criteria:**
+  1. `npm test`.
+  2. `node tests/e2e/run.mjs multi-server preset` (all servers down: the card's text names each server once, the same names as the Settings line; two servers, no serverName: after Open settings and the connection test's redraw, focus is on the first Remove button).
+  3. scope: only the Output paths changed.
+- **Notes/hazards:** walk the focus case with a slow server (the connection test answering after about 1.5 s) and with the keyboard.
+
+### 65. `release-2.4.2` — Version 2.4.2 and the docs
+- **Goal:** `VERSION` is 2.4.2, and the README, Roadmap and spec describe what 2.4.2 fixed. No upgrade notice: the marker stays `'2.4.1'` (D171 2).
+- **Requirements:** R-UPG-5 · **Rulings:** D13, D79, D170 · **Mode:** afk · **Tags:** docs · **Blocked by:** `server-ui-fixes`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `grep -q "VERSION = '2.4.2'" sw.js && grep -q "VERSION = '2.4.2'" js/main.js && test "$(grep -c '"version": "2.4.2"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
+  2. `grep -qE '^## .*Done in 2\.4\.2' Roadmap.md && grep -q "WHATS_NEW_VERSION = '2.4.1'" js/main.js`
+  3. `npm test && npm run test:e2e && node scripts/check-precache.mjs`  (once, by the conductor, after the memory gate)
+  4. scope: only the Output paths changed.
+  5. narrated: keep-docs-current over `217cdbe9..HEAD` inside the phase; the anchored documentation review APPROVE on disk.
+- **Notes/hazards:** No tag, no GitHub release, no pull request and no merge into `main` unless the owner asks (D13, D79).
+
+### Run 11 graph, tags and ports
+
+| Phase | Blocked by | Tags | Builder ports |
+|---|---|---|---|
+| `save-settle` | — | risk:high | 18480/18801 |
+| `token-rule-shared` | `save-settle` | risk:high | 18480/18801 |
+| `server-ui-fixes` | `token-rule-shared` | ui | 18480/18801 |
+| `release-2.4.2` | `server-ui-fixes` | docs | 18480/18801 |
+
+Serial: every phase touches `js/settings.js`, `js/settings-ui.js` or `js/main.js` of the one before. Every reviewer gets its own pair: 18680/19001, 18580/18901, 18782/19103. The conductor uses 18780/19101.
