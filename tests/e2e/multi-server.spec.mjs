@@ -597,6 +597,155 @@ msCase('19 a Save that only lowers the limit, with extra servers and an unread f
   check('a limit-only Save applied the limit before the id read');
 });
 
+// ---------- no interim state of a Save mixes the old server with the new selection (D172, D173) ----------
+
+const PLEX_KIDS_G = ['Captain Crayon', 'The Little Lantern', 'Whisker Wizards'];
+
+/**
+ * The first server is retyped to the Jellyfin mock in the sheet and signed in there with a user name and password; the sheet then holds the
+ * Jellyfin libraries as the new selection (disjoint from the old Plex Kids library, on a server with another id). The Jellyfin id read
+ * (System/Info/Public) is held from Save until `release()` is called, so no wall-clock time decides what the checks see.
+ */
+async function slowRetypeToJellyfin(page, app, { limit, beforeSave } = {}) {
+  let gate = null;
+  let release = () => {};
+  let asked = 0;
+  await page.route(/\/System\/Info\/Public/, async (route) => {
+    if (!gate) return route.continue();
+    asked++;
+    await gate;
+    return route.continue();
+  });
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await page.check('input[name="serverTypePick"][value="jellyfin"]');
+  await page.fill('#jf-address', jfUrl(app));
+  await page.click('#jf-password summary');
+  await page.fill('#jf-user', 'demo');
+  await page.fill('#jf-pass', 'demo-pass');
+  await page.click('#jf-login');
+  await testOk(page);
+  assert.ok((await libraryRows(page)).some((r) => /^Movies/.test(r)), 'the Jellyfin libraries are offered');
+  if (limit) {
+    await page.check('#household-toggle');
+    await page.selectOption('select[name="maxContentRating"]', limit);
+  }
+  if (beforeSave) await beforeSave();
+  gate = new Promise((done) => (release = done));
+  await page.click('#settings-save');
+  await waitUntil('the id read to start', async () => asked >= 1, 8000);
+  return { release: () => release() };
+}
+
+msCase('20 a slow id read at a changed first server: the old selection and the old pin show, nothing of the new selection, and the settled settings show after', {
+  settings: oneServer({ libraryKey: '3', libraryKeys: ['3'], staticRatingKey: '11', staticTitle: 'Pudding Planet' }),
+}, async ({ page, app }) => {
+  await recordDraws(page);
+  // The Save sets a new pin from the new server (an imported file names it), so only the hold keeps the old pin on screen and in the draws.
+  const newPin = { staticRatingKey: `@${JF_ID}/${hex('a', 2)}`, staticTitle: 'Midnight Projector' };
+  const { release } = await slowRetypeToJellyfin(page, app, {
+    limit: 'G',
+    beforeSave: async () => {
+      await page.setInputFiles('#import-file', { name: 'pin.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(newPin)) });
+      await page.waitForFunction(() => /Settings imported/.test(document.getElementById('toast').textContent), null, { timeout: 8000 });
+      assert.equal(await page.textContent('#pinned-title'), 'Midnight Projector', 'the sheet holds the new server\'s pin');
+    },
+  });
+  const during = await stored(page);
+  assert.deepEqual([during.serverType ?? 'plex', during.libraryKeys, during.staticRatingKey, during.staticTitle], ['plex', ['3'], '11', 'Pudding Planet'], 'the early state is the old connection, the old selection and the old pin');
+  assert.equal(during.maxContentRating, 'G', 'the lowered limit applied at once');
+  assert.equal(name(await page.evaluate(() => document.querySelector('.poster-layer.active')?.alt)), 'Pudding Planet', 'the old pin shows, exempt from the lowered limit (D173 2)');
+  const from = await page.evaluate(() => window.__draws.length);
+  const titles = await picks(page, 3);
+  const drawn = await page.evaluate((n) => window.__draws.slice(n), from);
+  assert.ok(drawn.length >= 3 && titles.length === 3, 'draws were asked for during the read, so the checks below are not vacuous');
+  assert.ok([...drawn, ...titles].every((t) => t === 'Pudding Planet'), `only the held pin may be drawn while the id was read: ${drawn.join(', ')}`);
+  release();
+  const settled = await waitUntil('the settled settings', async () => (await stored(page)).serverType === 'jellyfin' && (await stored(page)));
+  assert.ok(settled.libraryKeys.length > 0 && settled.libraryKeys.every((k) => !/^\d+$/.test(k)), `the settled selection is the Jellyfin one: ${settled.libraryKeys}`);
+  assert.equal(settled.staticRatingKey, '', 'the switch cleared the old pin');
+  await posterShown(page);
+  const after = await picks(page, 6);
+  for (const t of after) assert.ok([...JF_WITHIN_PG, ...JF_ABOVE_PG].includes(t) && !PLEX_KIDS.includes(t), `"${t}" is a poster of the settled (Jellyfin) selection`);
+  check('the old selection and pin stayed until the read answered; then the Jellyfin settings showed');
+});
+
+msCase('21 a slow id read at a changed first server: the lowered limit applies at once to the held selection\'s posters, and no poster of the new selection shows', {
+  settings: oneServer({ libraryKey: '3', libraryKeys: ['3'] }),
+}, async ({ page, app }) => {
+  await recordDraws(page);
+  const { release } = await slowRetypeToJellyfin(page, app, { limit: 'G' });
+  const during = await stored(page);
+  assert.deepEqual([during.serverType ?? 'plex', during.libraryKeys, during.maxContentRating], ['plex', ['3'], 'G'], 'the old connection and selection with the new limit');
+  const from = await page.evaluate(() => window.__draws.length);
+  const titles = await picks(page, 8);
+  const drawn = await page.evaluate((n) => window.__draws.slice(n), from);
+  for (const t of drawn) assert.ok(PLEX_KIDS_G.includes(t), `"${t}" was drawn while the read was held: only the held selection's G posters may show`);
+  assert.equal(titles.length, 8);
+  release();
+  await waitUntil('the settled settings', async () => (await stored(page)).serverType === 'jellyfin');
+  check('during the read only G posters of the held Plex selection were drawn; none of the new selection');
+});
+
+msCase('22 a slow id read at a changed first server: a viewer profile in force draws no poster from the new selection', {
+  settings: oneServer({
+    maxContentRating: 'PG',
+    limitSlots: [{ start: '00:00', profile: 'p1' }],
+    profiles: [{ id: 'p1', name: 'Kids', maxContentRating: 'G', limitNowPlaying: true, libraryKeys: ['3'], libraryNames: ['Kids Movies'], genres: [], ratings: [], source: null, weighting: 'off', noRepeatDays: 0, frameId: 'marquee' }],
+  }),
+}, async ({ page, app }) => {
+  await recordDraws(page);
+  // The profile is edited in the sheet against the new server's libraries, so the Save hands in a profile that draws from the new selection.
+  const { release } = await slowRetypeToJellyfin(page, app, {
+    beforeSave: async () => {
+      await page.click('#profile-list li:nth-child(1) .profile-edit');
+      await page.waitForSelector('#profile-banner:not([hidden])');
+      await page.evaluate(() => document.querySelectorAll('#library-list input[type="checkbox"]').forEach((box) => { box.checked = false; }));
+      await page.locator('#library-list li label', { hasText: /^Movies/ }).locator('input').check();
+      await page.click('#profile-done');
+      await page.waitForSelector('#profile-banner', { state: 'hidden' });
+    },
+  });
+  const from = await page.evaluate(() => window.__draws.length);
+  const during = await stored(page);
+  assert.deepEqual([during.serverType ?? 'plex', during.profiles[0].libraryKeys], ['plex', ['3']], 'the early state: the old connection and the profile\'s old selection');
+  const titles = await picks(page, 8);
+  const drawn = await page.evaluate((n) => window.__draws.slice(n), from);
+  for (const t of [...drawn, ...titles]) assert.ok(PLEX_KIDS_G.includes(t), `"${t}" was drawn while the read was held: only the profile's old G posters may show`);
+  release();
+  const settled = await waitUntil('the settled settings', async () => (await stored(page)).serverType === 'jellyfin' && (await stored(page)));
+  assert.ok(settled.profiles[0].libraryKeys.length > 0 && settled.profiles[0].libraryKeys.every((k) => !/^\d+$/.test(k)), `the settled profile draws from the Jellyfin selection: ${settled.profiles[0].libraryKeys}`);
+  check('a profile in force drew only from its old selection during the read, and from the new one after');
+});
+
+msCase('23 a slow id read at a changed first server, saved with an unpin by a display configured only by its pin: no first-run card, no plex.tv request, and the settled settings show after (D176 1)', {
+  settings: oneServer({ libraryKey: '', libraryKeys: [], libraryNames: [], staticRatingKey: '11', staticTitle: 'Pudding Planet' }),
+}, async ({ page, context, app }) => {
+  const plexTv = [];
+  await context.route('https://plex.tv/**', (route) => {
+    plexTv.push(`${route.request().method()} ${route.request().url()}`);
+    return route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: route.request().url().includes('/resources') ? '[]' : JSON.stringify({ id: 1, code: 'STUB', expiresIn: 900, authToken: null }) });
+  });
+  const { release } = await slowRetypeToJellyfin(page, app, { beforeSave: () => page.click('#unpin-btn') });
+  const during = await stored(page);
+  assert.deepEqual([during.serverType ?? 'plex', during.libraryKeys, during.staticRatingKey], ['plex', [], '11'], 'the early state keeps the old connection and the old pin: the unpin waits, as the display would read unconfigured');
+  for (let i = 0; i < 6; i++) {
+    assert.equal(await page.evaluate(() => document.getElementById('firstrun').hidden), true, 'the first-run card is not open while the Save settles');
+    assert.equal(await page.isVisible('#empty'), false, 'no empty card');
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  }
+  assert.deepEqual(plexTv, [], 'no plex.tv request was made during the read');
+  release();
+  const settled = await waitUntil('the settled settings', async () => (await stored(page)).serverType === 'jellyfin' && (await stored(page)));
+  assert.ok(settled.libraryKeys.length > 0 && settled.libraryKeys.every((k) => !/^\d+$/.test(k)), `the settled selection is the Jellyfin one: ${settled.libraryKeys}`);
+  assert.equal(settled.staticRatingKey, '', 'the unpin (and the switch) stands after the settle');
+  await posterShown(page);
+  assert.equal(await page.evaluate(() => document.getElementById('firstrun').hidden), true, 'no first-run card after the settle');
+  assert.deepEqual(plexTv, [], 'plex.tv heard nothing');
+  check('a pin-only display unpinned at a changed first server: no card and no plex.tv request during the read; the Jellyfin settings after');
+});
+
 // ---------- the views ----------
 
 for (const [label, viewport, extra, touch] of [

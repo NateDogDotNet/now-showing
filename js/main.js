@@ -19,7 +19,7 @@ import { createShownStore } from './weighting.js';
 import { isPlausibleClock } from './schedule.js';
 import { belongsTo, posterMatches, selectionKey, selectionOf } from './selection.js';
 import { applyServerText, createSettingsUI, pinSignIn } from './settings-ui.js';
-import { addressOf, fromImport, isConfigured, load, save, serverList, settleServers, STORAGE_KEY, withoutServers } from './settings.js';
+import { addressOf, earlySettings, fromImport, isConfigured, load, save, serverList, settleServers, STORAGE_KEY, withoutServers } from './settings.js';
 import { keyMap, listShortcuts, normalizeKey } from './shortcuts.js';
 import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
@@ -608,11 +608,9 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
     // It runs on every Save that will read a server: one that changes the servers, and one that finds the first server's id unknown among several.
     const willRead = serversKey(prev) !== serversKey(next) || (serverList(prev).length > 1 && !serverList(prev)[0].id);
     if (persist && willRead) {
-      const keep = ['serverType', 'serverUrl', 'plexToken', 'serverUserId', 'serverName', 'serverId', 'serverCarried', 'servers']; // only the connection keys wait; the pin and the library selection do not (D162 5)
-      let early = { ...next, ...Object.fromEntries(keep.map((k) => [k, prev[k]])) };
-      // While the reads run the display must stay configured: the old connection with a selection the sheet cleared (the sign-in was set aside) reads
-      // as unconfigured and would open the first-run card for a server that is about to be replaced. The selection and the pin wait too, then.
-      if (isConfigured(prev) && !isConfigured(early)) early = { ...early, ...Object.fromEntries(['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'ratings', 'source', 'staticRatingKey', 'staticTitle'].map((k) => [k, prev[k]])) };
+      // Only the connection keys wait. When the first server changes, the old selection and the old pin wait with them, except that an unpin applies
+      // at once (D162 5, D165 1, D165 4, D172, D173); earlySettings is the one place that rule is written.
+      const early = earlySettings(prev, next);
       state.settings = save(storage, early);
       enforceOnScreen();
     }

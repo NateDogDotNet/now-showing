@@ -438,6 +438,45 @@ function moveSelection(settings, from, to) {
   return out;
 }
 
+const EARLY_CONNECTION = ['serverType', 'serverUrl', 'plexToken', 'serverUserId', 'serverName', 'serverId', 'serverCarried', 'servers']; // only the connection keys wait for the reads (D162 5)
+const EARLY_SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'ratings', 'source'];
+const EARLY_PIN = ['staticRatingKey', 'staticTitle'];
+const EARLY_PROFILE_SELECTION = ['libraryKeys', 'libraryNames', 'genres', 'ratings', 'source']; // what a viewer profile draws from; its limit and the rest of its bundle do not wait
+const takeFrom = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
+
+/** Is a different server now first (D172 1)? Its type, its address as `addressOf` compares it, or its id (a Remove of the first server) differs from the first server's before the Save. */
+function firstEntryChanged(prev, next) {
+  const [a, b] = [serverList(prev)[0], serverList(next)[0]];
+  return a.type !== b.type || a.url !== b.url || Boolean(a.id && b.id && a.id !== b.id);
+}
+
+/**
+ * The settings shown while a Save reads who answers at a server (D162 5, D172, D173): every setting that is not a connection key applies
+ * at once, the limit first, and the connection keys stay as they were until the reads answer. When the old settings are configured and the
+ * first entry of the server list changes, the old selection (the libraries, genres, ratings and the collection or playlist) waits with the
+ * connection, and so does the old pin, and so does what each viewer profile draws from, so no poster and no pin of the new selection is drawn from the old server (D165 1, 4; D174 1). A Save that unpins
+ * applies the unpin at once (D173 1), except when the display would then read unconfigured (D176 1). The pin keeps its exemption from the household limit (D122 1), so nothing here hides it for the limit.
+ * Nothing is stored here.
+ */
+export function earlySettings(prev, next) {
+  let early = { ...next, ...takeFrom(prev, EARLY_CONNECTION) };
+  if (!isConfigured(prev)) return early; // a first configure holds nothing
+  if (firstEntryChanged(prev, next)) {
+    early = { ...early, ...takeFrom(prev, EARLY_SELECTION), ...(next.staticRatingKey ? takeFrom(prev, EARLY_PIN) : {}) };
+    // A viewer profile in force replaces the selection (R-PROF-1), so each profile keeps the selection it had before the Save (D174 1). Its limit and the
+    // rest of its bundle, and the slots, apply at once (D162 5): a lowered limit must not wait. A profile that did not exist before the Save holds only
+    // the new server's selection, so it is left out until the settle; a slot naming it gives G meanwhile (D120 2) and shows the held household selection.
+    const old = new Map((Array.isArray(prev.profiles) ? prev.profiles : []).map((p) => [p?.id, p]));
+    if (Array.isArray(early.profiles)) early.profiles = early.profiles.filter((p) => old.has(p?.id)).map((p) => ({ ...p, ...takeFrom(old.get(p.id), EARLY_PROFILE_SELECTION) }));
+  }
+  // D176 1, which extends D174 2 to every branch: while the reads run the display must stay configured. The old connection with a selection the sheet
+  // cleared (the sign-in was set aside), or with a pin-only display unpinned in the same Save, reads as unconfigured and would open the first-run card
+  // (and a plex.tv sign-in) for a server that is about to be replaced. The old selection and the old pin wait, then. This is the one place an unpin waits
+  // for the settle (D173 1 stands everywhere else).
+  if (!isConfigured(early)) early = { ...early, ...takeFrom(prev, [...EARLY_SELECTION, ...EARLY_PIN]) };
+  return early;
+}
+
 /** Does the settings object hold any scoped id (the selection, a pin, a profile)? Then it already had more than one server's worth of ids (D162 1, D163 3). */
 function holdsScopedId(s) {
   const keysOf = (o) => [...(Array.isArray(o?.libraryKeys) ? o.libraryKeys : []), o?.libraryKey, o?.source?.key];

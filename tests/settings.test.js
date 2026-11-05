@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, removedServers, sanitize, save, SECRET_KEYS, serverList, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
+import { defaults, earlySettings, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, removedServers, sanitize, save, SECRET_KEYS, serverList, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -918,4 +918,225 @@ test('several servers, a retype to another server saved with a FRESH sign-in: th
   const r = await settleServers(prev, settled({ ...prev, serverUrl: 'http://new:32400', plexToken: 'signed-in-fresh' }), reader({ 'http://new:32400': 'new-id' }).read);
   assert.deepEqual(r.next.libraryKeys, ['@new-id/5'], 'the main selection, ticked in the sheet from the new server, follows it');
   assert.deepEqual(r.next.profiles[0].libraryKeys, ['@jf-id-1/b2'], 'the profile keeps no key of the old first server, and no @new-id/5 was made from it; another server\'s key stays');
+});
+
+// ---- earlySettings: what the display shows while a Save reads who answers at the first server (D162 5, D165 1, D165 4, D172, D173) ----
+
+/** Before the Save: Plex first (the old selection and an old pin of its own), Jellyfin second, the first id recorded. */
+const heldBase = () =>
+  sanitize({
+    ...v240(),
+    serverId: 'plex-id',
+    libraryKey: '1',
+    libraryKeys: ['1', '@jf-id-1/b1'],
+    libraryNames: ['Movies', 'JF Movies'],
+    genres: ['Drama'],
+    ratings: ['PG'],
+    source: { kind: 'collection', key: '77', title: 'Old collection' },
+    staticRatingKey: '42',
+    staticTitle: 'Old pin',
+    maxContentRating: 'PG-13',
+    servers: [JF()],
+  });
+/** What the sheet hands in for a Save: the new selection and pin (ids of the new server), the connection keys as typed. */
+const newPicks = { libraryKey: '5', libraryKeys: ['5'], libraryNames: ['New Movies'], genres: ['Horror'], ratings: ['R'], source: { kind: 'playlist', key: '88', title: 'New list' }, staticRatingKey: '99', staticTitle: 'New pin' };
+const SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'ratings', 'source'];
+const PIN = ['staticRatingKey', 'staticTitle'];
+const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
+const CONNECTION = ['serverType', 'serverUrl', 'plexToken', 'serverUserId', 'serverName', 'serverId', 'serverCarried', 'servers'];
+
+test('early: a first server at another address holds the old selection and the old pin together, and the old connection (D172 1, 2)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400' });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early, SELECTION), pick(prev, SELECTION), 'the old selection, in full');
+  assert.deepEqual(pick(early, PIN), pick(prev, PIN), 'the old pin');
+  assert.deepEqual(pick(early, CONNECTION), pick(prev, CONNECTION), 'the old connection');
+});
+
+test('early: the first server\'s type, or a different server in the first place, holds the same set (D172 1)', () => {
+  const prev = heldBase();
+  const retyped = sanitize({ ...prev, ...newPicks, serverType: 'jellyfin' });
+  const swapped = sanitize({ ...prev, ...newPicks, serverUrl: 'http://jf:8096', serverId: 'jf-id-1', serverType: 'jellyfin', plexToken: 'jf-token', serverCarried: false, servers: [] });
+  for (const [what, next] of [['type', retyped], ['another server first', swapped]]) {
+    const early = earlySettings(prev, next);
+    assert.deepEqual([pick(early, SELECTION), pick(early, PIN)], [pick(prev, SELECTION), pick(prev, PIN)], `${what}: the old selection and pin`);
+  }
+});
+
+test('early: a different server in the first place at the same address and type holds the same set (D172 1)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, ...newPicks, serverId: 'another-id', serverCarried: false });
+  const early = earlySettings(prev, next);
+  assert.deepEqual([pick(early, SELECTION), pick(early, PIN)], [pick(prev, SELECTION), pick(prev, PIN)]);
+});
+
+test('early: an address that addressOf reads as the same (trailing slashes, spaces) holds nothing (D172 1)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: ' http://plex:32400/// ' });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early, [...SELECTION, ...PIN]), pick(next, [...SELECTION, ...PIN]), 'the new selection and pin apply at once');
+});
+
+test('early: a token-only or name-only change, a change to the second or third server only, and an unknown first id hold nothing (D172 1)', () => {
+  const prev = heldBase();
+  const unknownId = sanitize({ ...prev, serverId: '' });
+  const changes = [
+    ['token', sanitize({ ...prev, ...newPicks, plexToken: 'another-token' })],
+    ['name', sanitize({ ...prev, ...newPicks, serverName: 'Renamed' })],
+    ['second server address', sanitize({ ...prev, ...newPicks, servers: [JF({ url: 'http://jf-moved:8096' })] })],
+    ['second server removed', sanitize({ ...prev, ...newPicks, servers: [] })],
+    ['a third server added', sanitize({ ...prev, ...newPicks, servers: [JF(), EM()] })],
+  ];
+  for (const [what, next] of changes) {
+    const early = earlySettings(prev, next);
+    assert.deepEqual(pick(early, [...SELECTION, ...PIN]), pick(next, [...SELECTION, ...PIN]), `${what}: the new selection and pin apply at once`);
+  }
+  const unknownNext = sanitize({ ...unknownId, ...newPicks, servers: [JF(), EM()] });
+  const unknown = earlySettings(unknownId, unknownNext);
+  assert.deepEqual(pick(unknown, [...SELECTION, ...PIN]), pick(unknownNext, [...SELECTION, ...PIN]), 'an unknown first id with no first-entry change: no hold');
+});
+
+test('early: a first configure (the old settings unconfigured) holds nothing (D172 1)', () => {
+  const prev = sanitize({ ...defaults() });
+  assert.equal(isConfigured(prev), false);
+  const next = sanitize({ ...prev, ...newPicks, serverType: 'plex', serverUrl: 'http://new:32400', plexToken: 'fresh' });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early, [...SELECTION, ...PIN]), pick(next, [...SELECTION, ...PIN]), 'the new selection and pin apply at once');
+  assert.deepEqual(pick(early, ['serverUrl', 'plexToken']), pick(prev, ['serverUrl', 'plexToken']), 'the connection still waits for the reads');
+});
+
+test('early: an unpin applies at once even while the selection is held (D173 1)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, ...newPicks, staticRatingKey: '', staticTitle: '', serverUrl: 'http://new:32400' });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early, SELECTION), pick(prev, SELECTION), 'the selection is held');
+  assert.deepEqual(pick(early, PIN), { staticRatingKey: '', staticTitle: '' }, 'the pin is gone at once');
+});
+
+test('early: a Save that keeps the pin holds it, and one that sets a pin where there was none holds none (D173 1)', () => {
+  const prev = heldBase();
+  const kept = earlySettings(prev, sanitize({ ...prev, ...newPicks, staticRatingKey: '42', staticTitle: 'Old pin', serverUrl: 'http://new:32400' }));
+  assert.deepEqual(pick(kept, PIN), pick(prev, PIN), 'the kept pin');
+  const unpinned = sanitize({ ...prev, staticRatingKey: '', staticTitle: '' });
+  const fresh = earlySettings(unpinned, sanitize({ ...unpinned, ...newPicks, serverUrl: 'http://new:32400' }));
+  assert.deepEqual(pick(fresh, PIN), { staticRatingKey: '', staticTitle: '' }, 'a new pin from the new server does not show during the read');
+  assert.deepEqual(pick(fresh, SELECTION), pick(unpinned, SELECTION));
+});
+
+test('early: every other setting, the limit first, applies at once in a held Save (D162 5, D172 3)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400', maxContentRating: 'G', rotateSeconds: 77, showNowPlaying: false });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early, ['maxContentRating', 'rotateSeconds', 'showNowPlaying']), pick(next, ['maxContentRating', 'rotateSeconds', 'showNowPlaying']));
+  assert.equal(early.maxContentRating, 'G');
+});
+
+test('early: a Save that only lowers the limit applies it at once with the selection, pin and connection as they were (D162 5)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, maxContentRating: 'G' });
+  const early = earlySettings(prev, next);
+  assert.equal(early.maxContentRating, 'G');
+  assert.deepEqual(pick(early, [...SELECTION, ...PIN, ...CONNECTION]), pick(prev, [...SELECTION, ...PIN, ...CONNECTION]));
+});
+
+test('early: the display stays configured when a Save cleared the selection and the pin and only a second server changed (the 2.4.1 fallback)', () => {
+  const prev = heldBase();
+  const next = sanitize({ ...prev, libraryKey: '', libraryKeys: [], libraryNames: [], source: null, staticRatingKey: '', staticTitle: '', servers: [JF(), EM()] });
+  const early = earlySettings(prev, next);
+  assert.equal(isConfigured(early), true);
+  assert.deepEqual(pick(early, SELECTION), pick(prev, SELECTION));
+});
+
+// ---- earlySettings and the viewer profiles / rating-schedule slots (D174 1) ----
+
+const kidsProfile = (extra = {}) => ({ id: 'p1', name: 'Kids', maxContentRating: 'G', limitNowPlaying: true, libraryKeys: ['1'], libraryNames: ['Movies'], genres: ['Drama'], ratings: ['G'], source: { kind: 'collection', key: '77', title: 'Old collection' }, weighting: 'off', noRepeatDays: 0, frameId: 'marquee', ...extra });
+const PROFILE_SELECTION = ['libraryKeys', 'libraryNames', 'genres', 'ratings', 'source'];
+const withProfile = () => sanitize({ ...heldBase(), maxContentRating: 'PG', limitSlots: [{ start: '00:00', profile: 'p1' }], profiles: [kidsProfile()] });
+const sheetProfile = (extra = {}) => kidsProfile({ libraryKeys: ['5'], libraryNames: ['New Movies'], genres: ['Horror'], ratings: ['R'], source: { kind: 'playlist', key: '88', title: 'New list' }, ...extra });
+
+test('early: a held Save keeps the old selection of each profile in force, and the profile\'s limit and other settings apply at once (D174 1, D162 5)', () => {
+  const prev = withProfile();
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400', profiles: [sheetProfile({ maxContentRating: 'PG', weighting: 'unwatched', frameId: 'other' })] });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(pick(early.profiles[0], PROFILE_SELECTION), pick(prev.profiles[0], PROFILE_SELECTION), 'the profile draws from the old selection');
+  assert.deepEqual(pick(early.profiles[0], ['id', 'name', 'maxContentRating', 'weighting', 'frameId']), pick(next.profiles[0], ['id', 'name', 'maxContentRating', 'weighting', 'frameId']), 'its limit and the rest of its bundle apply at once');
+});
+
+test('early: a held Save leaves the slots as handed in, so a lowered slot limit applies at once, and a profile made in this Save is not shown (D174 1, D162 5)', () => {
+  const prev = withProfile();
+  const made = sheetProfile({ id: 'p2', name: 'New one' });
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400', limitSlots: [{ start: '00:00', profile: 'p2' }, { start: '20:00', limit: 'G' }], profiles: [sheetProfile(), made] });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(early.limitSlots, next.limitSlots);
+  assert.deepEqual(early.profiles.map((p) => p.id), ['p1'], 'a profile that did not exist before the Save has only the new server\'s selection, so it waits');
+});
+
+test('early: without a first-entry change the profiles apply at once (D174 1)', () => {
+  const prev = withProfile();
+  const next = sanitize({ ...prev, ...newPicks, plexToken: 'another-token', profiles: [sheetProfile(), sheetProfile({ id: 'p2', name: 'New one' })] });
+  const early = earlySettings(prev, next);
+  assert.deepEqual(early.profiles, next.profiles);
+  assert.deepEqual(early.limitSlots, next.limitSlots);
+});
+
+test('early: a first configure holds no profile (D174 1)', () => {
+  const prev = sanitize({ ...defaults() });
+  const next = sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400', plexToken: 'fresh', profiles: [sheetProfile()] });
+  assert.deepEqual(earlySettings(prev, next).profiles, next.profiles);
+});
+
+// ---- the stay-configured rule wins in every branch (D176 1) ----
+
+/** A display configured by its pin alone: a connection, no library, no collection, a pin of its own. */
+const pinOnly = () => sanitize({ ...heldBase(), libraryKey: '', libraryKeys: [], libraryNames: [], genres: [], ratings: [], source: null, profiles: [], limitSlots: [] });
+
+test('early: a pin-only display saved with a first-server change and an unpin is never stored unconfigured; the old pin waits for the settle (D176 1)', () => {
+  const prev = pinOnly();
+  assert.equal(isConfigured(prev), true);
+  const next = sanitize({ ...prev, ...newPicks, staticRatingKey: '', staticTitle: '', serverUrl: 'http://new:32400' });
+  const early = earlySettings(prev, next);
+  assert.equal(isConfigured(early), true, 'the first-run card never opens during the read');
+  assert.deepEqual(pick(early, PIN), pick(prev, PIN), 'the pin is restored for the read');
+  assert.deepEqual(pick(early, SELECTION), pick(prev, SELECTION), 'and the old (empty) selection is held');
+});
+
+test('early: a pin-only display with a first-server change that keeps its pin is configured, and an unpin that leaves a library is applied at once (D176 1, D173 1)', () => {
+  const prev = pinOnly();
+  const kept = earlySettings(prev, sanitize({ ...prev, ...newPicks, serverUrl: 'http://new:32400' }));
+  assert.deepEqual([isConfigured(kept), kept.staticRatingKey], [true, '42']);
+  const held = heldBase();
+  const unpinned = earlySettings(held, sanitize({ ...held, ...newPicks, staticRatingKey: '', staticTitle: '', serverUrl: 'http://new:32400' }));
+  assert.deepEqual(pick(unpinned, PIN), { staticRatingKey: '', staticTitle: '' }, 'the old selection keeps the display configured, so the unpin stands');
+});
+
+test('early: addresses that differ only as addressOf trims them (a trailing slash, surrounding spaces) hold nothing, compared without sanitize (D172 1)', () => {
+  const prev = heldBase();
+  for (const typed of ['http://plex:32400/', '  http://plex:32400  ', ' http://plex:32400// ']) {
+    const next = { ...prev, ...newPicks, serverUrl: typed };
+    const early = earlySettings(prev, next);
+    assert.deepEqual(pick(early, [...SELECTION, ...PIN]), pick(next, [...SELECTION, ...PIN]), `"${typed}": the new selection and pin apply at once`);
+  }
+});
+
+test('early: the stay-configured restore brings back only the old selection and pin, and leaves the limit, the slots and the profiles as the Save handed them in (D176 1, D162 5)', () => {
+  const prev = sanitize({ ...pinOnly(), maxContentRating: 'PG-13', limitSlots: [{ start: '08:00', limit: 'PG' }, { start: '20:00', profile: 'p1' }], profiles: [kidsProfile({ maxContentRating: 'PG' })] });
+  assert.equal(isConfigured(prev), true);
+  const next = sanitize({
+    ...prev,
+    ...newPicks,
+    staticRatingKey: '',
+    staticTitle: '',
+    serverUrl: 'http://new:32400',
+    maxContentRating: 'G',
+    limitSlots: [{ start: '09:00', limit: 'G' }, { start: '21:00', profile: 'p1' }],
+    profiles: [sheetProfile({ maxContentRating: 'G', weighting: 'unwatched' })],
+  });
+  const early = earlySettings(prev, next);
+  assert.equal(isConfigured(early), true, 'the restore ran');
+  assert.deepEqual([pick(early, PIN), pick(early, SELECTION)], [pick(prev, PIN), pick(prev, SELECTION)], 'the old pin and selection came back');
+  assert.equal(early.maxContentRating, 'G', 'the lowered limit applies at once');
+  assert.deepEqual(early.limitSlots, next.limitSlots, 'the slots are the Save\'s');
+  assert.deepEqual(early.profiles.map((p) => [p.id, p.maxContentRating, p.weighting]), [['p1', 'G', 'unwatched']], 'the profile\'s limit and bundle are the Save\'s');
+  assert.deepEqual(pick(early.profiles[0], PROFILE_SELECTION), pick(prev.profiles[0], PROFILE_SELECTION), 'a profile still draws from its old selection');
 });
