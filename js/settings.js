@@ -497,19 +497,23 @@ function holdsScopedId(s) {
  *    of one server (D163 2, Q5); the sheet never does.
  *  - `needsAnswer`: Save. It records the id read at `url` whatever the token and the type, so it is read even when the verdict does not need it.
  * Returns `{ go, same, answered }`: `same` is whether the server at `url` is `basis`'s, `answered` the id read there (null when nothing answered,
- * undefined when nothing was read).
+ * undefined when nothing was read). A verdict that needs no read is returned as it is, not as a promise; one that needs a read comes back as a
+ * promise of it. The sheet relies on that: its Test connection goes on in the same turn when nothing is to be read, as it did before the rule was
+ * shared, and the redraw it makes does not land after the scroll that Open settings in js/main.js makes right after the sheet opens.
  */
-export async function oldTokenMayGo({ basis, type, url, token, keepsTypeChange = false, needsAnswer = false }, readId) {
+export function oldTokenMayGo({ basis, type, url, token, keepsTypeChange = false, needsAnswer = false }, readId) {
   const sameType = type === basis.type;
   if (!needsAnswer && sameType && addressOf(url) === addressOf(basis.url)) return { go: true, same: true, answered: undefined };
   const holds = Boolean(token) && token === basis.token;
   if (!holds && !needsAnswer) return { go: true, same: false, answered: undefined };
-  const [answered, recorded] = await Promise.all([
-    needsAnswer || sameType ? readId(type, url) : undefined,
-    sameType ? basis.id || readId(type, basis.url) : null,
-  ]);
-  const same = Boolean(recorded) && answered === recorded; // `recorded` is null after a change of type: always another server (D157 2)
-  return { go: same || !holds || (!sameType && keepsTypeChange), same, answered };
+  const verdict = (answered, recorded) => {
+    const same = Boolean(recorded) && answered === recorded; // `recorded` is null after a change of type: always another server (D157 2)
+    return { go: same || !holds || (!sameType && keepsTypeChange), same, answered };
+  };
+  const readsNew = needsAnswer || sameType;
+  const readsOld = sameType && !basis.id;
+  if (!readsNew && !readsOld) return verdict(undefined, sameType ? basis.id : null);
+  return Promise.all([readsNew ? readId(type, url) : undefined, sameType ? basis.id || readId(type, basis.url) : null]).then(([answered, recorded]) => verdict(answered, recorded));
 }
 
 /**

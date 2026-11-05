@@ -1056,6 +1056,24 @@ test('the token rule: what the caller asks for changes what is read and what a c
   assert.deepEqual([elsewhere.verdict.go, elsewhere.verdict.same], [false, false]);
 });
 
+test('the token rule: a verdict that needs no read is returned at once, one that needs a read as a promise (Open settings scrolls the sheet right after it opens)', () => {
+  // The sheet's Test connection starts when Settings opens. If this answered a turn later, its redraw would land after the scroll that
+  // Open settings makes in js/main.js and move the server section out of place (the preset spec, "server section at the top").
+  const basis = { type: 'plex', url: 'http://plex:32400', token: 'plex-token', id: 'plex-id' };
+  const never = () => assert.fail('nothing is read in these cases');
+  const at = (input, readId = never) => oldTokenMayGo({ basis, token: 'plex-token', ...input }, readId);
+  const same = at({ type: 'plex', url: 'http://plex:32400/' });
+  assert.deepEqual([same instanceof Promise, same.go], [false, true], 'the same address');
+  const pasted = at({ type: 'plex', url: 'http://new:32400', token: 'pasted' });
+  assert.deepEqual([pasted instanceof Promise, pasted.go], [false, true], 'a token that is not the basis\'s');
+  const retyped = at({ type: 'jellyfin', url: 'http://jf:8096' });
+  assert.deepEqual([retyped instanceof Promise, retyped.go], [false, false], 'a change of type reads nothing');
+  const recorded = at({ type: 'plex', url: 'http://new:32400' }, async () => 'plex-id');
+  assert.equal(recorded instanceof Promise, true, 'another address of the same type is read');
+  const save = at({ type: 'plex', url: 'http://plex:32400', needsAnswer: true, keepsTypeChange: false }, async () => 'plex-id');
+  assert.equal(save instanceof Promise, true, 'Save always reads');
+});
+
 test('several servers, a retype to another server: the main selection follows the new server only with a fresh sign-in; with the old token the old first server\'s keys leave the main selection too (D163 1)', async () => {
   const prev = sanitize({ ...v240(), serverId: 'plex-id', libraryKeys: ['5'], libraryKey: '5', libraryNames: ['Kids'], servers: [JF()] });
   const answers = { 'http://new:32400': 'new-id' };

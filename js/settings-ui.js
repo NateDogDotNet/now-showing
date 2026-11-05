@@ -969,7 +969,10 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     // there is read without it and found to be the same one (D157 3).
     const basis = promoted || (original && { type: original.serverType || 'plex', url: original.serverUrl, token: original.plexToken, id: original.serverId });
     if (!basis) return true;
-    if ((await oldTokenMayGo({ basis, type, url: s.serverUrl, token: s.plexToken }, readId)).go) return true;
+    // A verdict that needs no read comes back at once: awaiting it anyway would put Test connection one turn later than it ran before the rule
+    // was shared, and the redraw it makes would land after the scroll that Open settings in js/main.js makes as the sheet opens.
+    const verdict = oldTokenMayGo({ basis, type, url: s.serverUrl, token: s.plexToken }, readId);
+    if ((verdict instanceof Promise ? await verdict : verdict).go) return true;
     field('plexToken').value = '';
     field('serverUserId').value = '';
     // With several servers, or a first server that is not the carried one, the library ticked for the server whose sign-in was set aside and its
