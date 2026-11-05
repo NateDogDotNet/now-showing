@@ -1526,7 +1526,7 @@ Facts this section stands on (invocation probes, 2026-11-05; `.orchestrator/arti
   1. `npm test` (a table: `addressOf(addressOf(x)) === addressOf(x)` for `"x /"`, `"x/ "`, `"x//"`, `"  x  "`, `"http://h:1/ /"`; the rows at `tests/settings.test.js:985-995` state the new output).
   2. `node tests/e2e/run.mjs multi-server preset status followups jellyfin emby` (two named servers, both down: the pill and the card name the same servers in the same words; two named servers with a limit that hides every poster: the limited empty card names them the same way; two servers, Open settings at 844x390 and at 390x844 with rotation 90: the focused Remove's bounding rect lies inside the sheet body's visible rect, and `document.elementFromPoint` at its centre is the button).
   3. scope: only the Output paths changed.
-- **Notes/hazards:** the pill rule takes the card's own helper; it is not a second copy of the naming rule. Duplicate names follow the card's existing rule.
+- **Notes/hazards:** the card names a server by `nameOf` (`js/sources/index.js:156`, a closure: `entry.name || source.label`); `js/main.js` already holds the same rule as `serverNameOf` (`:539`). The pill and the limited empty card use `serverNameOf` over every server, joined with `joinNames`; a name two servers share is said once. No third copy of the rule (D182 1).
 
 ### 67. `live-preview` — A live change previews only the live values
 - **Goal:** changing a live control in Settings previews that control's live values over the saved settings; an unsaved non-live value (Cross-fade, the limit, slots, profiles, the selection, the pin, kiosk) never reaches the display before Save (D181 2, reversing D138 1).

@@ -1156,3 +1156,8 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   8. **Notice:** a "What's new in 2.4.3" notice names Play now.
   9. **Pill wording:** the status pill and the limited empty card name servers by the all-down card's rule, through the card's own helper.
   10. **Run:** AFK on branch `2.4.3` from `main` 984cd0a0; every later question answers itself with these defaults under D44; a pull request, a merge into `main`, a tag, a GitHub release, a force-push and deleting unique work still wait for Nathan's own words (D13, D79). The run-11 trail moved to `/home/nathan/now-showing-run11-trail/`.
+
+## Conductor ruling — 2026-11-05 (run 12, `followup-fixes` pre-flight; under D44, D181 10): D182
+
+- **D182 What the pre-flight of `followup-fixes` found.**
+  1. **The card's helper is a closure (amends D181 9).** The all-down card names a server with `nameOf` inside `createSources` (`js/sources/index.js:156`: `entry.name || source.label`), which nothing outside can call. `js/main.js` already holds the same rule as `serverNameOf` (`:539`). The status pill and the limited empty card use `serverNameOf` over every server, joined with `joinNames`; a name two servers share is said once. `js/sources/index.js` stays out of the Output.
