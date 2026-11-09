@@ -165,6 +165,19 @@ Still ahead: for a later 2.4.x run (D134 1), Play now, the movie-night countdown
 - **Optional:** "Validate on a Raspberry Pi", whenever a Pi is at hand (D79), and the Jellyfin and Emby rows (sections I and J of `docs/validation/real-server-extended.md`) and the multiple-servers rows (section K) on real servers.
 - **Not decided:** whether 2.4.1 or 2.4.2 is tagged or released. Both were merged to `main` (D170, D180), as 2.4.0 was (D155).
 
+### Bug: the idle cursor does not hide on a real kiosk (found 2026-11-09)
+This is the first report from a real kiosk. The display `marquee` is an Orange Pi Zero 2W with DietPi (Debian 13), Chromium 156 under bare X (`startx`, no window manager), a portrait screen rotated by `xrandr`, and a 2.4 GHz wireless mouse receiver.
+
+- **What happened:** with `hideCursor` on (the default), the mouse pointer stayed on the poster after the controls hid. The `body.idle.hide-cursor` CSS rule in `css/app.css` did not remove it.
+- **Not verified, two likely causes:**
+  - Chromium on Linux often does not redraw the cursor after a CSS `cursor` change until the next pointer event. When the mouse is still, that event never comes.
+  - The controls stay shown while the pointer rests over them (D96), so `body` may never get the `idle` class.
+- **Workaround on the device:** `unclutter-xfixes` in the X session: `unclutter --timeout 4 --jitter 2 --ignore-scrolling --start-hidden &`. The pointer hides after 4 s without movement and comes back when the mouse moves. Nathan confirmed it works.
+- **To do:**
+  1. Find the real cause on a Pi or a similar board. Open Chromium with `--remote-debugging-port`, check whether `body` gets `idle`, and check whether the cursor changes without a pointer move.
+  2. Fix the app if a fix is possible. If no browser-side fix works, document `unclutter` as a required kiosk package in "Raspberry Pi setup" and "Kiosk" in the README.
+- **Lesson:** CSS alone cannot be relied on to hide the cursor on a kiosk. The kiosk setup needs an OS-level pointer hider, and the app's CSS hiding is a second layer.
+
 ### Gap fill inside the frame: the deferred styles
 Still deferred from 2.2 (D88), and not part of the next steps above. The Gap fill setting ships with **Off**, **Dimmed blurred poster** and **Colour matte**. D67 specifies more choices for the same gap (when the poster does not match the frame window's shape: "Fit inside window", or a poster scaled or offset smaller than the window):
 
