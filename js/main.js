@@ -7,8 +7,9 @@ import { createEngine } from './engine.js';
 import { createHelper } from './helper.js';
 import { cornerZone, createHold, HOLD_MS, inZone, REVEAL_MS, shouldResetPin } from './kiosk.js';
 import { createPinGate } from './pin-gate.js';
-import { createSource, createSources, needsSources, readServerId, serverTypeOf, signInFlow } from './sources/index.js';
+import { createSource, createSources, needsSources, readPlayers, readServerId, serverTypeOf, signInFlow } from './sources/index.js';
 import { createPosterCache } from './poster-cache.js';
+import { createChooser, createPlayNow, onBothLists, showsButton } from './play-now.js';
 import { createPosterPin } from './poster-pin.js';
 import { allows } from './ratings.js';
 import { createReload, takeCarriedPlayback } from './reload.js';
@@ -92,6 +93,7 @@ function rebuildClient() {
     sourceError = err;
     log.error(err.message);
   }
+  playNow.cancel(); // a Play now open for the old source ends: what is still on its way is ignored, and the poster's server may be another now
   engine = client
     ? createEngine({
         client,
@@ -180,6 +182,7 @@ function blockPoster() {
   display.currentPoster = null;
   display.setTitle(null);
   display.setNowPlaying(null);
+  syncPlayNow();
 }
 
 /** Whatever is on screen is checked against the limit in force now: a poster that is not allowed comes off at once, a fading one is cut. */
@@ -236,6 +239,7 @@ async function showPoster(poster, image) {
   outgoingPoster = outgoing;
   cutOutgoing(); // the limit may have been tightened during the decode, with the old poster now fading out
   document.body.classList.remove('poster-blocked');
+  syncPlayNow();
   return true;
 }
 
@@ -707,6 +711,7 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   }
   updateWakeLock();
   updatePinButton();
+  syncPlayNow(); // the allowed devices may have changed
   if (state.settings.deviceHelper && !prev.deviceHelper) tv.probeHelper();
   if (!state.settings.deviceHelper && prev.deviceHelper) tv.releaseTv();
   if (prev.dailyReloadTime !== state.settings.dailyReloadTime) reload.rearm(); // a new time is not "passing" until it does
@@ -814,6 +819,115 @@ const settingsUI = createSettingsUI({
 // A blocked poster is not on screen: it cannot be pinned.
 const posterPin = createPosterPin({ getSettings: () => state.settings, getCurrent: () => (display.currentPoster ? engine?.current : null), applySettings });
 
+// ---------- Play now (js/play-now.js, R-PLAY-1, D191) ----------
+
+/** The server entry a poster belongs to (its scoped id says which), or null. */
+const serverOfPoster = (poster) => serverList(state.settings).find((entry) => belongsTo(poster.ratingKey, entry)) ?? null;
+/** The allowed devices as they are stored now (the one list every decision of Play now reads). */
+const storedAllowed = () => load(storage).settings.allowedPlayers;
+/** The limit in force now, resolved from the settings as they are stored now (household, time slot, profile): what the send checks, so a limit saved from another page counts (D192 2). */
+const storedLimit = () => resolveSettings(load(storage).settings, new Date()).maxContentRating;
+
+// What Play now says while a dialog may cover the page (D193 4, D194 2, 3). The line that says a Play now was stopped, and the answer of a request that reached the
+// server, are held while a dialog is open and shown when the last one closes. The stopped line yields to any notice that is up then (and is dropped, not queued); the
+// answer does not: its time on screen starts when it is shown.
+let heldStopped = null;
+let heldAnswer = null;
+const dialogUp = () => document.querySelector('dialog[open]') !== null;
+const noticeUp = () => !$('toast').hidden;
+function tellPlayNow(text, options) {
+  if (options.later) {
+    if (dialogUp()) heldStopped = { text, ms: options.ms };
+    else toast(text, options); // no dialog covers the page: a rebuilt connection (the notice that offered the fix has closed itself by then)
+    return;
+  }
+  if (options.reached && dialogUp()) {
+    heldAnswer = { text, ms: options.ms };
+    if (options.replaces && $('toast').textContent === options.replaces) $('toast').hidden = true; // the wait's words are not left up behind the dialog
+    return;
+  }
+  toast(text, options);
+}
+
+const playChooser = createChooser({ dialog: $('play-now'), onClosed: () => focusPlayNow() });
+const playNow = createPlayNow({
+  getPoster: () => display.currentPoster,
+  serverTypeOf: (poster) => serverOfPoster(poster)?.type ?? '',
+  serverName: (poster) => serverNameOf(serverOfPoster(poster)), // only asked for a poster that passed the press check, so its server is in the list
+  nameOfSlot: (slot) => (serverList(state.settings)[slot] ? serverNameOf(serverList(state.settings)[slot]) : ''),
+  getLimit: limitNow,
+  getStoredLimit: storedLimit,
+  getAllowed: storedAllowed,
+  getPageAllowed: () => state.settings.allowedPlayers,
+  requestPin: pinGate.requestPin,
+  cancelPin: () => pinGate.prompt.cancelVerify(),
+  readPlayers: () => readPlayers(state.settings, { clientId: clientIdValue }),
+  savedPosition: (poster) => client.savedPosition({ id: poster.ratingKey, key: poster.playKey }),
+  prepare: (poster) => client.machineIdentifier({ id: poster.ratingKey }),
+  play: ({ poster, target, offset, machineIdentifier }) => client.play({ id: poster.ratingKey, key: poster.playKey, target, offset, machineIdentifier }),
+  hasSource: () => client !== null,
+  otherDialogOpen: () => document.querySelector('dialog[open]') !== null,
+  choose: playChooser.open,
+  closeChoice: playChooser.close,
+  focusBack: () => focusPlayNow(),
+  dropStopped: () => (heldStopped = null),
+  say: (text, options = {}) => tellPlayNow(text, options),
+  unsay: (text) => {
+    if (!$('toast').hidden && $('toast').textContent === text) $('toast').hidden = true;
+  },
+  onChange: () => syncPlayNow(),
+});
+
+// One dialog at a time (D192 5): a dialog that opens while a Play now is open ends it (the PIN prompt that Play now itself asked for is no other dialog). The line that says
+// it was stopped is held while a dialog covers the page and shown when the last one closes (D193 4).
+new MutationObserver((records) => {
+  for (const { target } of records) {
+    if (target.id === 'play-now') continue;
+    if (target.open) {
+      if (!(target.id === 'pin-dialog' && playNow.awaitingPin)) playNow.cancel();
+    } else if (heldStopped || heldAnswer) {
+      // One turn later, so a dialog that opens at once after this one (a PIN prompt, then the sheet it asked for) still covers the page: the line waits for the last.
+      setTimeout(() => {
+        if (dialogUp()) return;
+        if (heldAnswer) toast(heldAnswer.text, { ms: heldAnswer.ms });
+        else if (heldStopped && !noticeUp()) toast(heldStopped.text, { ms: heldStopped.ms });
+        heldAnswer = null;
+        heldStopped = null;
+      }, 0);
+    }
+  }
+}).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
+
+const playNowButton = () => document.querySelector('#controls [data-action="playnow"]');
+
+/**
+ * The Play now button: in the row only for a movie or an episode from a Plex server while a device is allowed (a copy of the template of index.html, put
+ * before Rotate; otherwise it is not in the row at all, so the row is the seven buttons it always was), named for the title, and waiting while a flow is open.
+ */
+function syncPlayNow() {
+  const poster = display.currentPoster;
+  const shown = showsButton({ poster, serverType: poster ? (serverOfPoster(poster)?.type ?? '') : '', allowed: onBothLists(storedAllowed(), state.settings.allowedPlayers) });
+  let btn = playNowButton();
+  if (!shown) {
+    // The button that has the focus goes: the focus moves to Pin, the button before it, so it never falls out of the row.
+    if (btn && document.activeElement === btn) document.querySelector('#controls [data-action="pin"]').focus({ preventScroll: true });
+    btn?.remove();
+    return;
+  }
+  if (!btn) {
+    btn = $('playnow-template').content.firstElementChild.cloneNode(true);
+    document.querySelector('#controls [data-action="rotate"]').before(btn);
+  }
+  btn.setAttribute('aria-label', `Play "${poster.title}" now`);
+  if (playNow.busy) btn.setAttribute('aria-disabled', 'true');
+  else btn.removeAttribute('aria-disabled');
+}
+
+/** Focus goes back to the Play now button when its dialog or its PIN prompt closes, and to Pin, the button before it, when the button has left the row. */
+function focusPlayNow() {
+  (playNowButton() ?? document.querySelector('#controls [data-action="pin"]')).focus({ preventScroll: true });
+}
+
 function rotate() {
   applySettings({ ...state.settings, rotation: (state.settings.rotation + 90) % 360 });
 }
@@ -908,6 +1022,7 @@ const actions = {
   refresh: () => (engine ? tick({ force: true, notify: true }) : requestSettings()),
   pause: () => setPaused(!state.paused),
   pin: posterPin.togglePin,
+  playnow: () => playNow.press(),
   rotate,
   fullscreen: toggleFullscreen,
   shortcuts: openShortcuts,

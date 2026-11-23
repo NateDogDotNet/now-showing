@@ -24,6 +24,7 @@ const SHELL = [
   'js/layout.js',
   'js/limit-schedule.js',
   'js/pin-gate.js',
+  'js/play-now.js',
   'js/position.js',
   'js/poster-cache.js',
   'js/poster-pin.js',

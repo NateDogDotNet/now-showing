@@ -44,7 +44,8 @@ export function xmlToContainer(doc) {
   return container;
 }
 
-async function request(url, { method = 'GET', timeoutMs = 10000, fetchImpl = fetch } = {}) {
+/** `ignoreBody`: only whether the server accepted the request matters (Play now's command: the answer is `<Response code="200" status="OK"/>`, which says nothing more). */
+async function request(url, { method = 'GET', timeoutMs = 10000, fetchImpl = fetch, ignoreBody = false } = {}) {
   let res;
   try {
     res = await fetchImpl(url, { method, headers: { Accept: 'application/json' }, signal: timeoutSignal(timeoutMs) });
@@ -58,6 +59,7 @@ async function request(url, { method = 'GET', timeoutMs = 10000, fetchImpl = fet
     throw new SourceError('Plex rejected the token (unauthorised).', { status: res.status, kind: 'auth' });
   }
   if (!res.ok) throw new SourceError(`Plex returned HTTP ${res.status}.`, { status: res.status, kind: 'http' });
+  if (ignoreBody) return {};
 
   const text = await res.text();
   if (!text.trim()) return {};
@@ -110,6 +112,9 @@ export function toPoster(m, source) {
   const viewCount = countOf(m.viewCount);
   const audienceRating = ratingOf(m.audienceRating);
   const rating = ratingOf(m.rating);
+  // What Play now needs (R-PLAY-1, D191): the kind of item and its OWN key (an episode's ratingKey above is its series'). Left off when the server sent no
+  // type or no key, so such a poster has no Play now and the shape every other reader sees is unchanged.
+  const playable = typeof m.type === 'string' && m.type !== '' && m.ratingKey !== undefined && m.ratingKey !== null ? { kind: m.type, playKey: String(m.ratingKey) } : {};
   return {
     ratingKey: String(isEpisode ? m.grandparentRatingKey || m.ratingKey : m.ratingKey),
     title: isEpisode ? m.grandparentTitle || m.title : m.title,
@@ -126,6 +131,7 @@ export function toPoster(m, source) {
     ...(viewCount ? { viewCount } : {}),
     ...(audienceRating !== null ? { audienceRating } : {}),
     ...(rating !== null ? { rating } : {}),
+    ...playable,
   };
 }
 
@@ -145,19 +151,86 @@ function genresOf(m) {
 
 const yearOf = (y) => (y ? String(y) : '');
 
+let commandId = 0; // the number the next play command carries (the companion call asks for one that counts up)
+
 export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a) => fetch(...a) }) {
   const auth = { 'X-Plex-Token': token, 'X-Plex-Client-Identifier': clientId, 'X-Plex-Product': PRODUCT };
   const get = (path, params = {}, opts = {}) => request(buildUrl(serverUrl, path, { ...params, ...auth }), { ...opts, fetchImpl });
+  const identity = async () => {
+    const c = await get('/', {}, { timeoutMs: 8000 });
+    return { name: c.friendlyName || '', version: c.version || '', machineIdentifier: c.machineIdentifier || '' };
+  };
 
-  return {
+  /**
+   * The saved position of one library item, in milliseconds (0 when it has none): the `viewOffset` of `/library/metadata/<key>` (R-PLAY-1, D191 9).
+   * `key` is the item's own key, the server's (`id`, the poster's scoped id, is for a source over several servers and is not read here). It throws a SourceError when the server does not answer, refuses the sign-in or no longer holds the item.
+   */
+  const savedPosition = async ({ key }) => {
+    const c = await get(`/library/metadata/${encodeURIComponent(key)}`);
+    const m = (c.Metadata || [])[0];
+    if (!m) throw new SourceError('That library item no longer exists.', { kind: 'http', status: 404 });
+    return toMs(m.viewOffset);
+  };
+
+  /**
+   * The server's own identifier, which the play command carries (`GET /`, an error of kind 'parse' when the server does not say who it is). Read by the caller before
+   * it makes its last check and calls `play`.
+   */
+  const machineIdentifier = async () => {
+    const { machineIdentifier: id } = await identity();
+    if (!id) throw new SourceError('The server did not say who it is.', { kind: 'parse' });
+    return id;
+  };
+
+  /**
+   * Asks THIS server to play an item on a player (R-PLAY-1, D181 3, D191 8): `GET /player/playback/playMedia`, the call the server forwards to the
+   * player named by `target`, the player's client identifier. The shape is the community's description of the companion call, not Plex's own
+   * documentation, and none of it is confirmed against a real server (verify): the item's `key` (`/library/metadata/<key>`), `offset` in milliseconds,
+   * the server's own `machineIdentifier` (read by `machineIdentifier()` BEFORE the caller's last check, so nothing is awaited between that check and this
+   * request: `play` starts the request in the same turn it is called) and its `address`, `port` and `protocol` as the player is to reach it, a
+   * `commandID`, and the target as the `X-Plex-Target-Client-Identifier` parameter (a query parameter keeps the request CORS-simple; a header is the
+   * documented alternative, (verify)). It goes to this server's own address with this server's sign-in, as every request to it does, and carries no
+   * token for the player: the one `X-Plex-Token` in it is the server's. A player's own address is never requested.
+   * `key` is the item's own key, `target` the client identifier of an allowed player and `machineIdentifier` this server's own; all three are required (`id`, the poster's scoped id, is for a
+   * source over several servers and is not read here).
+   */
+  const play = async ({ key, offset = 0, target, machineIdentifier }) => {
+    if (!key || !target || !machineIdentifier) throw new SourceError('Play now needs an item, a player and the server\'s identifier.', { kind: 'config' });
+    let where;
+    try {
+      where = new URL(serverUrl);
+    } catch {
+      throw new SourceError('The server address is not usable.', { kind: 'config' });
+    }
+    const protocol = where.protocol.replace(':', '');
+    await get(
+      '/player/playback/playMedia',
+      {
+        providerIdentifier: 'com.plexapp.plugins.library',
+        machineIdentifier,
+        protocol,
+        address: where.hostname,
+        port: where.port || (protocol === 'https' ? 443 : 80),
+        offset: Math.max(0, Math.round(Number(offset) || 0)),
+        key: `/library/metadata/${key}`,
+        commandID: ++commandId,
+        'X-Plex-Target-Client-Identifier': target,
+      },
+      { timeoutMs: 15000, ignoreBody: true },
+    );
+  };
+
+  const client = {
+    // Play now's three members (R-PLAY-1, D191, D192 4) belong to the Plex adapter alone: they are in PLEX_ONLY_MEMBERS (js/sources/index.js), not in the common list.
+    savedPosition,
+    machineIdentifier,
+    play,
+
     /** The server's name as the user reads it: every sentence that names the server uses this. */
     label: 'Plex',
 
     /** Server identity; succeeds only when the URL and token are good. */
-    async identity() {
-      const c = await get('/', {}, { timeoutMs: 8000 });
-      return { name: c.friendlyName || '', version: c.version || '', machineIdentifier: c.machineIdentifier || '' };
-    },
+    identity,
 
     /**
      * Who answers at this address, WITHOUT sending the token (D157 3, D160 1): `GET /identity`, which a Plex Media Server serves with no
@@ -289,6 +362,7 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
       });
     },
   };
+  return client;
 }
 
 // ---- plex.tv sign-in (PIN / plex.tv/link flow) and server discovery ----

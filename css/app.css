@@ -823,6 +823,23 @@ body.positioning.dragging.idle.hide-cursor #app * { cursor: grabbing !important;
   text-align: center;
 }
 
+/* ---------- Play now dialog (R-PLAY-1) ---------- */
+
+/* Centred in the viewer's frame like the PIN dialog (it shares .pin-sheet, so it carries the UI rotation too, D2); a long list scrolls inside it, never the page. */
+.play-sheet { width: min(420px, var(--vw)); }
+.play-sheet .pin-box { text-align: left; }
+.play-sheet .play-lead { margin: 8px 0 0; overflow-wrap: anywhere; }
+.play-sheet #play-now-note { margin: 8px 0 0; overflow-wrap: anywhere; }
+.play-sheet .play-start { margin: 12px 0 0; }
+.play-sheet .play-start .seg-opt span { white-space: normal; }
+.play-devices { margin: 12px 0; }
+.play-device { width: 100%; justify-content: center; white-space: normal; overflow-wrap: anywhere; }
+.play-device:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.play-device[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.play-devices .player-row { display: block; }
+.play-devices .player-state { margin: 6px 0 0; overflow-wrap: anywhere; }
+.controls button[aria-disabled="true"] { opacity: 0.5; }
+
 #add-status:empty { display: none; } /* no line, no space, while there is nothing to say (a one-server household sees no gap) */
 /* The household's servers (R-SRC-4): one row each, the same panel language as the "Connected to" card. */
 .server-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }

@@ -27,6 +27,7 @@
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5-12-7.5Z"/></symbol>
     <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"/><path d="M21 3v5h-5"/><rect x="8" y="10" width="8" height="10" rx="1"/></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6Z"/></symbol>
+    <symbol id="i-playnow" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M10 7.5v5l4.5-2.5-4.5-2.5ZM8 20h8M12 16v4"/></symbol>
     <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
   </svg>
 
@@ -104,6 +105,8 @@
     <button type="button" data-action="pin" aria-label="Pin this poster" aria-pressed="false"><svg><use href="#i-pin"/></svg><span class="label" aria-hidden="true">Pin</span></button>
     <button type="button" data-action="rotate" aria-label="Rotate display"><svg><use href="#i-rotate"/></svg><span class="label" aria-hidden="true">Rotate</span></button>
     <button type="button" data-action="fullscreen" aria-label="Full screen"><svg><use href="#i-fullscreen"/></svg><span class="label" aria-hidden="true">Full screen</span></button>
+    <!-- The Play now button (R-PLAY-1, D191) is in the row only while it may be used: js/main.js puts a copy of this one before Rotate and takes it out again. -->
+    <template id="playnow-template"><button type="button" data-action="playnow" aria-label="Play now"><svg><use href="#i-playnow"/></svg><span class="label" aria-hidden="true">Play now</span></button></template>
   </nav>
 
   <!-- Position mode (R-SET-5): the Settings sheet steps aside for this non-modal bar, so the poster can be dragged. -->
@@ -576,6 +579,24 @@
       <h2 id="shortcuts-title">Keyboard shortcuts</h2>
       <dl id="shortcuts-list" class="shortcuts-list"></dl>
       <button type="button" class="btn" id="shortcuts-close">Close</button>
+    </div>
+  </dialog>
+
+  <!-- Play now (R-PLAY-1, D191): which allowed device, and where to start. Opened by js/play-now.js after the PIN, when it is not one device that can be picked and nothing saved. -->
+  <dialog id="play-now" class="sheet pin-sheet play-sheet" aria-labelledby="play-now-title" aria-describedby="play-now-lead">
+    <div class="pin-box">
+      <h2 id="play-now-title">Play now</h2>
+      <p id="play-now-lead" class="play-lead"></p>
+      <p id="play-now-note" class="muted small" role="status" hidden></p>
+      <fieldset id="play-now-start" class="play-start" hidden>
+        <legend>Where to start</legend>
+        <div class="seg">
+          <label class="seg-opt"><input type="radio" id="play-now-resume-radio" name="playStart" value="resume" checked /><span id="play-now-resume-text"></span></label>
+          <label class="seg-opt"><input type="radio" name="playStart" value="start" /><span>Play from the start</span></label>
+        </div>
+      </fieldset>
+      <ul id="play-now-devices" class="player-list play-devices" aria-label="Allowed devices"></ul>
+      <button type="button" class="btn" id="play-now-cancel">Cancel</button>
     </div>
   </dialog>
 

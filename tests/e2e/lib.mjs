@@ -170,7 +170,8 @@ async function startDedicated(serveArgs) {
   throw lastErr;
 }
 
-function makeMock(mockPort) {
+/** The control calls of the mock Plex on `mockPort` (a spec that starts a second mock of its own makes one for it too). */
+export function makeMock(mockPort) {
   const base = `http://127.0.0.1:${mockPort}/__mock/`;
   const call = async (method, action, params = {}) => {
     const q = new URLSearchParams(params).toString();
@@ -192,6 +193,10 @@ function makeMock(mockPort) {
     },
     plexTvLog: async () => (await call('GET', 'plextv-log')).requests,
     plexTvReset: () => call('POST', 'plextv-reset'),
+    // Play now (R-PLAY-1): what the mock's players received ({ commands, received }), forgetting it, and making the forward fail (mode 'player', 'server' or 'auth'; 'none' is normal).
+    playLog: () => call('GET', 'player-log'),
+    playReset: () => call('POST', 'player-reset'),
+    playFail: (mode) => call('POST', 'player-fail', { mode }),
   };
 }
 
