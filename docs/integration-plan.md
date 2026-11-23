@@ -1564,14 +1564,14 @@ Facts this section stands on (invocation probes, 2026-11-05; `.orchestrator/arti
 ### 70. `release-2.4.3` — Version 2.4.3, the notice and the docs
 - **Goal:** `VERSION` is 2.4.3; a "What's new in 2.4.3" notice names Play now; README, Roadmap, the spec and `docs/validation/real-server-extended.md` (new (verify) rows for Play now on a real Plex server and player) describe 2.4.3.
 - **Requirements:** R-UPG-5, R-PLAY-1 · **Rulings:** D13, D79, D181 · **Mode:** afk · **Tags:** docs · **Blocked by:** `play-now-plex`
-- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`, `docs/spec.md`, `docs/validation/real-server-extended.md`, `tests/e2e/release.spec.mjs`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`, `docs/spec.md`, `docs/validation/real-server-extended.md`, `tests/e2e/release.spec.mjs`, `tests/e2e/lib.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/followups.spec.mjs` (the last four by D196 1)
 - **Acceptance criteria:**
   1. `grep -q "VERSION = '2.4.3'" sw.js && grep -q "VERSION = '2.4.3'" js/main.js && test "$(grep -c '"version": "2.4.3"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
   2. `grep -qE '^## .*Done in 2\.4\.3' Roadmap.md && grep -q "WHATS_NEW_VERSION = '2.4.3'" js/main.js && ! grep -q 'Carried from 2.4' Roadmap.md`
   3. `npm test && npm run test:e2e && node scripts/check-precache.mjs` (once, by the conductor, after the memory gate)
   4. scope: only the Output paths changed.
   5. narrated: keep-docs-current over `984cd0a0..HEAD` inside the phase; the anchored documentation review APPROVE on disk.
-- **Notes/hazards:** No tag, no GitHub release, no pull request and no merge into `main` unless the owner asks (D13, D79).
+- **Notes/hazards:** No tag, no GitHub release, no pull request and no merge into `main` unless the owner asks (D13, D79). The notice's words, who sees it and where Open settings lands: D196 2, D196 3. The Chromium build note: D196 4.
 
 ### Run 12 graph, tags and ports
 
