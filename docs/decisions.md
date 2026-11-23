@@ -1202,3 +1202,12 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   2. **A partial read is a failed read, and the line says which account (sharpens D186 2).** When any one Plex account cannot be read, the whole list is not checked and nothing can be added. The line names the server whose account could not be read and says what helps: sign in to that server again when the token was refused, otherwise try again later by opening the list again.
   3. **The read and the store share one bound.** A resource whose client identifier is longer than the 200 characters the store keeps is not listed.
   4. **Defects against D186, fixed without a question:** a plex.tv answer that is not a list is a failed read (D186 2); a player whose name is only spaces is shown by its product name, else its identifier.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-players` UX walk; Nathan: "Fix the findings (Recommended)"; under D44, D181 10): D188
+
+- **D188 What the UX walk of `play-now-players` left open.** Stop 6 offered three items with a recommended option each; they take their recommended options under Nathan's choice "Fix the findings (Recommended)", and he may overturn any of them.
+  1. **"Try again" after a failed read.** When plex.tv could not be read, the section shows a "Try again" button that reads the players again. No new PIN is asked while the list is open (D186 4).
+  2. **Plain words for a failed read.** The line says which of three things happened, with no status code or protocol word: plex.tv did not answer, plex.tv refused that server's sign-in, or plex.tv answered with something that could not be read. It names the server (D187 2).
+  3. **The state is read out and says what it means.** Each row's control is described by its state for assistive technology. "unavailable" says the player is no longer on the Plex account; "not checked" says plex.tv could not be read; "offline" says the player is not connected now.
+  4. **Each part of `provides` is trimmed** before it is compared with `player` (D186 7).
+  5. **Follow-ups (owner Nathan), not in this run:** the PIN prompt does not say what it is for; Settings opened while the position tool is active resumes without the PIN (older code); a check with a real screen reader.
