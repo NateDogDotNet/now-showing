@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addressOf, defaults, earlySettings, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, oldTokenMayGo, removedServers, sanitize, save, SECRET_KEYS, serverList, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
+import { addressOf, defaults, earlySettings, followNames, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, NO_SERVER_MEANING, oldTokenMayGo, PLAYER_STATES, playerRows, removedServers, sanitize, save, SECRET_KEYS, serverList, setAllowed, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -1335,4 +1335,133 @@ test('early: the stay-configured restore brings back only the old selection and 
   assert.deepEqual(early.limitSlots, next.limitSlots, 'the slots are the Save\'s');
   assert.deepEqual(early.profiles.map((p) => [p.id, p.maxContentRating, p.weighting]), [['p1', 'G', 'unwatched']], 'the profile\'s limit and bundle are the Save\'s');
   assert.deepEqual(pick(early.profiles[0], PROFILE_SELECTION), pick(prev.profiles[0], PROFILE_SELECTION), 'a profile still draws from its old selection');
+});
+
+
+// ---- the allowed devices (R-PLAY-1, D181, D186) ----
+
+const TV = { id: 'tv-living', name: 'Living Room TV' };
+const TABLET = { id: 'tab-1', name: 'Old Tablet' };
+const listedTv = (extra = {}) => ({ ...TV, present: true, ...extra });
+
+test('allowedPlayers: a new display allows nothing, and an allow-list with nothing in it allows nothing (D186 7)', () => {
+  assert.deepEqual(defaults().allowedPlayers, []);
+  assert.deepEqual(sanitize({}).allowedPlayers, []);
+  assert.deepEqual(load({ getItem: () => null, setItem() {}, removeItem() {} }).settings.allowedPlayers, []);
+  const a = defaults();
+  a.allowedPlayers.push(TV);
+  assert.deepEqual(defaults().allowedPlayers, [], 'a default that is a list is copied: no caller changes the schema\'s own');
+});
+
+test('allowedPlayers is sanitised on load: malformed entries are dropped, an identifier is kept once, an entry holds an id and a name and nothing else', () => {
+  const s = sanitize({ allowedPlayers: [TV, { ...TV, name: 'Renamed' }, { id: '  tv-2  ', name: '  Den  ', token: 'secret', address: 'http://192.0.2.5' }, { id: '' }, { name: 'no id' }, { id: 7 }, 'tv-3', null, [], { id: 'tv-4' }, { id: 'x'.repeat(201), name: 'too long' }] });
+  assert.deepEqual(s.allowedPlayers, [TV, { id: 'tv-2', name: 'Den' }, { id: 'tv-4', name: '' }]);
+  for (const junk of ['tv-1', 5, true, {}, { id: 'tv-1' }]) assert.deepEqual(sanitize({ allowedPlayers: junk }).allowedPlayers, [], JSON.stringify(junk));
+  assert.equal(sanitize({ allowedPlayers: Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, name: `P${i}` })) }).allowedPlayers.length, 40, 'more than one player may be allowed, with no limit');
+  const stored = JSON.stringify({ allowedPlayers: [TV] });
+  assert.deepEqual(load({ getItem: () => stored }).settings.allowedPlayers, [TV], 'and it is read back from storage as it was saved');
+});
+
+test('allowedPlayers is in LOCAL_KEYS: absent from every export, with and without secrets (D186 6)', () => {
+  assert.ok(LOCAL_KEYS.includes('allowedPlayers'));
+  const s = sanitize({ plexToken: 't', serverUrl: 'http://p:32400', libraryKey: '1', allowedPlayers: [TV, TABLET] });
+  for (const includeSecrets of [false, true]) {
+    const file = toExport(s, { includeSecrets });
+    assert.equal('allowedPlayers' in file.settings, false, `includeSecrets ${includeSecrets}`);
+    assert.equal(JSON.stringify(file).includes('tv-living'), false, `no identifier anywhere in the file (includeSecrets ${includeSecrets})`);
+    assert.equal(JSON.stringify(file).includes('Living Room TV'), false, `no name anywhere in the file (includeSecrets ${includeSecrets})`);
+  }
+});
+
+test('an import leaves this display\'s allowed list as it is, whatever the file says, with a wrapped file, a bare one and the sheet\'s import (D186 6)', () => {
+  const mine = sanitize({ serverUrl: 'http://p:32400', plexToken: 't', libraryKey: '1', allowedPlayers: [TV] });
+  const theirs = [TABLET, { id: 'tv-9', name: 'Their TV' }];
+  const wrapped = JSON.stringify({ format: 'plex-poster-display/settings', version: 1, settings: { rotateSeconds: 120, allowedPlayers: theirs } });
+  const bare = JSON.stringify({ rotateSeconds: 120, allowedPlayers: theirs });
+  for (const [name, text] of [['wrapped', wrapped], ['bare', bare]]) {
+    const merged = fromImport(text, mine);
+    assert.equal(merged.rotateSeconds, 120, `${name}: the file's other settings apply`);
+    assert.deepEqual(merged.allowedPlayers, [TV], `${name}: the display's own list is untouched`);
+    assert.deepEqual(importWithConnection(text, mine).settings.allowedPlayers, [TV], `${name}: the sheet's import too`);
+  }
+  assert.deepEqual(fromImport(bare, sanitize({})).allowedPlayers, [], 'a display that allows nothing still allows nothing after an import');
+  assert.throws(() => fromImport(JSON.stringify({ allowedPlayers: theirs }), mine), /No recognised settings/, 'a file with only that key has nothing to import');
+});
+
+test('a Save keeps the list: it is stored with the settings and read back, and an old settings object has none (D186 5)', () => {
+  const store = new Map();
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
+  save(storage, sanitize({ allowedPlayers: [TV] }));
+  assert.deepEqual(load(storage).settings.allowedPlayers, [TV]);
+  assert.deepEqual(sanitize({ rotateSeconds: 60 }).allowedPlayers, [], 'a 2.4.2 object has no list');
+});
+
+test('playerRows: a listed player is shown by name, ticked only when allowed; one plex.tv says is not present is offline and still allowable', () => {
+  const rows = playerRows([TV], [listedTv(), { ...TABLET, present: false }, { id: 'tv-kids', name: 'Kids Room TV', present: true }]);
+  assert.deepEqual(rows.map((r) => [r.name, r.listed, r.allowed, r.state]), [
+    ['Kids Room TV', true, false, ''],
+    ['Living Room TV', true, true, ''],
+    ['Old Tablet', true, false, 'offline'],
+  ]);
+  assert.deepEqual(playerRows([], [listedTv()]).map((r) => r.allowed), [false], 'nothing stored: nothing allowed');
+});
+
+test('playerRows: a renamed player with the same client identifier stays allowed, and a different player given the old name does not inherit it (D186 2, 7)', () => {
+  const renamed = playerRows([TV], [{ id: TV.id, name: 'Lounge TV', present: true }]);
+  assert.deepEqual(renamed.map((r) => [r.id, r.name, r.allowed, r.listed]), [[TV.id, 'Lounge TV', true, true]], 'matched by identifier');
+  const impostor = playerRows([TV], [{ id: 'tv-other', name: TV.name, present: true }]);
+  const other = impostor.find((r) => r.id === 'tv-other');
+  assert.equal(other.allowed, false, 'the same name is not the same player');
+  assert.deepEqual(impostor.filter((r) => r.id === TV.id).map((r) => [r.listed, r.allowed, r.state]), [[false, true, 'unavailable']], 'the allowed one is not listed any more: kept, unavailable');
+  assert.deepEqual(followNames([TV, TABLET], [{ id: TV.id, name: 'Lounge TV', present: true }]), [{ id: TV.id, name: 'Lounge TV' }, TABLET], 'the stored name follows the new one; an unlisted entry keeps its name');
+  assert.deepEqual(followNames([TV], [{ id: 'tv-other', name: TV.name, present: true }]), [TV], 'a name match renames nothing');
+});
+
+test('playerRows: an allowed player plex.tv no longer lists is kept and shown unavailable, removable, after the listed ones (D186 2)', () => {
+  const rows = playerRows([TV, TABLET], [{ id: TABLET.id, name: TABLET.name, present: true }]);
+  assert.deepEqual(rows.map((r) => [r.id, r.listed, r.allowed, r.state]), [[TABLET.id, true, true, ''], [TV.id, false, true, 'unavailable']]);
+  assert.deepEqual(playerRows([TV], []).map((r) => [r.id, r.listed, r.state]), [[TV.id, false, 'unavailable']], 'no player listed at all (an account with none, or no Plex server): still kept');
+  assert.deepEqual(playerRows([{ id: 'x', name: '' }], []).map((r) => r.name), ['x'], 'a name that was never stored shows the identifier');
+});
+
+test('playerRows: when plex.tv was not read every stored entry is shown as not checked, and no row can be ticked, so none can be added (D186 2)', () => {
+  const rows = playerRows([TV, TABLET], null);
+  assert.deepEqual(rows.map((r) => [r.id, r.listed, r.allowed, r.state]), [[TV.id, false, true, 'not checked'], [TABLET.id, false, true, 'not checked']]);
+  assert.deepEqual(playerRows([], null), []);
+  for (const unread of [null, undefined, 'x', 0]) assert.equal(playerRows([TV], unread).some((r) => r.listed), false, `unread as ${String(unread)}`);
+});
+
+test('setAllowed allows and removes one player by identifier and touches no other; allowing twice allows once', () => {
+  assert.deepEqual(setAllowed([], TV, true), [TV]);
+  assert.deepEqual(setAllowed([TV], TABLET, true), [TV, TABLET], 'more than one may be allowed');
+  assert.deepEqual(setAllowed([TV, TABLET], TV, false), [TABLET]);
+  assert.deepEqual(setAllowed([TV], { id: TV.id, name: 'Lounge TV' }, true), [{ id: TV.id, name: 'Lounge TV' }], 'the same identifier is one entry, with the newest name');
+  assert.deepEqual(setAllowed([TV], { id: 'other', name: TV.name }, false), [TV], 'removing is by identifier, not by name');
+  const before = [TV];
+  setAllowed(before, TABLET, true);
+  assert.deepEqual(before, [TV], 'the list given is not changed');
+});
+
+test('every state a row can have says what it means, in words a household reads (D188 3)', () => {
+  const states = new Set([...playerRows([TV], null), ...playerRows([TV, TABLET], [{ id: TABLET.id, name: TABLET.name, present: false }])].map((r) => r.state).filter(Boolean));
+  assert.deepEqual([...states].sort(), ['not checked', 'offline', 'unavailable']);
+  for (const state of states) assert.ok(PLAYER_STATES[state] && !/HTTP|CORS|\d{3}/.test(PLAYER_STATES[state]), state);
+  assert.match(PLAYER_STATES.offline, /not connected now/);
+  assert.match(PLAYER_STATES.offline, /still be allowed/);
+  assert.match(PLAYER_STATES.unavailable, /no longer on your Plex account/);
+  assert.match(PLAYER_STATES['not checked'], /plex\.tv could not be read/);
+});
+
+test('with no Plex server signed in a stored entry reads not checked, with that reason, removable, and nothing can be added (S6, D189 2)', () => {
+  const rows = playerRows([TV, TABLET], null, { noServer: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.listed, r.allowed, r.state, r.meaning]), [[TV.id, false, true, 'not checked', 'no Plex server is signed in'], [TABLET.id, false, true, 'not checked', 'no Plex server is signed in']]);
+  assert.equal(NO_SERVER_MEANING, 'no Plex server is signed in');
+  assert.deepEqual(playerRows([TV], null).map((r) => r.meaning), ['plex.tv could not be read'], 'plex.tv not read is told apart from nobody asked');
+  assert.deepEqual(playerRows([TV], []).map((r) => [r.state, r.meaning]), [['unavailable', 'no longer on your Plex account']], 'an account that lists none is still the account saying the player left');
+});
+
+test('players are sorted by name with numbers in order: "Player 2" before "Player 10" (S9, D189 UX N4)', () => {
+  const names = ['Player 10', 'Player 2', 'player 1', 'TV 9', 'TV 10', 'Player 11', 'Player 20', 'Alpha'];
+  const listed = names.map((name, i) => ({ id: `p${i}`, name, present: true }));
+  assert.deepEqual(playerRows([], listed).map((r) => r.name), ['Alpha', 'player 1', 'Player 2', 'Player 10', 'Player 11', 'Player 20', 'TV 9', 'TV 10']);
 });

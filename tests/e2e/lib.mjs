@@ -1,8 +1,10 @@
 // Shared helpers for the browser specs (tests/e2e/*.spec.mjs).
 //
 //   await withApp({ settings, viewport, hasTouch, isMobile, clock, serviceWorkers,
-//                   serveArgs, localStorage }, async ({ page, context, app, mock }) => { ... });
+//                   serveArgs, localStorage, plexTv }, async ({ page, context, app, mock }) => { ... });
 //
+// `plexTv: true` answers the page's plex.tv resources request (GET /api/v2/resources, what the Allowed devices list reads) from the mock Plex's
+// plex.tv side (`mock.plexTvSet`, `mock.plexTvLog`, `mock.plexTvReset`; scripts/mock-plex.mjs). It is opt-in: see the note at stubPlexTv.
 // app = { url, port, mockPort, jellyfinPort, argv, stop() }. Without serveArgs the spec uses the shared server
 // that run.mjs started on E2E_PORT / E2E_MOCK_PORT. Passing serveArgs (even []) starts a dedicated
 // `serve.mjs --mock` child on freshly probed ports, which is killed when the callback returns.
@@ -58,6 +60,20 @@ async function stubPlexTv(context) {
     if (pathname.startsWith('/api/v2/pins/')) return json({ id: 1, code: 'STUB', authToken: null });
     if (pathname === '/api/v2/resources') return json([]);
     return route.fulfill({ status: 404, headers, body: '' });
+  });
+}
+
+// The opt-in plex.tv resources route (`withApp({ plexTv: true })`): the answer comes from the mock Plex's plex.tv side, so a spec sets what plex.tv says
+// with `mock.plexTvSet` and reads what the page asked with `mock.plexTvLog`. Only /api/v2/resources is answered: any other plex.tv request of such a
+// context is still unanswered and still fails the spec (K48). A context that does not ask for it gets no route, as before.
+const RESOURCES = /^https:\/\/plex\.tv\/api\/v2\/resources(\?|$)/;
+
+async function routePlexTvResources(context, mockPort) {
+  await context.route(RESOURCES, async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const query = new URLSearchParams({ token: params.get('X-Plex-Token') || '', client: params.get('X-Plex-Client-Identifier') || '' });
+    const answer = await fetch(`http://127.0.0.1:${mockPort}/__mock/plextv-resources?${query}`);
+    await route.fulfill({ status: answer.status, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: await answer.text() });
   });
 }
 
@@ -169,11 +185,18 @@ function makeMock(mockPort) {
     down: () => call('POST', 'down'),
     up: () => call('POST', 'up'),
     stats: () => call('GET', 'stats'),
+    // The mock plex.tv (R-PLAY-1): `list` replaces the resources plex.tv lists for `token` (no token = every token; undefined leaves them), `status` its HTTP status.
+    plexTvSet: async (list, { token = '', status } = {}) => {
+      const q = new URLSearchParams({ token, ...(status === undefined ? {} : { status }) });
+      return (await fetch(`${base}plextv-set?${q}`, { method: 'POST', body: list === undefined ? '' : JSON.stringify(list) })).json();
+    },
+    plexTvLog: async () => (await call('GET', 'plextv-log')).requests,
+    plexTvReset: () => call('POST', 'plextv-reset'),
   };
 }
 
 export async function withApp(opts, fn) {
-  const { settings = {}, viewport, hasTouch = false, isMobile = false, clock, serviceWorkers = 'block', serveArgs, localStorage = {} } = opts;
+  const { settings = {}, viewport, hasTouch = false, isMobile = false, clock, serviceWorkers = 'block', serveArgs, localStorage = {}, plexTv = false } = opts;
 
   let dedicated = null;
   let app;
@@ -197,6 +220,7 @@ export async function withApp(opts, fn) {
     const seed = { ...DEFAULT_SETTINGS, ...(typeof settings === 'function' ? settings(app) : settings) };
     const guard = guardNetwork(context);
     if (!seed.plexToken) await stubPlexTv(context);
+    if (plexTv) await routePlexTvResources(context, app.mockPort); // after the stub: the most recent route is tried first
     const page = await context.newPage();
 
     await context.addInitScript(

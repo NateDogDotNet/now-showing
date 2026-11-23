@@ -59,11 +59,12 @@
 // is wrong and offers "Sign in again"; with one on screen the card stays away, and only a refresh somebody asked for shows a toast with the button. Every other kind counts as the server not
 // answering: the status pill reads "Can't reach <label>" (or "Offline" when the browser is offline) and cached posters rotate; 'network' and 'timeout' also offer Diagnostics and "Test connection"; 'http', 'parse' and 'config' offer no button.
 // The kind 'empty' is not a SourceError kind: the engine raises it itself when nothing can be drawn.
+// Players are not an adapter member: `readPlayers(settings, { clientId })` below reads the Plex players of the household from plex.tv (Settings, Allowed devices).
 
 import { KINDS, SourceError } from './errors.js';
 import { createEmbyClient, embySignIn } from './emby.js';
 import { createJellyfinClient, jellyfinSignIn } from './jellyfin.js';
-import { createPlexClient, plexSignIn } from './plex.js';
+import { createPlexClient, discoverPlayers, plexSignIn } from './plex.js';
 import { belongsTo, cleanServerId, keyFor, splitKey } from '../selection.js';
 import { serverList } from '../settings.js';
 
@@ -103,6 +104,37 @@ export function signInFlow(settings, { fetchImpl, version } = {}) {
   if (type === 'jellyfin') return jellyfinSignIn({ serverUrl: settings?.serverUrl || '', fetchImpl, version });
   if (type === 'emby') return embySignIn({ serverUrl: settings?.serverUrl || '', fetchImpl, version, userId: settings?.serverUserId || '' });
   throw unknownType(type);
+}
+
+/**
+ * The Plex players of the household (R-PLAY-1, D181 4, D186 3, D187 2): one plex.tv read per different Plex token among the household's servers
+ * (`serverList(settings)`), each player once by client identifier (present when any account says so), as `{ accounts, players }`; `accounts`
+ * is how many tokens were read, and none means no Plex server is signed in. Jellyfin and Emby servers hold no players and cost no request.
+ * The reads go to plex.tv only, with this display's `clientId`. It rejects (a SourceError) when any account's read fails, so a household
+ * is never shown a list that is missing an account; the error's `failed` says which: `[{ kind, slots }]`, one entry per account that could not be
+ * read, `kind` the SourceError kind (an HTTP 5xx answer is 'server') and `slots` the places in `serverList(settings)` of the servers that account signs in.
+ */
+/** What happened to one account's read, in the three-and-one ways a household is told (D188 2, D189 3): a server error (HTTP 5xx) is its own kind, 'server'. */
+const kindOf = (error) => (error?.kind === 'http' && error.status >= 500 ? 'server' : error?.kind || 'network');
+
+export async function readPlayers(settings, { clientId, fetchImpl } = {}) {
+  const servers = serverList(settings);
+  const tokens = [...new Set(servers.filter((e) => e.type === 'plex' && e.token).map((e) => e.token))];
+  const settled = await Promise.allSettled(tokens.map((token) => discoverPlayers(clientId, token, fetchImpl ? { fetchImpl } : {})));
+  const failed = settled
+    .map((r, i) => (r.status === 'rejected' ? { kind: kindOf(r.reason), error: r.reason, slots: servers.flatMap((e, slot) => (e.type === 'plex' && e.token === tokens[i] ? [slot] : [])) } : null))
+    .filter(Boolean);
+  if (failed.length) {
+    const first = failed[0].error;
+    throw Object.assign(new SourceError(first?.message || 'plex.tv could not be read.', { kind: failed[0].kind, ...(first?.status ? { status: first.status } : {}) }), { failed: failed.map(({ kind, slots }) => ({ kind, slots })) });
+  }
+  const byId = new Map();
+  for (const p of settled.flatMap((r) => r.value)) {
+    const known = byId.get(p.id);
+    if (!known) byId.set(p.id, { ...p });
+    else if (p.present) known.present = true;
+  }
+  return { accounts: tokens.length, players: [...byId.values()] };
 }
 
 // ---- several servers (R-SRC-4, D156, D157) ----

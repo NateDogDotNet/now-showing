@@ -848,6 +848,29 @@ body.positioning.dragging.idle.hide-cursor #app * { cursor: grabbing !important;
 .servers { margin-top: 6px; }
 .server-list[hidden] { display: none; }
 
+/* Allowed devices (R-PLAY-1): one row each, the same panel language as the server rows; a long name wraps and never makes the sheet scroll sideways. */
+#players-open { margin-top: 10px; }
+#players-status, #players-closed-note { margin: 10px 0 0; overflow-wrap: anywhere; }
+#players-status:empty, #players-closed-note:empty { display: none; }
+#players-status:focus, #players-status:focus-visible { outline: none; }
+.player-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.player-list:empty { display: none; }
+.player-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-line);
+}
+.player-row label.check { flex: 1 1 12rem; margin: 0; min-width: 0; }
+.player-row .player-name { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.player-row > .player-name { flex: 1 1 12rem; }
+.player-row .player-state { flex: 1 1 100%; margin: 0; overflow-wrap: anywhere; }
+#players-retry { margin-top: 8px; }
+
 /* A server's name over its libraries in the library list when there are several servers. */
 .pick-list .server-heading { margin: 8px 0 0; padding: 2px 4px; font-weight: 600; color: var(--muted); overflow-wrap: anywhere; }
 .pick-list .server-heading:first-child { margin-top: 0; }

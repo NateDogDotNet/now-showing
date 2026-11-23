@@ -7,6 +7,7 @@ import { allowedValues } from '../ratings.js';
 import { ratingPasses, ratingValues } from '../selection.js';
 import { SUMMARY_MAX, trimSummary } from '../fill.js';
 import { toMs } from '../duration.js';
+import { PLAYER_ID_MAX } from '../settings.js';
 import { SourceError } from './errors.js';
 import { buildUrl, timeoutSignal } from './http.js';
 
@@ -342,6 +343,33 @@ export async function discoverServers(clientId, token, { secureOnly = false, fet
       connections: rankConnections(r.connections || [], { secureOnly }),
     }))
     .filter((r) => r.connections.length);
+}
+
+/**
+ * The players on one Plex account (R-PLAY-1, D181 4, D186, D187, D188): the resources plex.tv lists whose `provides`, split at commas and each part
+ * trimmed, has a part equal to `player`, each as `{ id, name, present }`. `id` is the client identifier (a resource with none, or one longer than the
+ * store keeps, PLAYER_ID_MAX, is not listed, and an identifier is listed once, the first). This display's own `clientId` is never listed. `name` is
+ * the resource's name, else its product, else the identifier (a name of only spaces counts as none). `present` is false only when plex.tv says the
+ * player is not present. An answer that is not a list (an empty body, an error object, XML) is a failed read, a SourceError of kind 'parse', never
+ * "no players". The token goes to plex.tv only, and a player's own address is never read, let alone requested.
+ */
+export async function discoverPlayers(clientId, token, { fetchImpl = (...a) => fetch(...a) } = {}) {
+  const list = await request(
+    buildUrl(PLEX_TV, '/api/v2/resources', { includeHttps: 1, includeRelay: 1, ...tvParams(clientId, token) }),
+    { fetchImpl },
+  );
+  if (!Array.isArray(list)) throw new SourceError('plex.tv answered with something that is not a list of devices.', { kind: 'parse' });
+  const seen = new Set(clientId ? [clientId] : []);
+  const players = [];
+  for (const r of list) {
+    if (!r || typeof r !== 'object' || !String(r.provides || '').split(',').some((part) => part.trim() === 'player')) continue;
+    const id = typeof r.clientIdentifier === 'string' ? r.clientIdentifier.trim() : '';
+    if (!id || id.length > PLAYER_ID_MAX || seen.has(id)) continue;
+    seen.add(id);
+    const name = [r.name, r.product].map((v) => (typeof v === 'string' ? v.trim() : '')).find(Boolean) || id;
+    players.push({ id, name, present: r.presence !== false });
+  }
+  return players;
 }
 
 export function rankConnections(connections, { secureOnly = false } = {}) {

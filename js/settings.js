@@ -50,6 +50,68 @@ export function cleanServer(v) {
 /** The extra servers: at most MAX_SERVERS - 1 are kept, in the order stored, and the rest are dropped on load (D157 11). */
 const cleanServers = (v) => (Array.isArray(v) ? v.map(cleanServer).filter(Boolean).slice(0, MAX_SERVERS - 1) : []);
 
+/** The longest client identifier the store keeps (D187 3): the players read lists no identifier longer than this, so a player that can be ticked can be stored. */
+export const PLAYER_ID_MAX = 200;
+
+/**
+ * One allowed player (R-PLAY-1, D186 3) as stored: its client identifier and the name last seen, nothing else. A value with no identifier
+ * is not a player. The identifier is what a player is known by; the name is only what the list shows and follows the account's.
+ */
+export function cleanPlayer(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const id = typeof v.id === 'string' ? v.id.trim() : '';
+  if (!id || id.length > PLAYER_ID_MAX) return null;
+  return { id, name: typeof v.name === 'string' ? v.name.trim().slice(0, 100) : '' };
+}
+
+/** The allowed players: malformed entries are dropped and an identifier is kept once (the first entry). No limit on how many. */
+const cleanPlayers = (v) => {
+  const seen = new Set();
+  return (Array.isArray(v) ? v : []).map(cleanPlayer).filter((p) => p && !seen.has(p.id) && seen.add(p.id));
+};
+
+/**
+ * What the Allowed devices list shows (R-PLAY-1, D186 2): `allowed` is the stored list and `listed` the players plex.tv lists, `{ id, name, present }`, or null
+ * when plex.tv was not read (still loading, down, an error, a refused token). A player is told from another only by its client identifier, never its name.
+ * Every row is `{ id, name, listed, allowed, state }`:
+ *  - a listed player is `listed: true`, ticked when it is allowed, with the state 'offline' when plex.tv says it is not present (it can still be allowed);
+ *  - an allowed player plex.tv no longer lists is kept, `listed: false`, with the state 'unavailable' (it can be removed);
+ *  - when plex.tv was not read every stored entry is shown as it is stored, `listed: false`, 'not checked', and no row can be ticked: nothing can be added.
+ *    With no Plex server signed in (`noServer`) nobody asked an account: the state is the same, with the reason NO_SERVER_MEANING (D189 2).
+ * Players are sorted by name with numbers in order ("Player 2" before "Player 10"). `meaning` is what the state says, for the eye and for assistive technology.
+ */
+export function playerRows(allowed, listed, { noServer = false } = {}) {
+  const stored = (a, state, meaning = PLAYER_STATES[state]) => ({ id: a.id, name: a.name || a.id, listed: false, allowed: true, state, meaning });
+  if (!Array.isArray(listed)) return allowed.map((a) => stored(a, 'not checked', noServer ? NO_SERVER_MEANING : undefined));
+  const ids = new Set(listed.map((p) => p.id));
+  const shown = [...listed]
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+    .map((p) => ({ id: p.id, name: p.name, listed: true, allowed: allowed.some((a) => a.id === p.id), state: p.present ? '' : 'offline', meaning: p.present ? '' : PLAYER_STATES.offline }));
+  return [...shown, ...allowed.filter((a) => !ids.has(a.id)).map((a) => stored(a, 'unavailable'))];
+}
+
+/** Why a stored entry is not checked when there is no Plex server signed in to ask (D189 2). */
+export const NO_SERVER_MEANING = 'no Plex server is signed in';
+
+/** What each state of the Allowed devices list means (D188 3): shown beside the state word and read out with the control. */
+export const PLAYER_STATES = {
+  offline: 'not connected now, but it can still be allowed',
+  unavailable: 'no longer on your Plex account',
+  'not checked': 'plex.tv could not be read',
+};
+
+/** The allowed list with the names plex.tv lists now: a player that was renamed keeps its allowance (matched by identifier), and the stored name follows the new one. */
+export const followNames = (allowed, listed) => allowed.map((a) => {
+  const now = listed.find((p) => p.id === a.id);
+  return now ? { id: a.id, name: now.name } : a;
+});
+
+/** The allowed list with `player` (`{ id, name }`) allowed or, when `on` is false, not allowed. */
+export function setAllowed(allowed, player, on) {
+  const rest = allowed.filter((a) => a.id !== player.id);
+  return on ? [...rest, { id: player.id, name: player.name }] : rest;
+}
+
 const rotation = (v, d) => {
   const n = Number(v);
   return [0, 90, 180, 270].includes(n) ? n : d;
@@ -78,6 +140,9 @@ const SCHEMA = {
   serverId: ['', (v) => cleanServerId(v)],
   serverCarried: [true, bool],
   servers: [[], cleanServers],
+  // The Plex players this display may start playback on (R-PLAY-1, D181, D186): `{ id, name }`, the client identifier and the name last seen.
+  // Empty on a new display: an allow-list where empty allows nothing. Per display (LOCAL_KEYS): never exported, never taken from an import.
+  allowedPlayers: [[], cleanPlayers],
   libraryKey: ['', (v, d) => str(String(v ?? ''), d)],
   libraryName: ['', str],
   // The poster selection (R-SEL-1, D107): the chosen movie libraries (libraryKey/libraryName always mirror the first), the genres and
@@ -175,8 +240,11 @@ const CONNECTION_KEYS = ['serverUrl', 'plexToken', 'libraryKey', 'libraryKeys'];
 export const SECRET_KEYS = ['plexToken', 'servers.token'];
 // A key written `list.field` is the field `field` of every entry of the list `list`: each extra server holds its own token (D157 4).
 
-/** Keys that are this display's own state: never written to an export and never accepted from an import file (a file must not say which server owns the 2.4.0 keys). */
-export const LOCAL_KEYS = ['serverId', 'serverCarried'];
+/**
+ * Keys that are this display's own state: never written to an export and never accepted from an import file (a file must not say which server
+ * owns the 2.4.0 keys, nor which players this display may play on, D186 6).
+ */
+export const LOCAL_KEYS = ['serverId', 'serverCarried', 'allowedPlayers'];
 
 /** Takes the secrets named in SECRET_KEYS out of a settings object (a copy). */
 export function withoutSecrets(data) {

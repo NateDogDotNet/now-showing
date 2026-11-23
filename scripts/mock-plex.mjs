@@ -9,6 +9,14 @@
 //   POST /__mock/stop                         end it
 //   POST /__mock/rate?ratingKey=4&contentRating=R   re-rate a title from now on ("none" = unrated)
 //   POST /__mock/sessions-status?status=403   answer /status/sessions with that HTTP status (200 = normal again)
+//   GET  /__mock/plextv-resources?token=T&client=C   what plex.tv would answer to GET /api/v2/resources for token T and this display's client
+//                                             identifier C (the e2e harness fulfils the page's plex.tv request from it, tests/e2e/lib.mjs `plexTv`): the list
+//                                             set for T, else the list set for every token, else PLEX_TV_RESOURCES; the status set the same way (200 = normal).
+//                                             It records {token, client} in the plex.tv log. It is not a Plex Media Server route and needs no token.
+//   POST /__mock/plextv-set?token=T&status=500   answer token T (no token = every token) with that status (200 = normal again); a JSON array in the body
+//                                             replaces the resource list for T. Either part may be left out.
+//   GET  /__mock/plextv-log                   {requests}: every plextv-resources request since the last plextv-reset
+//   POST /__mock/plextv-reset                 forget every list, status and log entry of the plex.tv side
 //   GET  /__mock/stats                        {transcode, other}: image requests vs other Plex requests
 //   GET  /__mock/log                          {requests}: every Plex request since the last reset, "path?query" without the token
 //   POST /__mock/reset-stats                  zero the counters and clear that log
@@ -36,6 +44,16 @@ import { createServer } from 'node:http';
 
 export const TOKEN = 'demo-token';
 const MACHINE_ID = 'mock'; // what GET / and the token-free GET /identity both report
+
+// What the mock plex.tv answers to GET /api/v2/resources (R-PLAY-1, D186): the account's server and three players, one of them not present. A player's
+// connection is an address in TEST-NET-1 (RFC 5737): the display must never request it, and a request that tried would leave the machine (K48).
+// (verify) The resource shape (name, product, clientIdentifier, provides, presence, connections) is what plex.tv sends; not confirmed against a real account here.
+export const PLEX_TV_RESOURCES = [
+  { name: 'Mock Plex', product: 'Plex Media Server', clientIdentifier: MACHINE_ID, provides: 'server', owned: true, presence: true, connections: [{ uri: 'http://127.0.0.1:32400', protocol: 'http', local: true, relay: false }] },
+  { name: 'Living Room TV', product: 'Plex for Android (TV)', clientIdentifier: 'mock-player-living-room', provides: 'client,player,pubsub-player', owned: true, presence: true, connections: [{ uri: 'http://192.0.2.10:32500', protocol: 'http', local: true, relay: false }] },
+  { name: 'Kids Room TV', product: 'Plex for Android (TV)', clientIdentifier: 'mock-player-kids-room', provides: 'client,player,pubsub-player', owned: true, presence: true, connections: [{ uri: 'http://192.0.2.11:32500', protocol: 'http', local: true, relay: false }] },
+  { name: 'Old Tablet', product: 'Plex for Android', clientIdentifier: 'mock-player-old-tablet', provides: 'client,player,pubsub-player', owned: true, presence: false, connections: [{ uri: 'http://192.0.2.12:32500', protocol: 'http', local: true, relay: false }] },
+];
 
 const LIB1 = [
   ['The Grand Marquee', 1954, '#8b1e3f', 'G', 5_400_000, 'On the last night of the season, the owner of a failing picture palace stages one grand show to save it.'],
@@ -109,6 +127,7 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
   const ratings = new Map(); // ratingKey -> contentRating set by /__mock/rate ('' = unrated)
   let sessionsStatus = 200;
   let countsStatus = 200; // the library count request (/library/sections/1/all with X-Plex-Container-Size=0)
+  const plexTv = { lists: new Map(), statuses: new Map(), log: [] }; // the plex.tv side: per token ('*' = every token), what /__mock/plextv-resources answers
   let emptyUnwatched = false; // every title counts as watched: pool requests that ask for unwatched ones find none
   // A title as Plex would send it now: a re-rating applies to every endpoint.
   const current = (m) => {
@@ -145,6 +164,34 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
 
     if (url.pathname.startsWith('/__mock/')) {
       const action = url.pathname.slice(8);
+      if (action === 'plextv-resources') {
+        const token = url.searchParams.get('token') || '';
+        plexTv.log.push({ token, client: url.searchParams.get('client') || '' });
+        const status = plexTv.statuses.get(token) ?? plexTv.statuses.get('*') ?? 200;
+        if (status !== 200) return json(status, { error: `Mock plex.tv: resources answer ${status}` });
+        return json(200, plexTv.lists.get(token) ?? plexTv.lists.get('*') ?? PLEX_TV_RESOURCES);
+      }
+      if (action === 'plextv-log') return json(200, { requests: [...plexTv.log] });
+      if (action === 'plextv-reset') {
+        for (const part of [plexTv.lists, plexTv.statuses]) part.clear();
+        plexTv.log.length = 0;
+        return json(200, { ok: true });
+      }
+      if (action === 'plextv-set') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          const token = url.searchParams.get('token') || '*';
+          if (url.searchParams.has('status')) plexTv.statuses.set(token, Number(url.searchParams.get('status')) || 200);
+          try {
+            if (body.trim()) plexTv.lists.set(token, JSON.parse(body));
+          } catch {
+            return json(400, { error: 'the body is not JSON' });
+          }
+          json(200, { ok: true });
+        });
+        return;
+      }
       if (action === 'play') {
         const movie = current(MOVIES.find((m) => m.ratingKey === (url.searchParams.get('ratingKey') || '1')));
         const num = (name, fallback) => (url.searchParams.has(name) ? Number(url.searchParams.get(name)) : fallback);

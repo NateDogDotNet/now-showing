@@ -510,6 +510,19 @@
           </div>
           <p class="muted small">The PIN is a deterrent, not security: it keeps casual hands out of Settings, Diagnostics, import, reset and the token. It is stored on this device, so anyone who controls the device can get around it. It is never exported.</p>
         </fieldset>
+
+        <fieldset id="players-fieldset">
+          <legend>Allowed devices</legend>
+          <p id="players-help" class="muted small">The Plex players on your account that this display may play a movie on. A new display allows none, and a player that is not ticked is never used. The list is kept on this display only, is never exported, and applies when you press Save.</p>
+          <p id="players-pin-note" class="muted small" hidden>No settings PIN is set. A settings PIN (under Kiosk) keeps others from changing this list.</p>
+          <button type="button" class="btn" id="players-open" aria-controls="players-body">Show allowed devices</button>
+          <p id="players-closed-note" class="muted small" role="status" aria-live="polite"></p>
+          <div id="players-body" hidden>
+            <p id="players-status" class="muted small" role="status" aria-live="polite" tabindex="-1"></p>
+            <button type="button" class="btn small" id="players-retry" hidden>Try again</button>
+            <ul id="players-list" class="player-list" aria-label="Allowed devices"></ul>
+          </div>
+        </fieldset>
       </div>
 
       <footer class="sheet-foot">
