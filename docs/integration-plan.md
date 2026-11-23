@@ -1548,7 +1548,7 @@ Facts this section stands on (invocation probes, 2026-11-05; `.orchestrator/arti
   2. `node tests/e2e/run.mjs play-now settings-sheet preset first-run` (the list shows behind the PIN; a new display allows nothing; allowing and saving survives a reload; the list reads from the mock plex.tv resources).
   3. `grep -q 'R-PLAY-1' docs/spec.md`.
   4. scope: only the Output paths changed.
-- **Notes/hazards:** the players read uses the existing plex.tv request helper; the token goes only to plex.tv, as it does today. Jellyfin and Emby servers show no players (D181 1).
+- **Notes/hazards:** the players read uses the existing plex.tv request helper; the token goes only to plex.tv, as it does today. Jellyfin and Emby servers show no players (D181 1). The readings of D186 bind: no PIN set, no prompt; the display never contacts a player, and gone, offline and plex.tv-unread are three states; every Plex account of the household, each identifier once; one prompt opens the list; Save stores and Cancel discards, and Save never drops an entry on a failed read; Reset clears the list, a removed server and an import leave it; an allow-list where empty allows nothing.
 
 ### 69. `play-now-plex` — Play now on an allowed Plex player
 - **Goal:** a Play now control button sends the poster's title to an allowed Plex player through the poster's own Plex server, resuming at the saved position when there is one. It is hidden while no device is allowed and on a Jellyfin or Emby poster, asks for the PIN each time when a PIN is set, and refuses a title the limit in force does not allow before any request.
