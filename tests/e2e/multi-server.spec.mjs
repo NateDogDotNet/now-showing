@@ -888,6 +888,98 @@ msCase('31 a Remove with "Add a server" not shown still leaves focus on no Remov
   check('with no "Add a server" to go to, a Remove leaves focus on no other server\'s Remove');
 });
 
+// ---------- the status pill and the limited empty card name the servers as the all-down card does (D179 4) ----------
+
+const bothDown = async (page, app) => {
+  await page.route(`${plexUrl(app)}/**`, (route) => route.abort());
+  await page.route(`${jfUrl(app)}/**`, (route) => route.abort());
+};
+const pillText = async (page) => {
+  await page.waitForFunction(() => /Can't reach/.test(document.getElementById('status').textContent), null, { timeout: 20000 });
+  return (await page.textContent('#status')).trim();
+};
+/** The names the pill says after "Can't reach", up to where it goes on with " ·" (cached posters, retry). */
+const pillNames = (pill) => /^Can't reach (.+?)(?: · |$)/.exec(pill)?.[1];
+
+msCase('32 two named servers, both down: the pill and the card name the same servers in the same words (D179 4)', { settings: (app) => twoServers({ serverName: 'Den', servers: [jfEntry(app, { name: 'Attic' })] })(app) }, async ({ page, app }) => {
+  await bothDown(page, app);
+  await page.goto(app.url);
+  await page.waitForFunction(() => !document.getElementById('empty').hidden && /reach/i.test(document.getElementById('empty-message').textContent), null, { timeout: 20000 });
+  const card = (await page.textContent('#empty-message')).trim();
+  const pill = await pillText(page);
+  assert.equal(pillNames(pill), 'Den and Attic', `the pill names the servers: ${pill}`);
+  for (const [what, text] of [['pill', pill], ['card', card]]) {
+    assert.equal(times(text, 'Den'), 1, `the ${what} names Den once: ${text}`);
+    assert.equal(times(text, 'Attic'), 1, `the ${what} names Attic once: ${text}`);
+    assert.ok(!/Plex|Jellyfin/.test(text), `the ${what} names no server by its type: ${text}`);
+  }
+  check('both named servers down: the pill says "Den and Attic" and the card names Den and Attic once each');
+});
+
+/** A cached poster that a limit hides, no poster on screen, and both servers down: the card that says the limit is the reason. */
+const limitedCard = async (page, app) => {
+  await page.addInitScript(() => localStorage.setItem('plexPoster.posterIndex', JSON.stringify([{ ratingKey: '4', title: 'Hidden', contentRating: 'R' }])));
+  await bothDown(page, app);
+  await page.goto(app.url);
+  await page.waitForFunction(() => !document.getElementById('empty').hidden && /household limit/i.test(document.getElementById('empty-message').textContent), null, { timeout: 20000 });
+  return (await page.textContent('#empty-message')).trim();
+};
+
+msCase('33 two named servers and a limit that hides every poster: the limited card names them as the pill does (D179 4)', { settings: (app) => twoServers({ serverName: 'Den', servers: [jfEntry(app, { name: 'Attic' })], maxContentRating: 'G' })(app) }, async ({ page, app }) => {
+  const card = await limitedCard(page, app);
+  assert.equal(card, 'No posters within the household limit are available while Den and Attic are unreachable.', 'the limited card names the servers');
+  assert.equal(pillNames(await pillText(page)), 'Den and Attic', 'the pill names the same servers in the same words');
+  check('a limit hides every poster, both named servers down: the limited card and the pill say "Den and Attic"');
+});
+
+/** The pill of a household with every server down, and the limited card of the same household (a limit that hides every cached poster). */
+const downPill = async (page, app) => {
+  await bothDown(page, app);
+  await page.goto(app.url);
+  return pillText(page);
+};
+
+msCase('34 two servers that share a name: the pill and the limited card say the type labels, as 2.4.2 did (D183 1)', { settings: (app) => twoServers({ serverName: 'Den', servers: [jfEntry(app, { name: 'Den' })], maxContentRating: 'G' })(app) }, async ({ page, app }) => {
+  const card = await limitedCard(page, app);
+  assert.equal(card, 'No posters within the household limit are available while Plex and Jellyfin are unreachable.', 'one name is no name to tell the servers apart by');
+  assert.equal(pillNames(await pillText(page)), 'Plex and Jellyfin', 'the pill says the type labels');
+  check('two servers named Den: the pill and the limited card say "Plex and Jellyfin"');
+});
+
+msCase('35 two servers of one type that share a name: the limited card says "is", one thing is named (D183 1)', { settings: (app) => twoServers({ serverName: 'Den', servers: [PLEX_TWO({ name: 'Den' })], maxContentRating: 'G', libraryKeys: ['3', `@${hex('8', 1)}/3`], libraryNames: ['Kids Movies', 'Kids Movies'] })(app) }, async ({ page, app }) => {
+  const card = await limitedCard(page, app);
+  assert.equal(card, 'No posters within the household limit are available while Plex is unreachable.', 'one phrase, so "is"');
+  assert.equal(pillNames(await pillText(page)), 'Plex', 'the pill says the one type label');
+  check('two Plex servers named Den: "Plex is unreachable"');
+});
+
+msCase('36 one server named Den, down: the pill says its type, as 2.4.2 did (D183 1)', { settings: oneServer({ serverName: 'Den' }) }, async ({ page, app }) => {
+  await page.route(`${plexUrl(app)}/**`, (route) => route.abort());
+  await page.goto(app.url);
+  assert.equal(pillNames(await pillText(page)), 'Plex', 'the pill says Plex, not Den');
+  assert.match((await page.textContent('#empty-message')).trim(), /^Could not reach Plex /, 'and so does the card');
+  check('one server named Den, down: the pill and the card say Plex');
+});
+
+msCase('37 one server, unnamed, down: the pill says Plex', { settings: oneServer() }, async ({ page, app }) => {
+  await page.route(`${plexUrl(app)}/**`, (route) => route.abort());
+  await page.goto(app.url);
+  assert.equal(pillNames(await pillText(page)), 'Plex');
+  check('one unnamed server, down: the pill says Plex');
+});
+
+msCase('38 a named server and an unnamed Jellyfin: the pill says "Den and Jellyfin" and the limited card names both the same way (D183 1)', { settings: (app) => twoServers({ serverName: 'Den', servers: [jfEntry(app, { name: '' })], maxContentRating: 'G' })(app) }, async ({ page, app }) => {
+  const card = await limitedCard(page, app);
+  assert.equal(card, 'No posters within the household limit are available while Den and Jellyfin are unreachable.');
+  assert.equal(pillNames(await pillText(page)), 'Den and Jellyfin');
+  check('Den and an unnamed Jellyfin, down: "Den and Jellyfin" in the pill and the limited card');
+});
+
+msCase('39 three servers, two sharing a name: the pill says the shared name once', { settings: (app) => twoServers({ serverName: 'Den', servers: [jfEntry(app, { name: 'Den' }), PLEX_TWO({ name: 'Attic' })] })(app) }, async ({ page, app }) => {
+  assert.equal(pillNames(await downPill(page, app)), 'Den and Attic');
+  check('Den, Den and Attic, down: the pill says "Den and Attic"');
+});
+
 // ---------- run ----------
 
 const WORKERS = Number(process.env.E2E_MULTI_WORKERS || 3);

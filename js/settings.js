@@ -28,7 +28,7 @@ const oneOf = (...allowed) => (v, d) => (allowed.includes(v) ? v : d);
 const hhmm = (v, d) => (parseHHMM(v) !== null ? v : d);
 const hex = (v, d) => (typeof v === 'string' && /^[0-9a-f]*$/i.test(v) ? v : d);
 /** The address of a server as it is compared and stored: trimmed, with no trailing slash. */
-export const addressOf = (v) => (typeof v === 'string' ? v.trim().replace(/\/+$/, '') : '');
+export const addressOf = (v) => (typeof v === 'string' ? v.trim().replace(/[\s/]+$/, '') : '');
 
 /** How many servers a household may have, the first one included (D156 7). */
 export const MAX_SERVERS = 3;
@@ -488,9 +488,8 @@ function holdsScopedId(s) {
  * sheet) both follow (D157 3, D162 3, D163, D165 3). `basis` is the server the sign-in was made for, `{ type, url, token, id }` (the saved first
  * server, or the server Remove moved into its place). `readId(type, url)` asks who answers WITHOUT a token (see `settleServers`).
  *  - A token that is not `basis`'s (typed or pasted in the sheet, or made for the new server) belongs to the address it was made at: it may go.
- *  - The same type at the same address is the same server: it may go, and nothing is read. Save never takes this shortcut (`needsAnswer`): it has
- *    already found the address changed on the raw comparison, and `addressOf` is not idempotent (`"x /"` gives `"x "`), so the cleaned forms can
- *    be equal when the stored ones are not. Save then reads the id there, as it always has (D178 1).
+ *  - The same type at the same address is the same server: it may go, and nothing is read. Save (`needsAnswer`) never takes this shortcut: when it
+ *    asks at all, it reads the id there whatever the verdict (D178 1).
  *  - Otherwise it may go only when the same type answers there with `basis`'s own id (`basis.id`, or the id read at `basis.url` when none was
  *    recorded). A change of type is always another server (D157 2).
  *  - Another server is told the token only when the caller says a change of type alone keeps it: `keepsTypeChange`, which Save sets for a household

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults, earlySettings, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, oldTokenMayGo, removedServers, sanitize, save, SECRET_KEYS, serverList, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
+import { addressOf, defaults, earlySettings, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, oldTokenMayGo, removedServers, sanitize, save, SECRET_KEYS, serverList, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -978,22 +978,23 @@ const TOKEN_ROWS = [
     prev: () => promoteBase(), promote: true, change: { serverUrl: 'http://elsewhere:8096' }, answers: { 'http://elsewhere:8096': 'other-server-id' },
     settle: { keeps: false, asked: ['jellyfin http://elsewhere:8096'] }, sheet: { go: false, asked: ['jellyfin http://elsewhere:8096'] },
   },
-  // addressOf is not idempotent ("x /" gives "x "), so an address can differ from the stored one in its raw form and not in its cleaned form.
-  // Save enters its read on the raw comparison and never takes the sheet's same-address shortcut (D178 1): the id is read and recorded (`after`).
+  // addressOf is idempotent ("x /" gives "x"). An extra server's address is stored cleaned (cleanServer), so a promoted server stored as "x /" is "x" and
+  // equals its retyping: Save finds no change on the address and reads nothing (D178 2). The first server's own `serverUrl` is stored with only its trailing
+  // slashes taken off (js/settings.js:67), so "x / /" is kept as "x / " there; it equals its retyping only as addressOf cleans it, and Save reads nothing then too.
   {
-    name: 'a promoted server stored as "http://jf:8096 /", retyped to "http://jf:8096": Save reads its id and keeps it; the sheet sees the same address',
+    name: 'a promoted server stored as "http://jf:8096 /", retyped to "http://jf:8096": its address is stored cleaned, so Save reads nothing, keeps its id and the sheet sees the same address',
     prev: () => sanitize({ ...promoteBase(), servers: [JF({ url: 'http://jf:8096 /' })] }), promote: true, change: { serverUrl: 'http://jf:8096' }, answers: { 'http://jf:8096': 'jf-id-1' },
-    settle: { keeps: true, asked: ['jellyfin http://jf:8096'], after: { serverId: 'jf-id-1', promoted: true, sameRecorded: false, gone: ['plex-id'] } }, sheet: { go: true, asked: [] },
+    settle: { keeps: true, asked: [], after: { serverId: 'jf-id-1', promoted: true, sameRecorded: false, gone: ['plex-id'] } }, sheet: { go: true, asked: [] },
   },
   {
-    name: 'a first address stored as "http://plex:32400 / /", corrected to "http://plex:32400" (recorded id): Save reads the id and records the same server',
+    name: 'a first address stored as "http://plex:32400 / /" (kept as "http://plex:32400 / "), corrected to "http://plex:32400" (recorded id): it is the same address as addressOf cleans it, so Save reads nothing and the recorded id stays',
     prev: () => settled({ ...v240(), serverId: 'plex-id', serverUrl: 'http://plex:32400 / /' }), change: { serverUrl: 'http://plex:32400' }, answers: { 'http://plex:32400': 'plex-id' },
-    settle: { keeps: true, asked: ['plex http://plex:32400'], after: { serverId: 'plex-id', promoted: false, sameRecorded: true, gone: [] } }, sheet: { go: true, asked: [] },
+    settle: { keeps: true, asked: [], after: { serverId: 'plex-id', promoted: false, sameRecorded: false, gone: [] } }, sheet: { go: true, asked: [] },
   },
   {
-    name: 'the same, id never recorded: Save reads both forms of the address and records the id',
-    prev: () => settled({ ...v240(), serverUrl: 'http://plex:32400 / /' }), change: { serverUrl: 'http://plex:32400' }, answers: { 'http://plex:32400': 'm', 'http://plex:32400 ': 'm' },
-    settle: { keeps: true, asked: ['plex http://plex:32400', 'plex http://plex:32400 '], after: { serverId: 'm', promoted: false, sameRecorded: false, gone: [] } }, sheet: { go: true, asked: [] },
+    name: 'the same, id never recorded: Save reads nothing and records no id',
+    prev: () => settled({ ...v240(), serverUrl: 'http://plex:32400 / /' }), change: { serverUrl: 'http://plex:32400' }, answers: { 'http://plex:32400': 'm' },
+    settle: { keeps: true, asked: [], after: { serverId: '', promoted: false, sameRecorded: false, gone: [] } }, sheet: { go: true, asked: [] },
   },
 ];
 /** The settings before a row's Save, the settings it hands in, and the server the sheet's sign-in was made for (the promoted one after Remove). */
@@ -1003,6 +1004,14 @@ const rowInputs = (row) => {
   const next = row.promote ? retyped(prev, row.change.serverUrl, { libraryKeys: ['@jf-id-1/b1'], libraryKey: '@jf-id-1/b1' }) : settled({ ...prev, ...row.change });
   return { prev, basis: { type: basis.type, url: basis.url, token: basis.token, id: basis.id }, next };
 };
+
+test('addressOf is idempotent: cleaning a cleaned address changes nothing (table)', () => {
+  const rows = [['x /', 'x'], ['x/ ', 'x'], ['x//', 'x'], ['  x  ', 'x'], ['http://h:1/ /', 'http://h:1'], ['', ''], ['/', ''], [' / / ', ''], [undefined, '']];
+  for (const [raw, clean] of rows) {
+    assert.equal(addressOf(raw), clean, `${JSON.stringify(raw)} is cleaned`);
+    assert.equal(addressOf(addressOf(raw)), addressOf(raw), `${JSON.stringify(raw)} is idempotent`);
+  }
+});
 
 test('the token rule, Save: the old token is kept or set aside in each household and change (table)', async () => {
   for (const row of TOKEN_ROWS) {

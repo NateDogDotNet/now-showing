@@ -388,7 +388,7 @@ async function handleFailure(err, { notify = false } = {}) {
     const stored = cache.entries();
     const limit = limitNow();
     const limited = limit && !fatal && stored.length > 0 && !stored.some((e) => allows(limit, e.contentRating));
-    showEmpty(true, limited ? `No posters within the household limit are available while ${serverLabels()} ${serverList(state.settings).length > 1 ? 'are' : 'is'} unreachable.` : err.message, err.kind);
+    showEmpty(true, limited ? `No posters within the household limit are available while ${serverLabels()} ${serverNames().length > 1 ? 'are' : 'is'} unreachable.` : err.message, err.kind);
   }
   // A refresh somebody asked for that fails with a poster still on screen has nothing else to say so: the toast carries the fixes.
   if (notify && fixesFor(err.kind).length) {
@@ -537,11 +537,18 @@ const serversKey = (s) => JSON.stringify(serverList(s).map(({ name: _name, ...re
 let lastSettled = null; // what the last Save did to the servers: { settled, before }, for the toast
 /** A server as people read it: its name, else its type's label. */
 const serverNameOf = (entry) => entry.name || signInFlow({ serverType: entry.type }).label;
-/** Every server type the household has, in words: "Plex and Jellyfin". The status pill and the empty card name them all while any is down. */
-function serverLabels() {
-  const labels = [...new Set(serverList(state.settings).map((e) => signInFlow({ serverType: e.type }).label))];
-  return labels.length ? labels.join(' and ') : signIn().label;
+/**
+ * What the status pill and the limited empty card call the servers while any is down (D183 1), as a list. With two or more different names it is the
+ * servers' names ("Den", "Attic"; a name two servers share once); otherwise it is the server types, as 2.4.2 said them ("Plex", "Plex and Jellyfin").
+ */
+function serverNames() {
+  const list = serverList(state.settings);
+  const names = [...new Set(list.map(serverNameOf))];
+  if (names.length > 1) return names;
+  const labels = [...new Set(list.map((e) => signInFlow({ serverType: e.type }).label))];
+  return labels.length ? labels : [signIn().label];
 }
+const serverLabels = () => joinNames(serverNames());
 const joinNames = (names) => (names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 /**
@@ -1543,6 +1550,11 @@ function announceWhatsNew() {
       list.closest('fieldset').scrollIntoView({ block: 'start' }); // the whole server section (heading, connected card, list, Add a server; D168 1) at the top of the view,
       const first = [...list.querySelectorAll('button, summary')].find((el) => el.getClientRects().length > 0); // and focus on its first control
       (first ?? list).focus({ preventScroll: true });
+      // At rotation 90 the sheet is turned and the focused control can lie past the visible part of the sheet body: bring it to the middle of the view, which also
+      // keeps it in view when the lists above it grow a moment later. A control already in view stays where it is, so the section is still at the top.
+      const body = list.closest('.sheet-body').getBoundingClientRect();
+      const at = (first ?? list).getBoundingClientRect();
+      if (at.top < body.top || at.bottom > body.bottom || at.left < body.left || at.right > body.right) (first ?? list).scrollIntoView({ block: 'center', inline: 'nearest' });
     },
     ms: 20_000,
   });

@@ -324,6 +324,30 @@ await withApp({ settings: seed({ serverName: 'Mock Plex', servers: [{ id: '90000
   check('Open settings from two servers: the list at the top, focus on the first Remove button');
 });
 
+// D179 4: at each rotation the sheet is turned, and the first Remove button Open settings focuses must be inside the sheet body's visible box with nothing over
+// its centre, at a wide and at a tall screen. The wait is on the sheet being open and the button focused, not on a delay.
+for (const [label, viewport, rotation] of [390, 844].flatMap((w) => [0, 90, 180, 270].map((r) => [`${w}x${w === 390 ? 844 : 390} rotation ${r}`, w === 390 ? { width: 390, height: 844 } : { width: 844, height: 390 }, r]))) {
+  await withApp({ settings: seed({ rotation, serverName: 'Mock Plex', servers: [{ id: '90000000000000000000000000000001', type: 'jellyfin', url: 'http://127.0.0.1:1', token: 'jf-demo-token', userId: '', name: 'Mock Jellyfin' }] }), viewport }, async ({ page, app }) => {
+    await clearMarkerOnce(page);
+    await page.goto(app.url);
+    await waitToast(page);
+    await page.click('#toast button:has-text("Open settings")');
+    await page.waitForFunction(() => document.getElementById('settings').open && document.activeElement === document.querySelector('#server-list button'), null, { timeout: 5000 });
+    await serverChoiceAtTop(page).catch(() => {});
+    const where = await page.evaluate(() => {
+      const b = document.activeElement.getBoundingClientRect();
+      const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
+      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return { button: { top: b.top, bottom: b.bottom, left: b.left, right: b.right }, body: { top: body.top, bottom: body.bottom, left: body.left, right: body.right }, onRemove: document.activeElement === document.querySelector('#server-list button'), hit: hit === document.activeElement };
+    });
+    assert.equal(where.onRemove, true, `focus is on the first Remove button at ${label}`);
+    const { button: r, body: v } = where;
+    assert.ok(r.top >= v.top - 1 && r.bottom <= v.bottom + 1 && r.left >= v.left - 1 && r.right <= v.right + 1, `the focused Remove is inside the sheet body's visible box at ${label}: ${JSON.stringify(where)}`);
+    assert.equal(where.hit, true, `the element at the button's centre is the button at ${label}: ${JSON.stringify(where)}`);
+    check(`Open settings from two servers at ${label}: the focused Remove button is in view and nothing covers it`);
+  });
+}
+
 // D168 2: with two servers and no saved serverName the connection test names the first server a moment after the sheet opens, and the list is redrawn with
 // that name. The redraw must leave focus where it was: on the first Remove button. The test's answer is held until the page has been seen with focus on the
 // button, so the redraw comes after (a slow server), and the wait is on the redrawn name, not on a delay. The keyboard then goes on from there.
