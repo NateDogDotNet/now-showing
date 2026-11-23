@@ -1,5 +1,5 @@
 // The 2.3.1 follow-up fixes (the run-8 follow-ups, D132): the status pill, the unreadable schedule notice, the profile editor's genre
-// list and notice, the pinned-poster line, the toast on a phone and a TV, focus after Open settings, and the sheet at 390 px.
+// list and notice, the pinned-poster line, the toast on a phone and a TV, focus after Open settings (on Allowed devices), and the sheet at 390 px.
 // Every case names pixelShift: false and dailyReload: false (convention 7).
 
 import assert from 'node:assert/strict';
@@ -47,7 +47,7 @@ const clearMarkerOnce = (page) =>
     sessionStorage.setItem('__markerCleared', '1');
     localStorage.removeItem('plexPoster.whatsNew');
   });
-const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.4\.1/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.4\.3/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
 
 // ---------- 1. "Can't reach Plex" only when Plex did not answer ----------
 
@@ -183,15 +183,15 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   // The connection test and the library lists have answered and two frames have drawn before focus is read, so a late redraw cannot move it under the check.
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
-  assert.equal(await page.evaluate(() => document.activeElement?.closest('#servers-fieldset') !== null && document.activeElement.matches('summary')), true, 'focus starts on the first control of the server list: Add a server');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'players-open', 'focus starts on "Show allowed devices"');
   await page.keyboard.press('Tab');
   const where = await page.evaluate(() => {
     const el = document.activeElement;
-    const start = document.querySelector('#servers-fieldset summary');
+    const start = document.getElementById('players-open');
     return { after: Boolean(start.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING), id: el?.id };
   });
-  assert.ok(where.after, `the first Tab moves on from the server list: ${JSON.stringify(where)}`);
-  check('Open settings puts focus on the first control of the server list');
+  assert.ok(where.after, `the first Tab moves on from "Show allowed devices": ${JSON.stringify(where)}`);
+  check('Open settings puts focus on "Show allowed devices" (the Allowed devices section)');
 });
 
 // ---------- 7. The Settings sheet at 390 px does not scroll sideways ----------
