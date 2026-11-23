@@ -580,30 +580,47 @@ function serversToast(info, saved, names = []) {
 /** Who answers at an address, read without a token (js/sources/index.js `readServerId`), with this display's own client id. */
 const readId = (type, url) => readServerId(type, url, { clientId: clientIdValue, version: VERSION });
 
+/**
+ * The settings a live preview takes from the sheet: the named controls inside the two `data-live` sections of index.html (D181 2, D185). Every
+ * other key of a preview is the saved one. tests/e2e/settings-sheet.spec.mjs compares this list with those controls.
+ */
+const LIVE_KEYS = [
+  'controlLabels',
+  'customFrameUrl',
+  'fillMode',
+  'frameBrightness',
+  'frameId',
+  'gapFill',
+  'nightDim',
+  'nightDimEnd',
+  'nightDimLevel',
+  'nightDimStart',
+  'nightDimTarget',
+  'posterFit',
+  'posterOffsetX',
+  'posterOffsetY',
+  'posterScale',
+  'rotation',
+  'showMeta',
+  'showPlayer',
+  'showProgress',
+  'showTitle',
+];
+
 async function applySettings(next, { persist = true, preview = false, restartIdle = true } = {}) {
   const prev = state.settings;
   const before = resolveSettings(prev, new Date()); // what was in force before this apply, at the same instant
-  // A live preview shows layout only. The household limit, its time slots, the profiles, the poster selection and the pin are never previewed (CCI1, C6I1): while the
-  // dialog is open the previous, saved values keep applying, so only Save changes them and Cancel has nothing to undo
-  // (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the
-  // kiosk switches, the settings PIN and the device helper: an unsaved change to any of them is never in force. The Display
-  // protection fieldset is not live either (K30): a pixel-shift or daily-reload change waits for Save, even when a live
-  // layout field moves while it is unsaved. The brightness controls are their own live block and are not listed here.
-  if (preview) {
-    const { maxContentRating, limitSlots, profiles, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
-    const { pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime } = prev;
-    const { libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source } = prev; // the selection (R-SEL-1, D101 ruling 6)
-    const { serverType, serverUrl, plexToken, serverUserId, serverId, serverCarried, servers } = prev; // the connection keys are stored by Save, never before (D149 1): the Save compares the type, address, token and user id with the stored ones, and a preview never leaves the typed or imported ones in force
-    const { weighting, noRepeatDays } = prev; // an unsaved window of 0 must not reach the engine, which would clear the saved record (D114 1, D116 1)
-    next = {
-      ...next,
-      ...{ maxContentRating, limitSlots, profiles, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper },
-      ...{ pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime },
-      ...{ libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source },
-      ...{ weighting, noRepeatDays },
-      serverType, serverUrl, plexToken, serverUserId, serverId, serverCarried, servers,
-    };
-  }
+  // A live preview is the saved settings plus the live keys of the sheet, as the sheet holds them at that moment (D181 2, D185 1). Nothing else is
+  // taken from the sheet, from an imported file or from an open profile (D185 2, 3, 4): the household limit, its time slots, the profiles, the poster
+  // selection and the pin are never previewed (CCI1, C6I1), so while the dialog is open the saved values keep applying, only Save changes them and
+  // Cancel has nothing to undo (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the kiosk
+  // switches, the settings PIN and the device helper, and for the connection keys, which Save stores and a preview never leaves in force (D149 1:
+  // the Save compares the type, address, token and user id with the stored ones). The Display protection fieldset is not live either (K30): a
+  // pixel-shift or daily-reload change waits for Save, even when a live layout field moves while it is unsaved; so do the weighting and the
+  // no-repeat window, because an unsaved window of 0 must not reach the engine, which would clear the saved record (D114 1, D116 1), and Cross-fade.
+  // The brightness controls are their own live block, and LIVE_KEYS lists them with the layout controls. A key that is not listed there is
+  // never previewed, so a new setting is safe by default.
+  if (preview) next = { ...prev, ...Object.fromEntries(LIVE_KEYS.map((key) => [key, next[key]])) };
   // A Save that stores a different server type (an absent one counts as Plex) starts over: the pinned poster goes now, and the
   // offline cache and the no-repeat history go once the new client is built (D134 2, D141 3). A preview, a sign-in and a Cancel store nothing.
   // The servers are settled first (D156 3, D157): who answers at a changed address is read without the token, the token stays only with the

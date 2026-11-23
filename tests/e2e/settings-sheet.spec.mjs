@@ -7,7 +7,10 @@ import assert from 'node:assert/strict';
 import { startMockPlex } from '../../scripts/mock-plex.mjs';
 import { createPinAuth } from '../../js/kiosk.js';
 import { EventEmitter } from 'node:events';
-import { freePort, guardNetwork, withApp } from './lib.mjs';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { defaults } from '../../js/settings.js';
+import { freePort, guardNetwork, ROOT, withApp } from './lib.mjs';
 
 const check = (name) => console.log(`  ok  ${name}`);
 const cases = [];
@@ -699,6 +702,459 @@ sheetCase('D177 Test connection after the first server is retyped to Jellyfin, w
   assert.ok(!toJellyfin.some((line) => line.includes('demo-token')), 'no request to the Jellyfin address carried the Plex sign-in');
   await page.click('#settings-cancel');
   check('D177 a retype to Jellyfin with the old sign-in: it is set aside and sent nowhere');
+});
+
+// ---- LP: a live preview is the saved settings plus the live keys, as the sheet holds them, and nothing else (D181 2, D185) ----
+//
+// Nothing here passes or fails by elapsed time: every wait is on the state it names (a probe of the display, a poster drawn, a dialog closed).
+// The 10000 ms and 2500 ms timeouts in this section are only upper bounds on a wait for such a state, so a case that never reaches it fails
+// instead of hanging; reaching the state sooner or later changes nothing, and no assertion compares a duration.
+// "In force" is read off the display (the probe below) or off Diagnostics, which prints the settings the page is running on.
+
+/** The live keys the preview carries: the array named LIVE_KEYS in js/main.js, read from the file (main.js cannot be imported in node). */
+const liveKeysInMain = () => {
+  const text = readFileSync(join(ROOT, 'js', 'main.js'), 'utf8');
+  const body = /const LIVE_KEYS = \[([^\]]*)\]/.exec(text)?.[1];
+  assert.ok(body, 'js/main.js names its live keys in `const LIVE_KEYS = [...]`');
+  return [...body.matchAll(/'([A-Za-z]+)'/g)].map((m) => m[1]);
+};
+
+/** Installs `window.__probe()`: what the display shows of the live controls, as one comparable object. */
+const installProbe = (page) =>
+  page.evaluate(() => {
+    const $ = (id) => document.getElementById(id);
+    window.__probe = () => {
+      const box = $('poster-box').getBoundingClientRect();
+      const r = (v) => Math.round(v * 10) / 10;
+      return {
+        box: [box.left, box.top, box.width, box.height].map(r),
+        fit: $('poster-box').style.getPropertyValue('--poster-fit'),
+        rotation: $('stage').style.getPropertyValue('--rotation'),
+        labels: $('controls').dataset.labels,
+        frameHidden: $('frame').hidden,
+        frameSrc: $('frame').getAttribute('src') || '',
+        frameFilter: getComputedStyle($('frame')).filter,
+        stageFilter: getComputedStyle($('stage')).filter,
+        title: $('title-card').hidden ? '' : $('title-card').textContent,
+        backdropHidden: $('fill-backdrop').hidden,
+        gapHidden: $('gap-fill').hidden,
+        fade: document.documentElement.style.getPropertyValue('--fade-ms'),
+        transition: getComputedStyle(document.querySelector('.poster-layer')).transitionDuration,
+      };
+    };
+  });
+const probe = (page) => page.evaluate(() => window.__probe());
+/** Waits until the probe holds the stated values (a field, optionally one index of it, `eq` or `ne` to the value, or `lt` for a number, or `has` for a substring). */
+const probeIs = (page, field, op, value, index, ms = 10000) =>
+  page
+    .waitForFunction(
+      ({ field, op, value, index }) => {
+        const v = window.__probe()[field];
+        const got = index === undefined ? v : v[index];
+        return op === 'eq' ? got === value : op === 'ne' ? got !== value : op === 'lt' ? got < value : op === 'has' ? got.includes(value) : false;
+      },
+      { field, op, value, index },
+      { timeout: ms },
+    )
+    .catch(async () => assert.fail(`the display never showed ${field}${index === undefined ? '' : `[${index}]`} ${op} ${JSON.stringify(value)} (it shows ${JSON.stringify((await probe(page))[field])})`));
+const probeBack = (page, base) =>
+  page
+    .waitForFunction((want) => JSON.stringify(window.__probe()) === want, JSON.stringify(base), { timeout: 10000 })
+    .catch(async () => assert.fail(`the display did not return to the saved one:\n  was ${JSON.stringify(base)}\n  now ${JSON.stringify(await probe(page))}`));
+const openAdvanced = (page) => page.evaluate(() => (document.getElementById('advanced').open = true));
+/** A live change that is the same for every case: it shrinks the poster, and the wait is on that. */
+async function nudge(page, base) {
+  await page.fill('input[name="posterScale"]', '90');
+  await probeIs(page, 'box', 'lt', base.box[2], 2);
+}
+
+sheetCase('LP1 an unsaved Cross-fade is not previewed by a live change: the saved fade stays, Cancel restores, Save applies it', { settings: seed() }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  const base = await probe(page);
+  assert.equal(base.fade, '1200ms');
+  assert.equal(base.transition, '1.2s', 'the poster layers fade over the saved 1200 ms');
+  await openSettings(page);
+  await openAdvanced(page);
+  await page.fill('input[name="crossfadeMs"]', '4000'); // not a live control: nothing previews
+  await nudge(page, base); // a live control: the preview runs
+  const during = await probe(page);
+  assert.equal(during.fade, '1200ms', '--fade-ms stays at the saved value under the preview');
+  assert.equal(during.transition, '1.2s', 'and so does the fade the poster layers really use');
+  await page.click('#settings-cancel');
+  await probeBack(page, base);
+  assert.equal((await stored(page)).crossfadeMs ?? 1200, 1200);
+
+  await openSettings(page);
+  await openAdvanced(page);
+  await page.fill('input[name="crossfadeMs"]', '4000');
+  await nudge(page, base);
+  await save(page);
+  await probeIs(page, 'fade', 'eq', '4000ms');
+  await probeIs(page, 'transition', 'eq', '4s');
+  assert.equal((await stored(page)).crossfadeMs, 4000, 'Save applies it');
+  check('LP1 an unsaved Cross-fade stays out of the display; Cancel restores; Save applies it');
+});
+
+sheetCase('LP2 Cancel restores every live value the preview changed', { settings: seed({ pixelShift: false }), viewport: { width: 1920, height: 1080 } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  const base = await probe(page);
+  await openSettings(page);
+  const set = async (name, value) => {
+    if (typeof value === 'boolean') await page.setChecked(`input[name="${name}"]`, value);
+    else if ((await page.$eval(`[name="${name}"]`, (el) => el.tagName)) === 'SELECT') await page.selectOption(`select[name="${name}"]`, value);
+    else await page.fill(`input[name="${name}"]`, value);
+  };
+  for (const [name, value] of [['posterScale', '80'], ['posterOffsetX', '7'], ['posterOffsetY', '-6'], ['posterFit', 'contain'], ['rotation', '180'], ['frameId', 'none'], ['frameBrightness', '70'], ['controlLabels', 'always'], ['fillMode', 'blur'], ['showTitle', true], ['showMeta', true]]) await set(name, value);
+  const previewed = await probe(page);
+  for (const field of ['box', 'fit', 'rotation', 'labels', 'frameHidden', 'frameFilter', 'title', 'backdropHidden']) assert.notDeepEqual(previewed[field], base[field], `${field} previewed`);
+  await page.click('#settings-cancel');
+  await probeBack(page, base);
+  assert.equal((await stored(page)).posterScale ?? 100, 100, 'nothing was saved');
+  check('LP2 Cancel puts every previewed live value back');
+});
+
+sheetCase('LP3 every live value the sheet holds shows, whatever was touched last, and a non-live change between two live ones does not', { settings: seed() }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  const base = await probe(page);
+  await openSettings(page);
+  await openAdvanced(page);
+  await page.fill('input[name="posterScale"]', '80'); // live change A
+  await probeIs(page, 'box', 'lt', base.box[2], 2);
+  const afterA = await probe(page);
+  await page.fill('input[name="crossfadeMs"]', '4000'); // a non-live change
+  await page.check('input[name="showTitle"]'); // live change B
+  await probeIs(page, 'title', 'ne', '');
+  const afterB = await probe(page);
+  assert.deepEqual(afterB.box, afterA.box, 'A is still showing after B');
+  assert.equal(afterB.fade, '1200ms', 'the non-live change between them is not');
+  await page.click('#settings-cancel');
+  await probeBack(page, base);
+  check('LP3 live change A, a non-live change, live change B: A and B show, the non-live does not');
+});
+
+sheetCase('LP4a each live control of Frame & layout previews its own value', { settings: seed(), viewport: { width: 1920, height: 1080 } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  const base = await probe(page);
+  await openSettings(page);
+  const sel = (name, value) => page.selectOption(`select[name="${name}"]`, value);
+  await sel('frameId', 'none');
+  await probeIs(page, 'frameHidden', 'eq', true);
+  await sel('frameId', 'custom');
+  await page.fill('input[name="customFrameUrl"]', 'assets/frames/marquee-glow.png');
+  await probeIs(page, 'frameSrc', 'has', 'marquee-glow.png');
+  await sel('posterFit', 'contain');
+  await probeIs(page, 'fit', 'eq', 'contain');
+  const was = await probe(page);
+  await page.fill('input[name="posterScale"]', '80');
+  await probeIs(page, 'box', 'lt', was.box[2], 2);
+  const scaled = await probe(page);
+  await page.fill('input[name="posterOffsetX"]', '7');
+  await probeIs(page, 'box', 'ne', scaled.box[0], 0);
+  await page.fill('input[name="posterOffsetY"]', '-6');
+  await probeIs(page, 'box', 'ne', scaled.box[1], 1);
+  await sel('fillMode', 'blur');
+  await probeIs(page, 'backdropHidden', 'eq', false);
+  await sel('controlLabels', 'always');
+  await probeIs(page, 'labels', 'eq', 'always');
+  await page.check('input[name="showTitle"]');
+  await probeIs(page, 'title', 'ne', '');
+  const titled = (await probe(page)).title;
+  assert.notEqual(titled, '', 'showTitle: the poster title shows');
+  await page.check('input[name="showMeta"]');
+  await probeIs(page, 'title', 'ne', titled);
+  await sel('rotation', '180');
+  await probeIs(page, 'rotation', 'eq', '180deg');
+  await page.click('#settings-cancel');
+  await probeBack(page, base);
+  check('LP4a frame, custom frame, fit, size, offsets, landscape fill, labels, title, meta and rotation each preview');
+});
+
+sheetCase(
+  'LP4b the gap fill previews',
+  { settings: seed({ staticRatingKey: '3', staticTitle: 'Velvet Curtain', frameId: 'marquee-glow', posterFit: 'contain' }), viewport: { width: 1080, height: 1920 } },
+  async ({ page, app }) => {
+    await page.goto(app.url);
+    await posterShown(page);
+    await installProbe(page);
+    const base = await probe(page);
+    assert.equal(base.gapHidden, true);
+    await openSettings(page);
+    await page.selectOption('select[name="gapFill"]', 'blur');
+    await probeIs(page, 'gapHidden', 'eq', false);
+    await page.click('#settings-cancel');
+    await probeBack(page, base);
+    check('LP4b gapFill previews, and Cancel restores it');
+  },
+);
+
+sheetCase('LP4c the night dim controls preview their own values', { settings: seed({ nightDim: false }), clock: { time: '2026-06-01T12:00:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  const base = await probe(page);
+  assert.equal(base.frameFilter, 'none');
+  await openSettings(page);
+  await page.check('input[name="nightDim"]'); // saved window 22:00-07:00: it is noon, so no dimming yet
+  await page.fill('input[name="nightDimLevel"]', '40');
+  await page.fill('input[name="nightDimStart"]', '11:00');
+  await page.fill('input[name="nightDimEnd"]', '13:00'); // noon is inside the previewed window
+  await probeIs(page, 'frameFilter', 'eq', 'brightness(0.4)');
+  await page.selectOption('select[name="nightDimTarget"]', 'stage');
+  await probeIs(page, 'stageFilter', 'eq', 'brightness(0.4)');
+  await probeIs(page, 'frameFilter', 'eq', 'none');
+  await page.fill('input[name="nightDimLevel"]', '70');
+  await probeIs(page, 'stageFilter', 'eq', 'brightness(0.7)');
+  await page.fill('input[name="nightDimEnd"]', '11:30'); // noon is now past the window's end
+  await probeIs(page, 'stageFilter', 'eq', 'none');
+  await page.fill('input[name="nightDimEnd"]', '13:00');
+  await probeIs(page, 'stageFilter', 'eq', 'brightness(0.7)');
+  await page.fill('input[name="nightDimStart"]', '12:30'); // noon is now before the window's start
+  await probeIs(page, 'stageFilter', 'eq', 'none');
+  await page.click('#settings-cancel');
+  await probeBack(page, base);
+  check('LP4c nightDim, its window, its level and its target each preview');
+});
+
+sheetCase('LP5 the live keys in js/main.js are exactly the named controls inside the sheet\'s data-live sections', { settings: seed() }, async ({ page, app }) => {
+  const listed = liveKeysInMain();
+  assert.equal(new Set(listed).size, listed.length, 'no key is listed twice');
+  await page.goto(app.url);
+  await posterShown(page);
+  const { inLive, all } = await page.evaluate(() => {
+    const named = [...document.getElementById('settings-form').elements].filter((el) => el.name);
+    return { inLive: [...new Set(named.filter((el) => el.closest('[data-live]')).map((el) => el.name))], all: [...new Set(named.map((el) => el.name))] };
+  });
+  assert.deepEqual([...listed].sort(), [...inLive].sort(), 'the list and the data-live controls agree');
+  assert.ok(inLive.length > 0 && all.length > inLive.length, 'the sheet has live and non-live controls');
+  for (const key of listed) assert.ok(key in defaults(), `${key} is a setting`);
+  assert.ok(!listed.includes('crossfadeMs'), 'Cross-fade is not live');
+  check(`LP5 ${listed.length} live keys: the list and the data-live controls agree`);
+});
+
+// What the sheet holds that is not live never reaches the display, even while a live control moves (D181 2, D185 2).
+const TITLE_NAMES = ['The Grand Marquee', 'Midnight Projector', 'Velvet Curtain', 'Popcorn Skies', 'Neon Matinee', 'Last Reel', 'Silver Screen Serenade', 'Encore'];
+const titleNo = (alt) => TITLE_NAMES.indexOf((alt || '').replace(/^Poster: /, '')) + 1;
+const PG13_TITLES = [1, 2, 3, 6]; // what a PG-13 limit allows in the mock
+/** Records every poster that is ever active, and how many draws there were. */
+const watchDraws = (page) =>
+  page.evaluate(() => {
+    window.__ever = new Set();
+    window.__draws = 0;
+    let last = '';
+    const record = () => {
+      const alt = document.querySelector('.poster-layer.active')?.alt || '';
+      if (alt) window.__ever.add(alt);
+      if (alt && alt !== last) window.__draws++;
+      last = alt || last;
+    };
+    new MutationObserver(record).observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class', 'alt'] });
+    record();
+  });
+const everShown = async (page) => (await page.evaluate(() => [...window.__ever])).map(titleNo);
+/**
+ * Asks for `n` more posters, each wait on the draw itself, and returns how many were drawn. It gives up at the first draw that never comes (a
+ * poster pinned or playing keeps the same title on screen); the caller's check of what was shown is what fails then.
+ */
+async function drawMore(page, n) {
+  const start = await page.evaluate(() => window.__draws);
+  for (let want = start + 1; want <= start + n; want++) {
+    let drew = false;
+    for (let tries = 0; tries < 4 && !drew; tries++) {
+      await page.evaluate(() => document.querySelector('[data-action="refresh"]').click());
+      drew = await page.waitForFunction((w) => window.__draws >= w, want, { timeout: 2500 }).then(() => true, () => false);
+    }
+    if (!drew) break;
+  }
+  return (await page.evaluate(() => window.__draws)) - start;
+}
+const DRAWS = 16;
+const PG13 = { maxContentRating: 'PG-13' };
+
+sheetCase('LP6 an unsaved looser limit is not previewed by a live change: only what the saved limit allows is drawn', { settings: seed(PG13) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  await watchDraws(page);
+  const base = await probe(page);
+  await openSettings(page);
+  await page.selectOption('select[name="maxContentRating"]', 'NC-17');
+  await nudge(page, base);
+  assert.equal(await drawMore(page, DRAWS), DRAWS, 'the draws happened');
+  const ever = await everShown(page);
+  assert.deepEqual([...new Set(ever)].filter((t) => !PG13_TITLES.includes(t)), [], `only titles within PG-13 were drawn: ${[...new Set(ever)].sort()}`);
+  assert.equal((await stored(page)).maxContentRating, 'PG-13');
+  await page.click('#settings-cancel');
+  check(`LP6 an unsaved NC-17 under a saved PG-13: ${DRAWS} draws, all within PG-13`);
+});
+
+sheetCase(
+  'LP6b an unsaved all-day time slot with a looser limit is not previewed by a live change',
+  { settings: seed({ ...PG13, limitSlots: [] }), clock: { time: '2026-01-05T12:00:00' } },
+  async ({ page, app }) => {
+    await page.goto(app.url);
+    await posterShown(page);
+    await installProbe(page);
+    await watchDraws(page);
+    const base = await probe(page);
+    await openSettings(page);
+    await page.click('#slot-add');
+    await page.fill('#slot-list .slot-start', '00:00');
+    await page.selectOption('#slot-list .slot-limit', 'NC-17');
+    await nudge(page, base);
+    assert.equal(await drawMore(page, DRAWS), DRAWS, 'the draws happened');
+    const ever = await everShown(page);
+    assert.deepEqual([...new Set(ever)].filter((t) => !PG13_TITLES.includes(t)), [], `only titles within the saved PG-13 were drawn: ${[...new Set(ever)].sort()}`);
+    await page.click('#settings-cancel');
+    check(`LP6b an unsaved NC-17 all-day slot under a saved PG-13: ${DRAWS} draws, all within PG-13`);
+  },
+);
+
+sheetCase('LP6c an unsaved untick of "Apply the limit to what\'s playing" is not previewed by a live change', { settings: seed({ ...PG13, showNowPlaying: true, nowPlayingPollSeconds: 5 }) }, async ({ page, app, mock }) => {
+  await mock.play('4'); // an R title playing under PG-13
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  await watchDraws(page);
+  const base = await probe(page);
+  await openSettings(page);
+  await page.uncheck('input[name="limitNowPlaying"]');
+  await nudge(page, base);
+  const drawn = await drawMore(page, DRAWS);
+  const ever = await everShown(page);
+  assert.ok(!ever.includes(4), `the R title playing was not drawn while the untick was unsaved: ${[...new Set(ever)].sort()}`);
+  assert.equal(drawn, DRAWS, 'the draws happened (random posters keep coming while the R title plays)');
+  await page.click('#settings-cancel');
+  check('LP6c an unsaved untick of the now-playing limit: the R title playing is never drawn');
+});
+
+sheetCase('LP7 an unsaved library tick is not previewed by a live change', { settings: seed() }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  await watchDraws(page);
+  const base = await probe(page);
+  await openSettings(page);
+  await page.waitForFunction(() => [...document.querySelectorAll('#library-list label')].some((l) => /Kids Movies/.test(l.textContent)), null, { timeout: 10000 });
+  await page.check('#library-list input[value="3"]');
+  await nudge(page, base);
+  const drawn = await drawMore(page, DRAWS);
+  const ever = await everShown(page);
+  assert.ok(ever.every((t) => t >= 1 && t <= 8), `only Movies titles were drawn, none of Kids Movies (0 is not a Movies title): ${[...new Set(ever)].sort()}`);
+  assert.equal(drawn, DRAWS, 'the draws happened');
+  await page.click('#settings-cancel');
+  check('LP7 an unsaved library tick: no poster from it is drawn');
+});
+
+sheetCase('LP8 an unsaved server address and token are not previewed by a live change: Diagnostics shows the saved ones', { settings: seed() }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  const base = await probe(page);
+  await openSettings(page);
+  await page.evaluate(() => {
+    for (const [name, value] of [['serverUrl', 'http://127.0.0.1:9'], ['plexToken', 'other-token']]) {
+      const el = document.querySelector(`input[name="${name}"]`);
+      el.value = value;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+  await nudge(page, base);
+  await page.evaluate(() => document.querySelector('[data-action="diagnostics"]').click());
+  await page.waitForFunction(() => document.getElementById('diagnostics').open, null, { timeout: 5000 });
+  const rows = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#diag-list dt')].map((dt) => [dt.textContent, dt.nextElementSibling.textContent])));
+  assert.ok(rows.Server.includes(`127.0.0.1:${app.mockPort}`), `the saved address is in force: ${rows.Server}`);
+  assert.ok(rows.Token.startsWith('demo'), `the saved token is in force: ${rows.Token}`);
+  await page.click('#diag-close');
+  await page.click('#settings-cancel');
+  check('LP8 an unsaved address and token: Diagnostics shows the saved ones under a live preview');
+});
+
+sheetCase('LP8b an unsaved kiosk tick is not previewed by a live change: the page still lets a context menu through', { settings: seed() }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  const base = await probe(page);
+  const menuAllowed = () => page.evaluate(() => document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))); // false: kiosk mode stopped it
+  assert.equal(await menuAllowed(), true, 'the saved settings are not kiosk');
+  await openSettings(page);
+  await page.check('input[name="kioskMode"]');
+  await nudge(page, base);
+  assert.equal(await menuAllowed(), true, 'the unsaved kiosk tick is not in force');
+  await page.click('#settings-cancel');
+  check('LP8b an unsaved kiosk tick: not in force under a live preview');
+});
+
+sheetCase('LP9 an import previews only its live values: its Cross-fade, limit and pin wait for Save', { settings: seed(PG13) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  await watchDraws(page);
+  const base = await probe(page);
+  await openSettings(page);
+  const file = { crossfadeMs: 4000, maxContentRating: 'NC-17', posterScale: 70, showTitle: true, staticRatingKey: '4', staticTitle: 'Popcorn Skies' };
+  await page.setInputFiles('#import-file', { name: 'import.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(file)) });
+  await page.waitForFunction(() => document.getElementById('pinned-title').textContent === 'Popcorn Skies', null, { timeout: 10000 });
+  await probeIs(page, 'box', 'lt', base.box[2], 2); // the live values show
+  await probeIs(page, 'title', 'ne', '');
+  assert.equal((await probe(page)).fade, '1200ms', 'the imported Cross-fade is not in force');
+  const drawn = await drawMore(page, DRAWS);
+  const ever = await everShown(page);
+  assert.deepEqual([...new Set(ever)].filter((t) => !PG13_TITLES.includes(t)), [], `the imported limit and pin are not in force: ${[...new Set(ever)].sort()}`);
+  assert.equal(drawn, DRAWS, 'the draws happened');
+  await page.click('#settings-cancel');
+  await probeBack(page, base);
+  check('LP9 an import: its live values show; its Cross-fade, limit and pin do not');
+});
+
+// LP10: an unsaved weighting is not previewed (D114 1, D116 1). Off with no window, the engine's draw avoids the last ten shown, so eight draws are eight
+// different titles; "Unwatched first" would draw by weight from everything but the poster on screen, and eight draws from the seeded random below repeat.
+// The page's Math.random is seeded by an init script (as weighting.spec.mjs does), so a run repeats; each draw is waited for by the poster changing.
+const seedRandom = (page, n) =>
+  page.addInitScript((seedValue) => {
+    let a = seedValue >>> 0;
+    Math.random = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }, n);
+const activeTitle = (page) => page.evaluate(() => (document.querySelector('.poster-layer.active')?.alt || '').replace(/^Poster: /, ''));
+/** Asks for the next poster and waits for the one on screen to change (a click during a busy tick is ignored: ask again). */
+async function nextTitle(page) {
+  const was = await activeTitle(page);
+  for (let i = 0; i < 12; i++) {
+    await page.evaluate(() => document.querySelector('[data-action="refresh"]').click());
+    const changed = await page.waitForFunction((p) => { const a = (document.querySelector('.poster-layer.active')?.alt || '').replace(/^Poster: /, ''); return a !== '' && a !== p; }, was, { timeout: 2500 }).then(() => true, () => false);
+    if (changed) return activeTitle(page);
+  }
+  assert.fail(`the poster never changed from ${was}`);
+}
+
+sheetCase('LP10 an unsaved weighting is not previewed by a live change: eight draws with the sheet open are eight different titles', { settings: seed({ weighting: 'off', noRepeatDays: 0 }) }, async ({ page, app }) => {
+  await seedRandom(page, 20240601);
+  await page.goto(app.url);
+  await posterShown(page);
+  await installProbe(page);
+  const base = await probe(page);
+  const seen = [await activeTitle(page)];
+  await openSettings(page);
+  await page.selectOption('select[name="weighting"]', 'unwatched'); // unsaved
+  await nudge(page, base); // a live change: the preview runs
+  for (let i = 0; i < 7; i++) seen.push(await nextTitle(page));
+  assert.equal(new Set(seen).size, 8, `the saved weighting (off, last ten avoided) is in force: eight draws, eight titles: ${seen}`);
+  assert.equal((await stored(page)).weighting ?? 'off', 'off');
+  await page.click('#settings-cancel');
+  check('LP10 an unsaved weighting under a live preview: eight draws, eight different titles');
 });
 
 // ---- SSA2: the K48 guard counts a plex.tv request as routed only when a handler answered it ----
