@@ -1172,3 +1172,14 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Conductor ruling — 2026-11-23 (run 12, `followup-fixes` confirmation review; under D44, D181 10): D184
 
 - **D184 The focused control wins at any rotation where the section does not fit (amends D183 2).** D183 2 said "at rotation 90". The build applies one rule at every rotation: after Open settings, when the server section and the focused control cannot both be in the visible part of the sheet (for example at 844x390 with rotation 0), the focused control is brought into view; where both fit, the section stays at the top (D168 1). `tests/e2e/preset.spec.mjs` pins it at 390x844 and 844x390 for rotations 0, 90, 180 and 270. No code changes with this entry.
+
+## Conductor ruling — 2026-11-23 (run 12, `live-preview` pre-flight; under D44, D181 10): D185
+
+- **D185 What the criteria of `live-preview` mean.** A cold probe of the criteria text (`.orchestrator/artifacts/live-preview--criteria-probe-r1.md`, 13 findings) found inputs the text left open. Stop 3 offered five items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
+  1. **A preview carries every live value.** A preview is the saved settings with every live key as the sheet holds it at that moment, not only the control just touched. A live key is a control inside a `data-live` section of the sheet (20 today).
+  2. **A limit is never previewed (amends the plan's hazard).** The hazard's words "or the previewed limit" are struck. The saved limit in force decides what may show during a preview (D120 1).
+  3. **A profile open changes nothing.** The household's live controls keep previewing, nothing a profile holds is previewed, and Done and Discard send no preview (D122 4, D135 5).
+  4. **An import previews only its live values.** Import fills the sheet and sends one preview, which passes through the same rule; every non-live value of the file waits for Save.
+  5. **The list is checked.** A test compares the preview's list of live keys with the named controls inside the sheet's `data-live` sections.
+  6. **Unchanged, with no question:** "the saved value" is what is stored at that moment; Cancel restores the stored settings; a live value that depends on a non-live one uses the saved non-live value; brightness and night dim, invalid input and which screens a preview reaches stay as they are.
+  7. **Criterion 3 stays a grep.** The anchored review reads the sentence R-SET-1 gains and judges that it says what items 1 to 4 say.

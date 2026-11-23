@@ -1537,7 +1537,7 @@ Facts this section stands on (invocation probes, 2026-11-05; `.orchestrator/arti
   2. `node tests/e2e/run.mjs settings-sheet profiles brightness helper kiosk now-playing fill content-rating` (new cases: an unsaved Cross-fade of 4000 ms, then a live change: `--fade-ms` stays at the saved value and the live value shows; Cancel restores every live value; with a profile open, a live control in the profile's section previews only that live value).
   3. `grep -q 'D181' docs/spec.md` (R-SET-1 says what a live preview carries).
   4. scope: only the Output paths changed.
-- **Notes/hazards:** Hazard: the preview must never show a poster that the saved limit or the previewed limit would not allow (D120 1, D122 4); the allowlist keeps every limit-bearing key saved. `content-rating` needs a long timeout (it timed out at 180 s in the research probe).
+- **Notes/hazards:** Hazard: the preview must never show a poster that the saved limit would not allow (D120 1, D122 4; a limit is never previewed, D185 2); the allowlist keeps every limit-bearing key saved. A preview carries every live value as the sheet holds it; an import previews only its live values; a profile open changes nothing; a test compares the allowlist with the controls inside the `data-live` sections (D185). `content-rating` needs a long timeout (it timed out at 180 s in the research probe).
 
 ### 68. `play-now-players` — The allowed devices list
 - **Goal:** Settings, behind the PIN, lists the Plex players on the account and lets the owner allow each one for this display. The list is kept only on this display, starts empty, matches players by client identifier, and marks a player that has left the account as unavailable.
