@@ -1211,3 +1211,10 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   3. **The state is read out and says what it means.** Each row's control is described by its state for assistive technology. "unavailable" says the player is no longer on the Plex account; "not checked" says plex.tv could not be read; "offline" says the player is not connected now.
   4. **Each part of `provides` is trimmed** before it is compared with `player` (D186 7).
   5. **Follow-ups (owner Nathan), not in this run:** the PIN prompt does not say what it is for; Settings opened while the position tool is active resumes without the PIN (older code); a check with a real screen reader.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-players` second reviews; Nathan: "Fix the findings (Recommended)"; under D44, D181 10): D189
+
+- **D189 What the second reviews of `play-now-players` left open.** Stop 7 offered three items with a recommended option each; they take their recommended options under Nathan's choice, and he may overturn any of them.
+  1. **A list closed by a server change says why (adds to D187 1).** The section says in one line that the servers changed and the list was closed, and that opening it again reads the players. Every route that changes the servers closes the list, a sign-in that stops partway included.
+  2. **No Plex server signed in: stored entries are not checked (amends D186 7 and D188 3 for this case).** With no Plex server signed in, nobody asked an account, so a stored entry reads "not checked", with the reason that no Plex server is signed in. It stays removable, and nothing can be added.
+  3. **A fourth plain sentence (adds to D188 2).** A server error from plex.tv reads that plex.tv had a problem and could not answer, and to try again later.
