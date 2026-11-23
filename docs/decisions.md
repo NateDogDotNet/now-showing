@@ -1246,10 +1246,18 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   5. **One dialog at a time.** Opening Settings, Diagnostics or any other dialog ends an open Play now, and Play now does not start while another dialog is open.
   6. **Failures stay and say which.** A Play now failure stays on screen for 15 seconds. A server error on the play command (an HTTP 5xx answer) says the server had a problem and did not send it, and to try again later; "could not reach the device" is for the server's other refusals.
 
-## Conductor ruling — 2026-11-23 (run 12, `play-now-plex` second reviews; under D44, D181 10, and Nathan's "Fix the findings (Recommended)"): D193
+## Conductor ruling — 2026-11-23 (run 12, `play-now-plex` second reviews; under D44, D181 10, and Nathan's "Fix the findings (Recommended)"; item 3 amended by D194): D193
 
-- **D193 What the second reviews of `play-now-plex` left open.** Stop 11 offered four items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
+- **D193 What the second reviews of `play-now-plex` left open (item 3 is amended by D194).** Stop 11 offered four items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
   1. **The stricter of the two at the send (D193 1 amends D192 2).** D192 2, before D193, said the limit at the send is the stored one. The stored settings and the page's own can differ (a Save that a full store did not take). At the moment of sending the title must pass both the limit in force resolved from the stored settings and the one resolved from the page's settings, and the device must be on both allowed lists.
   2. **"Sending" shows when the request goes (D193 2 sharpens D192 3).** The checking line stays until the last check has passed. The line that says the title is being sent to the device shows only once the request is made.
-  3. **No answer in time is not "not sent".** A play request that got no answer in time says it is not known whether the device started, and to look at the device before trying again. A request that could not be made at all says it was not sent.
+  3. **No answer in time is not "not sent" (D194 1: nor is a failed connection, unless the browser is offline).** A play request that got no answer in time says it is not known whether the device started, and to look at the device before trying again. A request that could not be made at all says it was not sent.
   4. **A stopped Play now says so (D193 4).** When another dialog (D192 5, unchanged by D193) or a rebuilt connection (D192 1, unchanged by D193) ends a Play now before its request was handed over, the display says in one line that Play now was stopped and nothing was sent.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-plex` third reviews; under D44, D181 10, and Nathan's "Fix the findings (Recommended)"): D194
+
+- **D194 What the third reviews of `play-now-plex` left open.** Stop 12 offered four items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
+  1. **"Was not sent" only when the browser is offline (amends D193 3).** D193 3 said a request that could not be made at all says it was not sent. The browser reports a connection never made and one lost after the server took the command in the same way. A failed connection on the play request therefore says it is not known whether the device started, and to look at the device before trying again; only when the browser itself is offline does it say the title was not sent.
+  2. **Another notice wins over the stopped line (adds to D193 4).** If a notice is on screen when the last dialog closes, the line that says Play now was stopped is not shown. A new Play now also drops a stopped line that is still held.
+  3. **An answer is held too.** The answer of a request that reached the server (the title is playing, or what went wrong) that arrives while a dialog covers the page is held and shown when the last dialog closes, whatever other notice is up.
+  4. **The button and the dialog use both lists (adds to D193 1).** The Play now button shows, and the dialog lists a device, only when the device is on both the stored allowed list and the page's own.
