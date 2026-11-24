@@ -154,6 +154,16 @@ Play now on a Plex player, the live preview fix and the 2.4.2 follow-ups (D181).
 - **Version**: 2.4.3 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`.
 - **Not in 2.4.3**: "Here" (Play now in the display's own browser), Play now on Jellyfin and Emby, and the double tap and long press entry, which needs Touch gestures (D181 1). The browser evidence of this run is from Chromium build 1243 under Playwright 1.64.1, which names build 1248; the full suite is to be run on the devbox before any merge (D196 4).
 
+
+## ✅ Done in 2.4.4 (on `main`)
+
+One fix to Allowed devices, made on `main` on 2026-11-23 with no run, pull request, tag or GitHub release (D13, D79).
+
+- **The empty players list explains itself.** When plex.tv answers with no player, the status line still says "plex.tv lists no players on your account.", and a paragraph under it now says why and what to do: Plex lists an app only while it is open and can be controlled from another device (Plex HTPC, Plexamp for music, or an older Plex app on a TV or streaming box with "Advertise as Player" turned on); the current Plex apps on phones, tablets, Apple TV and Android TV, Plex in a browser and Plex for Windows or Mac are not listed; open the Plex app on the device, then close Settings and open the list again. The paragraph is its own element, so the status line stays short enough to be in view when it takes the focus (D197 2).
+- **Why**: the owner's account has several Plex devices and the list was empty. The research is in `reports/Plex player discovery sources.md`. It rests on library source code and forum reports, not on a statement from Plex, and nothing was tested on a real server.
+- **Still open**: whether the list should be read from the Plex server's own client list (`GET /clients`) before plex.tv. That would amend D181 4 and D186 and waits for the owner and a real-server test.
+- **Version**: 2.4.4 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new" notice stays at 2.4.3.
+
 ## 🧭 Suggested order
 
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
@@ -168,7 +178,7 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Next
 
-2.2.0 to 2.4.3 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1", "Done in 2.4.2" and "Done in 2.4.3" sections above); nothing is in progress. The next feature follows the suggested order:
+2.2.0 to 2.4.4 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1", "Done in 2.4.2", "Done in 2.4.3" and "Done in 2.4.4" sections above); nothing is in progress. The next feature follows the suggested order:
 
 1. **2.5, the no-server mode:** the TMDB adapter, on the adapter layer 2.4 built.
 

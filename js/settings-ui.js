@@ -1553,6 +1553,18 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     return `${said.join(' ')} The allowed devices below are as stored and were not checked. You can remove one, but not add one.`;
   }
 
+  /**
+   * The words under the status line when a read answered with no player. An empty list is usual on an account with several Plex devices: plex.tv
+   * lists an app only while it is open and offers itself for control from another device, and the current Plex apps no longer do. So the words say
+   * which apps can be listed and how to read again (the list is read when it is opened), and the empty list does not read as a fault of this
+   * display. They are their own paragraph, not part of the status line, so the line stays short enough to be in view when it takes the focus (D197 2).
+   */
+  const NO_PLAYERS_HELP =
+    'Plex lists an app only while it is open and can be controlled from another device: ' +
+    'Plex HTPC, Plexamp (music only), or an older Plex app on a TV or streaming box with "Advertise as Player" turned on in its settings. ' +
+    'The current Plex apps on phones, tablets, Apple TV and Android TV, Plex in a browser and Plex for Windows or Mac are not listed, whatever their settings. ' +
+    'Open the Plex app on the device, then close Settings and open this list again.';
+
   /** Redraws the Allowed devices section from `players` and `allowed`. Nothing is read here. Focus on a row stays on that player (D188), else on the line. */
   function renderPlayers() {
     const opened = players.phase !== 'closed';
@@ -1562,6 +1574,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     if (!opened) {
       $('players-list').replaceChildren();
       $('players-status').textContent = '';
+      $('players-none-help').hidden = true;
       $('players-retry').hidden = true;
       return;
     }
@@ -1576,6 +1589,8 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       none: `No Plex server is signed in on this display, so there are no Plex players to list.${allowed.length ? ' Your allowed devices are kept and were not checked. You can remove one, but not add one.' : ''}`,
       ok: players.listed.length ? 'Tick a player to allow it.' : 'plex.tv lists no players on your account.',
     }[players.phase];
+    $('players-none-help').textContent = NO_PLAYERS_HELP;
+    $('players-none-help').hidden = !(players.phase === 'ok' && !players.listed.length);
     $('players-retry').hidden = players.phase !== 'failed';
     if (rowHad !== undefined) {
       const row = [...$('players-list').children].find((li) => li.dataset.id === rowHad);
