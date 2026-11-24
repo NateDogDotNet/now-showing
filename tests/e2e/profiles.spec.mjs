@@ -496,7 +496,7 @@ const watchFade = (page) =>
   });
 /**
  * Opens profile `nth`, makes one edit in it, and ends it with `button` (#profile-done or #profile-discard). The edit in Adults is its no-repeat days, a
- * control that does not preview: a live control (the frame) would send the sheet's household values, X included, which D122 4 rules.
+ * control that does not preview, so the sequence sends no preview of its own (a live control's preview carries only live keys, 14e).
  */
 async function editProfileThen(page, nth, edit, button) {
   await page.click(`#profile-list li:nth-child(${nth}) .profile-edit`);
@@ -691,6 +691,37 @@ pCase('14d while a profile is open a live control still previews, and its frame 
   await cancelSettings(page);
   await page.waitForFunction((w) => Math.abs(document.getElementById('poster-box').getBoundingClientRect().width - w) < 2, before, { timeout: 10000 });
   check('a live control previews while a profile is open; the profile\'s own frame does not');
+});
+
+// 14e. A live control while a profile is open previews only that live value (D181 2, D185 3): the unsaved household Cross-fade and everything the
+//      open profile holds (its limit, its frame) stay out of the display. The page records every value the display is given (watchFade); the wait
+//      is on the poster's size following the slider, which the same preview carries.
+pCase('14e with a profile open a live control previews only its own value', { settings: seed({ frameId: 'none', limitSlots: [] }), clock: { time: '2026-01-05T12:00:00' } }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await watchFade(page);
+  const width = () => page.evaluate(() => document.getElementById('poster-box').getBoundingClientRect().width);
+  const before = await width();
+  await openSettings(page);
+  await page.evaluate(() => (document.getElementById('advanced').open = true));
+  await page.fill('[name="crossfadeMs"]', String(FADE_X)); // an unsaved household control that is not live
+  await page.click('#profile-list li:nth-child(1) .profile-edit'); // Kids: G, marquee
+  await page.waitForSelector('#profile-banner:not([hidden])');
+  await page.selectOption('[name="maxContentRating"]', { label: 'No limit' }); // the profile's limit, unsaved
+  await page.selectOption('[name="frameId"]', 'marquee-glow'); // a live control in the profile's section: the profile's frame is not previewed
+  await page.fill('[name="posterScale"]', '60'); // a live control: the household's own value previews
+  await page.waitForFunction((w) => document.getElementById('poster-box').getBoundingClientRect().width < w - 20, before, { timeout: 10000 }).catch(() => assert.fail('the poster size did not follow the slider while a profile was open'));
+  assert.deepEqual(await fadeSeen(page), ['1200ms'], 'the unsaved household cross-fade is not previewed');
+  assert.equal(await frameHidden(page), true, 'nothing the open profile holds is previewed: the household frame is none');
+  await page.click('#profile-done');
+  assert.deepEqual(await fadeSeen(page), ['1200ms'], 'Done sends no preview');
+  assert.equal(await frameHidden(page), true);
+  await cancelSettings(page);
+  await page.waitForFunction((w) => Math.abs(document.getElementById('poster-box').getBoundingClientRect().width - w) < 2, before, { timeout: 10000 });
+  assert.deepEqual(await fadeSeen(page), ['1200ms'], 'Cancel leaves the saved cross-fade');
+  assert.equal(await frameHidden(page), true);
+  assert.equal((await stored(page)).profiles[0].maxContentRating, 'G', 'the profile kept its saved limit');
+  check('with a profile open a live control previews only its own value');
 });
 
 // 15. A draw that finishes after a boundary meets the selection in force then (D120 6): the Kids poster held until after 21:00 is not shown.

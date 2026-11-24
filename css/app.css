@@ -823,6 +823,23 @@ body.positioning.dragging.idle.hide-cursor #app * { cursor: grabbing !important;
   text-align: center;
 }
 
+/* ---------- Play now dialog (R-PLAY-1) ---------- */
+
+/* Centred in the viewer's frame like the PIN dialog (it shares .pin-sheet, so it carries the UI rotation too, D2); a long list scrolls inside it, never the page. */
+.play-sheet { width: min(420px, var(--vw)); }
+.play-sheet .pin-box { text-align: left; }
+.play-sheet .play-lead { margin: 8px 0 0; overflow-wrap: anywhere; }
+.play-sheet #play-now-note { margin: 8px 0 0; overflow-wrap: anywhere; }
+.play-sheet .play-start { margin: 12px 0 0; }
+.play-sheet .play-start .seg-opt span { white-space: normal; }
+.play-devices { margin: 12px 0; }
+.play-device { width: 100%; justify-content: center; white-space: normal; overflow-wrap: anywhere; }
+.play-device:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.play-device[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.play-devices .player-row { display: block; }
+.play-devices .player-state { margin: 6px 0 0; overflow-wrap: anywhere; }
+.controls button[aria-disabled="true"] { opacity: 0.5; }
+
 #add-status:empty { display: none; } /* no line, no space, while there is nothing to say (a one-server household sees no gap) */
 /* The household's servers (R-SRC-4): one row each, the same panel language as the "Connected to" card. */
 .server-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
@@ -847,6 +864,29 @@ body.positioning.dragging.idle.hide-cursor #app * { cursor: grabbing !important;
 .add-type .seg-opt span { min-width: 88px; padding: 10px 16px; text-align: center; }
 .servers { margin-top: 6px; }
 .server-list[hidden] { display: none; }
+
+/* Allowed devices (R-PLAY-1): one row each, the same panel language as the server rows; a long name wraps and never makes the sheet scroll sideways. */
+#players-open { margin-top: 10px; }
+#players-status, #players-closed-note { margin: 10px 0 0; overflow-wrap: anywhere; }
+#players-status:empty, #players-closed-note:empty { display: none; }
+#players-status:focus, #players-status:focus-visible { outline: none; }
+.player-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.player-list:empty { display: none; }
+.player-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-line);
+}
+.player-row label.check { flex: 1 1 12rem; margin: 0; min-width: 0; }
+.player-row .player-name { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.player-row > .player-name { flex: 1 1 12rem; }
+.player-row .player-state { flex: 1 1 100%; margin: 0; overflow-wrap: anywhere; }
+#players-retry { margin-top: 8px; }
 
 /* A server's name over its libraries in the library list when there are several servers. */
 .pick-list .server-heading { margin: 8px 0 0; padding: 2px 4px; font-weight: 600; color: var(--muted); overflow-wrap: anywhere; }

@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createSource, createSources, needsSources, readServerId, signInFlow, SourceError, SOURCE_MEMBERS, KINDS } from '../js/sources/index.js';
+import { createSource, createSources, needsSources, PLEX_ONLY_MEMBERS, readServerId, signInFlow, SourceError, SOURCE_MEMBERS, KINDS } from '../js/sources/index.js';
 import { startMockPlex, TOKEN as PLEX_TOKEN } from '../scripts/mock-plex.mjs';
 import { startMockJellyfin, TOKEN as JF_TOKEN, EMBY_TOKEN, EMBY_SERVER_ID, SERVER_ID as JF_SERVER_ID, USER_ID } from '../scripts/mock-jellyfin.mjs';
 import { createEngine } from '../js/engine.js';
@@ -46,9 +46,21 @@ test('createSource refuses an unknown serverType with an error of kind config', 
 test('the adapter object has exactly the members the interface lists', () => {
   const source = createSource({ ...connection });
   const expected = ['identity', 'publicIdentity', 'libraries', 'libraryCount', 'sessions', 'pool', 'sourceItems', 'genres', 'collections', 'playlists', 'item', 'items', 'imageUrl', 'nowPlaying', 'label'];
-  assert.deepEqual(Object.keys(source).sort(), [...expected].sort());
+  // The Plex adapter has the common members and, beside them, the members only it has (Play now, D192 4): both lists are pinned, nothing else is there.
+  assert.deepEqual(Object.keys(source).sort(), [...expected, ...PLEX_ONLY_MEMBERS].sort());
   assert.deepEqual([...SOURCE_MEMBERS].sort(), [...expected].sort());
+  assert.deepEqual([...PLEX_ONLY_MEMBERS], ['savedPosition', 'machineIdentifier', 'play'], 'the members only the Plex adapter has');
   for (const name of expected) assert.equal(typeof source[name], name === 'label' ? 'string' : 'function', name);
+  for (const name of PLEX_ONLY_MEMBERS) assert.equal(typeof source[name], 'function', name);
+  assert.equal(PLEX_ONLY_MEMBERS.some((name) => SOURCE_MEMBERS.includes(name)), false, 'no member is on both lists');
+});
+
+test('the Jellyfin and Emby adapters have exactly the common members and none of the Plex-only ones', () => {
+  for (const serverType of ['jellyfin', 'emby']) {
+    const source = createSource({ ...connection, serverType, serverUserId: 'u1' });
+    assert.deepEqual(Object.keys(source).sort(), [...SOURCE_MEMBERS].sort(), serverType);
+    for (const name of PLEX_ONLY_MEMBERS) assert.equal(name in source, false, `${serverType} has no ${name}`);
+  }
 });
 
 test('createSource builds the adapter from the connection settings and sends them as before', async () => {
@@ -360,6 +372,9 @@ test('the source over several servers has every member of the interface', async 
   try {
     const source = createSources(household());
     for (const name of SOURCE_MEMBERS) assert.equal(typeof source[name], name === 'label' ? 'string' : 'function', name);
+    // The source over several servers routes the Plex-only members by the poster's id, and has nothing else beside the common ones and `multi`.
+    for (const name of PLEX_ONLY_MEMBERS) assert.equal(typeof source[name], 'function', name);
+    assert.deepEqual(Object.keys(source).sort(), [...SOURCE_MEMBERS, ...PLEX_ONLY_MEMBERS, 'multi'].sort());
     assert.equal(source.multi, true);
   } finally {
     await stopServers();

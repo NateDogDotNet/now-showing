@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildUrl, createPin, createPlexClient, discoverServers, pickNowPlaying, rankConnections, toPoster, xmlToContainer } from '../js/sources/plex.js';
+import { buildUrl, createPin, createPlexClient, discoverPlayers, discoverServers, pickNowPlaying, rankConnections, toPoster, xmlToContainer } from '../js/sources/plex.js';
 import { formatRuntime } from '../js/duration.js';
 import { allowedValues } from '../js/ratings.js';
 import { pinSignIn } from '../js/settings-ui.js';
+import { readPlayers } from '../js/sources/index.js';
+import { cleanPlayer, PLAYER_ID_MAX, sanitize } from '../js/settings.js';
+import { PLEX_TV_RESOURCES, startMockPlex } from '../scripts/mock-plex.mjs';
 
 const jsonResponse = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -92,6 +95,215 @@ test('discoverServers keeps only servers with usable connections', async () => {
   assert.equal(servers.length, 1);
   assert.equal(servers[0].accessToken, 'srv');
   assert.deepEqual(await discoverServers('cid', 't', { fetchImpl, secureOnly: true }), []);
+});
+
+// ---- the players on the account (R-PLAY-1, D181 4, D186) ----
+
+const player = (over = {}) => ({ name: 'Living Room TV', product: 'Plex for Android (TV)', clientIdentifier: 'tv-1', provides: 'client,player,pubsub-player', presence: true, connections: [{ uri: 'http://192.0.2.10:32500', protocol: 'http' }], ...over });
+/** A fetch that answers plex.tv with `body` (or by `byToken`, token -> body or a Response) and records every request it is given. */
+function plexTv(body, { byToken = {} } = {}) {
+  const calls = [];
+  const fetchImpl = async (url, opts) => {
+    const u = new URL(url);
+    calls.push({ url: u, opts, token: u.searchParams.get('X-Plex-Token') });
+    const answer = byToken[u.searchParams.get('X-Plex-Token')] ?? body;
+    return answer instanceof Response ? answer : jsonResponse(answer);
+  };
+  return { fetchImpl, calls };
+}
+
+test('discoverPlayers keeps the resources whose provides names player, as a part equal to it and nothing looser (P1)', async () => {
+  const resources = [
+    player({ name: 'A', clientIdentifier: 'a', provides: 'player' }),
+    player({ name: 'B', clientIdentifier: 'b', provides: 'client,player,pubsub-player' }),
+    player({ name: 'Both', clientIdentifier: 'both', provides: 'server,player' }),
+    player({ name: 'Server', clientIdentifier: 'srv', provides: 'server' }),
+    player({ name: 'Substring', clientIdentifier: 'sub', provides: 'players-x' }),
+    player({ name: 'Mediaplayer', clientIdentifier: 'mp', provides: 'mediaplayer' }),
+    player({ name: 'Prefix', clientIdentifier: 'pre', provides: 'player-x,client' }),
+    player({ name: 'Upper', clientIdentifier: 'up', provides: 'Player' }),
+    player({ name: 'None', clientIdentifier: 'none', provides: '' }),
+    player({ name: 'Missing', clientIdentifier: 'missing', provides: undefined }),
+    null,
+    'x',
+  ];
+  const { fetchImpl } = plexTv(resources);
+  assert.deepEqual((await discoverPlayers('me', 'tok', { fetchImpl })).map((p) => p.id), ['a', 'b', 'both']);
+  assert.deepEqual(await discoverPlayers('me', 'tok', { fetchImpl: plexTv([]).fetchImpl }), []);
+});
+
+test('discoverPlayers lists each player as { id, name, present } by its client identifier (P9)', async () => {
+  const { fetchImpl } = plexTv([
+    player({ name: 'Den TV', clientIdentifier: ' tv-den ' }),
+    player({ name: 'Away', clientIdentifier: 'tv-away', presence: false }),
+    player({ name: 'No presence said', clientIdentifier: 'tv-quiet', presence: undefined }),
+    player({ name: '', product: 'Plex for Roku', clientIdentifier: 'tv-roku' }),
+    player({ name: '', product: '', clientIdentifier: 'tv-bare' }),
+  ]);
+  assert.deepEqual(await discoverPlayers('me', 'tok', { fetchImpl }), [
+    { id: 'tv-den', name: 'Den TV', present: true },
+    { id: 'tv-away', name: 'Away', present: false },
+    { id: 'tv-quiet', name: 'No presence said', present: true },
+    { id: 'tv-roku', name: 'Plex for Roku', present: true },
+    { id: 'tv-bare', name: 'tv-bare', present: true },
+  ]);
+});
+
+test('discoverPlayers never lists a resource with no client identifier, this display\'s own identifier, or an identifier a second time (P9)', async () => {
+  const { fetchImpl } = plexTv([
+    player({ name: 'No id', clientIdentifier: undefined }),
+    player({ name: 'Empty id', clientIdentifier: '' }),
+    player({ name: 'Blank id', clientIdentifier: '   ' }),
+    player({ name: 'Number id', clientIdentifier: 42 }),
+    player({ name: 'This display', clientIdentifier: 'me' }),
+    player({ name: 'First', clientIdentifier: 'tv-1' }),
+    player({ name: 'Second', clientIdentifier: 'tv-1' }),
+    player({ name: 'Other', clientIdentifier: 'tv-2' }),
+  ]);
+  assert.deepEqual((await discoverPlayers('me', 'tok', { fetchImpl })).map((p) => [p.id, p.name]), [['tv-1', 'First'], ['tv-2', 'Other']]);
+  assert.deepEqual((await discoverPlayers('', 'tok', { fetchImpl })).map((p) => p.id), ['me', 'tv-1', 'tv-2'], 'with no identifier of its own nothing is excluded for it');
+});
+
+test('discoverPlayers: an answer that is not a list is a failed read of kind parse, never "no players" (Q1, D187 4)', async () => {
+  const answers = { 'an empty body': () => new Response('', { status: 200 }), 'an empty object': () => jsonResponse({}), 'an error object': () => jsonResponse({ errors: [{ code: 1001, message: 'x' }] }), 'a MediaContainer of one': () => jsonResponse({ MediaContainer: { size: 0 } }), 'a string': () => jsonResponse('no') };
+  for (const [label, answer] of Object.entries(answers)) {
+    await assert.rejects(() => discoverPlayers('me', 't', { fetchImpl: async () => answer() }), (e) => e.kind === 'parse', label);
+  }
+  assert.deepEqual(await discoverPlayers('me', 't', { fetchImpl: plexTv([]).fetchImpl }), [], 'a real list with nothing in it is still no players');
+});
+
+test('discoverPlayers: a name of only spaces falls back to the product, else the identifier, and is never empty (Q2, D187 4)', async () => {
+  const { fetchImpl } = plexTv([
+    player({ name: '   ', product: ' Plex for Roku ', clientIdentifier: 'a' }),
+    player({ name: '  ', product: '  ', clientIdentifier: 'b' }),
+    player({ name: undefined, product: undefined, clientIdentifier: 'c' }),
+    player({ name: '\t', product: undefined, clientIdentifier: 'd' }),
+    player({ name: ' Den TV ', product: 'Ignored', clientIdentifier: 'e' }),
+  ]);
+  assert.deepEqual((await discoverPlayers('me', 't', { fetchImpl })).map((p) => p.name), ['Plex for Roku', 'b', 'c', 'd', 'Den TV']);
+});
+
+test('discoverPlayers and the store share one bound on the identifier: a player that can be ticked can be stored (Q3, D187 3)', async () => {
+  const exact = 'x'.repeat(PLAYER_ID_MAX);
+  const { fetchImpl } = plexTv([player({ clientIdentifier: exact }), player({ clientIdentifier: `${exact}y`, name: 'Too long' }), player({ clientIdentifier: ` ${exact} `, name: 'Padded, then the same' })]);
+  const listed = await discoverPlayers('me', 't', { fetchImpl });
+  assert.deepEqual(listed.map((p) => p.id), [exact], 'the longest identifier the store keeps is listed once; one longer is not');
+  for (const p of listed) assert.deepEqual(cleanPlayer(p)?.id, p.id, 'whatever is listed, the store keeps');
+  assert.equal(cleanPlayer({ id: `${exact}y`, name: 'n' }), null);
+  assert.equal(PLAYER_ID_MAX, 200);
+});
+
+test('discoverPlayers trims each part of provides before it compares it with player (Q4, D188 4)', async () => {
+  const { fetchImpl } = plexTv([
+    player({ clientIdentifier: 'a', provides: 'client, player' }),
+    player({ clientIdentifier: 'b', provides: ' player ,client' }),
+    player({ clientIdentifier: 'c', provides: 'client,\tplayer\n,pubsub-player' }),
+    player({ clientIdentifier: 'd', provides: 'client, players' }),
+    player({ clientIdentifier: 'e', provides: 'client, pla yer' }),
+    player({ clientIdentifier: 'f', provides: 'server, ' }),
+  ]);
+  assert.deepEqual((await discoverPlayers('me', 't', { fetchImpl })).map((p) => p.id), ['a', 'b', 'c']);
+});
+
+test('discoverPlayers asks plex.tv once, with the token and only an Accept header, and never requests a player\'s own address (P8)', async () => {
+  const { fetchImpl, calls } = plexTv([player(), player({ clientIdentifier: 'tv-2', connections: [{ uri: 'https://203-0-113-9.abc.plex.direct:32500', protocol: 'https' }] })]);
+  await discoverPlayers('me', 'user-token', { fetchImpl });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url.origin, 'https://plex.tv');
+  assert.equal(calls[0].url.pathname, '/api/v2/resources');
+  assert.equal(calls[0].url.searchParams.get('X-Plex-Token'), 'user-token');
+  assert.equal(calls[0].url.searchParams.get('X-Plex-Client-Identifier'), 'me');
+  assert.deepEqual(calls[0].opts.headers, { Accept: 'application/json' });
+  assert.equal(calls[0].opts.method, 'GET');
+});
+
+test('discoverPlayers fails as plex.tv failed: a refused token, an error status, a network error and a reply that is not JSON are errors, never an empty list', async () => {
+  const status = (code) => async () => new Response('', { status: code });
+  await assert.rejects(() => discoverPlayers('me', 't', { fetchImpl: status(401) }), (e) => e.kind === 'auth');
+  await assert.rejects(() => discoverPlayers('me', 't', { fetchImpl: status(403) }), (e) => e.kind === 'auth');
+  await assert.rejects(() => discoverPlayers('me', 't', { fetchImpl: status(500) }), (e) => e.kind === 'http');
+  await assert.rejects(() => discoverPlayers('me', 't', { fetchImpl: async () => { throw new TypeError('Failed to fetch'); } }), (e) => e.kind === 'network');
+  await assert.rejects(() => discoverPlayers('me', 't', { fetchImpl: async () => new Response('not json', { status: 200 }) }), (e) => e.kind === 'parse');
+});
+
+const household = (extra = {}) => sanitize({ serverUrl: 'http://p:32400', plexToken: 'tok-a', serverId: 'p1', ...extra });
+const PLEX_SERVER = (over = {}) => ({ id: 'p2', type: 'plex', url: 'http://q:32400', token: 'tok-b', name: 'Q', ...over });
+
+test('readPlayers reads plex.tv once per different Plex token among the household\'s servers, and lists each identifier once (D186 3)', async () => {
+  const { fetchImpl, calls } = plexTv([], {
+    byToken: {
+      'tok-a': [player({ name: 'Shared', clientIdentifier: 'shared', presence: false }), player({ name: 'A only', clientIdentifier: 'a-only' })],
+      'tok-b': [player({ name: 'Shared again', clientIdentifier: 'shared', presence: true }), player({ name: 'B only', clientIdentifier: 'b-only' })],
+    },
+  });
+  const sameAccount = household({ servers: [PLEX_SERVER({ id: 'p3', token: 'tok-a' })] });
+  const one = await readPlayers(sameAccount, { clientId: 'me', fetchImpl });
+  assert.equal(calls.length, 1, 'two servers of one account are one read');
+  assert.deepEqual([one.accounts, one.players.map((p) => p.id)], [1, ['shared', 'a-only']]);
+  calls.length = 0;
+  const two = await readPlayers(household({ servers: [PLEX_SERVER()] }), { clientId: 'me', fetchImpl });
+  assert.deepEqual(calls.map((c) => c.token).sort(), ['tok-a', 'tok-b'], 'two accounts, two reads');
+  assert.deepEqual([two.accounts, two.players.map((p) => p.id).sort()], [2, ['a-only', 'b-only', 'shared']], 'the identifier both accounts list is listed once');
+  assert.equal(two.players.find((p) => p.id === 'shared').present, true, 'present when any account says it is');
+  assert.equal(calls.every((c) => c.url.origin === 'https://plex.tv'), true, 'every token goes to plex.tv and nowhere else');
+});
+
+test('readPlayers: a Jellyfin or Emby household has no players and sends no request; its tokens never go to plex.tv (D181 1, P12)', async () => {
+  const { fetchImpl, calls } = plexTv([player()]);
+  const jf = sanitize({ serverType: 'jellyfin', serverUrl: 'http://jf:8096', plexToken: 'jf-token', serverId: 'jf1', serverCarried: false, servers: [{ id: 'em1', type: 'emby', url: 'http://em:8096', token: 'em-token' }] });
+  assert.deepEqual(await readPlayers(jf, { clientId: 'me', fetchImpl }), { accounts: 0, players: [] });
+  assert.equal(calls.length, 0);
+  const mixed = sanitize({ serverType: 'jellyfin', serverUrl: 'http://jf:8096', plexToken: 'jf-token', serverId: 'jf1', serverCarried: false, servers: [PLEX_SERVER()] });
+  const out = await readPlayers(mixed, { clientId: 'me', fetchImpl });
+  assert.deepEqual(calls.map((c) => c.token), ['tok-b'], 'only the Plex server\'s token is sent');
+  assert.equal(out.accounts, 1);
+  assert.deepEqual(await readPlayers(sanitize({}), { clientId: 'me', fetchImpl }), { accounts: 0, players: [] }, 'a display with no server');
+  assert.equal(calls.length, 1);
+  assert.deepEqual(await readPlayers(sanitize({ serverUrl: 'http://p:32400' }), { clientId: 'me', fetchImpl }), { accounts: 0, players: [] }, 'a Plex server with no token is not an account');
+});
+
+test('readPlayers fails when any account\'s read fails: a household is never shown a list that is missing an account (D186 2)', async () => {
+  const { fetchImpl } = plexTv([player()], { byToken: { 'tok-b': new Response('', { status: 401 }) } });
+  await assert.rejects(() => readPlayers(household({ servers: [PLEX_SERVER()] }), { clientId: 'me', fetchImpl }), (e) => e.kind === 'auth');
+});
+
+test('readPlayers says which accounts could not be read, by their place in the household and by what happened (D187 2, D188 2)', async () => {
+  const { fetchImpl } = plexTv([player()], { byToken: { 'tok-b': new Response('', { status: 401 }), 'tok-c': new Response('', { status: 500 }), 'tok-d': new Response('{}', { status: 200 }) } });
+  const three = household({ servers: [PLEX_SERVER(), PLEX_SERVER({ id: 'p3', token: 'tok-b' })] });
+  await assert.rejects(() => readPlayers(three, { clientId: 'me', fetchImpl }), (e) => e.kind === 'auth' && JSON.stringify(e.failed) === JSON.stringify([{ kind: 'auth', slots: [1, 2] }]));
+  const mixed = household({ servers: [PLEX_SERVER({ token: 'tok-c' }), PLEX_SERVER({ id: 'p3', token: 'tok-d' })] });
+  await assert.rejects(() => readPlayers(mixed, { clientId: 'me', fetchImpl }), (e) => JSON.stringify(e.failed) === JSON.stringify([{ kind: 'server', slots: [1] }, { kind: 'parse', slots: [2] }]));
+  // Only a server error (5xx) is told apart; any other status stays an answer that could not be read (S7, D189 3).
+  const statuses = async (code) => readPlayers(household(), { clientId: 'me', fetchImpl: async () => new Response('', { status: code }) }).catch((e) => e.failed[0].kind);
+  assert.deepEqual([await statuses(500), await statuses(503), await statuses(599)], ['server', 'server', 'server']);
+  assert.deepEqual([await statuses(404), await statuses(400), await statuses(499), await statuses(429)], ['http', 'http', 'http', 'http']);
+  assert.deepEqual([await statuses(401), await statuses(403)], ['auth', 'auth']);
+  const down = async () => { throw new TypeError('Failed to fetch'); };
+  await assert.rejects(() => readPlayers(household(), { clientId: 'me', fetchImpl: down }), (e) => JSON.stringify(e.failed) === JSON.stringify([{ kind: 'network', slots: [0] }]));
+});
+
+test('the mock plex.tv serves the players the e2e specs read, and the one it lists with this display\'s identifier is left out (D186 7)', async () => {
+  const mock = await startMockPlex({ port: 0 });
+  const base = `http://127.0.0.1:${mock.address().port}/__mock/`;
+  try {
+    const fetchImpl = (url) => fetch(`${base}plextv-resources?${new URLSearchParams({ token: new URL(url).searchParams.get('X-Plex-Token'), client: new URL(url).searchParams.get('X-Plex-Client-Identifier') })}`);
+    const found = await discoverPlayers('mock-player-kids-room', 'any-token', { fetchImpl });
+    assert.deepEqual(found.map((p) => [p.id, p.name, p.present]), [['mock-player-living-room', 'Living Room TV', true], ['mock-player-old-tablet', 'Old Tablet', false]]);
+    assert.equal(PLEX_TV_RESOURCES.some((r) => r.provides === 'server'), true, 'the account also has a server, which is not a player');
+    await fetch(`${base}plextv-set?token=bad&status=401`, { method: 'POST' });
+    await assert.rejects(() => discoverPlayers('me', 'bad', { fetchImpl }), (e) => e.kind === 'auth');
+    assert.equal((await discoverPlayers('me', 'good', { fetchImpl })).length, 3, 'a status set for one token reaches that token only');
+    await fetch(`${base}plextv-set?token=tok`, { method: 'POST', body: JSON.stringify([player({ clientIdentifier: 'only' })]) });
+    assert.deepEqual((await discoverPlayers('me', 'tok', { fetchImpl })).map((p) => p.id), ['only']);
+    const log = (await (await fetch(`${base}plextv-log`)).json()).requests;
+    assert.deepEqual(log.map((r) => r.token), ['any-token', 'bad', 'good', 'tok']);
+    assert.equal(log[0].client, 'mock-player-kids-room');
+    await fetch(`${base}plextv-reset`, { method: 'POST' });
+    assert.equal((await discoverPlayers('me', 'tok', { fetchImpl })).length, 3, 'a reset forgets the lists');
+    assert.equal((await (await fetch(`${base}plextv-log`)).json()).requests.length, 1, 'and the log');
+  } finally {
+    await new Promise((r) => mock.close(r));
+  }
 });
 
 // ---- content rating (R-FILT-1) ----

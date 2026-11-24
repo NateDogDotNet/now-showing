@@ -9,6 +9,29 @@
 //   POST /__mock/stop                         end it
 //   POST /__mock/rate?ratingKey=4&contentRating=R   re-rate a title from now on ("none" = unrated)
 //   POST /__mock/sessions-status?status=403   answer /status/sessions with that HTTP status (200 = normal again)
+//   GET  /__mock/plextv-resources?token=T&client=C   what plex.tv would answer to GET /api/v2/resources for token T and this display's client
+//                                             identifier C (the e2e harness fulfils the page's plex.tv request from it, tests/e2e/lib.mjs `plexTv`): the list
+//                                             set for T, else the list set for every token, else PLEX_TV_RESOURCES; the status set the same way (200 = normal).
+//                                             It records {token, client} in the plex.tv log. It is not a Plex Media Server route and needs no token.
+//   POST /__mock/plextv-set?token=T&status=500   answer token T (no token = every token) with that status (200 = normal again); a JSON array in the body
+//                                             replaces the resource list for T. Either part may be left out.
+//   GET  /__mock/plextv-log                   {requests}: every plextv-resources request since the last plextv-reset
+//   POST /__mock/plextv-reset                 forget every list, status and log entry of the plex.tv side
+//   GET  /player/playback/playMedia?key=/library/metadata/3&offset=0&machineIdentifier=..&address=..&port=..&protocol=..&commandID=1&X-Plex-Target-Client-Identifier=<player>
+//                                             Play now (R-PLAY-1, D191): the server forwards the command to the player named by the target (the parameter, or the header of the
+//                                             same name) and the mock records what the player would receive. (verify) The shape is the community's description of the companion
+//                                             call, not confirmed against a real server. Needs the token, which is the SERVER's: it is not part of what is forwarded.
+//   GET  /__mock/player-log                   {commands, received}: what the players received since the last player-reset, one entry each {key, offset, machineIdentifier, address,
+//                                             port, protocol, commandID, providerIdentifier, target, forwarded (the names of what was forwarded), tokenLike (anything token-like in
+//                                             what was forwarded), tokenParams (how many X-Plex-Token parameters the request held)}; `received` counts every playMedia request the
+//                                             server got, a failed forward included (a failed one is not in `commands`)
+//   POST /__mock/player-reset                 forget the player record and the failure mode
+//   POST /__mock/player-fail?mode=player      make the forward fail: mode=player (the player cannot be reached: the server answers 404, a (verify) status), mode=server (the server has a problem: it answers 503),
+//                                             mode=auth (the server refuses the sign-in: 401); mode=reset (the player receives the command and is recorded, and then the connection to the page is cut with no answer); mode=none (or no mode) is normal again
+//   POST /__mock/offset?ratingKey=3&viewOffset=600000   give a title a saved position in ms (0 removes it); every endpoint that lists the title carries `viewOffset`
+//   POST /__mock/kind?ratingKey=3&type=show   the title is listed with that type (show, season, ...) instead of movie, as Plex lists other kinds of item
+//   POST /__mock/episode?ratingKey=3          the title is listed as an episode whose series is that title (type episode, its own key 500 + the series key, the series' title
+//                                             and key as grandparent*, as Plex sends them); /library/metadata/<own key> answers it
 //   GET  /__mock/stats                        {transcode, other}: image requests vs other Plex requests
 //   GET  /__mock/log                          {requests}: every Plex request since the last reset, "path?query" without the token
 //   POST /__mock/reset-stats                  zero the counters and clear that log
@@ -36,6 +59,16 @@ import { createServer } from 'node:http';
 
 export const TOKEN = 'demo-token';
 const MACHINE_ID = 'mock'; // what GET / and the token-free GET /identity both report
+
+// What the mock plex.tv answers to GET /api/v2/resources (R-PLAY-1, D186): the account's server and three players, one of them not present. A player's
+// connection is an address in TEST-NET-1 (RFC 5737): the display must never request it, and a request that tried would leave the machine (K48).
+// (verify) The resource shape (name, product, clientIdentifier, provides, presence, connections) is what plex.tv sends; not confirmed against a real account here.
+export const PLEX_TV_RESOURCES = [
+  { name: 'Mock Plex', product: 'Plex Media Server', clientIdentifier: MACHINE_ID, provides: 'server', owned: true, presence: true, connections: [{ uri: 'http://127.0.0.1:32400', protocol: 'http', local: true, relay: false }] },
+  { name: 'Living Room TV', product: 'Plex for Android (TV)', clientIdentifier: 'mock-player-living-room', provides: 'client,player,pubsub-player', owned: true, presence: true, connections: [{ uri: 'http://192.0.2.10:32500', protocol: 'http', local: true, relay: false }] },
+  { name: 'Kids Room TV', product: 'Plex for Android (TV)', clientIdentifier: 'mock-player-kids-room', provides: 'client,player,pubsub-player', owned: true, presence: true, connections: [{ uri: 'http://192.0.2.11:32500', protocol: 'http', local: true, relay: false }] },
+  { name: 'Old Tablet', product: 'Plex for Android', clientIdentifier: 'mock-player-old-tablet', provides: 'client,player,pubsub-player', owned: true, presence: false, connections: [{ uri: 'http://192.0.2.12:32500', protocol: 'http', local: true, relay: false }] },
+];
 
 const LIB1 = [
   ['The Grand Marquee', 1954, '#8b1e3f', 'G', 5_400_000, 'On the last night of the season, the owner of a failing picture palace stages one grand show to save it.'],
@@ -101,14 +134,19 @@ const MOVIES = [...LIB1.map((row, i) => movie(row, i + 1, 1, LIB1_EXTRA[i])), ..
 const MOVIE_LIBRARIES = new Set(['1', '3']);
 const WATCHED_AT = 1_700_500_000; // lastViewedAt for a title /__mock/watch marks watched
 
-export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
+export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineId = MACHINE_ID } = {}) {
   const state = { session: null, down: false };
   const stats = { transcode: 0, other: 0 };
   const log = []; // "path?query" of every Plex request, token left out
   const watches = new Map(); // ratingKey -> viewCount set by /__mock/watch (0 = unwatched)
   const ratings = new Map(); // ratingKey -> contentRating set by /__mock/rate ('' = unrated)
+  const offsets = new Map(); // ratingKey -> viewOffset (ms) set by /__mock/offset (a saved position)
+  const kinds = new Map(); // ratingKey -> the `type` set by /__mock/kind
+  const episodes = new Map(); // ratingKey -> the key of the episode that title is listed as, set by /__mock/episode
+  const player = { commands: [], received: 0, fail: 'none' }; // what the players received (Play now), and how the forward fails
   let sessionsStatus = 200;
   let countsStatus = 200; // the library count request (/library/sections/1/all with X-Plex-Container-Size=0)
+  const plexTv = { lists: new Map(), statuses: new Map(), log: [] }; // the plex.tv side: per token ('*' = every token), what /__mock/plextv-resources answers
   let emptyUnwatched = false; // every title counts as watched: pool requests that ask for unwatched ones find none
   // A title as Plex would send it now: a re-rating applies to every endpoint.
   const current = (m) => {
@@ -122,6 +160,15 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
       const { viewCount: _count, lastViewedAt: _at, ...rest } = out;
       const count = watches.get(m.ratingKey);
       out = count > 0 ? { ...rest, viewCount: count, lastViewedAt: WATCHED_AT } : rest;
+    }
+    if (offsets.has(m.ratingKey)) {
+      const { viewOffset: _at, ...rest } = out;
+      out = offsets.get(m.ratingKey) > 0 ? { ...rest, viewOffset: offsets.get(m.ratingKey) } : rest;
+    }
+    if (kinds.has(m.ratingKey)) out = { ...out, type: kinds.get(m.ratingKey) };
+    if (episodes.has(m.ratingKey)) {
+      const own = episodes.get(m.ratingKey);
+      out = { ...out, type: 'episode', ratingKey: own, key: `/library/metadata/${own}`, title: 'Pilot', grandparentRatingKey: m.ratingKey, grandparentTitle: m.title, grandparentYear: m.year, grandparentThumb: m.thumb };
     }
     return out;
   };
@@ -145,6 +192,48 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
 
     if (url.pathname.startsWith('/__mock/')) {
       const action = url.pathname.slice(8);
+      if (action === 'plextv-resources') {
+        const token = url.searchParams.get('token') || '';
+        plexTv.log.push({ token, client: url.searchParams.get('client') || '' });
+        const status = plexTv.statuses.get(token) ?? plexTv.statuses.get('*') ?? 200;
+        if (status !== 200) return json(status, { error: `Mock plex.tv: resources answer ${status}` });
+        return json(200, plexTv.lists.get(token) ?? plexTv.lists.get('*') ?? PLEX_TV_RESOURCES);
+      }
+      if (action === 'player-log') return json(200, { commands: [...player.commands], received: player.received });
+      if (action === 'player-reset') {
+        player.commands.length = 0;
+        player.received = 0;
+        player.fail = 'none';
+        return json(200, { ok: true });
+      }
+      if (action === 'player-fail') {
+        player.fail = url.searchParams.get('mode') || 'none';
+        return json(200, { ok: true });
+      }
+      if (action === 'offset') offsets.set(url.searchParams.get('ratingKey'), Number(url.searchParams.get('viewOffset') || 0));
+      if (action === 'kind') kinds.set(url.searchParams.get('ratingKey'), url.searchParams.get('type') || 'movie');
+      if (action === 'episode') episodes.set(url.searchParams.get('ratingKey'), String(500 + Number(url.searchParams.get('ratingKey'))));
+      if (action === 'plextv-log') return json(200, { requests: [...plexTv.log] });
+      if (action === 'plextv-reset') {
+        for (const part of [plexTv.lists, plexTv.statuses]) part.clear();
+        plexTv.log.length = 0;
+        return json(200, { ok: true });
+      }
+      if (action === 'plextv-set') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          const token = url.searchParams.get('token') || '*';
+          if (url.searchParams.has('status')) plexTv.statuses.set(token, Number(url.searchParams.get('status')) || 200);
+          try {
+            if (body.trim()) plexTv.lists.set(token, JSON.parse(body));
+          } catch {
+            return json(400, { error: 'the body is not JSON' });
+          }
+          json(200, { ok: true });
+        });
+        return;
+      }
       if (action === 'play') {
         const movie = current(MOVIES.find((m) => m.ratingKey === (url.searchParams.get('ratingKey') || '1')));
         const num = (name, fallback) => (url.searchParams.has(name) ? Number(url.searchParams.get(name)) : fallback);
@@ -208,7 +297,7 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
       return res.end();
     }
     // (verify) Real Plex serves GET /identity without a token (machineIdentifier, version, claimed); the mock answers it with the same machineIdentifier as GET / (D160 1).
-    if (url.pathname === '/identity') return json(200, { MediaContainer: { size: 0, claimed: true, machineIdentifier: MACHINE_ID, version: '1.40.0.0000-mock' } });
+    if (url.pathname === '/identity') return json(200, { MediaContainer: { size: 0, claimed: true, machineIdentifier: machineId, version: '1.40.0.0000-mock' } });
     if (url.searchParams.get('X-Plex-Token') !== TOKEN) return json(401, { error: 'Unauthorized' });
     stats[url.pathname === '/photo/:/transcode' ? 'transcode' : 'other']++;
     const query = new URLSearchParams(url.searchParams);
@@ -217,9 +306,38 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
 
     const strip = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'color' && k !== 'lib'));
     const path = url.pathname;
-    if (path === '/') return json(200, { MediaContainer: { friendlyName: 'Mock Plex', version: '1.40.0.0000-mock', machineIdentifier: MACHINE_ID } });
+    if (path === '/') return json(200, { MediaContainer: { friendlyName: 'Mock Plex', version: '1.40.0.0000-mock', machineIdentifier: machineId } });
     if (path === '/library/sections') {
       return json(200, { MediaContainer: { Directory: [{ key: '1', title: 'Movies', type: 'movie' }, { key: '2', title: 'Music', type: 'artist' }, { key: '3', title: 'Kids Movies', type: 'movie' }] } });
+    }
+    if (path === '/player/playback/playMedia') {
+      // The server forwards the command to the player it names; what the player would receive is every parameter but the server's own sign-in and the target.
+      player.received++;
+      if (player.fail === 'auth') return json(401, { error: 'Mock: the sign-in was refused' });
+      if (player.fail === 'player') return json(404, { error: 'Mock: the player could not be reached' }); // (verify) the status a real server gives for a player it cannot reach
+      if (player.fail === 'server') return json(503, { error: 'Mock: the server could not forward the command' });
+      const target = url.searchParams.get('X-Plex-Target-Client-Identifier') || req.headers['x-plex-target-client-identifier'] || '';
+      if (!target) return json(400, { error: 'Mock: no target player' });
+      const own = new Set(['X-Plex-Token', 'X-Plex-Client-Identifier', 'X-Plex-Product', 'X-Plex-Target-Client-Identifier']);
+      const forwarded = [...url.searchParams].filter(([name]) => !own.has(name));
+      const get = (name) => url.searchParams.get(name);
+      player.commands.push({
+        key: get('key'),
+        offset: Number(get('offset')),
+        machineIdentifier: get('machineIdentifier'),
+        address: get('address'),
+        port: get('port'),
+        protocol: get('protocol'),
+        commandID: get('commandID'),
+        providerIdentifier: get('providerIdentifier'),
+        target,
+        forwarded: forwarded.map(([name]) => name),
+        tokenLike: forwarded.some(([name, value]) => /token/i.test(name) || value.includes(TOKEN)),
+        tokenParams: url.searchParams.getAll('X-Plex-Token').length,
+      });
+      if (player.fail === 'reset') return req.socket.destroy(); // the server took the command and forwarded it, then the connection to the page was lost
+      res.writeHead(200, { ...cors, 'Content-Type': 'application/xml' });
+      return res.end('<?xml version="1.0" encoding="UTF-8"?>\n<Response code="200" status="OK"/>');
     }
     if (path === '/status/sessions') {
       if (sessionsStatus !== 200) return json(sessionsStatus, { error: `Mock: sessions answer ${sessionsStatus}` });
@@ -283,7 +401,9 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1' } = {}) {
     // unknown key is a 404; unknown keys in a list are just absent.
     const meta = path.match(/^\/library\/metadata\/(\d+(?:,\d+)*)$/);
     if (meta) {
-      const found = meta[1].split(',').map((k) => MOVIES.find((x) => x.ratingKey === k)).filter(Boolean);
+      // An episode's own key (set by /__mock/episode) answers with that episode; any other key is a title as before.
+      const titleFor = (k) => MOVIES.find((x) => x.ratingKey === k) ?? MOVIES.find((x) => episodes.get(x.ratingKey) === k);
+      const found = meta[1].split(',').map(titleFor).filter(Boolean);
       return found.length || meta[1].includes(',') ? json(200, { MediaContainer: { Metadata: found.map((m) => strip(current(m))) } }) : json(404, {});
     }
     if (path === '/photo/:/transcode') {

@@ -1142,3 +1142,141 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner ruling — 2026-11-05 (after run 11; Nathan: "merge 2.4.2 into main, push, and clean up branches"): D180
 
 - **D180 2.4.2 is merged into `main`.** The branch `2.4.2` (tip 09a9d461, run 11 closed with `closer close` r2 ok) was merged with a merge commit, 1043e292, after `npm test` passed 977 of 977 on the merged tree, which is identical to the tree at 09a9d461. There is no pull request, tag or GitHub release (D13, D79). README and Roadmap now say 2.4.2 is on `main`. The branch `2.4.2` is deleted locally and on origin.
+
+## Owner decision — 2026-11-05 (the run-12 policy; Nathan: "defaults"): D181
+
+- **D181 Run 12 builds 2.4.3: Play now on a Plex player, the live preview fix and the 2.4.2 follow-ups.** The run-12 section of `docs/integration-plan.md` (phases 66–70: `followup-fixes`, `live-preview`, `play-now-players`, `play-now-plex`, `release-2.4.3`) is the plan. The policy stop offered ten items with a recommended option each; Nathan answered "defaults".
+  1. **Scope:** the five phases. Out of scope: "Here" (local playback in the display's browser; untestable without real devices, and no token-safe media URL yet); Play now on Jellyfin and Emby (a later run, per adapter); the double tap and long press entry (touch gestures are not built).
+  2. **Live preview (reverses D138 1):** a live change previews only the live values over the saved settings; an unsaved non-live value never reaches the display before Save.
+  3. **Route:** the play command goes through the poster's own Plex server, which forwards it to the player (verify on a real server).
+  4. **Players listed:** every player on the Plex account (a resource whose `provides` names `player`); one that cannot be reached shows as unavailable.
+  5. **Resume:** from the saved position when there is one, with a "Play from start" choice.
+  6. **PIN:** asked before every Play now whenever a PIN is set; no PIN set, no prompt.
+  7. **The button:** hidden while no device is allowed and on Jellyfin and Emby posters.
+  8. **Notice:** a "What's new in 2.4.3" notice names Play now.
+  9. **Pill wording:** the status pill and the limited empty card name servers by the all-down card's rule, through the card's own helper.
+  10. **Run:** AFK on branch `2.4.3` from `main` 984cd0a0; every later question answers itself with these defaults under D44; a pull request, a merge into `main`, a tag, a GitHub release, a force-push and deleting unique work still wait for Nathan's own words (D13, D79). The run-11 trail moved to `/home/nathan/now-showing-run11-trail/`.
+
+## Conductor ruling — 2026-11-05 (run 12, `followup-fixes` pre-flight; under D44, D181 10): D182
+
+- **D182 What the pre-flight of `followup-fixes` found.**
+  1. **The card's helper is a closure (amends D181 9).** The all-down card names a server with `nameOf` inside `createSources` (`js/sources/index.js:156`: `entry.name || source.label`), which nothing outside can call. `js/main.js` already holds the same rule as `serverNameOf` (`:539`). The status pill and the limited empty card use `serverNameOf` over every server, joined with `joinNames`; a name two servers share is said once. `js/sources/index.js` stays out of the Output.
+
+## Conductor ruling — 2026-11-23 (run 12, `followup-fixes` first review round; under D44, D181 10; item 2 amended by D184): D183
+
+- **D183 What the first reviews of `followup-fixes` found (item 2 is amended by D184).** Stop 2 offered three items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
+  1. **The pill says names only when there are two or more different names (amends D182 1).** D182 1 said the status pill and the limited empty card use `serverNameOf` over every server. The all-down card names servers only when several different ones fail: one server, or several that share one name, says its adapter's own words ("Could not reach Plex"; `js/sources/index.js:174`, `js/engine.js:96-98`). So with one server named "Den" the pill said "Den" and the card said "Plex". The pill and the limited empty card now say the servers' names, joined with `joinNames`, when the household's servers have two or more different names; otherwise they keep the 2.4.2 wording (the type labels). A name two servers share is still said once among several. The limited empty card's verb agrees with what is named. `js/sources/index.js` and `js/engine.js` stay out of the Output.
+  2. **At rotation 90 the focused control wins where the section does not fit (D184: at any rotation).** At 390x844 with rotation 90 the server section is taller than the visible part of the sheet, so D168 1 (the whole section at the top) and D179 4 (the focused Remove in view) cannot both hold. The focused control stays in view there; D168 1 holds wherever both fit.
+  3. **Follow-ups (owner Nathan), not in this run:** naming a single named server in the all-down card too, so the pill can say the name in a one-server household; a focus ring on the Remove button that Open settings focuses after a pointer click; whether the first server's stored `serverUrl` is cleaned with `addressOf` on load (`js/settings.js:67`).
+
+## Conductor ruling — 2026-11-23 (run 12, `followup-fixes` confirmation review; under D44, D181 10): D184
+
+- **D184 The focused control wins at any rotation where the section does not fit (amends D183 2).** D183 2 said "at rotation 90". The build applies one rule at every rotation: after Open settings, when the server section and the focused control cannot both be in the visible part of the sheet (for example at 844x390 with rotation 0), the focused control is brought into view; where both fit, the section stays at the top (D168 1). `tests/e2e/preset.spec.mjs` pins it at 390x844 and 844x390 for rotations 0, 90, 180 and 270. No code changes with this entry.
+
+## Conductor ruling — 2026-11-23 (run 12, `live-preview` pre-flight; under D44, D181 10): D185
+
+- **D185 What the criteria of `live-preview` mean.** A cold probe of the criteria text (`.orchestrator/artifacts/live-preview--criteria-probe-r1.md`, 13 findings) found inputs the text left open. Stop 3 offered five items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
+  1. **A preview carries every live value.** A preview is the saved settings with every live key as the sheet holds it at that moment, not only the control just touched. A live key is a control inside a `data-live` section of the sheet (20 today).
+  2. **A limit is never previewed (amends the plan's hazard).** The hazard's words "or the previewed limit" are struck. The saved limit in force decides what may show during a preview (D120 1).
+  3. **A profile open changes nothing.** The household's live controls keep previewing, nothing a profile holds is previewed, and Done and Discard send no preview (D122 4, D135 5).
+  4. **An import previews only its live values.** Import fills the sheet and sends one preview, which passes through the same rule; every non-live value of the file waits for Save.
+  5. **The list is checked.** A test compares the preview's list of live keys with the named controls inside the sheet's `data-live` sections.
+  6. **Unchanged, with no question:** "the saved value" is what is stored at that moment; Cancel restores the stored settings; a live value that depends on a non-live one uses the saved non-live value; brightness and night dim, invalid input and which screens a preview reaches stay as they are.
+  7. **Criterion 3 stays a grep.** The anchored review reads the sentence R-SET-1 gains and judges that it says what items 1 to 4 say.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-players` pre-flight; under D44, D181 10): D186
+
+- **D186 What the criteria of `play-now-players` mean.** A cold probe of the criteria text (`.orchestrator/artifacts/play-now-players--criteria-probe-r1.md`, 18 findings) found inputs the text left open. Stop 4 offered six items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
+  1. **No PIN set, no prompt.** As everywhere else (D16, D181 6). The Allowed devices section says in one line that a settings PIN keeps others from changing the list.
+  2. **Three states, and the display never contacts a player (sharpens D181 4).** The token goes only to plex.tv. A player plex.tv lists is shown by name and can be allowed; it is marked offline when plex.tv says it is not present. An allowed player that plex.tv no longer lists is kept and shown unavailable. When plex.tv cannot be read (down, an error, a refused token), the stored list is shown as not checked: players can be removed, none can be added.
+  3. **Every Plex account of the household, each identifier once.** The players read runs once per different Plex token among the household's servers. An allowed entry holds the client identifier and the name last seen, nothing else. Play now still goes through the poster's own server (D181 3).
+  4. **One prompt opens the list.** The PIN is asked when the Allowed devices list is opened; the list can then be read and changed until the sheet closes.
+  5. **Save stores it, Cancel discards it.** Allowing and removing are sheet changes like any non-live setting (never previewed, D185). Save never drops an allowed player because the list was loading or plex.tv failed.
+  6. **Reset, a removed server, an import.** Reset everything clears the list. Removing a server or signing out keeps the allowed entries, which show unavailable. An import leaves this display's list as it is, without a notice (`allowedPlayers` is in `LOCAL_KEYS`).
+  7. **Read without a question.** The list is an allow-list: empty allows nothing, and a player not on it is not allowed. `provides` is split at commas and one part must equal `player`. A resource with no client identifier is not listed, and a repeated identifier is listed once. This display's own client identifier is never listed. The list is read when it is opened, not at page load. A household with no Plex server sees that said, with any stored entries still removable. More than one player may be allowed.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-players` first reviews; Nathan: "Fix the findings (Recommended)"; under D44, D181 10; item 1 amended by D190): D187
+
+- **D187 What the first reviews of `play-now-players` left open (item 1 is amended by D190).** Stop 5 offered three items with a recommended option each. Nathan chose "Fix the findings (Recommended)" on the question card; the items take their recommended options, and he may overturn any of them.
+  1. **A change to the servers closes the open list.** When a server's type, address, token or user changes in the sheet, a server is added or removed, or an import fills the sheet, an open Allowed devices list closes (D190: an import closes it only when it changes the servers). Opening it again asks the PIN (D186 4) and reads the accounts as the sheet now holds them.
+  2. **A partial read is a failed read, and the line says which account (sharpens D186 2).** When any one Plex account cannot be read, the whole list is not checked and nothing can be added. The line names the server whose account could not be read and says what helps: sign in to that server again when the token was refused, otherwise try again later by opening the list again.
+  3. **The read and the store share one bound.** A resource whose client identifier is longer than the 200 characters the store keeps is not listed.
+  4. **Defects against D186, fixed without a question:** a plex.tv answer that is not a list is a failed read (D186 2); a player whose name is only spaces is shown by its product name, else its identifier.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-players` UX walk; Nathan: "Fix the findings (Recommended)"; under D44, D181 10): D188
+
+- **D188 What the UX walk of `play-now-players` left open.** Stop 6 offered three items with a recommended option each; they take their recommended options under Nathan's choice "Fix the findings (Recommended)", and he may overturn any of them.
+  1. **"Try again" after a failed read.** When plex.tv could not be read, the section shows a "Try again" button that reads the players again. No new PIN is asked while the list is open (D186 4).
+  2. **Plain words for a failed read.** The line says which of three things happened, with no status code or protocol word: plex.tv did not answer, plex.tv refused that server's sign-in, or plex.tv answered with something that could not be read. It names the server (D187 2; D190 does not change this).
+  3. **The state is read out and says what it means.** Each row's control is described by its state for assistive technology. "unavailable" says the player is no longer on the Plex account; "not checked" says plex.tv could not be read; "offline" says the player is not connected now.
+  4. **Each part of `provides` is trimmed** before it is compared with `player` (D186 7).
+  5. **Follow-ups (owner Nathan), not in this run:** the PIN prompt does not say what it is for; Settings opened while the position tool is active resumes without the PIN (older code); a check with a real screen reader.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-players` second reviews; Nathan: "Fix the findings (Recommended)"; under D44, D181 10): D189
+
+- **D189 What the second reviews of `play-now-players` left open.** Stop 7 offered three items with a recommended option each; they take their recommended options under Nathan's choice, and he may overturn any of them.
+  1. **A list closed by a server change says why (adds to D187 1, which D190 amends for an import).** The section says in one line that the servers changed and the list was closed, and that opening it again reads the players. Every route that changes the servers closes the list, a sign-in that stops partway included.
+  2. **No Plex server signed in: stored entries are not checked (amends D186 7 and D188 3 for this case).** With no Plex server signed in, nobody asked an account, so a stored entry reads "not checked", with the reason that no Plex server is signed in. It stays removable, and nothing can be added.
+  3. **A fourth plain sentence (adds to D188 2).** A server error from plex.tv reads that plex.tv had a problem and could not answer, and to try again later.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-players` reviews of round 4; Nathan: "Fix the findings (Recommended)"; under D44, D181 10): D190
+
+- **D190 An import closes the list only when it changes the servers (amends D187 1).** D187 1 said an import that fills the sheet closes an open Allowed devices list. It now closes the list only when the servers the sheet holds after the import differ from those the list was read for, the same test every other route uses; the line that says the servers changed (D189 1) is then true. An import that changes no server leaves the list open.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-plex` pre-flight; under D44, D181 10): D191
+
+- **D191 What the criteria of `play-now-plex` mean.** A cold probe of the criteria text (`.orchestrator/artifacts/play-now-plex--criteria-probe-r1.md`, 23 findings) found inputs the text left open; eight touch what a child at the display can start, or where. Stop 9 offered eight items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
+  1. **A pin does not make a title playable.** The pin's exemption from the limit (D5) is for showing the poster only. Play now refuses a title the limit in force does not allow, pinned or not.
+  2. **The limit in force at the moment of sending.** It is resolved as the display resolves it (household, time slot, profile). Under a limit, a title with no rating or an unknown rating is refused, as `allows()` refuses to show it. With no limit, everything plays.
+  3. **The title pressed is the title played.** It is the title on screen when the button was pressed; the menu and the confirmation name it. At the moment of sending, that title is checked again against the limit then in force, and the device against `allowedPlayers` as stored then. A title or a device that no longer passes is not sent, and the display says so.
+  4. **The PIN comes first.** Press, then the PIN when one is set (D181 6), then any choice, then the send. A wrong or cancelled PIN sends nothing and shows no device. Unlocking Settings does not count for Play now.
+  5. **plex.tv is read once per press.** A device plex.tv lists as present can be picked. One that is offline or gone from the account is shown and cannot be picked, with the reason (D186 2, D188 3). If plex.tv cannot be read, the allowed devices are shown as not checked and can be picked, always through the menu and never straight through. The display never contacts a player.
+  6. **One device, and "Play from start".** One allowed device that can be picked and no saved position: straight to it (the D65 note). With a saved position, one step offers two choices: resume at that position, or play from the start (D181 5). One allowed device that cannot be picked is shown with the reason, and nothing is sent.
+  7. **Which posters have the button.** A movie or an episode from a Plex server. Not a show or a season poster, not the now-playing poster, not a Jellyfin or Emby poster (D181 7), and not while no device is allowed.
+  8. **The token.** The command goes to the poster's own Plex server with that server's sign-in, as every request to it does, and carries no token for the player. The token never appears in a message on screen, the log or Diagnostics. Whether a real player needs more is a (verify) row.
+  9. **Read without a question.** One Play now at a time: the button waits while one is open or sending, and nothing is retried automatically. The menu lists the allowed devices by name with numbers in order; Cancel or Escape sends nothing and returns focus to the button. The saved position is read from the poster's server at the press; if it cannot be read, nothing is sent. Offsets are in milliseconds. Success and each failure say in plain words what happened, with no status code. No keyboard shortcut is added. The button follows the other control buttons in kiosk mode, in sleep and when the controls are hidden. A player on another Plex account than the poster's server is listed, and the server's answer is shown when it cannot reach it.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-plex` first reviews; under D44, D181 10, and Nathan's "Fix the findings (Recommended)"; item 2 amended by D193): D192
+
+- **D192 What the first reviews of `play-now-plex` left open (item 2 is amended by D193).** Stop 10 offered five items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
+  1. **Nothing waits between the check and the command (sharpens D191 3).** Whatever the command needs from the network (the server's machine identifier) is read before the check at the moment of sending. After that check passes, the play request is the next thing that happens, with no wait in between. Once the request has been handed to the server, the flow stays busy until its answer, and the answer is told; a cancel before that moment stops it.
+  2. **The limit at the send is the stored one (D193 1: and the page's own; the stricter of the two).** At the moment of sending, the limit in force is resolved from the settings as they are stored then (household, time slot, profile), as the allowed list already is. A limit saved from another page of the same browser therefore counts.
+  3. **The display says what it is waiting for.** After the press (and the PIN) it says it is checking the devices; after a pick it says it is sending the title to the device; the answer replaces that line. The waits themselves are unchanged.
+  4. **The Plex-only members are ordinary members (answers Q1 of the builder).** `play` and `savedPosition` are ordinary, enumerable members of the Plex adapter. The source layer exports the list of members only the Plex adapter has, beside the common list. `tests/sources.test.js` joins the phase's Output and pins both lists: every adapter has the common members, the Plex adapter has those of the second list too, and Jellyfin and Emby have none of them.
+  5. **One dialog at a time.** Opening Settings, Diagnostics or any other dialog ends an open Play now, and Play now does not start while another dialog is open.
+  6. **Failures stay and say which.** A Play now failure stays on screen for 15 seconds. A server error on the play command (an HTTP 5xx answer) says the server had a problem and did not send it, and to try again later; "could not reach the device" is for the server's other refusals.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-plex` second reviews; under D44, D181 10, and Nathan's "Fix the findings (Recommended)"; item 3 amended by D194): D193
+
+- **D193 What the second reviews of `play-now-plex` left open (item 3 is amended by D194).** Stop 11 offered four items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
+  1. **The stricter of the two at the send (D193 1 amends D192 2).** D192 2, before D193, said the limit at the send is the stored one. The stored settings and the page's own can differ (a Save that a full store did not take). At the moment of sending the title must pass both the limit in force resolved from the stored settings and the one resolved from the page's settings, and the device must be on both allowed lists.
+  2. **"Sending" shows when the request goes (D193 2 sharpens D192 3).** The checking line stays until the last check has passed. The line that says the title is being sent to the device shows only once the request is made.
+  3. **No answer in time is not "not sent" (D194 1: nor is a failed connection, unless the browser is offline).** A play request that got no answer in time says it is not known whether the device started, and to look at the device before trying again. A request that could not be made at all says it was not sent.
+  4. **A stopped Play now says so (D193 4).** When another dialog (D192 5, unchanged by D193) or a rebuilt connection (D192 1, unchanged by D193) ends a Play now before its request was handed over, the display says in one line that Play now was stopped and nothing was sent.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-plex` third reviews; under D44, D181 10, and Nathan's "Fix the findings (Recommended)"; item 1 amended by D195): D194
+
+- **D194 What the third reviews of `play-now-plex` left open (item 1 is amended by D195).** Stop 12 offered four items with a recommended option each; they are answered "defaults" under D44, and the owner may overturn any of them.
+  1. **"Was not sent" only when the browser is offline (amends D193 3; D195 withdraws the offline exception).** D193 3 said a request that could not be made at all says it was not sent. The browser reports a connection never made and one lost after the server took the command in the same way. A failed connection on the play request therefore says it is not known whether the device started, and to look at the device before trying again; only when the browser itself is offline does it say the title was not sent.
+  2. **Another notice wins over the stopped line (adds to D193 4).** If a notice is on screen when the last dialog closes, the line that says Play now was stopped is not shown. A new Play now also drops a stopped line that is still held.
+  3. **An answer is held too.** The answer of a request that reached the server (the title is playing, or what went wrong) that arrives while a dialog covers the page is held and shown when the last dialog closes, whatever other notice is up.
+  4. **The button and the dialog use both lists (adds to D193 1).** The Play now button shows, and the dialog lists a device, only when the device is on both the stored allowed list and the page's own.
+
+## Conductor ruling — 2026-11-23 (run 12, `play-now-plex` fourth reviews; under D44, D181 10, and Nathan's "Fix the findings (Recommended)"): D195
+
+- **D195 The play request never says "was not sent" (amends D194 1).** D194 1 kept one exception: a failed connection says the title was not sent when the browser itself is offline. Both code reviews of round 4 showed the exception wrong where it can be reached: with the browser offline before the press, Play now stops earlier, at the read of the saved position; the offline words at the send are reached only when the browser goes offline after the request has left, which is when the server may already have the command. The exception is withdrawn. Every failed connection and every missing answer on the play request says it is not known whether the device started, and to look at the device before trying again. The reads before the request (the saved position, the server's identifier) keep their words: nothing had been sent.
+
+## Conductor ruling — 2026-11-23 (run 12, `release-2.4.3` pre-flight; under D44, D181 10): D196
+
+- **D196 What the pre-flight of `release-2.4.3` found.** The owner may overturn any item.
+  1. **The Output grows by four test files.** The upgrade notice's marker and words are pinned in `tests/e2e/lib.mjs` (`WHATS_NEW_MARKER`), `tests/e2e/smoke.spec.mjs`, `tests/e2e/preset.spec.mjs` and `tests/e2e/followups.spec.mjs`; the plan's Output named only `tests/e2e/release.spec.mjs`, and criterion 3 (the whole suite) cannot pass without them. They join the Output.
+  2. **The notice (D181 8).** A configured display whose marker is not `'2.4.3'` shows once: "What's new in 2.4.3: Play now sends the poster on screen to a Plex player you allow." with an **Open settings** action. The marker is written as `'2.4.3'` either way; an unconfigured display shows nothing (D73). The 2.4.1 notice is retired. A household with no Plex server sees no notice (Play now is for Plex posters only, D181 7); its marker is written all the same.
+  3. **Where Open settings lands.** Through the normal PIN gate, on the Allowed devices section, with focus on its "Show allowed devices" button: that is where a household turns Play now on (the list starts empty). The rule of D168 1 and D184 carries over to the new target: the section at the top of the view where it and the focused control both fit, the focused control in view where they do not, at every rotation. The list is not opened by the notice (it asks the PIN itself, D187).
+  4. **The Chromium note (stop 1 item 3).** `docs/validation/real-server-extended.md` says that the run-12 browser evidence is from Chromium build 1243 under Playwright 1.64.1 (which names build 1248), and that the full suite is run on the devbox before any merge.
+
+## Conductor ruling — 2026-11-23 (run 12, `release-2.4.3` first reviews; under D44, D181 10): D197
+
+- **D197 What the reviews of `release-2.4.3` found (amends D196 3).** The owner may overturn any item.
+  1. **The landing rule, said truly.** Allowed devices is the last section of the sheet, so on an ordinary sheet it cannot reach the top of the view: the sheet ends first. The rule is: after Open settings the sheet is scrolled so that the section is as near the top of the view as the sheet's end allows, and the control that has focus is inside the visible part of the sheet. `docs/spec.md` (R-UPG-6) and `Roadmap.md` say this and no longer say the section "is at the top where both fit".
+  2. **The list already open.** When the Allowed devices list is already open (its "Show allowed devices" button is hidden; reachable through the position tool while the notice is up), Open settings focuses the first visible control of the open list, or the list's status line when it has none, and that control is brought into view by the same rule. Focus never stays on a control outside the visible sheet.
+  3. **Follow-up, not in this run (owner Nathan):** the notice is gone after a cancelled PIN and its marker is already written, so that display is not told again (the same as 2.4.1).

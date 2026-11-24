@@ -7,8 +7,9 @@ import { createEngine } from './engine.js';
 import { createHelper } from './helper.js';
 import { cornerZone, createHold, HOLD_MS, inZone, REVEAL_MS, shouldResetPin } from './kiosk.js';
 import { createPinGate } from './pin-gate.js';
-import { createSource, createSources, needsSources, readServerId, serverTypeOf, signInFlow } from './sources/index.js';
+import { createSource, createSources, needsSources, readPlayers, readServerId, serverTypeOf, signInFlow } from './sources/index.js';
 import { createPosterCache } from './poster-cache.js';
+import { createChooser, createPlayNow, onBothLists, showsButton } from './play-now.js';
 import { createPosterPin } from './poster-pin.js';
 import { allows } from './ratings.js';
 import { createReload, takeCarriedPlayback } from './reload.js';
@@ -25,7 +26,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.4.2';
+export const VERSION = '2.4.3';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -92,6 +93,7 @@ function rebuildClient() {
     sourceError = err;
     log.error(err.message);
   }
+  playNow.cancel(); // a Play now open for the old source ends: what is still on its way is ignored, and the poster's server may be another now
   engine = client
     ? createEngine({
         client,
@@ -180,6 +182,7 @@ function blockPoster() {
   display.currentPoster = null;
   display.setTitle(null);
   display.setNowPlaying(null);
+  syncPlayNow();
 }
 
 /** Whatever is on screen is checked against the limit in force now: a poster that is not allowed comes off at once, a fading one is cut. */
@@ -236,6 +239,7 @@ async function showPoster(poster, image) {
   outgoingPoster = outgoing;
   cutOutgoing(); // the limit may have been tightened during the decode, with the old poster now fading out
   document.body.classList.remove('poster-blocked');
+  syncPlayNow();
   return true;
 }
 
@@ -388,7 +392,7 @@ async function handleFailure(err, { notify = false } = {}) {
     const stored = cache.entries();
     const limit = limitNow();
     const limited = limit && !fatal && stored.length > 0 && !stored.some((e) => allows(limit, e.contentRating));
-    showEmpty(true, limited ? `No posters within the household limit are available while ${serverLabels()} ${serverList(state.settings).length > 1 ? 'are' : 'is'} unreachable.` : err.message, err.kind);
+    showEmpty(true, limited ? `No posters within the household limit are available while ${serverLabels()} ${serverNames().length > 1 ? 'are' : 'is'} unreachable.` : err.message, err.kind);
   }
   // A refresh somebody asked for that fails with a poster still on screen has nothing else to say so: the toast carries the fixes.
   if (notify && fixesFor(err.kind).length) {
@@ -537,11 +541,18 @@ const serversKey = (s) => JSON.stringify(serverList(s).map(({ name: _name, ...re
 let lastSettled = null; // what the last Save did to the servers: { settled, before }, for the toast
 /** A server as people read it: its name, else its type's label. */
 const serverNameOf = (entry) => entry.name || signInFlow({ serverType: entry.type }).label;
-/** Every server type the household has, in words: "Plex and Jellyfin". The status pill and the empty card name them all while any is down. */
-function serverLabels() {
-  const labels = [...new Set(serverList(state.settings).map((e) => signInFlow({ serverType: e.type }).label))];
-  return labels.length ? labels.join(' and ') : signIn().label;
+/**
+ * What the status pill and the limited empty card call the servers while any is down (D183 1), as a list. With two or more different names it is the
+ * servers' names ("Den", "Attic"; a name two servers share once); otherwise it is the server types, as 2.4.2 said them ("Plex", "Plex and Jellyfin").
+ */
+function serverNames() {
+  const list = serverList(state.settings);
+  const names = [...new Set(list.map(serverNameOf))];
+  if (names.length > 1) return names;
+  const labels = [...new Set(list.map((e) => signInFlow({ serverType: e.type }).label))];
+  return labels.length ? labels : [signIn().label];
 }
+const serverLabels = () => joinNames(serverNames());
 const joinNames = (names) => (names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 /**
@@ -573,30 +584,47 @@ function serversToast(info, saved, names = []) {
 /** Who answers at an address, read without a token (js/sources/index.js `readServerId`), with this display's own client id. */
 const readId = (type, url) => readServerId(type, url, { clientId: clientIdValue, version: VERSION });
 
+/**
+ * The settings a live preview takes from the sheet: the named controls inside the two `data-live` sections of index.html (D181 2, D185). Every
+ * other key of a preview is the saved one. tests/e2e/settings-sheet.spec.mjs compares this list with those controls.
+ */
+const LIVE_KEYS = [
+  'controlLabels',
+  'customFrameUrl',
+  'fillMode',
+  'frameBrightness',
+  'frameId',
+  'gapFill',
+  'nightDim',
+  'nightDimEnd',
+  'nightDimLevel',
+  'nightDimStart',
+  'nightDimTarget',
+  'posterFit',
+  'posterOffsetX',
+  'posterOffsetY',
+  'posterScale',
+  'rotation',
+  'showMeta',
+  'showPlayer',
+  'showProgress',
+  'showTitle',
+];
+
 async function applySettings(next, { persist = true, preview = false, restartIdle = true } = {}) {
   const prev = state.settings;
   const before = resolveSettings(prev, new Date()); // what was in force before this apply, at the same instant
-  // A live preview shows layout only. The household limit, its time slots, the profiles, the poster selection and the pin are never previewed (CCI1, C6I1): while the
-  // dialog is open the previous, saved values keep applying, so only Save changes them and Cancel has nothing to undo
-  // (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the
-  // kiosk switches, the settings PIN and the device helper: an unsaved change to any of them is never in force. The Display
-  // protection fieldset is not live either (K30): a pixel-shift or daily-reload change waits for Save, even when a live
-  // layout field moves while it is unsaved. The brightness controls are their own live block and are not listed here.
-  if (preview) {
-    const { maxContentRating, limitSlots, profiles, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper } = prev;
-    const { pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime } = prev;
-    const { libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source } = prev; // the selection (R-SEL-1, D101 ruling 6)
-    const { serverType, serverUrl, plexToken, serverUserId, serverId, serverCarried, servers } = prev; // the connection keys are stored by Save, never before (D149 1): the Save compares the type, address, token and user id with the stored ones, and a preview never leaves the typed or imported ones in force
-    const { weighting, noRepeatDays } = prev; // an unsaved window of 0 must not reach the engine, which would clear the saved record (D114 1, D116 1)
-    next = {
-      ...next,
-      ...{ maxContentRating, limitSlots, profiles, limitNowPlaying, staticRatingKey, staticTitle, kioskMode, disableShortcuts, settingsPinHash, settingsPinSalt, deviceHelper },
-      ...{ pixelShift, pixelShiftMinutes, dailyReload, dailyReloadTime },
-      ...{ libraryKey, libraryName, libraryKeys, libraryNames, genres, ratings, source },
-      ...{ weighting, noRepeatDays },
-      serverType, serverUrl, plexToken, serverUserId, serverId, serverCarried, servers,
-    };
-  }
+  // A live preview is the saved settings plus the live keys of the sheet, as the sheet holds them at that moment (D181 2, D185 1). Nothing else is
+  // taken from the sheet, from an imported file or from an open profile (D185 2, 3, 4): the household limit, its time slots, the profiles, the poster
+  // selection and the pin are never previewed (CCI1, C6I1), so while the dialog is open the saved values keep applying, only Save changes them and
+  // Cancel has nothing to undo (an imported file that pins an above-limit title must not exempt it before it is saved). The same goes for the kiosk
+  // switches, the settings PIN and the device helper, and for the connection keys, which Save stores and a preview never leaves in force (D149 1:
+  // the Save compares the type, address, token and user id with the stored ones). The Display protection fieldset is not live either (K30): a
+  // pixel-shift or daily-reload change waits for Save, even when a live layout field moves while it is unsaved; so do the weighting and the
+  // no-repeat window, because an unsaved window of 0 must not reach the engine, which would clear the saved record (D114 1, D116 1), and Cross-fade.
+  // The brightness controls are their own live block, and LIVE_KEYS lists them with the layout controls. A key that is not listed there is
+  // never previewed, so a new setting is safe by default.
+  if (preview) next = { ...prev, ...Object.fromEntries(LIVE_KEYS.map((key) => [key, next[key]])) };
   // A Save that stores a different server type (an absent one counts as Plex) starts over: the pinned poster goes now, and the
   // offline cache and the no-repeat history go once the new client is built (D134 2, D141 3). A preview, a sign-in and a Cancel store nothing.
   // The servers are settled first (D156 3, D157): who answers at a changed address is read without the token, the token stays only with the
@@ -683,6 +711,7 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   }
   updateWakeLock();
   updatePinButton();
+  syncPlayNow(); // the allowed devices may have changed
   if (state.settings.deviceHelper && !prev.deviceHelper) tv.probeHelper();
   if (!state.settings.deviceHelper && prev.deviceHelper) tv.releaseTv();
   if (prev.dailyReloadTime !== state.settings.dailyReloadTime) reload.rearm(); // a new time is not "passing" until it does
@@ -790,6 +819,115 @@ const settingsUI = createSettingsUI({
 // A blocked poster is not on screen: it cannot be pinned.
 const posterPin = createPosterPin({ getSettings: () => state.settings, getCurrent: () => (display.currentPoster ? engine?.current : null), applySettings });
 
+// ---------- Play now (js/play-now.js, R-PLAY-1, D191) ----------
+
+/** The server entry a poster belongs to (its scoped id says which), or null. */
+const serverOfPoster = (poster) => serverList(state.settings).find((entry) => belongsTo(poster.ratingKey, entry)) ?? null;
+/** The allowed devices as they are stored now (the one list every decision of Play now reads). */
+const storedAllowed = () => load(storage).settings.allowedPlayers;
+/** The limit in force now, resolved from the settings as they are stored now (household, time slot, profile): what the send checks, so a limit saved from another page counts (D192 2). */
+const storedLimit = () => resolveSettings(load(storage).settings, new Date()).maxContentRating;
+
+// What Play now says while a dialog may cover the page (D193 4, D194 2, 3). The line that says a Play now was stopped, and the answer of a request that reached the
+// server, are held while a dialog is open and shown when the last one closes. The stopped line yields to any notice that is up then (and is dropped, not queued); the
+// answer does not: its time on screen starts when it is shown.
+let heldStopped = null;
+let heldAnswer = null;
+const dialogUp = () => document.querySelector('dialog[open]') !== null;
+const noticeUp = () => !$('toast').hidden;
+function tellPlayNow(text, options) {
+  if (options.later) {
+    if (dialogUp()) heldStopped = { text, ms: options.ms };
+    else toast(text, options); // no dialog covers the page: a rebuilt connection (the notice that offered the fix has closed itself by then)
+    return;
+  }
+  if (options.reached && dialogUp()) {
+    heldAnswer = { text, ms: options.ms };
+    if (options.replaces && $('toast').textContent === options.replaces) $('toast').hidden = true; // the wait's words are not left up behind the dialog
+    return;
+  }
+  toast(text, options);
+}
+
+const playChooser = createChooser({ dialog: $('play-now'), onClosed: () => focusPlayNow() });
+const playNow = createPlayNow({
+  getPoster: () => display.currentPoster,
+  serverTypeOf: (poster) => serverOfPoster(poster)?.type ?? '',
+  serverName: (poster) => serverNameOf(serverOfPoster(poster)), // only asked for a poster that passed the press check, so its server is in the list
+  nameOfSlot: (slot) => (serverList(state.settings)[slot] ? serverNameOf(serverList(state.settings)[slot]) : ''),
+  getLimit: limitNow,
+  getStoredLimit: storedLimit,
+  getAllowed: storedAllowed,
+  getPageAllowed: () => state.settings.allowedPlayers,
+  requestPin: pinGate.requestPin,
+  cancelPin: () => pinGate.prompt.cancelVerify(),
+  readPlayers: () => readPlayers(state.settings, { clientId: clientIdValue }),
+  savedPosition: (poster) => client.savedPosition({ id: poster.ratingKey, key: poster.playKey }),
+  prepare: (poster) => client.machineIdentifier({ id: poster.ratingKey }),
+  play: ({ poster, target, offset, machineIdentifier }) => client.play({ id: poster.ratingKey, key: poster.playKey, target, offset, machineIdentifier }),
+  hasSource: () => client !== null,
+  otherDialogOpen: () => document.querySelector('dialog[open]') !== null,
+  choose: playChooser.open,
+  closeChoice: playChooser.close,
+  focusBack: () => focusPlayNow(),
+  dropStopped: () => (heldStopped = null),
+  say: (text, options = {}) => tellPlayNow(text, options),
+  unsay: (text) => {
+    if (!$('toast').hidden && $('toast').textContent === text) $('toast').hidden = true;
+  },
+  onChange: () => syncPlayNow(),
+});
+
+// One dialog at a time (D192 5): a dialog that opens while a Play now is open ends it (the PIN prompt that Play now itself asked for is no other dialog). The line that says
+// it was stopped is held while a dialog covers the page and shown when the last one closes (D193 4).
+new MutationObserver((records) => {
+  for (const { target } of records) {
+    if (target.id === 'play-now') continue;
+    if (target.open) {
+      if (!(target.id === 'pin-dialog' && playNow.awaitingPin)) playNow.cancel();
+    } else if (heldStopped || heldAnswer) {
+      // One turn later, so a dialog that opens at once after this one (a PIN prompt, then the sheet it asked for) still covers the page: the line waits for the last.
+      setTimeout(() => {
+        if (dialogUp()) return;
+        if (heldAnswer) toast(heldAnswer.text, { ms: heldAnswer.ms });
+        else if (heldStopped && !noticeUp()) toast(heldStopped.text, { ms: heldStopped.ms });
+        heldAnswer = null;
+        heldStopped = null;
+      }, 0);
+    }
+  }
+}).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
+
+const playNowButton = () => document.querySelector('#controls [data-action="playnow"]');
+
+/**
+ * The Play now button: in the row only for a movie or an episode from a Plex server while a device is allowed (a copy of the template of index.html, put
+ * before Rotate; otherwise it is not in the row at all, so the row is the seven buttons it always was), named for the title, and waiting while a flow is open.
+ */
+function syncPlayNow() {
+  const poster = display.currentPoster;
+  const shown = showsButton({ poster, serverType: poster ? (serverOfPoster(poster)?.type ?? '') : '', allowed: onBothLists(storedAllowed(), state.settings.allowedPlayers) });
+  let btn = playNowButton();
+  if (!shown) {
+    // The button that has the focus goes: the focus moves to Pin, the button before it, so it never falls out of the row.
+    if (btn && document.activeElement === btn) document.querySelector('#controls [data-action="pin"]').focus({ preventScroll: true });
+    btn?.remove();
+    return;
+  }
+  if (!btn) {
+    btn = $('playnow-template').content.firstElementChild.cloneNode(true);
+    document.querySelector('#controls [data-action="rotate"]').before(btn);
+  }
+  btn.setAttribute('aria-label', `Play "${poster.title}" now`);
+  if (playNow.busy) btn.setAttribute('aria-disabled', 'true');
+  else btn.removeAttribute('aria-disabled');
+}
+
+/** Focus goes back to the Play now button when its dialog or its PIN prompt closes, and to Pin, the button before it, when the button has left the row. */
+function focusPlayNow() {
+  (playNowButton() ?? document.querySelector('#controls [data-action="pin"]')).focus({ preventScroll: true });
+}
+
 function rotate() {
   applySettings({ ...state.settings, rotation: (state.settings.rotation + 90) % 360 });
 }
@@ -884,6 +1022,7 @@ const actions = {
   refresh: () => (engine ? tick({ force: true, notify: true }) : requestSettings()),
   pause: () => setPaused(!state.paused),
   pin: posterPin.togglePin,
+  playnow: () => playNow.press(),
   rotate,
   fullscreen: toggleFullscreen,
   shortcuts: openShortcuts,
@@ -1519,30 +1658,42 @@ async function boot() {
   announceWhatsNew();
 }
 
-// ---------- The upgrade notice (R-UPG-5) ----------
+// ---------- The upgrade notice (R-UPG-6) ----------
 
 const WHATS_NEW_KEY = 'plexPoster.whatsNew';
-const WHATS_NEW_VERSION = '2.4.1';
+const WHATS_NEW_VERSION = '2.4.3';
 
 /**
  * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new
- * and pointed at the server list (through the normal PIN gate), where "Add a server" lives.
- * An unconfigured one is a fresh install, not an upgrade, so it shows nothing. Either way the marker is written, so it
- * never shows again. The 2.4 notice is retired.
+ * and pointed at the Allowed devices section (through the normal PIN gate), where Play now is turned on (D196 2, 3).
+ * An unconfigured display is a fresh install, not an upgrade, so it shows nothing; neither does a household with no Plex server,
+ * since Play now is for Plex posters only. Every one of them gets the marker written, so it never shows again. The 2.4.1 notice is retired.
+ * Open settings scrolls the section as near the top of the view as the end of the sheet allows (it is the last section, so on an ordinary sheet it cannot reach the top),
+ * and the control that has focus is inside the visible part of the sheet (D197 1).
  */
 function announceWhatsNew() {
   if (storage.getItem(WHATS_NEW_KEY) === WHATS_NEW_VERSION) return;
   storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION);
   if (!isConfigured(state.settings)) return;
-  toast("What's new in 2.4.1: choose posters from more than one server.", {
+  if (!serverList(state.settings).some((e) => e.type === 'plex')) return;
+  toast("What's new in 2.4.3: Play now sends the poster on screen to a Plex player you allow.", {
     action: 'Open settings',
     onAction: async () => {
       await requestSettings(); // through the PIN gate; the sheet opens at its top
       if (!settingsUI.isOpen) return;
-      const list = document.getElementById('servers-fieldset');
-      list.closest('fieldset').scrollIntoView({ block: 'start' }); // the whole server section (heading, connected card, list, Add a server; D168 1) at the top of the view,
-      const first = [...list.querySelectorAll('button, summary')].find((el) => el.getClientRects().length > 0); // and focus on its first control
-      (first ?? list).focus({ preventScroll: true });
+      const button = document.getElementById('players-open'); // "Show allowed devices": the list is not opened here, it asks the PIN itself (D187)
+      const section = button.closest('fieldset');
+      // The button is not rendered while the list is already open (it can be, through position mode, which keeps the list open): then the first visible control of the
+      // open list takes the focus, or the list's status line (it has tabindex -1) when the list has none (D197 2).
+      const open = button.getClientRects().length === 0;
+      const target = open ? ([...document.querySelectorAll('#players-body button, #players-body input')].find((el) => el.getClientRects().length > 0) ?? document.getElementById('players-status')) : button;
+      section.scrollIntoView({ block: 'start' }); // the Allowed devices section as near the top of the view as the end of the sheet allows,
+      target.focus({ preventScroll: true }); // and focus on that control
+      // Where the section and the button do not both fit (a short view, a turned sheet), the focused control must still be in the visible part of the sheet body:
+      // bring it to the middle of the view. A control already in view stays where it is, so the section stays as near the top as the sheet's end allowed.
+      const body = target.closest('.sheet-body').getBoundingClientRect();
+      const at = target.getBoundingClientRect();
+      if (at.top < body.top || at.bottom > body.bottom || at.left < body.left || at.right > body.right) target.scrollIntoView({ block: 'center', inline: 'nearest' });
     },
     ms: 20_000,
   });

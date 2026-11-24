@@ -2,14 +2,14 @@
 
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
-import { createSource, createSources, needsSources, readServerId, signInFlow } from './sources/index.js';
+import { createSource, createSources, needsSources, readPlayers, readServerId, signInFlow } from './sources/index.js';
 import { describeLimitNow, MAX_SLOTS, NO_LIMIT, wasUnreadable } from './limit-schedule.js';
 import { createPositionMode } from './position.js';
 import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describeProfile, MAX_PROFILES, removeProfile, renameProfile, updateProfile } from './profiles.js';
 import { parseHHMM } from './schedule.js';
 import { LIMITS } from './ratings.js';
 import { belongsTo, genreRequestValue, memberBelongsTo, offeredRatings, selectionOf } from './selection.js';
-import { addressOf as cleanAddress, defaults, importWithConnection, isConfigured, MAX_SERVERS, oldTokenMayGo, sanitize, serverList, toExport } from './settings.js';
+import { addressOf as cleanAddress, defaults, followNames, importWithConnection, isConfigured, MAX_SERVERS, oldTokenMayGo, PLAYER_STATES, playerRows, sanitize, serverList, setAllowed, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
 const LAYOUT_KEYS = ['posterScale', 'posterOffsetX', 'posterOffsetY'];
@@ -170,6 +170,13 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   let removedNames = []; // the servers Remove took out in this sheet, as the sheet named them: { id, carried, name }, for the Save toast
   let promoted = null; // the server Remove moved into the first place, { type, url, token }: its own sign-in, not one carried to another address
   let held = {}; // the token, address, server name and user id set aside for the server type the sheet is not showing, so a change of mind loses nothing
+  // The allowed devices the sheet would save (R-PLAY-1, D186): `{ id, name }` entries, set by write(), changed by the list, saved by Save, like pendingPin.
+  // They are kept apart from what the list shows, so a Save never writes what is on screen: a read still loading or failed leaves them as they are (D186 5).
+  let allowed = [];
+  // What the Allowed devices list is showing: 'closed' (not opened since the sheet opened; nothing is read), 'loading', 'ok' (the players plex.tv lists, in
+  // `listed`), 'failed' (plex.tv could not be read: the stored entries are shown as not checked) or 'none' (no Plex server is signed in).
+  let players = { phase: 'closed', listed: [], error: '' };
+  let playersRun = 0; // bumped when the list is opened and when the sheet closes, so a late answer from plex.tv is ignored
 
   /** The server type the sheet shows. */
   const formType = () => field('serverType').value || 'plex';
@@ -220,6 +227,8 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     $('pinned-title').textContent = s.staticRatingKey ? s.staticTitle || `item ${s.staticRatingKey}` : 'none';
     $('unpin-btn').hidden = !s.staticRatingKey;
     pendingAuth = { hash: s.settingsPinHash || '', salt: s.settingsPinSalt || '' };
+    allowed = (s.allowedPlayers || []).map((p) => ({ ...p })); // an import leaves the display's own list (a file never carries one), so this is the list as it was
+    renderPlayers(); // an open list keeps showing the list as it is; `renderConnection` below ends in `renderServers`, which shuts it only if this fill changed a server (D190)
     connectionOpen = !isConfigured(s);
     syncPin();
     syncRotate();
@@ -260,6 +269,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     s.staticTitle = pendingPin.title;
     s.settingsPinHash = pendingAuth.hash;
     s.settingsPinSalt = pendingAuth.salt;
+    s.allowedPlayers = allowed.map((p) => ({ ...p }));
     return sanitize(s);
   }
 
@@ -1064,6 +1074,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   let serversShown = '';
   let serversPlaced = []; // the server (its type and address) at each place of the list as last drawn
   function renderServers() {
+    syncPlayersToServers(); // every route that changes the servers (add, remove, sign in, type, import) ends here
     const list = sheetServers();
     const first = list[0];
     $('server-list').hidden = list.length < 2;
@@ -1331,6 +1342,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       }
       field('plexToken').value = token;
       field('serverUserId').value = formType() === 'emby' ? userId : ''; // only Emby needs the user id (C1); it goes with its token
+      syncPlayersToServers(); // the account changed, whatever the sign-in does next: an open list is of the old one (D187 1, D189 1)
       servers = await sign.discoverServers(clientId, token, { secureOnly: location.protocol === 'https:' });
       if (ctrl.signal.aborted) return;
       if (!servers.length) {
@@ -1364,6 +1376,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     field('plexToken').value = sv.accessToken;
     field('serverUrl').value = uri;
     form.dataset.serverName = sv.name;
+    syncPlayersToServers(); // the server changed, whether or not the test below passes
     await testConnection();
   }
 
@@ -1443,13 +1456,191 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     dialog.close();
   }
 
+  // ---- the allowed devices (R-PLAY-1, D181, D186, D187, D188): the Plex players this display may play on, kept on this display only ----
+
+  let playerStates = 0; // numbers the state lines, so a control can be described by its own
+  let playersServers = ''; // the servers (type, address, token, user) the open list was read for
+
+  /** The servers the open list depends on, as the sheet holds them now. */
+  const serversKey = () => JSON.stringify(serverList(read()).map((e) => [e.type, e.url, e.token, e.userId]));
+
+  /** The servers changed under an open list: it shuts, and one line says why (D189 1). The players of the old account must not stay tickable (D187 1). */
+  function closeForServers() {
+    if (players.phase === 'closed') return;
+    const heldFocus = $('players-body').contains(document.activeElement);
+    closePlayers();
+    $('players-closed-note').textContent = 'The servers changed, so the list was closed. Open it again to read the players.';
+    if (heldFocus) $('players-open').focus({ preventScroll: true }); // the control that had focus is gone
+  }
+
+  /** Called wherever the sheet changes a server: typed, picked, signed in, added, removed or imported. */
+  function syncPlayersToServers() {
+    if (players.phase !== 'closed' && serversKey() !== playersServers) closeForServers();
+  }
+
+  /** What a state says, beside the word, for the eye and for assistive technology (D188 3): the control is described by it. */
+  function playerState(state, meaning) {
+    const span = document.createElement('span');
+    span.className = 'player-state muted small';
+    span.id = `players-state-${++playerStates}`;
+    span.dataset.state = state;
+    span.textContent = `${state}: ${meaning}`;
+    return span;
+  }
+
+  /** A player plex.tv lists: a tick that allows it, named for the player it allows. A player that is not present is still allowable. */
+  function listedPlayerRow(row) {
+    const li = document.createElement('li');
+    li.className = 'player-row';
+    li.dataset.id = row.id;
+    const label = document.createElement('label');
+    label.className = 'check';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.dataset.player = row.id;
+    box.dataset.name = row.name;
+    box.checked = row.allowed;
+    box.setAttribute('aria-label', `Allow ${row.name}`);
+    const name = document.createElement('span');
+    name.className = 'player-name';
+    name.textContent = row.name;
+    label.append(box, name);
+    li.append(label);
+    if (row.state) {
+      const state = playerState(row.state, row.meaning);
+      box.setAttribute('aria-describedby', state.id);
+      li.append(state);
+    }
+    return li;
+  }
+
+  /** An allowed player that cannot be ticked: plex.tv no longer lists it ("unavailable") or could not be asked ("not checked"). It can be removed. */
+  function storedPlayerRow(row) {
+    const li = document.createElement('li');
+    li.className = 'player-row';
+    li.dataset.id = row.id;
+    const name = document.createElement('span');
+    name.className = 'player-name';
+    name.textContent = row.name;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn small player-remove';
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', `Remove ${row.name} from the allowed devices`);
+    const state = playerState(row.state, row.meaning);
+    remove.setAttribute('aria-describedby', state.id);
+    li.append(name, remove, state);
+    return li;
+  }
+
+  /** Words for a list of names: "A", "A and B", "A, B and C". */
+  const joinServers = (names) => (names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
+
+  /**
+   * The line for a read that failed (D187 2, D188 2): which server's account, and which of three things happened, in plain words (no status code,
+   * no protocol word). A read that failed for no reason the error names is "answered with something that could not be read".
+   */
+  function failedLine(error) {
+    const list = sheetServers();
+    const said = (error?.failed?.length ? error.failed : [{ kind: 'parse', slots: [] }]).map(({ kind, slots }) => {
+      const who = joinServers([...new Set(slots.map((slot) => nameOf(list[slot], slot)))]) || 'your Plex account';
+      const head = `Could not read the players of ${who}:`;
+      if (kind === 'network' || kind === 'timeout') return `${head} plex.tv did not answer.`;
+      if (kind === 'server') return `${head} plex.tv had a problem and could not answer. Try again later.`;
+      if (kind === 'auth') return `${head} plex.tv refused the sign-in. Sign in to ${who} again under the connection above.`;
+      return `${head} plex.tv answered with something that could not be read.`;
+    });
+    return `${said.join(' ')} The allowed devices below are as stored and were not checked. You can remove one, but not add one.`;
+  }
+
+  /** Redraws the Allowed devices section from `players` and `allowed`. Nothing is read here. Focus on a row stays on that player (D188), else on the line. */
+  function renderPlayers() {
+    const opened = players.phase !== 'closed';
+    $('players-open').hidden = opened;
+    $('players-body').hidden = !opened;
+    $('players-pin-note').hidden = Boolean(getSettings().settingsPinHash); // the PIN that asks is the saved one (requestPin)
+    if (!opened) {
+      $('players-list').replaceChildren();
+      $('players-status').textContent = '';
+      $('players-retry').hidden = true;
+      return;
+    }
+    const was = document.activeElement;
+    const rowHad = $('players-list').contains(was) ? was.closest('li')?.dataset.id : undefined;
+    // Only a list plex.tv answered can be ticked; a read still loading or failed, or no Plex server to ask, shows the stored entries, not checked.
+    const rows = playerRows(allowed, players.phase === 'ok' ? players.listed : null, { noServer: players.phase === 'none' });
+    $('players-list').replaceChildren(...rows.map((row) => (row.listed ? listedPlayerRow(row) : storedPlayerRow(row))));
+    $('players-status').textContent = {
+      loading: 'Reading your players from plex.tv…',
+      failed: players.error,
+      none: `No Plex server is signed in on this display, so there are no Plex players to list.${allowed.length ? ' Your allowed devices are kept and were not checked. You can remove one, but not add one.' : ''}`,
+      ok: players.listed.length ? 'Tick a player to allow it.' : 'plex.tv lists no players on your account.',
+    }[players.phase];
+    $('players-retry').hidden = players.phase !== 'failed';
+    if (rowHad !== undefined) {
+      const row = [...$('players-list').children].find((li) => li.dataset.id === rowHad);
+      (row?.querySelector('input, button') || $('players-status')).focus({ preventScroll: true });
+    }
+  }
+
+  /**
+   * After a state change the element that has focus is in the visible part of the sheet (D188). Focus in the list: that control is scrolled to,
+   * since new rows above it may have pushed it down. Focus on the line or on "Try again": both are brought into view. Focus anywhere else is left alone.
+   */
+  function showPlayersState() {
+    const at = document.activeElement;
+    if ($('players-list').contains(at)) at.scrollIntoView({ block: 'nearest' });
+    else if (at === $('players-status') || at === $('players-retry')) {
+      $('players-status').scrollIntoView({ block: 'nearest' });
+      ($('players-retry').hidden ? $('players-status') : $('players-retry')).scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  /** Reads the players, for the list just opened (the PIN has been given) or for "Try again" (no new PIN): once, over every Plex account of the household. */
+  function openPlayers() {
+    const run = ++playersRun;
+    $('players-closed-note').textContent = '';
+    const household = read();
+    playersServers = serversKey();
+    players = { phase: 'loading', listed: [], error: '' };
+    renderPlayers();
+    $('players-status').focus({ preventScroll: true }); // the button that was pressed is gone: keyboard focus stays in the section
+    showPlayersState();
+    readPlayers(household, { clientId }).then(
+      ({ accounts, players: listed }) => {
+        if (run !== playersRun) return;
+        // An allowed player keeps its allowance when its name changes: it is matched by its client identifier, and the stored name follows the new one (on Save).
+        allowed = followNames(allowed, listed);
+        players = { phase: accounts ? 'ok' : 'none', listed: accounts ? listed : [], error: '' };
+        renderPlayers();
+        showPlayersState();
+      },
+      (err) => {
+        if (run !== playersRun) return;
+        players = { phase: 'failed', listed: [], error: failedLine(err) };
+        renderPlayers();
+        showPlayersState();
+      },
+    );
+  }
+
+  /** The list is shut again: the sheet closed or filled afresh, or its servers changed, so the next opening asks for the PIN and reads again. */
+  function closePlayers() {
+    playersRun++;
+    $('players-closed-note').textContent = '';
+    players = { phase: 'closed', listed: [], error: '' };
+    renderPlayers();
+  }
+
   // ---- events ----
 
   form.addEventListener('input', (e) => {
+    syncPlayersToServers();
     syncDependent();
     if (e.target.closest('[data-live]')) onPreview(read()); // while a profile is open read() is the household's own values, so a profile's are never previewed (D120 1)
   });
   form.addEventListener('change', (e) => {
+    syncPlayersToServers();
     syncDependent();
     if (e.target.closest('[data-live]')) onPreview(read());
   });
@@ -1491,6 +1682,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       keepOriginal = false;
       return;
     }
+    closePlayers();
     if (original) onPreview(original); // undo live preview
     original = null;
   });
@@ -1535,6 +1727,10 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       field('serverUrl').value = url;
       $('jf-address').value = url;
     }
+    // No check for an open Allowed devices list here, on purpose, and no case can pin one: a type change ends in `renderServers` through
+    // `chooseServerType`; a token handed over with the choice goes through `signIn`, which checks; the address written here is a Jellyfin or Emby
+    // first server's (the card hands over an address only for those types), which the players read never uses; and the first-run choice is
+    // handed over only when the empty card's "Open settings" is pressed, and that card is hidden in the one state that resumes this sheet from the position tool with the display unconfigured (a pin that vanished).
   }
 
   /** Done or Escape: the sheet comes back with the values just set and the SAME `original`, so Cancel still reverts. */
@@ -1670,6 +1866,33 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     } else {
       setTokenShown(false);
     }
+  });
+
+  // The Allowed devices list opens behind the PIN (D186 4): one prompt, then it can be read and changed until the sheet closes. No PIN set, no prompt.
+  $('players-open').addEventListener('click', async () => {
+    if (!(await requestPin()) || !dialog.open) return;
+    openPlayers();
+  });
+  // A tick allows a listed player, and clears the allowance; both are sheet changes, stored by Save and undone by Cancel (D186 5).
+  // "Try again" reads again with no new PIN: the list is open (D188 1). Nothing can be ticked until plex.tv answers.
+  $('players-retry').addEventListener('click', openPlayers);
+  $('players-list').addEventListener('change', (e) => {
+    const box = e.target.closest('input[data-player]');
+    if (!box) return;
+    allowed = setAllowed(allowed, { id: box.dataset.player, name: box.dataset.name }, box.checked);
+  });
+  $('players-list').addEventListener('click', (e) => {
+    const button = e.target.closest('button.player-remove');
+    if (!button) return;
+    const row = button.closest('li');
+    const rows = [...$('players-list').children];
+    const at = rows.indexOf(row);
+    allowed = allowed.filter((p) => p.id !== row.dataset.id);
+    renderPlayers();
+    // Focus goes to the next row's control, or the one before, or the section's own line: never back to the top of the sheet.
+    const left = [...$('players-list').children];
+    const next = left[at] || left[at - 1];
+    (next?.querySelector('input, button') || $('players-status')).focus();
   });
 
   $('pin-set-btn').addEventListener('click', async () => {

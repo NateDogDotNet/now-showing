@@ -59,11 +59,18 @@
 // is wrong and offers "Sign in again"; with one on screen the card stays away, and only a refresh somebody asked for shows a toast with the button. Every other kind counts as the server not
 // answering: the status pill reads "Can't reach <label>" (or "Offline" when the browser is offline) and cached posters rotate; 'network' and 'timeout' also offer Diagnostics and "Test connection"; 'http', 'parse' and 'config' offer no button.
 // The kind 'empty' is not a SourceError kind: the engine raises it itself when nothing can be drawn.
+// Play now (R-PLAY-1, D191, D192 4) is the Plex adapter's alone (PLEX_ONLY_MEMBERS below, ordinary members of it); Jellyfin and Emby have none of them, and the
+// source over several servers routes them by the poster's id and throws an error of kind 'config' for a poster of one of them:
+//   savedPosition({ id, key })            the saved position of one item in ms, 0 when it has none; `key` is the item's own key, `id` the poster's `ratingKey` (which says which server)
+//   machineIdentifier({ id })             the poster's own server's identifier, read before the last check of a send, because the play command carries it
+//   play({ id, key, offset, target, machineIdentifier })   asks the poster's own server to play the item on the player whose client identifier is `target`, starting at `offset` ms
+// A poster of a Plex server also carries `kind` ('movie', 'episode', ...) and `playKey` (the item's own key; an episode's `ratingKey` is its series'), left off when the server sent no type.
+// Players are not an adapter member: `readPlayers(settings, { clientId })` below reads the Plex players of the household from plex.tv (Settings, Allowed devices).
 
 import { KINDS, SourceError } from './errors.js';
 import { createEmbyClient, embySignIn } from './emby.js';
 import { createJellyfinClient, jellyfinSignIn } from './jellyfin.js';
-import { createPlexClient, plexSignIn } from './plex.js';
+import { createPlexClient, discoverPlayers, plexSignIn } from './plex.js';
 import { belongsTo, cleanServerId, keyFor, splitKey } from '../selection.js';
 import { serverList } from '../settings.js';
 
@@ -73,6 +80,9 @@ export { KINDS, SourceError };
 export const SOURCE_MEMBERS = [
   'label', 'identity', 'publicIdentity', 'libraries', 'libraryCount', 'sessions', 'pool', 'sourceItems', 'genres', 'collections', 'playlists', 'item', 'items', 'imageUrl', 'nowPlaying',
 ];
+
+/** The members only the Plex adapter has (Play now); every adapter has SOURCE_MEMBERS, the Plex adapter and the source over several servers have these too. */
+export const PLEX_ONLY_MEMBERS = ['savedPosition', 'machineIdentifier', 'play'];
 
 /** The server type a settings object names: 'plex' when it names none (a 2.3.1 object). */
 export const serverTypeOf = (settings) => settings?.serverType || 'plex';
@@ -105,9 +115,41 @@ export function signInFlow(settings, { fetchImpl, version } = {}) {
   throw unknownType(type);
 }
 
+/**
+ * The Plex players of the household (R-PLAY-1, D181 4, D186 3, D187 2): one plex.tv read per different Plex token among the household's servers
+ * (`serverList(settings)`), each player once by client identifier (present when any account says so), as `{ accounts, players }`; `accounts`
+ * is how many tokens were read, and none means no Plex server is signed in. Jellyfin and Emby servers hold no players and cost no request.
+ * The reads go to plex.tv only, with this display's `clientId`. It rejects (a SourceError) when any account's read fails, so a household
+ * is never shown a list that is missing an account; the error's `failed` says which: `[{ kind, slots }]`, one entry per account that could not be
+ * read, `kind` the SourceError kind (an HTTP 5xx answer is 'server') and `slots` the places in `serverList(settings)` of the servers that account signs in.
+ */
+/** What happened to one account's read, in the three-and-one ways a household is told (D188 2, D189 3): a server error (HTTP 5xx) is its own kind, 'server'. */
+const kindOf = (error) => (error?.kind === 'http' && error.status >= 500 ? 'server' : error?.kind || 'network');
+
+export async function readPlayers(settings, { clientId, fetchImpl } = {}) {
+  const servers = serverList(settings);
+  const tokens = [...new Set(servers.filter((e) => e.type === 'plex' && e.token).map((e) => e.token))];
+  const settled = await Promise.allSettled(tokens.map((token) => discoverPlayers(clientId, token, fetchImpl ? { fetchImpl } : {})));
+  const failed = settled
+    .map((r, i) => (r.status === 'rejected' ? { kind: kindOf(r.reason), error: r.reason, slots: servers.flatMap((e, slot) => (e.type === 'plex' && e.token === tokens[i] ? [slot] : [])) } : null))
+    .filter(Boolean);
+  if (failed.length) {
+    const first = failed[0].error;
+    throw Object.assign(new SourceError(first?.message || 'plex.tv could not be read.', { kind: failed[0].kind, ...(first?.status ? { status: first.status } : {}) }), { failed: failed.map(({ kind, slots }) => ({ kind, slots })) });
+  }
+  const byId = new Map();
+  for (const p of settled.flatMap((r) => r.value)) {
+    const known = byId.get(p.id);
+    if (!known) byId.set(p.id, { ...p });
+    else if (p.present) known.present = true;
+  }
+  return { accounts: tokens.length, players: [...byId.values()] };
+}
+
 // ---- several servers (R-SRC-4, D156, D157) ----
 
 const noServer = () => new SourceError('That server is not in the list any more.', { kind: 'config' });
+const noPlayer = (m) => new SourceError(`${m.source.label} cannot start a title on a player.`, { kind: 'config' });
 
 /**
  * Does the settings object need `createSources`? It does when it names more than one server, or a first server that is not the one
@@ -297,6 +339,26 @@ export function createSources(settings, opts = {}) {
     imageUrl(thumb, size) {
       const [m, bare] = route(thumb);
       return m.source.imageUrl(bare, size);
+    },
+
+    /** Play now, on the server the poster belongs to: its scoped id picks the server, so a command never goes to another one. */
+    async savedPosition({ id, key }) {
+      const [m] = route(id);
+      if (typeof m.source.savedPosition !== 'function') throw noPlayer(m);
+      return m.source.savedPosition({ id, key });
+    },
+
+    async machineIdentifier({ id }) {
+      const [m] = route(id);
+      if (typeof m.source.machineIdentifier !== 'function') throw noPlayer(m);
+      return m.source.machineIdentifier({ id });
+    },
+
+    // An async function runs up to its first `await` in the turn it is called, so the request below is started in that turn (nothing waits between a caller's last check and it).
+    async play({ id, key, offset, target, machineIdentifier }) {
+      const [m] = route(id);
+      if (typeof m.source.play !== 'function') throw noPlayer(m);
+      return m.source.play({ id, key, offset, target, machineIdentifier });
     },
   };
 }
