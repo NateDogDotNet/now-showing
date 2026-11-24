@@ -1318,7 +1318,7 @@ test('a source over several servers has no play command for a Jellyfin or an Emb
   }
 });
 
-test('the token goes to the server alone: not in the command the player receives, and the players read goes to plex.tv only', async () => {
+test('the token goes to the server alone: not in the command the player receives, and the players read goes to plex.tv and the server only (D199)', async () => {
   const a = await startPlex('mock-a');
   try {
     const calls = [];
@@ -1331,7 +1331,7 @@ test('the token goes to the server alone: not in the command the player receives
     assert.equal(JSON.stringify(command).includes(TOKEN), false, 'the record of what the player received holds no token');
     const read = [];
     await readPlayers(sanitize({ serverUrl: a.url, plexToken: 'tok', serverId: 'm' }), { clientId: 'd', fetchImpl: async (url) => (read.push(String(url)), new Response('[]', { status: 200 })) });
-    assert.ok(read.every((u) => new URL(u).hostname === 'plex.tv'));
+    assert.deepEqual([...new Set(read.map((u) => new URL(u).origin))].sort(), ['https://plex.tv', new URL(a.url).origin].sort(), 'plex.tv and the household\'s own server, nowhere else');
   } finally {
     await stop(a.server);
   }

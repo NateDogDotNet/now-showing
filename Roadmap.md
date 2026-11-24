@@ -161,8 +161,19 @@ One fix to Allowed devices, made on `main` on 2026-11-23 with no run, pull reque
 
 - **The empty players list explains itself.** When plex.tv answers with no player, the status line still says "plex.tv lists no players on your account.", and a paragraph under it now says why and what to do: Plex lists an app only while it is open and can be controlled from another device (Plex HTPC, Plexamp for music, or an older Plex app on a TV or streaming box with "Advertise as Player" turned on); the current Plex apps on phones, tablets, Apple TV and Android TV, Plex in a browser and Plex for Windows or Mac are not listed; open the Plex app on the device, then close Settings and open the list again. The paragraph is its own element, so the status line stays short enough to be in view when it takes the focus (D197 2).
 - **Why**: the owner's account has several Plex devices and the list was empty. The research is in `reports/Plex player discovery sources.md`. It rests on library source code and forum reports, not on a statement from Plex, and nothing was tested on a real server.
-- **Still open**: whether the list should be read from the Plex server's own client list (`GET /clients`) before plex.tv. That would amend D181 4 and D186 and waits for the owner and a real-server test.
+- **Then open, done in 2.4.5**: whether the list should also be read from the Plex server's own client list (`GET /clients`).
 - **Version**: 2.4.4 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new" notice stays at 2.4.3.
+
+
+## ✅ Done in 2.4.5 (on `main`)
+
+The players are also read from each Plex server's own client list (owner ruling D199), made on `main` on 2026-11-24 with no run, pull request, tag or GitHub release (D13, D79).
+
+- **The read (D199 1, 2)**: when Allowed devices is opened or Play now is pressed, each Plex server of the household is asked `GET /clients` at its own address with its own sign-in, beside the plex.tv read. A player a server lists is present whatever plex.tv says, and one plex.tv does not list is added; a client that states what it can do and does not name `playback` is not listed.
+- **Only adds (D199 3)**: a server that does not answer, refuses or answers with something else adds nothing and fails nothing. A failed plex.tv read is still a failed read, and the three states and their words are unchanged.
+- **Unchanged (D199 4)**: the display never contacts a player, a token goes only to plex.tv and to the server it signs in, and Jellyfin and Emby servers are not asked.
+- **Not confirmed (verify)**: the shape of `/clients`, whether a real server answers it to a browser page, and whether a command reaches a player that only one of the two lists names. Tested against the mock server only. A current Plex app that does not offer itself for control is in neither list, and this change does not list it.
+- **Version**: 2.4.5 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new" notice stays at 2.4.3.
 
 ## 🧭 Suggested order
 
@@ -178,7 +189,7 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Next
 
-2.2.0 to 2.4.4 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1", "Done in 2.4.2", "Done in 2.4.3" and "Done in 2.4.4" sections above); nothing is in progress. The next feature follows the suggested order:
+2.2.0 to 2.4.5 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1", "Done in 2.4.2", "Done in 2.4.3", "Done in 2.4.4" and "Done in 2.4.5" sections above); nothing is in progress. The next feature follows the suggested order:
 
 1. **2.5, the no-server mode:** the TMDB adapter, on the adapter layer 2.4 built.
 

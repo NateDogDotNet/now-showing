@@ -65,12 +65,12 @@
 //   machineIdentifier({ id })             the poster's own server's identifier, read before the last check of a send, because the play command carries it
 //   play({ id, key, offset, target, machineIdentifier })   asks the poster's own server to play the item on the player whose client identifier is `target`, starting at `offset` ms
 // A poster of a Plex server also carries `kind` ('movie', 'episode', ...) and `playKey` (the item's own key; an episode's `ratingKey` is its series'), left off when the server sent no type.
-// Players are not an adapter member: `readPlayers(settings, { clientId })` below reads the Plex players of the household from plex.tv (Settings, Allowed devices).
+// Players are not an adapter member: `readPlayers(settings, { clientId })` below reads the Plex players of the household from plex.tv and from each Plex server's own client list (D199; Settings, Allowed devices).
 
 import { KINDS, SourceError } from './errors.js';
 import { createEmbyClient, embySignIn } from './emby.js';
 import { createJellyfinClient, jellyfinSignIn } from './jellyfin.js';
-import { createPlexClient, discoverPlayers, plexSignIn } from './plex.js';
+import { createPlexClient, discoverPlayers, discoverServerPlayers, plexSignIn } from './plex.js';
 import { belongsTo, cleanServerId, keyFor, splitKey } from '../selection.js';
 import { serverList } from '../settings.js';
 
@@ -122,6 +122,11 @@ export function signInFlow(settings, { fetchImpl, version } = {}) {
  * The reads go to plex.tv only, with this display's `clientId`. It rejects (a SourceError) when any account's read fails, so a household
  * is never shown a list that is missing an account; the error's `failed` says which: `[{ kind, slots }]`, one entry per account that could not be
  * read, `kind` the SourceError kind (an HTTP 5xx answer is 'server') and `slots` the places in `serverList(settings)` of the servers that account signs in.
+ *
+ * Each Plex server of the household is also asked for the players it lists itself (D199: `GET /clients`, one request per different address and
+ * token, to the server's own address with its own sign-in). A player a server lists is present, whatever plex.tv says of it, and one plex.tv does
+ * not list is added. These reads only add: a server that does not answer, refuses or answers with something else adds nothing and fails nothing,
+ * so the list is then plex.tv's alone, and a failed plex.tv read still rejects whatever the servers said.
  */
 /** What happened to one account's read, in the three-and-one ways a household is told (D188 2, D189 3): a server error (HTTP 5xx) is its own kind, 'server'. */
 const kindOf = (error) => (error?.kind === 'http' && error.status >= 500 ? 'server' : error?.kind || 'network');
@@ -129,7 +134,12 @@ const kindOf = (error) => (error?.kind === 'http' && error.status >= 500 ? 'serv
 export async function readPlayers(settings, { clientId, fetchImpl } = {}) {
   const servers = serverList(settings);
   const tokens = [...new Set(servers.filter((e) => e.type === 'plex' && e.token).map((e) => e.token))];
-  const settled = await Promise.allSettled(tokens.map((token) => discoverPlayers(clientId, token, fetchImpl ? { fetchImpl } : {})));
+  const opts = fetchImpl ? { fetchImpl } : {};
+  const own = [...new Map(servers.filter((e) => e.type === 'plex' && e.token && e.url).map((e) => [`${e.url}\n${e.token}`, e])).values()];
+  const [settled, fromServers] = await Promise.all([
+    Promise.allSettled(tokens.map((token) => discoverPlayers(clientId, token, opts))),
+    Promise.allSettled(own.map((e) => discoverServerPlayers(e.url, e.token, clientId, opts))),
+  ]);
   const failed = settled
     .map((r, i) => (r.status === 'rejected' ? { kind: kindOf(r.reason), error: r.reason, slots: servers.flatMap((e, slot) => (e.type === 'plex' && e.token === tokens[i] ? [slot] : [])) } : null))
     .filter(Boolean);
@@ -142,6 +152,11 @@ export async function readPlayers(settings, { clientId, fetchImpl } = {}) {
     const known = byId.get(p.id);
     if (!known) byId.set(p.id, { ...p });
     else if (p.present) known.present = true;
+  }
+  for (const p of fromServers.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))) {
+    const known = byId.get(p.id);
+    if (!known) byId.set(p.id, { ...p });
+    else known.present = true;
   }
   return { accounts: tokens.length, players: [...byId.values()] };
 }

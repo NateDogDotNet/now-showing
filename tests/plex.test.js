@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildUrl, createPin, createPlexClient, discoverPlayers, discoverServers, pickNowPlaying, rankConnections, toPoster, xmlToContainer } from '../js/sources/plex.js';
+import { buildUrl, createPin, createPlexClient, discoverPlayers, discoverServerPlayers, discoverServers, pickNowPlaying, rankConnections, toPoster, xmlToContainer } from '../js/sources/plex.js';
 import { formatRuntime } from '../js/duration.js';
 import { allowedValues } from '../js/ratings.js';
 import { pinSignIn } from '../js/settings-ui.js';
@@ -100,16 +100,27 @@ test('discoverServers keeps only servers with usable connections', async () => {
 // ---- the players on the account (R-PLAY-1, D181 4, D186) ----
 
 const player = (over = {}) => ({ name: 'Living Room TV', product: 'Plex for Android (TV)', clientIdentifier: 'tv-1', provides: 'client,player,pubsub-player', presence: true, connections: [{ uri: 'http://192.0.2.10:32500', protocol: 'http' }], ...over });
-/** A fetch that answers plex.tv with `body` (or by `byToken`, token -> body or a Response) and records every request it is given. */
-function plexTv(body, { byToken = {} } = {}) {
+/**
+ * A fetch that answers plex.tv with `body` (or by `byToken`, token -> body or a Response) and records every plex.tv request in `calls`. A request to
+ * any other address is one to a household server (its own client list, D199): it is recorded in `serverCalls` and answered from `servers`
+ * (origin -> body or a Response), with an empty container when the origin is not there.
+ */
+function plexTv(body, { byToken = {}, servers = {} } = {}) {
   const calls = [];
+  const serverCalls = [];
   const fetchImpl = async (url, opts) => {
     const u = new URL(url);
-    calls.push({ url: u, opts, token: u.searchParams.get('X-Plex-Token') });
+    const call = { url: u, opts, token: u.searchParams.get('X-Plex-Token') };
+    if (u.hostname !== 'plex.tv') {
+      serverCalls.push(call);
+      const said = servers[u.origin] ?? { MediaContainer: { size: 0 } };
+      return said instanceof Response ? said : jsonResponse(said);
+    }
+    calls.push(call);
     const answer = byToken[u.searchParams.get('X-Plex-Token')] ?? body;
     return answer instanceof Response ? answer : jsonResponse(answer);
   };
-  return { fetchImpl, calls };
+  return { fetchImpl, calls, serverCalls };
 }
 
 test('discoverPlayers keeps the resources whose provides names player, as a part equal to it and nothing looser (P1)', async () => {
@@ -245,14 +256,102 @@ test('readPlayers reads plex.tv once per different Plex token among the househol
   assert.deepEqual(calls.map((c) => c.token).sort(), ['tok-a', 'tok-b'], 'two accounts, two reads');
   assert.deepEqual([two.accounts, two.players.map((p) => p.id).sort()], [2, ['a-only', 'b-only', 'shared']], 'the identifier both accounts list is listed once');
   assert.equal(two.players.find((p) => p.id === 'shared').present, true, 'present when any account says it is');
-  assert.equal(calls.every((c) => c.url.origin === 'https://plex.tv'), true, 'every token goes to plex.tv and nowhere else');
+  assert.equal(calls.every((c) => c.url.origin === 'https://plex.tv'), true, 'every account token is read at plex.tv');
+});
+
+const clients = (...list) => ({ MediaContainer: { size: list.length, Server: list } });
+const client = (over = {}) => ({ name: 'Den HTPC', product: 'Plex HTPC', machineIdentifier: 'htpc-1', host: '192.168.1.50', address: '192.168.1.50', port: 32500, protocolCapabilities: 'timeline,playback,navigation,playqueues', ...over });
+
+test('discoverServerPlayers lists the clients the server lists as { id, name, present: true }, under the rules of discoverPlayers (D199)', async () => {
+  const { fetchImpl, serverCalls } = plexTv([], {
+    servers: {
+      'http://p:32400': clients(
+        client(),
+        client({ name: '  ', machineIdentifier: 'amp-1', product: 'Plexamp' }),
+        client({ name: '', product: '', machineIdentifier: 'bare' }),
+        client({ name: 'Says nothing', machineIdentifier: 'quiet', protocolCapabilities: undefined }),
+        client({ name: 'Cannot play', machineIdentifier: 'nav', protocolCapabilities: 'timeline,navigation' }),
+        client({ name: 'A look-alike', machineIdentifier: 'look', protocolCapabilities: 'playbacks, xplayback' }),
+        client({ name: 'Spaced', machineIdentifier: 'spaced', protocolCapabilities: 'timeline, playback' }),
+        client({ name: 'Again', machineIdentifier: 'htpc-1' }),
+        client({ name: 'No id', machineIdentifier: '' }),
+        client({ name: 'Long', machineIdentifier: 'x'.repeat(201) }),
+        client({ name: 'Me', machineIdentifier: 'me' }),
+        null,
+      ),
+    },
+  });
+  assert.deepEqual(await discoverServerPlayers('http://p:32400', 'tok-a', 'me', { fetchImpl }), [
+    { id: 'htpc-1', name: 'Den HTPC', present: true },
+    { id: 'amp-1', name: 'Plexamp', present: true },
+    { id: 'bare', name: 'bare', present: true },
+    { id: 'quiet', name: 'Says nothing', present: true },
+    { id: 'spaced', name: 'Spaced', present: true },
+  ]);
+  assert.equal(serverCalls.length, 1);
+  const { url } = serverCalls[0];
+  assert.deepEqual([url.origin, url.pathname, url.searchParams.get('X-Plex-Token'), url.searchParams.get('X-Plex-Client-Identifier')], ['http://p:32400', '/clients', 'tok-a', 'me']);
+  assert.deepEqual(serverCalls[0].opts.headers, { Accept: 'application/json' }, 'no header but Accept: the request stays CORS-simple');
+});
+
+test('discoverServerPlayers: an answer with no client list is no players, and a server that fails is an error for the caller to drop (D199)', async () => {
+  for (const body of [{ MediaContainer: { size: 0 } }, {}, { MediaContainer: { Server: 'x' } }]) {
+    assert.deepEqual(await discoverServerPlayers('http://p:32400', 't', 'me', { fetchImpl: async () => jsonResponse(body) }), []);
+  }
+  assert.deepEqual(await discoverServerPlayers('http://p:32400', 't', 'me', { fetchImpl: async () => new Response('', { status: 200 }) }), [], 'an empty body');
+  await assert.rejects(() => discoverServerPlayers('http://p:32400', 't', 'me', { fetchImpl: async () => new Response('', { status: 401 }) }), (e) => e.kind === 'auth');
+  await assert.rejects(() => discoverServerPlayers('http://p:32400', 't', 'me', { fetchImpl: async () => new Response('', { status: 404 }) }), (e) => e.kind === 'http');
+  await assert.rejects(() => discoverServerPlayers('http://p:32400', 't', 'me', { fetchImpl: async () => { throw new TypeError('Failed to fetch'); } }), (e) => e.kind === 'network');
+});
+
+test('readPlayers adds the players each Plex server lists itself: one plex.tv does not list is added, and one it calls offline is present (D199)', async () => {
+  const { fetchImpl, calls, serverCalls } = plexTv([player({ name: 'Bedroom', clientIdentifier: 'bed', presence: false }), player({ name: 'Hall', clientIdentifier: 'hall', presence: false })], {
+    servers: {
+      'http://p:32400': clients(client(), client({ name: 'Bedroom as the server names it', machineIdentifier: 'bed' })),
+      'http://q:32400': clients(client({ name: 'Den again', machineIdentifier: 'htpc-1' }), client({ name: 'Shop', machineIdentifier: 'shop' })),
+    },
+  });
+  const out = await readPlayers(household({ servers: [PLEX_SERVER({ token: 'tok-a' }), PLEX_SERVER({ id: 'p3', token: 'tok-a' })] }), { clientId: 'me', fetchImpl });
+  assert.deepEqual(out, {
+    accounts: 1,
+    players: [
+      { id: 'bed', name: 'Bedroom', present: true },
+      { id: 'hall', name: 'Hall', present: false },
+      { id: 'htpc-1', name: 'Den HTPC', present: true },
+      { id: 'shop', name: 'Shop', present: true },
+    ],
+  }, 'plex.tv\'s name is kept, the server makes a player present, and a player is listed once');
+  assert.equal(calls.length, 1, 'one account, one plex.tv read');
+  assert.deepEqual(serverCalls.map((c) => `${c.url.origin}${c.url.pathname} ${c.token}`).sort(), ['http://p:32400/clients tok-a', 'http://q:32400/clients tok-a'], 'each different server address is asked once, with its own sign-in');
+});
+
+test('readPlayers: a token goes only to plex.tv and to the server it signs in, and a Jellyfin or Emby server is not asked for players (D199)', async () => {
+  const { fetchImpl, calls, serverCalls } = plexTv([player()]);
+  const mixed = household({ servers: [PLEX_SERVER(), { id: 'jf1', type: 'jellyfin', url: 'http://jf:8096', token: 'jf-token' }] });
+  await readPlayers(mixed, { clientId: 'me', fetchImpl });
+  assert.deepEqual(serverCalls.map((c) => `${c.url.origin} ${c.token}`).sort(), ['http://p:32400 tok-a', 'http://q:32400 tok-b']);
+  assert.deepEqual(calls.map((c) => c.token).sort(), ['tok-a', 'tok-b']);
+  assert.equal([...calls, ...serverCalls].some((c) => c.url.href.includes('jf-token') || c.url.hostname === 'jf'), false);
+});
+
+test('readPlayers: a server that cannot be asked adds nothing and fails nothing, and a failed plex.tv read still fails whatever the servers said (D199)', async () => {
+  const down = plexTv([player()], { servers: { 'http://p:32400': new Response('', { status: 500 }), 'http://q:32400': new Response('not json', { status: 200 }) } });
+  assert.deepEqual(await readPlayers(household({ servers: [PLEX_SERVER({ token: 'tok-a' })] }), { clientId: 'me', fetchImpl: down.fetchImpl }), { accounts: 1, players: [{ id: 'tv-1', name: 'Living Room TV', present: true }] });
+  const unreachable = async (url, opts) => {
+    if (new URL(url).hostname !== 'plex.tv') throw new TypeError('Failed to fetch');
+    return down.fetchImpl(url, opts);
+  };
+  assert.equal((await readPlayers(household(), { clientId: 'me', fetchImpl: unreachable })).players.length, 1);
+  const refused = plexTv(new Response('', { status: 401 }), { servers: { 'http://p:32400': clients(client()) } });
+  await assert.rejects(() => readPlayers(household(), { clientId: 'me', fetchImpl: refused.fetchImpl }), (e) => e.kind === 'auth');
 });
 
 test('readPlayers: a Jellyfin or Emby household has no players and sends no request; its tokens never go to plex.tv (D181 1, P12)', async () => {
-  const { fetchImpl, calls } = plexTv([player()]);
+  const { fetchImpl, calls, serverCalls } = plexTv([player()]);
   const jf = sanitize({ serverType: 'jellyfin', serverUrl: 'http://jf:8096', plexToken: 'jf-token', serverId: 'jf1', serverCarried: false, servers: [{ id: 'em1', type: 'emby', url: 'http://em:8096', token: 'em-token' }] });
   assert.deepEqual(await readPlayers(jf, { clientId: 'me', fetchImpl }), { accounts: 0, players: [] });
   assert.equal(calls.length, 0);
+  assert.equal(serverCalls.length, 0, 'and no server is asked for players');
   const mixed = sanitize({ serverType: 'jellyfin', serverUrl: 'http://jf:8096', plexToken: 'jf-token', serverId: 'jf1', serverCarried: false, servers: [PLEX_SERVER()] });
   const out = await readPlayers(mixed, { clientId: 'me', fetchImpl });
   assert.deepEqual(calls.map((c) => c.token), ['tok-b'], 'only the Plex server\'s token is sent');

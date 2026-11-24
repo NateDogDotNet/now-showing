@@ -17,6 +17,9 @@
 //                                             replaces the resource list for T. Either part may be left out.
 //   GET  /__mock/plextv-log                   {requests}: every plextv-resources request since the last plextv-reset
 //   POST /__mock/plextv-reset                 forget every list, status and log entry of the plex.tv side
+//   GET  /clients                             the players this server lists itself (D199): {MediaContainer: {size, Server: [...]}}, empty until clients-set. Needs the token.
+//                                             (verify) The shape is the community's description, not confirmed against a real server.
+//   POST /__mock/clients-set                  a JSON array in the body replaces the list /clients answers (no body = none again); ?status=500 answers /clients with that status (200 = normal again)
 //   GET  /player/playback/playMedia?key=/library/metadata/3&offset=0&machineIdentifier=..&address=..&port=..&protocol=..&commandID=1&X-Plex-Target-Client-Identifier=<player>
 //                                             Play now (R-PLAY-1, D191): the server forwards the command to the player named by the target (the parameter, or the header of the
 //                                             same name) and the mock records what the player would receive. (verify) The shape is the community's description of the companion
@@ -143,6 +146,7 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
   const offsets = new Map(); // ratingKey -> viewOffset (ms) set by /__mock/offset (a saved position)
   const kinds = new Map(); // ratingKey -> the `type` set by /__mock/kind
   const episodes = new Map(); // ratingKey -> the key of the episode that title is listed as, set by /__mock/episode
+  const clients = { list: [], status: 200 }; // what GET /clients answers (D199): the players this server lists itself
   const player = { commands: [], received: 0, fail: 'none' }; // what the players received (Play now), and how the forward fails
   let sessionsStatus = 200;
   let countsStatus = 200; // the library count request (/library/sections/1/all with X-Plex-Container-Size=0)
@@ -218,6 +222,20 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
         for (const part of [plexTv.lists, plexTv.statuses]) part.clear();
         plexTv.log.length = 0;
         return json(200, { ok: true });
+      }
+      if (action === 'clients-set') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          clients.status = Number(url.searchParams.get('status')) || 200;
+          try {
+            clients.list = body.trim() ? JSON.parse(body) : [];
+          } catch {
+            return json(400, { error: 'the body is not JSON' });
+          }
+          json(200, { ok: true });
+        });
+        return;
       }
       if (action === 'plextv-set') {
         let body = '';
@@ -309,6 +327,10 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
     if (path === '/') return json(200, { MediaContainer: { friendlyName: 'Mock Plex', version: '1.40.0.0000-mock', machineIdentifier: machineId } });
     if (path === '/library/sections') {
       return json(200, { MediaContainer: { Directory: [{ key: '1', title: 'Movies', type: 'movie' }, { key: '2', title: 'Music', type: 'artist' }, { key: '3', title: 'Kids Movies', type: 'movie' }] } });
+    }
+    if (path === '/clients') {
+      if (clients.status !== 200) return json(clients.status, { error: `Mock: clients answer ${clients.status}` });
+      return json(200, { MediaContainer: { size: clients.list.length, Server: clients.list } });
     }
     if (path === '/player/playback/playMedia') {
       // The server forwards the command to the player it names; what the player would receive is every parameter but the server's own sign-in and the target.

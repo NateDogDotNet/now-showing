@@ -192,6 +192,8 @@ export function makeMock(mockPort) {
       return (await fetch(`${base}plextv-set?${q}`, { method: 'POST', body: list === undefined ? '' : JSON.stringify(list) })).json();
     },
     plexTvLog: async () => (await call('GET', 'plextv-log')).requests,
+    // The players the mock server lists itself (D199, GET /clients): `list` replaces them (none = an empty list), `status` is the HTTP status of the answer.
+    clientsSet: async (list = [], { status } = {}) => (await fetch(`${base}clients-set${status === undefined ? '' : `?status=${status}`}`, { method: 'POST', body: JSON.stringify(list) })).json(),
     plexTvReset: () => call('POST', 'plextv-reset'),
     // Play now (R-PLAY-1): what the mock's players received ({ commands, received }), forgetting it, and making the forward fail (mode 'player', 'server' or 'auth'; 'none' is normal).
     playLog: () => call('GET', 'player-log'),

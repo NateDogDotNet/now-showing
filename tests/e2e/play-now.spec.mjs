@@ -555,6 +555,36 @@ playCase('an account with no players says so, and still keeps and shows what is 
   check('no players on the account');
 });
 
+// D199: the household's own Plex server is asked for the players it lists itself (GET /clients), and they join what plex.tv lists.
+playCase('a player the Plex server lists itself is listed though plex.tv lists none, and a server that cannot be asked leaves plex.tv\'s list (D199)', { settings: seed() }, async ({ page, app, mock }) => {
+  const helpShown = () => page.evaluate(() => !document.getElementById('players-none-help').hidden);
+  try {
+    await mock.plexTvSet([{ name: 'Hall TV', provides: 'client,player', presence: false, clientIdentifier: 'hall' }]);
+    await mock.clientsSet([
+      { name: 'Den HTPC', product: 'Plex HTPC', machineIdentifier: 'den-htpc', protocolCapabilities: 'timeline,playback,navigation,playqueues' },
+      { name: 'Hall TV as the server names it', machineIdentifier: 'hall', protocolCapabilities: 'playback' },
+      { name: 'Cannot play', machineIdentifier: 'nav-only', protocolCapabilities: 'timeline,navigation' },
+    ]);
+    await load(page, app);
+    await openSettings(page);
+    await showList(page);
+    assert.deepEqual((await rows(page)).map((r) => [r.id, r.name, r.state]), [['den-htpc', 'Den HTPC', ''], ['hall', 'Hall TV', '']], 'the server\'s player is added, and the one plex.tv calls offline is present');
+    assert.match(await status(page), /^Tick a player to allow it\./);
+    assert.equal(await helpShown(), false, 'the words for an empty list are not shown');
+    await cancel(page);
+    await mock.plexTvSet([]);
+    await mock.clientsSet([], { status: 500 });
+    await openSettings(page);
+    await showList(page);
+    assert.match(await status(page), /lists no players on your account/);
+    assert.deepEqual(await rows(page), [], 'a server that cannot be asked adds nothing and fails nothing');
+    assert.equal(await helpShown(), true, 'the empty list says which Plex apps can be listed');
+    check('D199 the server\'s own players');
+  } finally {
+    await mock.clientsSet([]);
+  }
+});
+
 // ---- r2: Try again, a change to the servers, what a state means, where focus goes (D187, D188) ----
 
 /** Holds every plex.tv resources request until `release()`; the held request is then answered by the harness route behind it. */

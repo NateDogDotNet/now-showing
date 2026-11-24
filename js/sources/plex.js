@@ -446,6 +446,37 @@ export async function discoverPlayers(clientId, token, { fetchImpl = (...a) => f
   return players;
 }
 
+/**
+ * The players one Plex server lists itself (R-PLAY-1, D199): `GET /clients` on the household's own server, the list the server forwards a play
+ * command to. Each is `{ id, name, present: true }` (a player the server lists is there now): `id` is the client's `machineIdentifier`, under
+ * the rules of `discoverPlayers` (none, too long, repeated and this display's own are not listed), `name` its name, else its product, else the
+ * identifier. A client that says what it can do (`protocolCapabilities`) and does not name `playback` is not listed; one that does not say is
+ * listed. The shape is the community's description, not Plex's own documentation, and is not confirmed against a real server (verify): JSON
+ * puts the clients under `Server`, and an XML answer's children are read the same. The request goes to this server's own address with this
+ * server's sign-in, and a player's own address is never read, let alone requested. It throws a SourceError as every server request does; the
+ * caller (`readPlayers`) treats that as "this server added nothing".
+ */
+export async function discoverServerPlayers(serverUrl, token, clientId, { fetchImpl = (...a) => fetch(...a), timeoutMs = 4000 } = {}) {
+  const c = await request(
+    buildUrl(serverUrl, '/clients', { 'X-Plex-Token': token, 'X-Plex-Client-Identifier': clientId, 'X-Plex-Product': PRODUCT }),
+    { fetchImpl, timeoutMs },
+  );
+  const list = [c?.Server, c?.Metadata].find(Array.isArray) || [];
+  const seen = new Set(clientId ? [clientId] : []);
+  const players = [];
+  for (const r of list) {
+    if (!r || typeof r !== 'object') continue;
+    const can = typeof r.protocolCapabilities === 'string' ? r.protocolCapabilities.trim() : '';
+    if (can && !can.split(',').some((part) => part.trim() === 'playback')) continue;
+    const id = typeof r.machineIdentifier === 'string' ? r.machineIdentifier.trim() : '';
+    if (!id || id.length > PLAYER_ID_MAX || seen.has(id)) continue;
+    seen.add(id);
+    const name = [r.name, r.product].map((v) => (typeof v === 'string' ? v.trim() : '')).find(Boolean) || id;
+    players.push({ id, name, present: true });
+  }
+  return players;
+}
+
 export function rankConnections(connections, { secureOnly = false } = {}) {
   const score = (c) => (c.local ? 0 : 2) + (c.relay ? 4 : 0) + (c.protocol === 'https' ? 0 : 1);
   return connections
