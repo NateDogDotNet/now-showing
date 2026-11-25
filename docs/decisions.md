@@ -1362,3 +1362,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner ruling — 2026-11-25 (stop 2 in `.orchestrator/phases/mock-tmdb.md`, answered "defaults" at 2026-11-25T20:47:23Z): D207
 
 - **D207 The mock takes the token only as Bearer and the v3 key only as `api_key` (option a; amends `mock-tmdb` criterion 1).** The old text accepted the demo token "as a Bearer header and as `api_key`", which conflicted with D203 3, and the anchored review (F1) showed that an adapter sending the token as `api_key` would pass the mock and fail on TMDB. The new text: 200 "for the demo token as a Bearer header and for the 32-character demo v3 key as `api_key`, 401 otherwise (the demo token sent as `api_key` is 401)". The owner also saw D204, D205 and D206 at that stop and raised nothing.
+
+## Owner ruling — 2026-11-25 (stop 3 in `.orchestrator/phases/tmdb-ids.md`, answered "defaults" at 2026-11-25T22:29:56Z): D208
+
+- **D208 Wait for a quiet host (option a; D204 stands).** The load average is the Proxmox host's (18 to 40 over 30 minutes), not this container's. The conductor keeps waiting, checking every 15 s for up to 8 hours, and runs `tmdb-ids`'s criteria 1 and 2 as written once the 1-minute load is under 8. `tmdb-source` stays blocked until `tmdb-ids` closes. Meanwhile it is prepared without building: a cold reviewer probes its criteria (pre-claim preparation). If the 8 hours pass with no quiet moment, the conductor asks again.
