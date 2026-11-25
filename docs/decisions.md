@@ -1348,3 +1348,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Conductor ruling — 2026-11-25 (run 13 pre-flight; listed at the next stop as made by the conductor alone): D204
 
 - **D204 A browser spec that times out under another session's load is run again as written, never with a longer limit.** On the unchanged tree `9f722923` the `jellyfin` spec took 183 s alone against the runner's 180 s limit (`E2E_SPEC_TIMEOUT`), at a load average of 16 on 4 cores from other sessions' browsers, with 7 GB free; `emby` took 79 s and passed. A criterion that names such a spec runs as the plan writes it, by the conductor, when the load allows (load average under 8 is the aim, not a pass condition); the limit is not raised and no spec is left out. Builders may use a longer limit for their own runs, which are testimony only. A spec that still times out at a quiet moment is a finding against the code.
+
+## Conductor ruling — 2026-11-25 (run 13 pre-flight, before the first dispatch): D205
+
+- **D205 `mock-tmdb`'s Output gains `tests/e2e/smoke.spec.mjs`.** Criterion 2 runs `node tests/e2e/run.mjs smoke` and states a case (a page `fetch` to `api.themoviedb.org` answered by the mock, no outside request); the Output held no spec file to write that case in. The criterion text is unchanged; no builder had returned.
