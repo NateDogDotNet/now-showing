@@ -99,6 +99,25 @@ export function pickNowPlaying(sessions, { username = '', includeEpisodes = true
   };
 }
 
+/**
+ * The TMDB id a Plex item carries in its `Guid` list (asked for with includeGuids=1): `{ tmdbId, tmdbType }`, or nothing. A wrong id
+ * shows another title's art, so it is taken only when every `tmdb://` entry is plain digits and they name one id (the same id twice
+ * is one). An episode's own Guid is an episode id, not its show's, and a reply carries no show TMDB id, so an episode gets none.
+ */
+function tmdbOf(m) {
+  if (m.type === 'episode' || !Array.isArray(m.Guid)) return {};
+  const ids = new Set();
+  for (const g of m.Guid) {
+    if (typeof g?.id !== 'string' || !g.id.startsWith('tmdb://')) continue;
+    const id = g.id.slice('tmdb://'.length);
+    if (!/^[0-9]+$/.test(id)) return {};
+    ids.add(id);
+  }
+  if (ids.size !== 1) return {};
+  const tmdbType = m.type === 'show' ? 'tv' : m.type === undefined || m.type === 'movie' ? 'movie' : '';
+  return tmdbType ? { tmdbId: [...ids][0], tmdbType } : {};
+}
+
 /** Normalised poster descriptor used throughout the app. */
 export function toPoster(m, source) {
   const isEpisode = m.type === 'episode';
@@ -132,6 +151,7 @@ export function toPoster(m, source) {
     ...(audienceRating !== null ? { audienceRating } : {}),
     ...(rating !== null ? { rating } : {}),
     ...playable,
+    ...tmdbOf(m), // tmdbId and tmdbType, only when the server names exactly one TMDB id
   };
 }
 
@@ -393,6 +413,7 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
       const values = ratings.length ? ratingValues(ratings, maxContentRating) : allowedValues(maxContentRating);
       if (ratings.length && !values.length) return [];
       const c = await get(`/library/sections/${encodeURIComponent(libraryKey)}/all`, {
+        includeGuids: 1,
         unwatched: unwatchedOnly ? 1 : '',
         sort: 'rating:desc',
         contentRating: values.join(','),
@@ -409,7 +430,7 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
      */
     async sourceItems({ kind, key }, { unwatchedOnly = true, size = 100, maxContentRating = '', ratings = [] } = {}) {
       const path = kind === 'playlist' ? `/playlists/${encodeURIComponent(key)}/items` : `/library/collections/${encodeURIComponent(key)}/children`;
-      const c = await get(path);
+      const c = await get(path, { includeGuids: 1 });
       const all = c.Metadata || [];
       const posters = all
         // What the limit in force or the chosen ratings reject is dropped BEFORE the cut, so many high-scoring rejected titles cannot crowd out the allowed ones.
@@ -443,7 +464,7 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
     },
 
     async item(ratingKey) {
-      const c = await get(`/library/metadata/${encodeURIComponent(ratingKey)}`);
+      const c = await get(`/library/metadata/${encodeURIComponent(ratingKey)}`, { includeGuids: 1 });
       const m = (c.Metadata || [])[0];
       if (!m) throw new SourceError('That library item no longer exists.', { kind: 'http', status: 404 });
       return toPoster(m, 'static');
@@ -455,7 +476,7 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
      */
     async items(ratingKeys) {
       if (!ratingKeys.length) return [];
-      const c = await get(`/library/metadata/${ratingKeys.map(encodeURIComponent).join(',')}`);
+      const c = await get(`/library/metadata/${ratingKeys.map(encodeURIComponent).join(',')}`, { includeGuids: 1 });
       return (c.Metadata || []).map((m) => toPoster(m, 'static'));
     },
 

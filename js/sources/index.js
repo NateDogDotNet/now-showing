@@ -39,6 +39,7 @@
 //   summary        text trimmed to the shared length limit (SUMMARY_MAX in js/fill.js), '' when none
 //   genres         the item's own genre titles (a genre selection is checked against them); left off when none
 //   viewCount, audienceRating, rating    what weighting reads (R-SEL-2); left off when the server sent nothing usable
+//   tmdbId, tmdbType  the title's TMDB id (digits, as text) and 'movie' or 'tv', only when the server's metadata names exactly one; an episode has none
 // The engine adds `libraryKey` and `members` to the pool posters it draws; the adapter does not.
 // A server-side rating filter in pool() or sourceItems() is an optimisation only: the engine checks every poster against
 // the household limit itself (D5), whatever an adapter returns.

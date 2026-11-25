@@ -17,7 +17,7 @@ import { buildUrl, timeoutSignal } from './http.js';
 
 export const CLIENT_NAME = 'Now Showing';
 const TICKS_PER_MS = 10_000; // RunTimeTicks and PositionTicks are 100 ns ticks (a (verify) row)
-const FIELDS = 'CustomRating,Overview,Genres,GenreItems'; // not in a default item reply (a (verify) row)
+const FIELDS = 'CustomRating,Overview,Genres,GenreItems,ProviderIds'; // not in a default item reply (a (verify) row)
 const QUICK_CONNECT_LIFE_S = 10 * 60; // Jellyfin's Quick Connect code lasts 10 minutes (D134)
 
 /** The `Authorization` header value: the client's identity, and the token once there is one. */
@@ -50,6 +50,16 @@ const hasImage = (item) => Boolean(text(item?.ImageTags?.Primary));
 const genresOf = (item) => (Array.isArray(item?.Genres) ? item.Genres.filter((g) => typeof g === 'string' && g.trim() !== '').map((g) => g.trim()) : []);
 
 /**
+ * The TMDB id of a Movie or Series item (`ProviderIds.Tmdb`, plain digits only): `{ tmdbId, tmdbType }`, or nothing. An episode's own
+ * id is an episode id, not its series', so an episode gets none.
+ */
+function tmdbOf(item) {
+  const id = item.ProviderIds?.Tmdb;
+  const tmdbType = item.Type === 'Movie' ? 'movie' : item.Type === 'Series' ? 'tv' : '';
+  return tmdbType && typeof id === 'string' && /^[0-9]+$/.test(id) ? { tmdbId: id, tmdbType } : {};
+}
+
+/**
  * A Jellyfin item as the poster the engine reads (the interface comment in js/sources/index.js). An episode shows its series: the
  * series' id, title and poster, with its own rating as `contentRating` (D75) and the series' rating, when the caller could read one
  * (`seriesRating`, a string), apart for the offline cache (D73); without one the poster says its rating is the episode's.
@@ -76,6 +86,7 @@ export function toPoster(item, source, { seriesRating } = {}) {
     ...(genres.length ? { genres } : {}),
     ...(plays ? { viewCount: Math.floor(plays) } : {}),
     ...(audience !== null ? { audienceRating: audience } : {}),
+    ...tmdbOf(item),
   };
 }
 

@@ -437,3 +437,22 @@ test('publicIdentity sends the Emby identity header and no X-Emby-Token, and rea
   assert.equal('X-Emby-Token' in h, false);
   assert.equal(JSON.stringify(calls[0]).includes(EMBY_TOKEN), false);
 });
+
+// ---- a poster's TMDB id (Run 13, tmdb-ids): the Jellyfin client's ProviderIds, through Emby ----
+
+test('tmdb ids: Emby requests ProviderIds, reads Tmdb of digits, and gives an episode and a malformed id none', async () => {
+  const { source, calls } = connect();
+  const [movies] = await source.libraries();
+  const posters = await source.pool({ libraryKey: movies.key, size: 100 });
+  assert.ok(calls.some((c) => (c.url.searchParams.get('Fields') || '').split(',').includes('ProviderIds')));
+  const withId = posters.filter((p) => p.tmdbId);
+  assert.ok(withId.length > 0 && withId.length < posters.length, 'some titles carry an id and some do not');
+  for (const p of withId) {
+    assert.match(p.tmdbId, /^\d+$/);
+    assert.equal(p.tmdbType, 'movie');
+  }
+  const reply = (item) => stubbed({ '/emby/Users/u1/Items': { Items: [item] }, '/Users/u1/Items': { Items: [item] }, '/Items': { Items: [item] } });
+  const movie = { Id: 'm1', Name: 'Film', Type: 'Movie', ImageTags: { Primary: 'x' } };
+  assert.equal((await reply({ ...movie, ProviderIds: { Tmdb: '77' } }).item('m1')).tmdbId, '77');
+  for (const Tmdb of ['12a', '']) assert.ok(!('tmdbId' in (await reply({ ...movie, ProviderIds: { Tmdb } }).item('m1'))), Tmdb);
+});

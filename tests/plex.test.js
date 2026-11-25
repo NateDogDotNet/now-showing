@@ -829,7 +829,7 @@ test('request for one library, nothing else: the 2.2 request, with no genre and 
   const { calls, client } = poolCalls();
   await client.pool({ libraryKey: '1', unwatchedOnly: true, size: 100 });
   assert.equal(calls[0].pathname, '/library/sections/1/all');
-  assert.deepEqual(ask(calls[0]), { unwatched: '1', sort: 'rating:desc', 'X-Plex-Container-Start': '0', 'X-Plex-Container-Size': '100' });
+  assert.deepEqual(ask(calls[0]), { unwatched: '1', sort: 'rating:desc', 'X-Plex-Container-Start': '0', 'X-Plex-Container-Size': '100', includeGuids: '1' });
 });
 
 test('request for two libraries: one pool request each, with its own size', async () => {
@@ -1057,4 +1057,65 @@ test('publicIdentity reports an unreachable address and an HTTP error as errors,
   await assert.rejects(() => refused.publicIdentity(), (err) => err.kind === 'http');
   const empty = createPlexClient({ serverUrl: 'http://x', token: 't', clientId: 'c', fetchImpl: async () => jsonResponse({ MediaContainer: {} }) });
   assert.equal((await empty.publicIdentity()).machineIdentifier, '');
+});
+
+// ---- a poster's TMDB id (Run 13, tmdb-ids): includeGuids=1 and the Guid entries ----
+
+const withGuids = (...ids) => ({ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t', Guid: ids.map((id) => ({ id })) });
+
+test('tmdb ids: the pool, sourceItems, item and items requests each carry includeGuids=1', async () => {
+  const { calls, client } = poolCalls([{ ratingKey: '2', title: 'B', thumb: '/t/2', type: 'movie' }]);
+  await client.pool({ libraryKey: '1', size: 10 });
+  await client.sourceItems({ kind: 'collection', key: '101' });
+  await client.sourceItems({ kind: 'playlist', key: '201' });
+  await client.item('2');
+  await client.items(['2', '3']);
+  assert.equal(calls.length, 5);
+  for (const url of calls) assert.equal(url.searchParams.get('includeGuids'), '1', url.pathname);
+});
+
+test('tmdb ids: a movie takes the one TMDB Guid among its others, as tmdbId with tmdbType movie', () => {
+  const p = toPoster(withGuids('imdb://tt0111161', 'tmdb://278', 'tvdb://81189'), 'random');
+  assert.equal(p.tmdbId, '278');
+  assert.equal(p.tmdbType, 'movie');
+  assert.equal(toPoster({ ...withGuids('tmdb://5'), type: 'show' }, 'random').tmdbType, 'tv');
+});
+
+test('tmdb ids: no Guid, no TMDB Guid, or an unusable Guid list gives neither field', () => {
+  for (const m of [{ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t' }, withGuids(), withGuids('imdb://tt1'), { ...withGuids(), Guid: 'tmdb://5' }, { ...withGuids(), Guid: [null, {}, { id: 5 }] }]) {
+    const p = toPoster(m, 'random');
+    assert.ok(!('tmdbId' in p) && !('tmdbType' in p), JSON.stringify(m.Guid));
+  }
+});
+
+test('tmdb ids: two different TMDB Guids give no id; the same one listed twice is one id', () => {
+  assert.ok(!('tmdbId' in toPoster(withGuids('tmdb://11', 'tmdb://12'), 'random')));
+  assert.ok(!('tmdbType' in toPoster(withGuids('tmdb://11', 'tmdb://12'), 'random')));
+  assert.equal(toPoster(withGuids('tmdb://11', 'tmdb://11'), 'random').tmdbId, '11');
+});
+
+test('tmdb ids: a TMDB Guid that is not plain digits gives no id, alone or beside a good one', () => {
+  for (const bad of ['tmdb://12a', 'tmdb://', 'tmdb://-5', 'tmdb://+5', 'tmdb:// 5', 'tmdb://5/', 'tmdb://1.5']) {
+    assert.ok(!('tmdbId' in toPoster(withGuids(bad), 'random')), bad);
+    assert.ok(!('tmdbId' in toPoster(withGuids('tmdb://9', bad), 'random')), `9 + ${bad}`);
+  }
+});
+
+test('tmdb ids: an episode never takes its own TMDB Guid and gets no tmdbType without an id', () => {
+  const ep = toPoster({ type: 'episode', ratingKey: '500', grandparentRatingKey: '3', grandparentTitle: 'Show', title: 'Pilot', thumb: '/t', Guid: [{ id: 'tmdb://999' }] }, 'now-playing');
+  assert.ok(!('tmdbId' in ep));
+  assert.ok(!('tmdbType' in ep));
+  assert.equal(ep.ratingKey, '3');
+});
+
+test('tmdb ids: an item of another kind (a season, a collection) takes none', () => {
+  assert.ok(!('tmdbId' in toPoster({ ...withGuids('tmdb://5'), type: 'season' }, 'random')));
+});
+
+test('tmdb ids: every other poster field is unchanged by a TMDB Guid', () => {
+  const plain = toPoster({ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t', year: 1999, contentRating: 'PG' }, 'random');
+  const { tmdbId, tmdbType, ...rest } = toPoster({ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t', year: 1999, contentRating: 'PG', Guid: [{ id: 'tmdb://7' }] }, 'random');
+  assert.equal(tmdbId, '7');
+  assert.equal(tmdbType, 'movie');
+  assert.deepEqual(rest, plain);
 });

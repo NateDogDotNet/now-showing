@@ -89,6 +89,8 @@ const MOVIE_ROWS = [
 // (verify) UserData.PlayCount and UserData.Played: the UserItemDataDto fields were not read (research section 5).
 // (verify) A null field is left out of the reply (an unrated movie has no OfficialRating key); the research does not say Jellyfin does this.
 // (verify) ImageTags.Primary values (tag1, ...) are invented, and the image body is an SVG where a real server sends JPEG or WebP.
+// TMDB ids the mock knows for some movies (by row index); the rest carry no ProviderIds.Tmdb.
+const TMDB_IDS = { 0: '2001', 1: '2002', 3: '2004', 8: '2009' };
 const MOVIES = MOVIE_ROWS.map(([Name, year, color, rating, minutes, community, genres, plays, Overview, lib], i) => ({
   Id: hex('a', i + 1),
   Name,
@@ -104,6 +106,7 @@ const MOVIES = MOVIE_ROWS.map(([Name, year, color, rating, minutes, community, g
   UserData: { PlayCount: plays, Played: plays > 0 },
   ImageTags: { Primary: `tag${i + 1}` },
   ParentId: LIBS[lib].Id,
+  ...(TMDB_IDS[i] ? { ProviderIds: { Imdb: `tt100${i}`, Tmdb: TMDB_IDS[i] } } : { ProviderIds: { Imdb: `tt100${i}` } }),
   color,
 }));
 const movieNamed = (name) => MOVIES.find((m) => m.Name === name);

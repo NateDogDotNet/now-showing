@@ -115,6 +115,9 @@ const KIDS = [
   ['Mini Monster Mash', 2022, '#3c8d2f', 'PG', 4_680_000, 'The monsters under the bed throw a party and invite the child above it.', ['Comedy', 'Animation'], 6.4, '2022-10-14', 0, 0],
 ];
 
+// TMDB ids the mock knows for some titles (by ratingKey); the rest have none. Sent as a Guid list only when the request has includeGuids=1, as Plex does.
+const TMDB_IDS = { 1: '1001', 2: '1002', 4: '1004', 9: '1009', 10: '1010' };
+
 const movie = ([title, year, color, contentRating, duration, summary], n, lib, extra) => ({
   ratingKey: String(n),
   key: `/library/metadata/${n}`,
@@ -125,6 +128,7 @@ const movie = ([title, year, color, contentRating, duration, summary], n, lib, e
   color,
   summary,
   ...(contentRating ? { contentRating } : {}),
+  ...(TMDB_IDS[n] ? { Guid: [{ id: `plex://movie/mock${n}` }, { id: `imdb://tt000${n}` }, { id: `tmdb://${TMDB_IDS[n]}` }] } : {}),
   ...(duration ? { duration } : {}),
   rating: 9 - (n - 1) * 0.4,
   ...withExtra(extra),
@@ -339,7 +343,8 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
     query.delete('X-Plex-Token');
     log.push(url.pathname + (query.size ? `?${query}` : ''));
 
-    const strip = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'color' && k !== 'lib'));
+    const guids = url.searchParams.get('includeGuids') === '1';
+    const strip = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'color' && k !== 'lib' && (guids || k !== 'Guid')));
     const path = url.pathname;
     if (path === '/') return json(200, { MediaContainer: { friendlyName: 'Mock Plex', version: '1.40.0.0000-mock', machineIdentifier: machineId } });
     if (path === '/library/sections') {

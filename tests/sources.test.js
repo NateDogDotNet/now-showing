@@ -686,3 +686,11 @@ test('identity with every server down names every server; one server says its ow
   const two = createSources({ ...defaults(), serverUrl: 'http://127.0.0.1:1', plexToken: 't', serverId: 'p1', servers: [{ id: 'jf-1', type: 'jellyfin', url: 'http://127.0.0.1:2', token: 'x', userId: '', name: 'Den Jellyfin' }] }, { fetchImpl: dead });
   await assert.rejects(() => two.identity(), (err) => err.kind === 'network' && /Could not reach Plex/.test(err.message) && /Could not reach Den Jellyfin/.test(err.message) && !/Plex: |Jellyfin: /.test(err.message));
 });
+
+test('tmdb ids: a poster that carries tmdbId keeps it through the combined source', async () => {
+  const fetchImpl = async (url) => new Response(JSON.stringify({ MediaContainer: { Metadata: [{ ratingKey: '3', type: 'movie', title: 'A', thumb: '/t/3', Guid: [{ id: 'tmdb://42' }] }] } }), { status: 200 });
+  const one = createSources({ ...defaults(), serverUrl: 'http://127.0.0.1:1', plexToken: 't', serverId: 'p1' }, { fetchImpl });
+  const [p] = await one.pool({ libraryKey: '1', size: 5 });
+  assert.equal(p.tmdbId, '42');
+  assert.equal(p.tmdbType, 'movie');
+});

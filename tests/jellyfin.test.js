@@ -234,6 +234,8 @@ test('a Jellyfin movie maps to the poster shape the engine reads', async () => {
     genres: ['Drama'],
     viewCount: 2,
     audienceRating: 7.9,
+    tmdbId: '2001',
+    tmdbType: 'movie',
   });
   const fresh = all.find((p) => p.title === 'Midnight Projector');
   assert.equal('viewCount' in fresh, false, 'a play count of 0 is left off');
@@ -676,4 +678,51 @@ test('publicIdentity answers for a wrong token too, since it proves nothing abou
   assert.equal((await source.publicIdentity()).machineIdentifier, '90000000000000000000000000000001');
   const bad = createSource({ serverType: 'jellyfin', serverUrl: 'http://j.test', plexToken: 't' }, { fetchImpl: async () => new Response('[]', { status: 200 }) });
   await assert.rejects(() => bad.publicIdentity(), (err) => err.kind === 'parse');
+});
+
+// ---- a poster's TMDB id (Run 13, tmdb-ids): ProviderIds.Tmdb ----
+
+test('tmdb ids: every item request asks for ProviderIds among its Fields', async () => {
+  const { source, calls } = connect();
+  const [movies] = await source.libraries();
+  await source.pool({ libraryKey: movies.key });
+  const first = (await source.pool({ libraryKey: movies.key }))[0];
+  await source.item(first.ratingKey);
+  await source.items([first.ratingKey]);
+  const asked = calls.filter((c) => c.url.pathname.startsWith('/Items') || c.url.pathname.includes('/Items'));
+  assert.ok(asked.length >= 3);
+  for (const { url } of asked.filter((c) => c.url.searchParams.has('Fields'))) assert.ok(url.searchParams.get('Fields').split(',').includes('ProviderIds'), url.href);
+  assert.ok(asked.some((c) => c.url.searchParams.has('Fields')));
+});
+
+test('tmdb ids: ProviderIds.Tmdb of digits becomes tmdbId (Movie: movie, Series: tv)', () => {
+  const m = toPoster({ ...movieItem, ProviderIds: { Imdb: 'tt1', Tmdb: '278' } }, 'random');
+  assert.equal(m.tmdbId, '278');
+  assert.equal(m.tmdbType, 'movie');
+  const s = toPoster({ Id: 's1', Name: 'Show', Type: 'Series', ProviderIds: { Tmdb: '1396' } }, 'random');
+  assert.equal(s.tmdbId, '1396');
+  assert.equal(s.tmdbType, 'tv');
+});
+
+test('tmdb ids: a missing, malformed or odd ProviderIds.Tmdb gives neither field', () => {
+  for (const ProviderIds of [undefined, null, {}, { Imdb: 'tt1' }, { Tmdb: '' }, { Tmdb: '12a' }, { Tmdb: '-5' }, { Tmdb: '+5' }, { Tmdb: ' 5' }, { Tmdb: '1.5' }, { Tmdb: 5 }, { Tmdb: null }, 'Tmdb=5']) {
+    const p = toPoster({ ...movieItem, ProviderIds }, 'random');
+    assert.ok(!('tmdbId' in p) && !('tmdbType' in p), JSON.stringify(ProviderIds));
+  }
+});
+
+test('tmdb ids: an episode never takes its own ProviderIds.Tmdb', () => {
+  const p = toPoster({ ...episodeItem, ProviderIds: { Tmdb: '4242' } }, 'now-playing');
+  assert.ok(!('tmdbId' in p) && !('tmdbType' in p));
+  assert.equal(p.ratingKey, 'sr1');
+});
+
+test('tmdb ids: the mock lists TMDB ids for some titles and none for others, and no other field changes', async () => {
+  const { source } = connect();
+  const [movies] = await source.libraries();
+  const posters = await source.pool({ libraryKey: movies.key, size: 100 });
+  const withId = posters.filter((p) => p.tmdbId);
+  assert.ok(withId.length > 0 && withId.length < posters.length);
+  for (const p of withId) assert.match(p.tmdbId, /^\d+$/);
+  for (const p of withId) assert.equal(p.tmdbType, 'movie');
 });
