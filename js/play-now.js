@@ -122,6 +122,20 @@ export function refusalText(title, reason) {
 }
 
 /** What was started (D191 3): the title pressed, on the device picked, and from where. */
+/** The Diagnostics line of a command the server accepted (D201): what the command carried and what the server answered. No code beyond the answer's own, no address, no token. */
+export const acceptedText = ({ title, device, server, sent }) => {
+  const parts = sent && typeof sent === 'object' ? [`play queue: ${sent.queue ? 'yes' : 'no'}`, `token for the player: ${sent.token ? 'yes' : 'no'}`, `the answer: ${sent.reply || 'empty'}`] : [];
+  return `Play now: ${server} accepted the command to play "${title}" on ${device}${parts.length ? ` (${parts.join(', ')})` : ''}.`;
+};
+/** The Diagnostics line of the check after a command (D201): what the server shows the player doing. */
+export const confirmText = ({ device, server, state }) =>
+  state === 'nothing'
+    ? `Play now: a few seconds later ${server} shows nothing playing on ${device}. The player took the command and did not start.`
+    : state === 'unknown'
+      ? `Play now: ${server} could not be asked what ${device} is doing.`
+      : `Play now: a few seconds later ${server} shows ${device} ${state}.`;
+/** What kind of failure a send was, for Diagnostics: the kind and the HTTP status when there is one. */
+export const sendErrorDetail = (error) => [error?.kind || 'unexpected', error?.status ? `HTTP ${error.status}` : ''].filter(Boolean).join(', ');
 export const playingText = (title, device, offset) => `Playing "${title}" on ${device}${offset > 0 ? `, from ${clockText(offset)}` : ''}.`;
 
 /** The devices on both allowed lists, as the stored list names them: Play now offers a device only when it is on the stored list and on this page's own, as the send requires (D194 4). */
@@ -221,7 +235,7 @@ export const FAILURE_MS = 15_000;
  * rebuilt or another dialog opens. Once `play` has been called, `cancel()` no longer ends the flow: it stays busy until the answer, which is told.
  */
 export function createPlayNow(deps) {
-  const { getPoster, serverTypeOf, serverName, nameOfSlot, getLimit, getStoredLimit, getAllowed, getPageAllowed, dropStopped, requestPin, cancelPin, readPlayers, savedPosition, prepare, play, hasSource, otherDialogOpen, choose, closeChoice, focusBack, say, unsay, onChange } = deps;
+  const { getPoster, serverTypeOf, serverName, nameOfSlot, getLimit, getStoredLimit, getAllowed, getPageAllowed, dropStopped, requestPin, cancelPin, readPlayers, savedPosition, prepare, play, hasSource, otherDialogOpen, choose, closeChoice, focusBack, say, unsay, onChange, note = () => {} } = deps;
   let flow = null; // the open flow, or null
   let shown = ''; // the words of a wait that are on screen and that nothing has replaced
 
@@ -245,7 +259,11 @@ export function createPlayNow(deps) {
     shown = '';
     say(text, { ...(ms ? { ms } : {}), ...(reached ? { reached, replaces } : {}) });
   };
-  const fail = (text) => answer(text, FAILURE_MS);
+  /** A failure or a refusal, on screen and in Diagnostics (D201): the words hold no code, no address and no token. */
+  const fail = (text) => {
+    note('warn', text);
+    answer(text, FAILURE_MS);
+  };
   /** The device offered: on the stored list and on this page's own (D194 4). */
   const offered = () => onBothLists(getAllowed(), getPageAllowed());
 
@@ -267,10 +285,21 @@ export function createPlayNow(deps) {
     f.sending = true;
     wait(f, sendingText(f.poster.title, device.name)); // the last check has passed and the request goes in this same turn
     // From here on the server may have taken the command: its answer is told wherever the person is looking, so it is marked `reached` (D194 3).
+    let sent;
     try {
-      await play({ poster: f.poster, target: verdict.target, offset: verdict.offset, machineIdentifier });
+      sent = await play({ poster: f.poster, target: verdict.target, offset: verdict.offset, machineIdentifier });
     } catch (error) {
-      return answer(failureText({ step: 'send', error, title: f.poster.title, device: device.name, server: f.server }), FAILURE_MS, true);
+      const text = failureText({ step: 'send', error, title: f.poster.title, device: device.name, server: f.server });
+      note('warn', `${text} (${sendErrorDetail(error)})`);
+      return answer(text, FAILURE_MS, true);
+    }
+    // Diagnostics (D201): what was sent and what the server answered, then what the server shows the player doing a few seconds later.
+    note('info', acceptedText({ title: f.poster.title, device: device.name, server: f.server, sent }));
+    if (typeof sent?.confirm === 'function') {
+      Promise.resolve()
+        .then(() => sent.confirm())
+        .then((state) => note(state === 'nothing' ? 'warn' : 'info', confirmText({ device: device.name, server: f.server, state })))
+        .catch(() => {});
     }
     answer(playingText(f.poster.title, device.name, verdict.offset), 0, true);
   }

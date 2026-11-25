@@ -26,7 +26,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.4.6';
+export const VERSION = '2.4.7';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -876,6 +876,7 @@ const playNow = createPlayNow({
     if (!$('toast').hidden && $('toast').textContent === text) $('toast').hidden = true;
   },
   onChange: () => syncPlayNow(),
+  note: (level, text) => log[level === 'warn' ? 'warn' : 'info'](text.startsWith('Play now') ? text : `Play now: ${text}`), // Diagnostics (D201)
 });
 
 // One dialog at a time (D192 5): a dialog that opens while a Play now is open ends it (the PIN prompt that Play now itself asked for is no other dialog). The line that says

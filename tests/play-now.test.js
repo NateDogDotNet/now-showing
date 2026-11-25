@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CHECKING_TEXT, PICK_MEANINGS, STILL_WORKING_TEXT, STOPPED_TEXT, chooseStep, clockText, createPlayNow, decideSend, failureText, limitVerdict, notCheckedText, onBothLists, playingText, pressDecision, refusalText, sendingText, showsButton } from '../js/play-now.js';
+import { CHECKING_TEXT, PICK_MEANINGS, STILL_WORKING_TEXT, STOPPED_TEXT, acceptedText, chooseStep, clockText, confirmText, createPlayNow, decideSend, failureText, limitVerdict, notCheckedText, onBothLists, playingText, pressDecision, refusalText, sendErrorDetail, sendingText, showsButton } from '../js/play-now.js';
 import { createPlexClient, toPoster } from '../js/sources/plex.js';
 import { createSource, createSources, PLEX_ONLY_MEMBERS, readPlayers, SourceError } from '../js/sources/index.js';
 import { sanitize } from '../js/settings.js';
@@ -1138,17 +1138,17 @@ test('the Plex client\'s play asks its own server, with its own sign-in, to forw
     assert.equal(received, 1);
     assert.deepEqual(queues, [{ type: 'video', uri: 'server://mock-a/com.plexapp.plugins.library/library/metadata/3' }], 'D200: a play queue of the one item is made first');
     assert.deepEqual(commands.map(({ commandID: _c, forwarded: _f, ...rest }) => rest), [
-      { key: '/library/metadata/3', offset: 83456, machineIdentifier: 'mock-a', address: '127.0.0.1', port: String(a.port), protocol: 'http', providerIdentifier: 'com.plexapp.plugins.library', type: 'video', containerKey: '/playQueues/9001?window=100&own=1', target: 'tv-living', tokenLike: false, tokenParams: 1 },
+      { key: '/library/metadata/3', offset: 83456, machineIdentifier: 'mock-a', address: '127.0.0.1', port: String(a.port), protocol: 'http', providerIdentifier: 'com.plexapp.plugins.library', type: 'video', containerKey: '/playQueues/9001?window=100&own=1', target: 'tv-living', playerToken: 'transient-mock-1', tokenLike: false, tokenParams: 1 },
     ]);
     assert.ok(Number(commands[0].commandID) > 0);
     const playCall = calls.find((c) => c.url.pathname === '/player/playback/playMedia');
     assert.equal(playCall.url.origin, a.url, 'to the server\'s own address');
     assert.equal(playCall.url.searchParams.get('X-Plex-Token'), TOKEN);
     assert.deepEqual(Object.keys(playCall.init.headers), ['Accept'], 'CORS-simple: no custom header');
-    assert.deepEqual(calls.map((c) => [c.url.origin, c.url.pathname, c.init.method]), [[a.url, '/', 'GET'], [a.url, '/playQueues', 'POST'], [a.url, '/player/playback/playMedia', 'GET']], 'the identity read, the play queue and the command, all to this server');
+    assert.deepEqual(calls.map((c) => [c.url.origin, c.url.pathname, c.init.method]), [[a.url, '/', 'GET'], [a.url, '/playQueues', 'POST'], [a.url, '/security/token', 'GET'], [a.url, '/player/playback/playMedia', 'GET']], 'the identity read, the play queue, the token for the player (D201) and the command, all to this server');
     assert.ok(calls.every((c) => Object.keys(c.init.headers).join() === 'Accept' && c.url.searchParams.getAll('X-Plex-Token').join() === TOKEN), 'each CORS-simple, each with this server\'s sign-in');
     assert.ok(calls.every((c) => !/192\.0\.2\./.test(c.url.hostname)), 'no player address');
-    assert.equal(commands[0].forwarded.some((n) => /token/i.test(n)), false);
+    assert.deepEqual(commands[0].forwarded.filter((n) => /token/i.test(n)), ['token'], 'the one token the player gets is the short-lived one (D201), not this display\'s sign-in');
   } finally {
     await stop(a.server);
   }
@@ -1183,12 +1183,12 @@ test('play: no item, no target or no identifier is not sent; an address that is 
   assert.equal(calls.length, 1, 'and no command');
 });
 
-test('play starts its first request, the play queue\'s, in the turn it is called: nothing waits between a caller\'s last check and the send (D200)', () => {
+test('play starts its first requests, the play queue\'s and the player token\'s, in the turn it is called: nothing waits between a caller\'s last check and the send (D200, D201)', () => {
   const calls = [];
   const fetchImpl = (url) => (calls.push(new URL(url).pathname), new Promise(() => {}));
   const client = createPlexClient({ serverUrl: 'http://h:32400', token: 't', clientId: 'd', fetchImpl });
   client.play({ key: '3', target: 'tv', machineIdentifier: 'm' });
-  assert.deepEqual(calls, ['/playQueues'], 'the request left before any await of the caller');
+  assert.deepEqual(calls, ['/playQueues', '/security/token'], 'the requests left before any await of the caller');
 });
 
 test('play: a server that makes no play queue still gets the command, without one; a server that does not answer or refuses gets none (D200)', async () => {
@@ -1341,6 +1341,63 @@ test('a source over several servers has no play command for a Jellyfin or an Emb
   } finally {
     await stop(a.server);
   }
+});
+
+test('play: the command carries a short-lived token for the player when the server gives one, and goes without when it does not; it reports what was sent and what the server shows afterwards (D201)', async () => {
+  const run = async ({ tokenAnswer, sessions = { MediaContainer: {} }, reply = '<Response code="200" status="OK"/>' }) => {
+    const calls = [];
+    const fetchImpl = async (url) => {
+      const u = new URL(url);
+      calls.push(u);
+      if (u.pathname === '/playQueues') return new Response(JSON.stringify({ MediaContainer: { playQueueID: 7 } }), { status: 200 });
+      if (u.pathname === '/security/token') return tokenAnswer();
+      if (u.pathname === '/status/sessions') return typeof sessions === 'function' ? sessions() : new Response(JSON.stringify(sessions), { status: 200 });
+      return new Response(reply, { status: 200 });
+    };
+    const sent = await createPlexClient({ serverUrl: 'http://h:32400', token: 'server-secret', clientId: 'd', fetchImpl }).play({ key: '3', target: 'tv', machineIdentifier: 'm' });
+    const command = calls.find((u) => u.pathname === '/player/playback/playMedia');
+    const { confirm, ...report } = sent;
+    return { token: command.searchParams.get('token'), report, state: await confirm({ waitMs: 0 }), text: JSON.stringify(report) };
+  };
+  const json = (body, status = 200) => () => new Response(JSON.stringify(body), { status });
+  const ok = await run({ tokenAnswer: json({ MediaContainer: { token: 'transient-abc' } }), sessions: { MediaContainer: { Metadata: [{ Player: { machineIdentifier: 'other', state: 'playing' } }, { Player: { machineIdentifier: 'tv', state: 'paused' } }] } } });
+  assert.deepEqual(ok, { token: 'transient-abc', report: { queue: true, token: true, reply: '200 OK' }, state: 'paused', text: ok.text });
+  assert.equal(/transient-abc|server-secret|h:32400/.test(ok.text), false, 'the report for Diagnostics holds no token and no address');
+  for (const [label, tokenAnswer] of [['HTTP 403', json({}, 403)], ['HTTP 500', json({}, 500)], ['no token', json({ MediaContainer: {} })], ['not JSON', () => new Response('nope', { status: 200 })], ['no answer', () => { throw new TypeError('Failed to fetch'); }]]) {
+    const none = await run({ tokenAnswer, reply: '' });
+    assert.deepEqual([none.token, none.report, none.state], [null, { queue: true, token: false, reply: '' }, 'nothing'], label);
+  }
+  assert.equal((await run({ tokenAnswer: json({}), sessions: () => new Response('{}', { status: 500 }) })).state, 'unknown');
+});
+
+test('flow: a Play now is written to Diagnostics: the accepted command with what it carried, what the server shows afterwards, and every failure or refusal (D201)', async () => {
+  assert.equal(acceptedText({ title: 'Heat', device: 'TV', server: 'Castle', sent: { queue: true, token: false, reply: '200 OK' } }), 'Play now: Castle accepted the command to play "Heat" on TV (play queue: yes, token for the player: no, the answer: 200 OK).');
+  assert.equal(acceptedText({ title: 'Heat', device: 'TV', server: 'Castle', sent: undefined }), 'Play now: Castle accepted the command to play "Heat" on TV.');
+  assert.match(confirmText({ device: 'TV', server: 'Castle', state: 'nothing' }), /shows nothing playing on TV\. The player took the command and did not start\./);
+  assert.equal(confirmText({ device: 'TV', server: 'Castle', state: 'playing' }), 'Play now: a few seconds later Castle shows TV playing.');
+  assert.match(confirmText({ device: 'TV', server: 'Castle', state: 'unknown' }), /could not be asked/);
+  assert.equal(sendErrorDetail({ kind: 'http', status: 404 }), 'http, HTTP 404');
+  assert.equal(sendErrorDetail({ kind: 'timeout' }), 'timeout');
+  assert.equal(sendErrorDetail(new Error('x')), 'unexpected');
+  // The flow writes them: an accepted command and its check, a failed send with its kind, a refusal before any send.
+  const notes = [];
+  const note = (level, text) => notes.push([level, text]);
+  const ok = rig({ deps: { note, play: async () => ({ queue: true, token: true, reply: '200 OK', confirm: async () => 'nothing' }) } });
+  await ok.flow.press();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(notes.map(([level]) => level), ['info', 'warn']);
+  assert.match(notes[0][1], /^Play now: Mock Plex accepted the command to play "Velvet Curtain" on Living Room TV \(play queue: yes, token for the player: yes, the answer: 200 OK\)\.$/);
+  assert.match(notes[1][1], /shows nothing playing on Living Room TV/);
+  notes.length = 0;
+  const bad = rig({ deps: { note, play: async () => { throw new SourceError('Plex returned HTTP 404.', { kind: 'http', status: 404 }); } } });
+  await bad.flow.press();
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0][0], 'warn');
+  assert.ok(notes[0][1].startsWith(bad.said[0]) && notes[0][1].endsWith('(http, HTTP 404)'), notes[0][1]);
+  notes.length = 0;
+  const old = rig({ deps: { note, play: async () => undefined } }); // a play that reports nothing still gets its line
+  await old.flow.press();
+  assert.deepEqual(notes, [['info', 'Play now: Mock Plex accepted the command to play "Velvet Curtain" on Living Room TV.']]);
 });
 
 test('the token goes to the server alone: not in the command the player receives, and the players read goes to plex.tv and the server only (D199)', async () => {

@@ -30,6 +30,8 @@
 //                                             server got, a failed forward included (a failed one is not in `commands`)
 //   POST /playQueues?type=video&uri=server://<machine>/com.plexapp.plugins.library/library/metadata/3   the play queue a play command names (D200): {MediaContainer: {playQueueID}}; each is
 //                                             recorded as {type, uri} in `queues` of player-log. Needs the token. (verify)
+//   GET  /security/token?type=delegation&scope=all   the short-lived token a play command carries for the player (D201): {MediaContainer: {token}}
+//   POST /__mock/token-status?status=500      answer GET /security/token with that status (200 = normal again; player-reset also puts it back)
 //   POST /__mock/queue-status?status=500      answer POST /playQueues with that status (200 = normal again; player-reset also puts it back)
 //   POST /__mock/player-reset                 forget the player record and the failure mode
 //   POST /__mock/player-fail?mode=player      make the forward fail: mode=player (the player cannot be reached: the server answers 404, a (verify) status), mode=server (the server has a problem: it answers 503),
@@ -150,7 +152,7 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
   const kinds = new Map(); // ratingKey -> the `type` set by /__mock/kind
   const episodes = new Map(); // ratingKey -> the key of the episode that title is listed as, set by /__mock/episode
   const clients = { list: [], status: 200 }; // what GET /clients answers (D199): the players this server lists itself
-  const player = { commands: [], received: 0, fail: 'none', queues: [], queueStatus: 200 }; // what the players received (Play now), and how the forward fails
+  const player = { commands: [], received: 0, fail: 'none', queues: [], queueStatus: 200, tokens: 0, tokenStatus: 200 }; // what the players received (Play now), and how the forward fails
   let sessionsStatus = 200;
   let countsStatus = 200; // the library count request (/library/sections/1/all with X-Plex-Container-Size=0)
   const plexTv = { lists: new Map(), statuses: new Map(), log: [] }; // the plex.tv side: per token ('*' = every token), what /__mock/plextv-resources answers
@@ -213,6 +215,12 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
         player.fail = 'none';
         player.queues.length = 0;
         player.queueStatus = 200;
+        player.tokens = 0;
+        player.tokenStatus = 200;
+        return json(200, { ok: true });
+      }
+      if (action === 'token-status') {
+        player.tokenStatus = Number(url.searchParams.get('status')) || 200;
         return json(200, { ok: true });
       }
       if (action === 'queue-status') {
@@ -341,6 +349,11 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
       if (clients.status !== 200) return json(clients.status, { error: `Mock: clients answer ${clients.status}` });
       return json(200, { MediaContainer: { size: clients.list.length, Server: clients.list } });
     }
+    if (path === '/security/token') {
+      // (verify) The short-lived token a play command carries for the player (D201). The mock counts them; `player.tokenStatus` makes it fail.
+      if (player.tokenStatus !== 200) return json(player.tokenStatus, { error: `Mock: the token answer is ${player.tokenStatus}` });
+      return json(200, { MediaContainer: { token: `transient-mock-${++player.tokens}` } });
+    }
     if (path === '/playQueues') {
       // (verify) The play queue a play command names (D200): made with POST, answered with its id. The mock records what was asked.
       if (req.method !== 'POST') return json(405, { error: 'Mock: a play queue is made with POST' });
@@ -372,7 +385,8 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
         containerKey: get('containerKey'),
         target,
         forwarded: forwarded.map(([name]) => name),
-        tokenLike: forwarded.some(([name, value]) => /token/i.test(name) || value.includes(TOKEN)),
+        playerToken: get('token') || '',
+        tokenLike: forwarded.some(([name, value]) => (/token/i.test(name) && name !== 'token') || value.includes(TOKEN)), // the display's own sign-in in what the player gets; the short-lived `token` (D201) is not it
         tokenParams: url.searchParams.getAll('X-Plex-Token').length,
       });
       if (player.fail === 'reset') return req.socket.destroy(); // the server took the command and forwarded it, then the connection to the page was lost

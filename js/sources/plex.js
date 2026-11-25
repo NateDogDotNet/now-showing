@@ -59,7 +59,7 @@ async function request(url, { method = 'GET', timeoutMs = 10000, fetchImpl = fet
     throw new SourceError('Plex rejected the token (unauthorised).', { status: res.status, kind: 'auth' });
   }
   if (!res.ok) throw new SourceError(`Plex returned HTTP ${res.status}.`, { status: res.status, kind: 'http' });
-  if (ignoreBody) return {};
+  if (ignoreBody) return { replyText: (await res.text().catch(() => '')).slice(0, 300) };
 
   const text = await res.text();
   if (!text.trim()) return {};
@@ -187,11 +187,11 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
    * player named by `target`, the player's client identifier. The shape is the community's description of the companion call, not Plex's own
    * documentation, and none of it is confirmed against a real server (verify): the item's `key` (`/library/metadata/<key>`), `offset` in milliseconds,
    * the server's own `machineIdentifier` (read by `machineIdentifier()` BEFORE the caller's last check, so nothing is awaited between that check and this
-   * request: `play` starts its first request, the play queue's (D200), in the same turn it is called) and its `address`, `port` and `protocol` as the player is to reach it, the
+   * request: `play` starts its first requests, the play queue's (D200) and the player token's (D201), in the same turn it is called) and its `address`, `port` and `protocol` as the player is to reach it, the
    * `type` (`video`: a movie or an episode) and the play queue as `containerKey` when the server made one, a
    * `commandID`, and the target as the `X-Plex-Target-Client-Identifier` parameter (a query parameter keeps the request CORS-simple; a header is the
-   * documented alternative, (verify)). It goes to this server's own address with this server's sign-in, as every request to it does, and carries no
-   * token for the player: the one `X-Plex-Token` in it is the server's. A player's own address is never requested.
+   * documented alternative, (verify)). It goes to this server's own address with this server's sign-in, as every request to it does. The one `X-Plex-Token` in it is the server's;
+   * the `token` parameter, when the server gave one, is a short-lived token for the player (D201), never this display's sign-in. A player's own address is never requested.
    * `key` is the item's own key, `target` the client identifier of an allowed player and `machineIdentifier` this server's own; all three are required (`id`, the poster's scoped id, is for a
    * source over several servers and is not read here).
    */
@@ -225,6 +225,40 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
     }
   };
 
+  /**
+   * A short-lived token the PLAYER uses to read the item from this server (D201): `GET /security/token?type=delegation&scope=all`, the transient
+   * token the companion description says a controller must get from the server and python-plexapi sends with every play command. It is not the
+   * sign-in this display holds, and it is never written to Diagnostics. Any failure gives '' and the command goes without one, as before 2.4.7.
+   */
+  const playerToken = async () => {
+    try {
+      const c = await get('/security/token', { type: 'delegation', scope: 'all' }, { timeoutMs: 8000 });
+      return typeof c?.token === 'string' ? c.token.trim() : '';
+    } catch {
+      return '';
+    }
+  };
+
+  /**
+   * What the server shows the player doing, `waitMs` after a command (D201): 'playing', 'paused', 'buffering' (the state of the session whose
+   * player is `target`) or 'nothing' when the server lists no session for it; 'unknown' when the sessions cannot be read. For Diagnostics only.
+   */
+  const playerState = async (target, waitMs) => {
+    if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+    try {
+      const c = await get('/status/sessions', {}, { timeoutMs: 8000 });
+      const mine = (c.Metadata || []).find((m) => m?.Player?.machineIdentifier === target);
+      return mine ? String(mine.Player.state || 'playing') : 'nothing';
+    } catch {
+      return 'unknown';
+    }
+  };
+
+  /**
+   * It answers with what was sent and what came back, for Diagnostics (D201), holding no token and no address: `queue` and `token` (was a play
+   * queue named, was a token for the player sent), `reply` (the code and status of the server's answer, '' when it gave none) and `confirm`,
+   * which reads what the server shows the player doing a few seconds later.
+   */
   const play = async ({ key, offset = 0, target, machineIdentifier }) => {
     if (!key || !target || !machineIdentifier) throw new SourceError('Play now needs an item, a player and the server\'s identifier.', { kind: 'config' });
     let where;
@@ -234,8 +268,8 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
       throw new SourceError('The server address is not usable.', { kind: 'config' });
     }
     const protocol = where.protocol.replace(':', '');
-    const containerKey = await playQueue({ key, machineIdentifier });
-    await get(
+    const [containerKey, token] = await Promise.all([playQueue({ key, machineIdentifier }), playerToken()]);
+    const { replyText = '' } = await get(
       '/player/playback/playMedia',
       {
         providerIdentifier: 'com.plexapp.plugins.library',
@@ -247,11 +281,15 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
         key: `/library/metadata/${key}`,
         type: 'video',
         ...(containerKey ? { containerKey } : {}),
+        ...(token ? { token } : {}),
         commandID: ++commandId,
         'X-Plex-Target-Client-Identifier': target,
       },
       { timeoutMs: 15000, ignoreBody: true },
     );
+    const code = /\bcode="(\d{1,4})"/.exec(replyText)?.[1] ?? '';
+    const status = /\bstatus="([A-Za-z ]{1,40})"/.exec(replyText)?.[1] ?? '';
+    return { queue: Boolean(containerKey), token: Boolean(token), reply: [code, status].filter(Boolean).join(' '), confirm: ({ waitMs = 8000 } = {}) => playerState(target, waitMs) };
   };
 
   const client = {
