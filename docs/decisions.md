@@ -1358,3 +1358,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 - **D206 The years filter and two more (verify) rows.**
   1. **Years (builder question Q1).** `tmdb-source` sends the years choice (`primary_release_date.gte/lte` for movies, `first_air_date.gte/lte` for shows). Its Output gains `scripts/mock-tmdb.mjs` and `tests/mock-tmdb.test.js`, so it may extend the mock to honour them. `mock-tmdb` closes without a years filter.
   2. **Review findings F3 and F4.** Whether a browser page can read TMDB's `Retry-After` on a 429, and how `language` and `include_image_language` combine on the images route, are (verify) rows in `docs/validation/real-server-extended.md` section M (D203 10). The mock's header lists both, and no phase may depend on reading `Retry-After`.
+
+## Owner ruling — 2026-11-25 (stop 2 in `.orchestrator/phases/mock-tmdb.md`, answered "defaults" at 2026-11-25T20:47:23Z): D207
+
+- **D207 The mock takes the token only as Bearer and the v3 key only as `api_key` (option a; amends `mock-tmdb` criterion 1).** The old text accepted the demo token "as a Bearer header and as `api_key`", which conflicted with D203 3, and the anchored review (F1) showed that an adapter sending the token as `api_key` would pass the mock and fail on TMDB. The new text: 200 "for the demo token as a Bearer header and for the 32-character demo v3 key as `api_key`, 401 otherwise (the demo token sent as `api_key` is 401)". The owner also saw D204, D205 and D206 at that stop and raised nothing.
