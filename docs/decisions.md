@@ -1381,3 +1381,18 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   9. **Nothing playing (G30):** `sessions()` resolves `[]` and `nowPlaying()` resolves `null` with no request (`js/sources/index.js:26`, `js/engine.js:260-262`); the list "Now playing in theatres" is a pool choice, never now-playing mode.
   10. **Export and import (G34):** the key follows the Plex token's rule (`js/settings.js:412-418`, `:449`, `:478-484`; `js/settings-ui.js:1938-1939`): in the file only when the PIN is given, as plain text; a file without a key keeps the stored one.
   11. **The credit's sentence (G33)** is TMDB's own wording as D203 1 records it: "uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB", in Settings' TMDB section and the README, shown in Settings only while TMDB is the server type or a TMDB key is set.
+
+## Owner ruling — 2026-11-25 (stop 4 in `.orchestrator/phases/tmdb-source.md`, answered "defaults" at 2026-11-25T22:39:45Z): D210
+
+- **D210 The eleven `tmdb-source` rules (all option a).** Written into `tmdb-source`'s criteria before its first dispatch.
+  1. **Several US certifications** (a movie's `release_dates`, a show's `content_ratings`): the strictest non-empty one counts; all empty is unrated.
+  2. **A failed certification lookup** (429, network, server error): the title is not shown while a limit is set and is looked up again at the next pool build; the rest of the pool is kept.
+  3. **Every title** (lists and Discover, movie and TV) has its own US certification read before it can be shown; TMDB's `certification.lte` only narrows the request.
+  4. **The key.** After trimming and removing a leading `Bearer ` (any case), it is a v3 key only when it is exactly 32 hex characters (sent as `api_key`); otherwise it is the read access token (sent as `Authorization: Bearer`). Image requests carry no key. The key is never in a cache key; Diagnostics shows its first 4 characters only. Test connection: 200 with `success: true` is connected; 401, 403 or `success: false` is kind `auth`; anything else is a server that does not answer.
+  5. **Storage.** The key is its own setting (`tmdbKey`), kept across server-type switches (D203 9). A switch to or from TMDB clears the cache, the pin and the history, both ways (R-SRC-2). A change of key or list clears nothing. TMDB cannot be an extra server: the Add a server form does not offer it, and an imported file listing it as an extra server has that entry dropped with a toast.
+  6. **180 days.** Age is measured from the time the entry was stored on this display, as 180 × 86 400 000 ms (≥ is expired); an entry with no time or a time in the future is expired; the rule covers every stored TMDB image and reply.
+  7. **Offline.** Expired TMDB entries are never shown, even offline; with nothing else to show, the server-down card shows.
+  8. **Discover** has a Movies / TV choice with each type's genre list (`genre/movie/list`, `genre/tv/list`); TV ratings are checked per show.
+  9. **Years.** From and To, both optional and inclusive, on `primary_release_date` (movies) or `first_air_date` (shows), from `YYYY-01-01` to `YYYY-12-31`; From later than To is swapped.
+  10. **Order, region, language.** `sort_by=popularity.desc`, `region=US` on `now_playing` and `upcoming`, `language=en-US`.
+  11. **Pool.** Filled to `randomPoolSize` from at most 5 pages, duplicates (`type:id`) dropped, at most 4 certification lookups at once.
