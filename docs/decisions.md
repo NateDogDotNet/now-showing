@@ -1328,3 +1328,19 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner report — 2026-11-25 (after 2.4.8; Nathan: "that works great now")
 
 - **2.4.8 is confirmed on the owner's own server with Plex HTPC**: Play now starts the title and the display says "Playing" (D202 1). This is an owner's report of use, not a run of the checklist: the rows of section L of `docs/validation/real-server-extended.md` stay unticked, and row V1-L05 no longer matches the app since D201 2 (the player now receives a short-lived token, never the display's sign-in). No decision is made here.
+
+## Run 13 policy — 2026-11-25 (Nathan, `/orchestrate 2.5`; the policy stop answered "1. b 2. a 3. a 4. a 5. a 6. a 7. a 8. a 9. a 10. a 11. a 12. a" at 2026-11-25T20:05:07Z): D203
+
+- **D203 Run 13 is 2.5.0: the TMDB no-server mode, Poster art, Title as logo and Production house.** Drafted on the owner's answers ("Draft Run 13", "Adapter + all three extras", "Popular / in theatres + Discover + your filters", "Branch 2.5, no PR/merge/tag"). Seven phases: `mock-tmdb`, `tmdb-ids`, `tmdb-source`, `production-house-filter`, `artwork-sources`, `clear-logo-title`, `release-2.5.0` (plan, Run 13). Branch `2.5` from `main` 9f722923, pushed at the end; no tag, release, pull request or merge unless the owner asks (D13, D79).
+  1. **The TMDB credit (option b).** TMDB's sentence ("uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB") and the TMDB logo appear in Settings (the TMDB section) and in the README. The display shows no TMDB mark.
+  2. **Terms.** Treated as personal, non-commercial use with the household's own key; the README says so.
+  3. **Key form.** Both are accepted: a read access token is sent as `Authorization: Bearer`, a 32-character v3 key as `api_key`.
+  4. **Certification.** Only the US certification counts (movies: `release_dates`; shows: `content_ratings`). None, `""` or an unknown string is unrated, refused while a limit is set (D5).
+  5. **TV.** TMDB mode includes TV lists; each show's rating is read before it can be shown.
+  6. **Production house on a server** is the studio the server stores; in TMDB mode it is any company (`with_companies`).
+  7. **The logo** replaces the title line of the title card; the frames are unchanged.
+  8. **Six months.** TMDB images and replies older than 180 days are fetched again.
+  9. **One TMDB key** serves the source, the art and the logo. TMDB is not one of several servers in this run.
+  10. **(verify)** The logo file type, the TV top-rated list, the TV certification list, the page size, Plex `includeGuids` and Jellyfin `ProviderIds` are rows in `docs/validation/real-server-extended.md` section M, for the owner after the release.
+  11. **Out of scope:** the timing test `tests/device-helper.test.js:595` (1 failure in 3 runs, 2162 ms against 1500 ms), recorded as run 13 unknown U1.
+  12. **Commit trailer:** `Co-Authored-By: Claude <noreply@anthropic.com>`.
