@@ -1552,7 +1552,7 @@ playCase('N21 a title the limit refuses (a pinned one, above the limit): said in
   assert.equal(await page.evaluate(() => document.getElementById('play-now').open), false);
   assert.deepEqual(await mock.plexTvLog(), []);
   assert.deepEqual((await mock.get('log')).requests, [], 'no request to the server');
-  assert.deepEqual(await mock.playLog(), { commands: [], received: 0 });
+  assert.deepEqual(await mock.playLog(), { commands: [], received: 0, queues: [] });
   plain(await toastText(page));
   check('N21 a refused title: nothing at all');
 });
@@ -1825,7 +1825,7 @@ playCase('N36 the limit tightens while the server\'s identifier is being read (a
   await page.clock.setSystemTime(new Date('2026-01-05T06:00:30')); // the G slot begins while GET / is out
   held.release();
   await toastWait(page, /^"Popcorn Skies" is rated above this display's limit/);
-  assert.deepEqual(await mock.playLog(), { commands: [], received: 0 });
+  assert.deepEqual(await mock.playLog(), { commands: [], received: 0, queues: [] });
   check('N36 limit tightened during the identifier read');
 });
 
@@ -1839,7 +1839,7 @@ playCase('N37 the device leaves the allowed list while the server\'s identifier 
   await page.evaluate((id) => { const k = 'plexPoster.settings'; const st = JSON.parse(localStorage.getItem(k)); st.allowedPlayers = st.allowedPlayers.filter((a) => a.id !== id); localStorage.setItem(k, JSON.stringify(st)); }, KIDS.id);
   held.release();
   await toastWait(page, /^Kids Room TV is no longer on this display's list of allowed devices, so nothing was sent\.$/);
-  assert.deepEqual(await mock.playLog(), { commands: [], received: 0 });
+  assert.deepEqual(await mock.playLog(), { commands: [], received: 0, queues: [] });
   check('N37 device removed during the identifier read');
 });
 
@@ -1850,7 +1850,7 @@ playCase('N38 a limit saved from another page while the dialog is open is the li
   await setStored(page, { maxContentRating: 'G' }); // a second page of the same browser saves a G limit
   await pickDevice(page, 'Popcorn Skies', 'Kids Room TV');
   await toastWait(page, /^"Popcorn Skies" is rated above this display's limit, so it can't be played from here\.$/);
-  assert.deepEqual(await mock.playLog(), { commands: [], received: 0 });
+  assert.deepEqual(await mock.playLog(), { commands: [], received: 0, queues: [] });
   // Loosened again in storage: a press afterwards is judged on what is stored then, and a new press is needed.
   await setStored(page, { maxContentRating: '' });
   await pressPlay(page);
@@ -1972,7 +1972,7 @@ for (const dialog of ['Settings', 'Diagnostics', 'shortcuts']) {
     reads.release();
     await frames(page, 6);
     assert.equal(await page.evaluate(() => document.getElementById('play-now').open), false, 'no Play now dialog on top');
-    assert.deepEqual(await mock.playLog(), { commands: [], received: 0 });
+    assert.deepEqual(await mock.playLog(), { commands: [], received: 0, queues: [] });
     await page.click({ Settings: '#settings-cancel', Diagnostics: '#diag-close', shortcuts: '#shortcuts-close' }[dialog]);
     await toastWait(page, /^Play now was stopped, so nothing was sent\.$/); // readable now that the dialog is closed
     check(`N43 ${dialog} ends a Play now`);
@@ -2025,7 +2025,7 @@ playCase('N45 the notice\'s fix "Turn off unwatched only" rebuilds the source wh
   position.release();
   await frames(page, 8);
   assert.equal(await page.evaluate(() => document.getElementById('play-now').open), false, 'no chooser for a flow that ended');
-  assert.deepEqual(await mock.playLog(), { commands: [], received: 0 });
+  assert.deepEqual(await mock.playLog(), { commands: [], received: 0, queues: [] });
   check('N45 the rebuild ends the flow');
 });
 
@@ -2057,7 +2057,7 @@ for (const action of ['Settings', 'Diagnostics']) {
     reads.release();
     await frames(page, 6);
     assert.equal(await page.evaluate(() => document.getElementById('play-now').open), false);
-    assert.deepEqual(await mock.playLog(), { commands: [], received: 0 });
+    assert.deepEqual(await mock.playLog(), { commands: [], received: 0, queues: [] });
     await page.click(action === 'Settings' ? '#settings-cancel' : '#diag-close');
     await toastWait(page, /^Play now was stopped, so nothing was sent\.$/);
     check(`N46 ${action} with a PIN`);
@@ -2088,7 +2088,7 @@ playCase('N46c with a PIN set, a notice\'s fix that asks for the PIN keeps its p
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.settings')).unwatchedOnly === false, null, { timeout: 5000 });
   position.release();
   await frames(page, 6);
-  assert.deepEqual(await mock.playLog(), { commands: [], received: 0 });
+  assert.deepEqual(await mock.playLog(), { commands: [], received: 0, queues: [] });
   check('N46c the fix with a PIN');
 });
 
@@ -2155,7 +2155,7 @@ playCase('N47c with no device on both lists the button is not there', { settings
   await save(page); // the page holds nothing; the store still holds both
   assert.equal((await stored(page)).allowedPlayers.length, 2);
   assert.equal(await buttonShown(page), false, 'the stored list alone does not show the button');
-  assert.deepEqual(await mock.playLog(), { commands: [], received: 0 });
+  assert.deepEqual(await mock.playLog(), { commands: [], received: 0, queues: [] });
   check('N47c no device on both lists');
 });
 
@@ -2276,7 +2276,7 @@ playCase('N52 the line that says Play now was stopped yields to a notice that is
   assert.equal(await toastText(page), notice, 'the notice stays: the stopped line is dropped, not shown over it');
   reads.release();
   await frames(page, 4);
-  assert.deepEqual(await mock.playLog(), { commands: [], received: 0 });
+  assert.deepEqual(await mock.playLog(), { commands: [], received: 0, queues: [] });
   check('N52 stopped yields');
 });
 

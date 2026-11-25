@@ -28,6 +28,9 @@
 //                                             port, protocol, commandID, providerIdentifier, target, forwarded (the names of what was forwarded), tokenLike (anything token-like in
 //                                             what was forwarded), tokenParams (how many X-Plex-Token parameters the request held)}; `received` counts every playMedia request the
 //                                             server got, a failed forward included (a failed one is not in `commands`)
+//   POST /playQueues?type=video&uri=server://<machine>/com.plexapp.plugins.library/library/metadata/3   the play queue a play command names (D200): {MediaContainer: {playQueueID}}; each is
+//                                             recorded as {type, uri} in `queues` of player-log. Needs the token. (verify)
+//   POST /__mock/queue-status?status=500      answer POST /playQueues with that status (200 = normal again; player-reset also puts it back)
 //   POST /__mock/player-reset                 forget the player record and the failure mode
 //   POST /__mock/player-fail?mode=player      make the forward fail: mode=player (the player cannot be reached: the server answers 404, a (verify) status), mode=server (the server has a problem: it answers 503),
 //                                             mode=auth (the server refuses the sign-in: 401); mode=reset (the player receives the command and is recorded, and then the connection to the page is cut with no answer); mode=none (or no mode) is normal again
@@ -147,7 +150,7 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
   const kinds = new Map(); // ratingKey -> the `type` set by /__mock/kind
   const episodes = new Map(); // ratingKey -> the key of the episode that title is listed as, set by /__mock/episode
   const clients = { list: [], status: 200 }; // what GET /clients answers (D199): the players this server lists itself
-  const player = { commands: [], received: 0, fail: 'none' }; // what the players received (Play now), and how the forward fails
+  const player = { commands: [], received: 0, fail: 'none', queues: [], queueStatus: 200 }; // what the players received (Play now), and how the forward fails
   let sessionsStatus = 200;
   let countsStatus = 200; // the library count request (/library/sections/1/all with X-Plex-Container-Size=0)
   const plexTv = { lists: new Map(), statuses: new Map(), log: [] }; // the plex.tv side: per token ('*' = every token), what /__mock/plextv-resources answers
@@ -203,11 +206,17 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
         if (status !== 200) return json(status, { error: `Mock plex.tv: resources answer ${status}` });
         return json(200, plexTv.lists.get(token) ?? plexTv.lists.get('*') ?? PLEX_TV_RESOURCES);
       }
-      if (action === 'player-log') return json(200, { commands: [...player.commands], received: player.received });
+      if (action === 'player-log') return json(200, { commands: [...player.commands], received: player.received, queues: [...player.queues] });
       if (action === 'player-reset') {
         player.commands.length = 0;
         player.received = 0;
         player.fail = 'none';
+        player.queues.length = 0;
+        player.queueStatus = 200;
+        return json(200, { ok: true });
+      }
+      if (action === 'queue-status') {
+        player.queueStatus = Number(url.searchParams.get('status')) || 200;
         return json(200, { ok: true });
       }
       if (action === 'player-fail') {
@@ -332,6 +341,13 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
       if (clients.status !== 200) return json(clients.status, { error: `Mock: clients answer ${clients.status}` });
       return json(200, { MediaContainer: { size: clients.list.length, Server: clients.list } });
     }
+    if (path === '/playQueues') {
+      // (verify) The play queue a play command names (D200): made with POST, answered with its id. The mock records what was asked.
+      if (req.method !== 'POST') return json(405, { error: 'Mock: a play queue is made with POST' });
+      if (player.queueStatus !== 200) return json(player.queueStatus, { error: `Mock: play queues answer ${player.queueStatus}` });
+      const playQueueID = 9000 + player.queues.push({ type: url.searchParams.get('type'), uri: url.searchParams.get('uri') });
+      return json(200, { MediaContainer: { size: 1, playQueueID, playQueueSelectedItemID: 1 } });
+    }
     if (path === '/player/playback/playMedia') {
       // The server forwards the command to the player it names; what the player would receive is every parameter but the server's own sign-in and the target.
       player.received++;
@@ -352,6 +368,8 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
         protocol: get('protocol'),
         commandID: get('commandID'),
         providerIdentifier: get('providerIdentifier'),
+        type: get('type'),
+        containerKey: get('containerKey'),
         target,
         forwarded: forwarded.map(([name]) => name),
         tokenLike: forwarded.some(([name, value]) => /token/i.test(name) || value.includes(TOKEN)),

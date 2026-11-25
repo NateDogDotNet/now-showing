@@ -187,13 +187,44 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
    * player named by `target`, the player's client identifier. The shape is the community's description of the companion call, not Plex's own
    * documentation, and none of it is confirmed against a real server (verify): the item's `key` (`/library/metadata/<key>`), `offset` in milliseconds,
    * the server's own `machineIdentifier` (read by `machineIdentifier()` BEFORE the caller's last check, so nothing is awaited between that check and this
-   * request: `play` starts the request in the same turn it is called) and its `address`, `port` and `protocol` as the player is to reach it, a
+   * request: `play` starts its first request, the play queue's (D200), in the same turn it is called) and its `address`, `port` and `protocol` as the player is to reach it, the
+   * `type` (`video`: a movie or an episode) and the play queue as `containerKey` when the server made one, a
    * `commandID`, and the target as the `X-Plex-Target-Client-Identifier` parameter (a query parameter keeps the request CORS-simple; a header is the
    * documented alternative, (verify)). It goes to this server's own address with this server's sign-in, as every request to it does, and carries no
    * token for the player: the one `X-Plex-Token` in it is the server's. A player's own address is never requested.
    * `key` is the item's own key, `target` the client identifier of an allowed player and `machineIdentifier` this server's own; all three are required (`id`, the poster's scoped id, is for a
    * source over several servers and is not read here).
    */
+  /**
+   * A play queue on THIS server holding the one item, as the key the play command carries (D200): `POST /playQueues` with the item's `uri`
+   * (`server://<machineIdentifier>/com.plexapp.plugins.library/library/metadata/<key>`), answered with a `playQueueID`. A current player (Plex
+   * HTPC, on the owner's own server, 2026-11-24) takes a play command without one and plays nothing. The shape is what python-plexapi sends, not
+   * Plex's own documentation (verify). A server that does not answer or refuses the sign-in is an error, and nothing is sent to the player; a
+   * server that answers with anything but a queue gives '' and the command goes without one, as it did before 2.4.6.
+   */
+  const playQueue = async ({ key, machineIdentifier }) => {
+    try {
+      const c = await request(
+        buildUrl(serverUrl, '/playQueues', {
+          type: 'video',
+          uri: `server://${machineIdentifier}/com.plexapp.plugins.library/library/metadata/${key}`,
+          includeChapters: 1,
+          includeRelated: 1,
+          repeat: 0,
+          shuffle: 0,
+          continuous: 0,
+          ...auth,
+        }),
+        { method: 'POST', timeoutMs: 8000, fetchImpl },
+      );
+      const id = String(c?.playQueueID ?? '').trim();
+      return /^\d+$/.test(id) ? `/playQueues/${id}?window=100&own=1` : '';
+    } catch (error) {
+      if (['network', 'timeout', 'auth'].includes(error?.kind)) throw error;
+      return '';
+    }
+  };
+
   const play = async ({ key, offset = 0, target, machineIdentifier }) => {
     if (!key || !target || !machineIdentifier) throw new SourceError('Play now needs an item, a player and the server\'s identifier.', { kind: 'config' });
     let where;
@@ -203,6 +234,7 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
       throw new SourceError('The server address is not usable.', { kind: 'config' });
     }
     const protocol = where.protocol.replace(':', '');
+    const containerKey = await playQueue({ key, machineIdentifier });
     await get(
       '/player/playback/playMedia',
       {
@@ -213,6 +245,8 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
         port: where.port || (protocol === 'https' ? 443 : 80),
         offset: Math.max(0, Math.round(Number(offset) || 0)),
         key: `/library/metadata/${key}`,
+        type: 'video',
+        ...(containerKey ? { containerKey } : {}),
         commandID: ++commandId,
         'X-Plex-Target-Client-Identifier': target,
       },

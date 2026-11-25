@@ -175,6 +175,19 @@ The players are also read from each Plex server's own client list (owner ruling 
 - **Not confirmed (verify)**: the shape of `/clients`, whether a real server answers it to a browser page, and whether a command reaches a player that only one of the two lists names. Tested against the mock server only. A current Plex app that does not offer itself for control is in neither list, and this change does not list it.
 - **Version**: 2.4.5 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new" notice stays at 2.4.3.
 
+
+## ✅ Done in 2.4.6 (on `main`)
+
+Play now names a play queue (D200), made on `main` on 2026-11-24 with no run, pull request, tag or GitHub release (D13, D79).
+
+- **First real-server evidence**: on the owner's server, Plex HTPC was listed by the server's own client list (2.4.5, D199). The play command was answered without an error and the player played nothing.
+- **The fix (D200 1, 2)**: before the command, the display asks the poster's own server for a play queue of the one item (`POST /playQueues`), and the command carries it (`containerKey`) with `type=video`. This is what python-plexapi sends; the earlier form is its "legacy command for older clients".
+- **When no queue is made (D200 3)**: a server that does not answer or refuses the sign-in is a failed send; a server that answers with anything else gets the command without a queue, as before.
+- **Unchanged**: the target is a query parameter, every request is CORS-simple, and no token for the player is sent.
+- **Not confirmed (verify)**: whether Plex HTPC now plays. If it does not, the next candidates are a token for the player in the command and the target as a header.
+- **Still open**: the display says "Playing" when the server takes the command; it does not check that the player started.
+- **Version**: 2.4.6 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new" notice stays at 2.4.3.
+
 ## 🧭 Suggested order
 
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
@@ -189,7 +202,7 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Next
 
-2.2.0 to 2.4.5 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1", "Done in 2.4.2", "Done in 2.4.3", "Done in 2.4.4" and "Done in 2.4.5" sections above); nothing is in progress. The next feature follows the suggested order:
+2.2.0 to 2.4.6 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1", "Done in 2.4.2", "Done in 2.4.3", "Done in 2.4.4", "Done in 2.4.5" and "Done in 2.4.6" sections above); nothing is in progress. The next feature follows the suggested order:
 
 1. **2.5, the no-server mode:** the TMDB adapter, on the adapter layer 2.4 built.
 

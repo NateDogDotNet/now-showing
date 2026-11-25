@@ -1134,17 +1134,19 @@ test('the Plex client\'s play asks its own server, with its own sign-in, to forw
     const fetchImpl = (url, init) => (calls.push({ url: new URL(url), init }), fetch(url, init));
     const client = createPlexClient({ serverUrl: a.url, token: TOKEN, clientId: 'display-1', fetchImpl });
     await playOn(client, { key: '3', offset: 83456, target: 'tv-living' });
-    const { commands, received } = await logOf(a.url);
+    const { commands, received, queues } = await logOf(a.url);
     assert.equal(received, 1);
+    assert.deepEqual(queues, [{ type: 'video', uri: 'server://mock-a/com.plexapp.plugins.library/library/metadata/3' }], 'D200: a play queue of the one item is made first');
     assert.deepEqual(commands.map(({ commandID: _c, forwarded: _f, ...rest }) => rest), [
-      { key: '/library/metadata/3', offset: 83456, machineIdentifier: 'mock-a', address: '127.0.0.1', port: String(a.port), protocol: 'http', providerIdentifier: 'com.plexapp.plugins.library', target: 'tv-living', tokenLike: false, tokenParams: 1 },
+      { key: '/library/metadata/3', offset: 83456, machineIdentifier: 'mock-a', address: '127.0.0.1', port: String(a.port), protocol: 'http', providerIdentifier: 'com.plexapp.plugins.library', type: 'video', containerKey: '/playQueues/9001?window=100&own=1', target: 'tv-living', tokenLike: false, tokenParams: 1 },
     ]);
     assert.ok(Number(commands[0].commandID) > 0);
     const playCall = calls.find((c) => c.url.pathname === '/player/playback/playMedia');
     assert.equal(playCall.url.origin, a.url, 'to the server\'s own address');
     assert.equal(playCall.url.searchParams.get('X-Plex-Token'), TOKEN);
     assert.deepEqual(Object.keys(playCall.init.headers), ['Accept'], 'CORS-simple: no custom header');
-    assert.deepEqual(calls.map((c) => c.url.origin), [a.url, a.url], 'the identity read and the command, both to this server');
+    assert.deepEqual(calls.map((c) => [c.url.origin, c.url.pathname, c.init.method]), [[a.url, '/', 'GET'], [a.url, '/playQueues', 'POST'], [a.url, '/player/playback/playMedia', 'GET']], 'the identity read, the play queue and the command, all to this server');
+    assert.ok(calls.every((c) => Object.keys(c.init.headers).join() === 'Accept' && c.url.searchParams.getAll('X-Plex-Token').join() === TOKEN), 'each CORS-simple, each with this server\'s sign-in');
     assert.ok(calls.every((c) => !/192\.0\.2\./.test(c.url.hostname)), 'no player address');
     assert.equal(commands[0].forwarded.some((n) => /token/i.test(n)), false);
   } finally {
@@ -1181,12 +1183,35 @@ test('play: no item, no target or no identifier is not sent; an address that is 
   assert.equal(calls.length, 1, 'and no command');
 });
 
-test('play starts its request in the turn it is called, and makes no read of its own: nothing waits between a caller\'s last check and the request', () => {
+test('play starts its first request, the play queue\'s, in the turn it is called: nothing waits between a caller\'s last check and the send (D200)', () => {
   const calls = [];
   const fetchImpl = (url) => (calls.push(new URL(url).pathname), new Promise(() => {}));
   const client = createPlexClient({ serverUrl: 'http://h:32400', token: 't', clientId: 'd', fetchImpl });
   client.play({ key: '3', target: 'tv', machineIdentifier: 'm' });
-  assert.deepEqual(calls, ['/player/playback/playMedia'], 'the request left before any await of the caller');
+  assert.deepEqual(calls, ['/playQueues'], 'the request left before any await of the caller');
+});
+
+test('play: a server that makes no play queue still gets the command, without one; a server that does not answer or refuses gets none (D200)', async () => {
+  const run = async (queueAnswer) => {
+    const calls = [];
+    const fetchImpl = async (url) => {
+      const u = new URL(url);
+      calls.push(u);
+      if (u.pathname === '/playQueues') return queueAnswer();
+      return new Response('', { status: 200 });
+    };
+    const error = await createPlexClient({ serverUrl: 'http://h:32400', token: 't', clientId: 'd', fetchImpl }).play({ key: '3', target: 'tv', machineIdentifier: 'm' }).then(() => null, (e) => e);
+    const command = calls.find((u) => u.pathname === '/player/playback/playMedia');
+    return { kind: error?.kind ?? null, sent: Boolean(command), containerKey: command?.searchParams.get('containerKey') ?? null, type: command?.searchParams.get('type') ?? null };
+  };
+  const json = (body, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  assert.deepEqual(await run(json({ MediaContainer: { playQueueID: 42 } })), { kind: null, sent: true, containerKey: '/playQueues/42?window=100&own=1', type: 'video' });
+  for (const [label, answer] of [['HTTP 404', json({}, 404)], ['HTTP 500', json({}, 500)], ['no id', json({ MediaContainer: {} })], ['an id that is not a number', json({ MediaContainer: { playQueueID: '7?x=1&own=0' } })], ['not JSON', () => new Response('nope', { status: 200 })]]) {
+    assert.deepEqual(await run(answer), { kind: null, sent: true, containerKey: null, type: 'video' }, label);
+  }
+  assert.deepEqual(await run(json({}, 401)), { kind: 'auth', sent: false, containerKey: null, type: null });
+  assert.deepEqual(await run(() => { throw new TypeError('Failed to fetch'); }), { kind: 'network', sent: false, containerKey: null, type: null });
+  assert.deepEqual(await run(() => { throw Object.assign(new Error('x'), { name: 'TimeoutError' }); }), { kind: 'timeout', sent: false, containerKey: null, type: null });
 });
 
 test('play: a request that got no answer in time is an error of kind timeout (it may have arrived), one that could not be made is kind network', async () => {
