@@ -1344,3 +1344,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   10. **(verify)** The logo file type, the TV top-rated list, the TV certification list, the page size, Plex `includeGuids` and Jellyfin `ProviderIds` are rows in `docs/validation/real-server-extended.md` section M, for the owner after the release.
   11. **Out of scope:** the timing test `tests/device-helper.test.js:595` (1 failure in 3 runs, 2162 ms against 1500 ms), recorded as run 13 unknown U1.
   12. **Commit trailer:** `Co-Authored-By: Claude <noreply@anthropic.com>`.
+
+## Conductor ruling — 2026-11-25 (run 13 pre-flight; listed at the next stop as made by the conductor alone): D204
+
+- **D204 A browser spec that times out under another session's load is run again as written, never with a longer limit.** On the unchanged tree `9f722923` the `jellyfin` spec took 183 s alone against the runner's 180 s limit (`E2E_SPEC_TIMEOUT`), at a load average of 16 on 4 cores from other sessions' browsers, with 7 GB free; `emby` took 79 s and passed. A criterion that names such a spec runs as the plan writes it, by the conductor, when the load allows (load average under 8 is the aim, not a pass condition); the limit is not raised and no spec is left out. Builders may use a longer limit for their own runs, which are testimony only. A spec that still times out at a quiet moment is a finding against the code.
