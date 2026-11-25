@@ -1366,3 +1366,18 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner ruling — 2026-11-25 (stop 3 in `.orchestrator/phases/tmdb-ids.md`, answered "defaults" at 2026-11-25T22:29:56Z): D208
 
 - **D208 Wait for a quiet host (option a; D204 stands).** The load average is the Proxmox host's (18 to 40 over 30 minutes), not this container's. The conductor keeps waiting, checking every 15 s for up to 8 hours, and runs `tmdb-ids`'s criteria 1 and 2 as written once the 1-minute load is under 8. `tmdb-source` stays blocked until `tmdb-ids` closes. Meanwhile it is prepared without building: a cold reviewer probes its criteria (pre-claim preparation). If the 8 hours pass with no quiet moment, the conductor asks again.
+
+## Conductor rulings — 2026-11-25 (run 13, `tmdb-source` pre-claim; the cold criteria probe `tmdb-source--criteria-probe-r1.md` G1–G34 mapped to existing code in `research--tmdb-gaps-r1.md`; listed at stop 4 as made by the conductor alone): D209
+
+- **D209 `tmdb-source` follows the rules the app already applies to every source.** Each item below is an existing rule, cited, that the TMDB adapter keeps:
+  1. **Rating strings (G3, G4, G6, G2).** `ratingRank` and `allows` (`js/ratings.js:37-54`) decide: trimmed and case-insensitive; `TV-Y7-FV`, `PG13`, `NR`, `Unrated`, `Not Rated`, `X`, `M`, `GP` are unknown, so refused under any limit; one ladder for film and TV (`G = TV-Y = TV-G < PG = TV-Y7 = TV-PG < PG-13 = TV-14 < R = TV-MA < NC-17`, `js/ratings.js:5-20`), so a TV-14 show is refused at limit PG and a movie whose only US value is TV-MA counts as R. No new rating rule is written.
+  2. **A lowered limit (G9).** The pool key holds the limit (`js/engine.js:115`), every draw re-checks (`js/engine.js:292`), and the screen is re-checked every second (`js/main.js:418`, `enforceOnScreen`).
+  3. **Genres (G20).** An empty genre list sends no `with_genres` (`js/engine.js:81-84`, `js/sources/http.js:19-22`).
+  4. **Ratings subset (G22).** The subset is cut by the limit first and an empty subset means no rating filter (`js/engine.js:64-65`, `js/selection.js:174-184`); Unrated is never selectable (`js/selection.js:79-82`).
+  5. **A list item of the other type (G25)** is dropped, as Plex's `sourceItems` filter does (`js/sources/plex.js:437-439`).
+  6. **A failure part-way through a pool (G27).** Posters already fetched are kept and the pool is marked partial; a load with none keeps the previous pool; retries use `js/backoff.js`; the server-down card shows only when nothing is on screen (`js/engine.js:93-134`, `js/main.js:393-402`). `Retry-After` is not read (D206 2).
+  7. **Nothing to show (G28)** is the `empty` kind and its words (`js/engine.js:293-304`), never the server-down card.
+  8. **No poster image (G29):** the title is skipped (`js/sources/plex.js:424`, `js/sources/jellyfin.js:49`).
+  9. **Nothing playing (G30):** `sessions()` resolves `[]` and `nowPlaying()` resolves `null` with no request (`js/sources/index.js:26`, `js/engine.js:260-262`); the list "Now playing in theatres" is a pool choice, never now-playing mode.
+  10. **Export and import (G34):** the key follows the Plex token's rule (`js/settings.js:412-418`, `:449`, `:478-484`; `js/settings-ui.js:1938-1939`): in the file only when the PIN is given, as plain text; a file without a key keeps the stored one.
+  11. **The credit's sentence (G33)** is TMDB's own wording as D203 1 records it: "uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB", in Settings' TMDB section and the README, shown in Settings only while TMDB is the server type or a TMDB key is set.
