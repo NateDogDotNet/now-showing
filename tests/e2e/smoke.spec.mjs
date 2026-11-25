@@ -2,6 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { withApp } from './lib.mjs';
+import { TOKEN as TMDB_TOKEN } from '../../scripts/mock-tmdb.mjs';
 
 const seedFor = (app) => ({ plexToken: 'demo-token', serverUrl: `http://127.0.0.1:${app.mockPort}`, libraryKey: '1' });
 const check = (name) => console.log(`  ok  ${name}`);
@@ -133,3 +134,24 @@ const layoutWidth = async (opts) =>
 assert.equal(await layoutWidth({ isMobile: true }), 980);
 assert.equal(await layoutWidth({}), 500);
 check('isMobile gives a mobile signal (980px layout without viewport meta)');
+
+// The TMDB hosts: `tmdb: true` routes api.themoviedb.org and image.tmdb.org to the mock TMDB the shared server started (D205); the network guard records nothing outside.
+await withApp({ tmdb: true }, async ({ page, app }) => {
+  await page.goto(app.url);
+  const r = await page.evaluate(async (token) => {
+    const get = async (url, headers) => {
+      const res = await fetch(url, { headers });
+      return { status: res.status, type: res.headers.get('content-type'), text: await res.text() };
+    };
+    return {
+      config: await get('https://api.themoviedb.org/3/configuration', { Authorization: `Bearer ${token}` }),
+      noKey: await get('https://api.themoviedb.org/3/configuration', {}),
+      image: await get('https://image.tmdb.org/t/p/w500/mock-poster-1001-en.svg', {}),
+    };
+  }, TMDB_TOKEN);
+  assert.equal(r.config.status, 200);
+  assert.equal(JSON.parse(r.config.text).images.secure_base_url, 'https://image.tmdb.org/t/p/');
+  assert.equal(r.noKey.status, 401, 'the mock is not lenient');
+  assert.deepEqual([r.image.status, r.image.type], [200, 'image/svg+xml']);
+  check('TMDB hosts answered by the mock TMDB, no outside request');
+});

@@ -1,11 +1,13 @@
 // Shared helpers for the browser specs (tests/e2e/*.spec.mjs).
 //
 //   await withApp({ settings, viewport, hasTouch, isMobile, clock, serviceWorkers,
-//                   serveArgs, localStorage, plexTv }, async ({ page, context, app, mock }) => { ... });
+//                   serveArgs, localStorage, plexTv, tmdb }, async ({ page, context, app, mock }) => { ... });
 //
 // `plexTv: true` answers the page's plex.tv resources request (GET /api/v2/resources, what the Allowed devices list reads) from the mock Plex's
 // plex.tv side (`mock.plexTvSet`, `mock.plexTvLog`, `mock.plexTvReset`; scripts/mock-plex.mjs). It is opt-in: see the note at stubPlexTv.
-// app = { url, port, mockPort, jellyfinPort, argv, stop() }. Without serveArgs the spec uses the shared server
+// `tmdb: true` routes api.themoviedb.org and image.tmdb.org to the mock TMDB (scripts/mock-tmdb.mjs, app.tmdbPort). It is opt-in for the same reason
+// as plexTv; a TMDB request of a context that did not ask for it is unanswered and fails the spec.
+// app = { url, port, mockPort, jellyfinPort, tmdbPort, argv, stop() }. Without serveArgs the spec uses the shared server
 // that run.mjs started on E2E_PORT / E2E_MOCK_PORT. Passing serveArgs (even []) starts a dedicated
 // `serve.mjs --mock` child on freshly probed ports, which is killed when the callback returns.
 
@@ -16,12 +18,14 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { jellyfinPortFor } from '../../scripts/mock-jellyfin.mjs';
+import { tmdbPortFor } from '../../scripts/mock-tmdb.mjs';
 
 export const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 export const SERVE = join(ROOT, 'scripts', 'serve.mjs');
 export const E2E_PORT = Number(process.env.E2E_PORT || 18080);
 export const E2E_MOCK_PORT = Number(process.env.E2E_MOCK_PORT || 18401);
 export const E2E_JELLYFIN_PORT = jellyfinPortFor(E2E_MOCK_PORT); // serve.mjs --mock puts the Jellyfin mock on the Plex mock's port plus 1000
+export const E2E_TMDB_PORT = tmdbPortFor(E2E_MOCK_PORT); // and the TMDB mock on the Plex mock's port plus 2000
 
 // Prefer the local devDependency; fall back to the global install (a bare ESM import does not find it).
 async function loadPlaywright() {
@@ -47,6 +51,7 @@ const WHATS_NEW_MARKER = '2.4.3'; // the current release's marker (R-UPG-6): any
 // request interception, which changes cache and service-worker behaviour (pi-stability depends on neither changing).
 const STUB_HOST = 'plex.tv';
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+const TMDB_HOSTS = new Set(['api.themoviedb.org', 'image.tmdb.org']);
 
 async function stubPlexTv(context) {
   await context.route(`https://${STUB_HOST}/**`, (route) => {
@@ -74,6 +79,25 @@ async function routePlexTvResources(context, mockPort) {
     const query = new URLSearchParams({ token: params.get('X-Plex-Token') || '', client: params.get('X-Plex-Client-Identifier') || '' });
     const answer = await fetch(`http://127.0.0.1:${mockPort}/__mock/plextv-resources?${query}`);
     await route.fulfill({ status: answer.status, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: await answer.text() });
+  });
+}
+
+// The opt-in TMDB routes (`withApp({ tmdb: true })`): both TMDB hosts are answered by the mock TMDB on `tmdbPort`, which stands for either. A request
+// to either host that no route answers is flagged by guardNetwork, like plex.tv.
+async function routeTmdb(context, tmdbPort) {
+  const headers = { 'access-control-allow-origin': '*' };
+  await context.route((url) => TMDB_HOSTS.has(url.hostname), async (route) => {
+    const req = route.request();
+    const { pathname, search } = new URL(req.url());
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...headers, 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET, OPTIONS' } });
+    const init = { method: req.method(), headers: req.headers().authorization ? { authorization: req.headers().authorization } : {} };
+    const answer = await fetch(`http://127.0.0.1:${tmdbPort}${pathname}${search}`, init);
+    await route.fulfill({
+      status: answer.status,
+      headers: { ...headers, ...(answer.headers.get('retry-after') ? { 'retry-after': answer.headers.get('retry-after') } : {}) },
+      contentType: answer.headers.get('content-type') || 'application/octet-stream',
+      body: Buffer.from(await answer.arrayBuffer()),
+    });
   });
 }
 
@@ -110,13 +134,13 @@ export function guardNetwork(context) {
     const { protocol, hostname } = new URL(req.url());
     if (!/^https?:$/.test(protocol)) return; // data:, blob:, about:
     if (LOCAL_HOSTS.has(hostname)) return;
-    if (hostname === STUB_HOST) plexTv.set(req, `${req.method()} ${req.url()}`);
+    if (hostname === STUB_HOST || TMDB_HOSTS.has(hostname)) plexTv.set(req, `${req.method()} ${req.url()}`);
     else outside.add(`${req.method()} ${req.url()}`);
   });
   return {
     async assertClean() {
       await new Promise((resolve) => setTimeout(resolve, 150)); // a request made just now may not have reached its handler yet
-      const unanswered = [...plexTv].filter(([req]) => !answered.has(req)).map(([, label]) => `${label} (plex.tv, no route answered it: fulfill or abort it, continue() reaches the real service)`);
+      const unanswered = [...plexTv].filter(([req]) => !answered.has(req)).map(([, label]) => `${label} (${TMDB_HOSTS.has(new URL(label.split(' ')[1]).hostname) ? 'TMDB' : 'plex.tv'}, no route answered it: fulfill or abort it, continue() reaches the real service)`);
       const found = [...outside, ...unanswered];
       if (found.length) throw new Error(`the spec reached beyond the local servers (K48):\n  ${found.join('\n  ')}`);
     },
@@ -203,16 +227,16 @@ export function makeMock(mockPort) {
 }
 
 export async function withApp(opts, fn) {
-  const { settings = {}, viewport, hasTouch = false, isMobile = false, clock, serviceWorkers = 'block', serveArgs, localStorage = {}, plexTv = false } = opts;
+  const { settings = {}, viewport, hasTouch = false, isMobile = false, clock, serviceWorkers = 'block', serveArgs, localStorage = {}, plexTv = false, tmdb = false } = opts;
 
   let dedicated = null;
   let app;
   if (serveArgs) {
     dedicated = await startDedicated(serveArgs);
-    app = { url: `http://127.0.0.1:${dedicated.port}/`, port: dedicated.port, mockPort: dedicated.mockPort, jellyfinPort: jellyfinPortFor(dedicated.mockPort), argv: dedicated.argv, spawned: dedicated.spawned };
+    app = { url: `http://127.0.0.1:${dedicated.port}/`, port: dedicated.port, mockPort: dedicated.mockPort, jellyfinPort: jellyfinPortFor(dedicated.mockPort), tmdbPort: tmdbPortFor(dedicated.mockPort), argv: dedicated.argv, spawned: dedicated.spawned };
     app.stop = () => dedicated.child.kill();
   } else {
-    app = { url: `http://127.0.0.1:${E2E_PORT}/`, port: E2E_PORT, mockPort: E2E_MOCK_PORT, jellyfinPort: E2E_JELLYFIN_PORT, argv: ['--mock'], stop() {} };
+    app = { url: `http://127.0.0.1:${E2E_PORT}/`, port: E2E_PORT, mockPort: E2E_MOCK_PORT, jellyfinPort: E2E_JELLYFIN_PORT, tmdbPort: E2E_TMDB_PORT, argv: ['--mock'], stop() {} };
   }
 
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
@@ -228,6 +252,7 @@ export async function withApp(opts, fn) {
     const guard = guardNetwork(context);
     if (!seed.plexToken) await stubPlexTv(context);
     if (plexTv) await routePlexTvResources(context, app.mockPort); // after the stub: the most recent route is tried first
+    if (tmdb) await routeTmdb(context, app.tmdbPort);
     const page = await context.newPage();
 
     await context.addInitScript(
