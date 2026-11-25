@@ -1324,3 +1324,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   3. **What counts.** Only a session whose player is the target and whose item is the one sent. Another title on that player, or the same title on another player, does not count. A refused command (an error status, a refused sign-in) is a failure whatever the sessions show.
   4. **Confirmed on the owner's server**: the server's client list lists Plex HTPC (D199), and a command with a play queue and a delegation token starts it (D200, D201). Which of the two it needed is not known: 2.4.6 had the queue alone and did not play. Still **(verify)**: any other player.
   5. **Version 2.4.8** in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new" notice stays at 2.4.3.
+
+## Owner report — 2026-11-25 (after 2.4.8; Nathan: "that works great now")
+
+- **2.4.8 is confirmed on the owner's own server with Plex HTPC**: Play now starts the title and the display says "Playing" (D202 1). This is an owner's report of use, not a run of the checklist: the rows of section L of `docs/validation/real-server-extended.md` stay unticked, and row V1-L05 no longer matches the app since D201 2 (the player now receives a short-lived token, never the display's sign-in). No decision is made here.

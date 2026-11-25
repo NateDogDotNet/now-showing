@@ -206,7 +206,8 @@ Play now says "Playing" when the player has started (D202), made on `main` on 20
 - **Confirmed on the owner's server**: with 2.4.7, Plex HTPC played the title. This is the first Play now confirmed on a real server.
 - **What was wrong**: Plex HTPC starts the title and never answers the command, so after 15 seconds the display said the server did not answer and that it was not known whether the player started.
 - **The fix (D202 1, 2)**: while the command is out the display reads the server's sessions every 2 seconds. A session of that title on that player is the success. A command that times out gets one last look before the display says it is not known.
-- **Not confirmed (verify)**: this fix on a real server, and any player other than Plex HTPC.
+- **Confirmed on the owner's server (2026-11-25)**: with 2.4.8, Plex HTPC plays the title and the display says "Playing" (Nathan: "that works great now").
+- **Not confirmed (verify)**: any player other than Plex HTPC, and the rows of section L of `docs/validation/real-server-extended.md`, which were not run as written.
 - **Version**: 2.4.8 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new" notice stays at 2.4.3.
 
 ## 🧭 Suggested order
