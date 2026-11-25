@@ -125,7 +125,8 @@ export function refusalText(title, reason) {
 /** The Diagnostics line of a command the server accepted (D201): what the command carried and what the server answered. No code beyond the answer's own, no address, no token. */
 export const acceptedText = ({ title, device, server, sent }) => {
   const parts = sent && typeof sent === 'object' ? [`play queue: ${sent.queue ? 'yes' : 'no'}`, `token for the player: ${sent.token ? 'yes' : 'no'}`, `the answer: ${sent.reply || 'empty'}`] : [];
-  return `Play now: ${server} accepted the command to play "${title}" on ${device}${parts.length ? ` (${parts.join(', ')})` : ''}.`;
+  const what = sent?.started ? `${server} shows ${device} playing "${title}" before it answered the command` : `${server} accepted the command to play "${title}" on ${device}`;
+  return `Play now: ${what}${parts.length ? ` (${parts.join(', ')})` : ''}.`;
 };
 /** The Diagnostics line of the check after a command (D201): what the server shows the player doing. */
 export const confirmText = ({ device, server, state }) =>
@@ -295,7 +296,7 @@ export function createPlayNow(deps) {
     }
     // Diagnostics (D201): what was sent and what the server answered, then what the server shows the player doing a few seconds later.
     note('info', acceptedText({ title: f.poster.title, device: device.name, server: f.server, sent }));
-    if (typeof sent?.confirm === 'function') {
+    if (typeof sent?.confirm === 'function' && !sent.started) {
       Promise.resolve()
         .then(() => sent.confirm())
         .then((state) => note(state === 'nothing' ? 'warn' : 'info', confirmText({ device: device.name, server: f.server, state })))

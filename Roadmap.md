@@ -199,6 +199,16 @@ Play now is written to Diagnostics and sends the player a short-lived token (D20
 - **Not confirmed (verify)**: whether Plex HTPC now plays. If it does not, the Diagnostics lines say which step failed; the target as a header is the next candidate.
 - **Version**: 2.4.7 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new" notice stays at 2.4.3.
 
+## ✅ Done in 2.4.8 (on `main`)
+
+Play now says "Playing" when the player has started (D202), made on `main` on 2026-11-25 with no run, pull request, tag or GitHub release (D13, D79).
+
+- **Confirmed on the owner's server**: with 2.4.7, Plex HTPC played the title. This is the first Play now confirmed on a real server.
+- **What was wrong**: Plex HTPC starts the title and never answers the command, so after 15 seconds the display said the server did not answer and that it was not known whether the player started.
+- **The fix (D202 1, 2)**: while the command is out the display reads the server's sessions every 2 seconds. A session of that title on that player is the success. A command that times out gets one last look before the display says it is not known.
+- **Not confirmed (verify)**: this fix on a real server, and any player other than Plex HTPC.
+- **Version**: 2.4.8 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`. The "What's new" notice stays at 2.4.3.
+
 ## 🧭 Suggested order
 
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
@@ -213,7 +223,7 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Next
 
-2.2.0 to 2.4.7 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1", "Done in 2.4.2", "Done in 2.4.3", "Done in 2.4.4", "Done in 2.4.5", "Done in 2.4.6" and "Done in 2.4.7" sections above); nothing is in progress. The next feature follows the suggested order:
+2.2.0 to 2.4.8 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1", "Done in 2.4.2", "Done in 2.4.3", "Done in 2.4.4", "Done in 2.4.5", "Done in 2.4.6", "Done in 2.4.7" and "Done in 2.4.8" sections above); nothing is in progress. The next feature follows the suggested order:
 
 1. **2.5, the no-server mode:** the TMDB adapter, on the adapter layer 2.4 built.
 

@@ -243,11 +243,11 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
    * What the server shows the player doing, `waitMs` after a command (D201): 'playing', 'paused', 'buffering' (the state of the session whose
    * player is `target`) or 'nothing' when the server lists no session for it; 'unknown' when the sessions cannot be read. For Diagnostics only.
    */
-  const playerState = async (target, waitMs) => {
+  const playerState = async (target, waitMs, key = '') => {
     if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
     try {
       const c = await get('/status/sessions', {}, { timeoutMs: 8000 });
-      const mine = (c.Metadata || []).find((m) => m?.Player?.machineIdentifier === target);
+      const mine = (c.Metadata || []).find((m) => m?.Player?.machineIdentifier === target && (!key || String(m.ratingKey) === String(key)));
       return mine ? String(mine.Player.state || 'playing') : 'nothing';
     } catch {
       return 'unknown';
@@ -257,9 +257,30 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
   /**
    * It answers with what was sent and what came back, for Diagnostics (D201), holding no token and no address: `queue` and `token` (was a play
    * queue named, was a token for the player sent), `reply` (the code and status of the server's answer, '' when it gave none) and `confirm`,
-   * which reads what the server shows the player doing a few seconds later.
+   * which reads what the server shows the player doing a few seconds later. `started` is true when the server showed the player playing the item before the command was answered (D202).
    */
-  const play = async ({ key, offset = 0, target, machineIdentifier }) => {
+  /**
+   * While the command is out, the server's sessions are read every `pollMs` (D202): Plex HTPC starts the title and leaves the command's request
+   * unanswered (the owner's server, 2026-11-25), so the session of this item on the target player is the answer the command never gives. It
+   * resolves once that session is there and never otherwise; `stop()` ends it.
+   */
+  const watchForStart = (target, key, pollMs) => {
+    let timer = 0;
+    let stopped = false;
+    const seen = new Promise((resolve) => {
+      const look = async () => {
+        if (stopped) return;
+        const state = await playerState(target, 0, key);
+        if (stopped) return;
+        if (state !== 'nothing' && state !== 'unknown') return resolve(state);
+        timer = setTimeout(look, pollMs);
+      };
+      timer = setTimeout(look, pollMs);
+    });
+    return { seen, stop: () => ((stopped = true), clearTimeout(timer)) };
+  };
+
+  const play = async ({ key, offset = 0, target, machineIdentifier, pollMs = 2000 }) => {
     if (!key || !target || !machineIdentifier) throw new SourceError('Play now needs an item, a player and the server\'s identifier.', { kind: 'config' });
     let where;
     try {
@@ -269,7 +290,7 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
     }
     const protocol = where.protocol.replace(':', '');
     const [containerKey, token] = await Promise.all([playQueue({ key, machineIdentifier }), playerToken()]);
-    const { replyText = '' } = await get(
+    const command = get(
       '/player/playback/playMedia',
       {
         providerIdentifier: 'com.plexapp.plugins.library',
@@ -287,9 +308,30 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
       },
       { timeoutMs: 15000, ignoreBody: true },
     );
+    const confirm = ({ waitMs = 8000 } = {}) => playerState(target, waitMs);
+    const watch = watchForStart(target, key, pollMs);
+    let replyText = '';
+    try {
+      const first = await Promise.race([command, watch.seen.then((state) => ({ started: state }))]);
+      if (first.started) {
+        command.catch(() => {}); // its answer, if one ever comes, changes nothing: the player has started
+        return { queue: Boolean(containerKey), token: Boolean(token), reply: `none yet, and the server shows the player ${first.started}`, started: true, confirm };
+      }
+      replyText = first.replyText || '';
+    } catch (error) {
+      watch.stop();
+      // No answer in time: one last look before saying it is not known whether the player started.
+      if (error?.kind === 'timeout') {
+        const state = await playerState(target, 0, key);
+        if (state !== 'nothing' && state !== 'unknown') return { queue: Boolean(containerKey), token: Boolean(token), reply: `none in time, and the server shows the player ${state}`, started: true, confirm };
+      }
+      throw error;
+    } finally {
+      watch.stop();
+    }
     const code = /\bcode="(\d{1,4})"/.exec(replyText)?.[1] ?? '';
     const status = /\bstatus="([A-Za-z ]{1,40})"/.exec(replyText)?.[1] ?? '';
-    return { queue: Boolean(containerKey), token: Boolean(token), reply: [code, status].filter(Boolean).join(' '), confirm: ({ waitMs = 8000 } = {}) => playerState(target, waitMs) };
+    return { queue: Boolean(containerKey), token: Boolean(token), reply: [code, status].filter(Boolean).join(' '), started: false, confirm };
   };
 
   const client = {

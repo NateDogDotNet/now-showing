@@ -1361,13 +1361,45 @@ test('play: the command carries a short-lived token for the player when the serv
   };
   const json = (body, status = 200) => () => new Response(JSON.stringify(body), { status });
   const ok = await run({ tokenAnswer: json({ MediaContainer: { token: 'transient-abc' } }), sessions: { MediaContainer: { Metadata: [{ Player: { machineIdentifier: 'other', state: 'playing' } }, { Player: { machineIdentifier: 'tv', state: 'paused' } }] } } });
-  assert.deepEqual(ok, { token: 'transient-abc', report: { queue: true, token: true, reply: '200 OK' }, state: 'paused', text: ok.text });
+  assert.deepEqual(ok, { token: 'transient-abc', report: { queue: true, token: true, reply: '200 OK', started: false }, state: 'paused', text: ok.text });
   assert.equal(/transient-abc|server-secret|h:32400/.test(ok.text), false, 'the report for Diagnostics holds no token and no address');
   for (const [label, tokenAnswer] of [['HTTP 403', json({}, 403)], ['HTTP 500', json({}, 500)], ['no token', json({ MediaContainer: {} })], ['not JSON', () => new Response('nope', { status: 200 })], ['no answer', () => { throw new TypeError('Failed to fetch'); }]]) {
     const none = await run({ tokenAnswer, reply: '' });
-    assert.deepEqual([none.token, none.report, none.state], [null, { queue: true, token: false, reply: '' }, 'nothing'], label);
+    assert.deepEqual([none.token, none.report, none.state], [null, { queue: true, token: false, reply: '', started: false }, 'nothing'], label);
   }
   assert.equal((await run({ tokenAnswer: json({}), sessions: () => new Response('{}', { status: 500 }) })).state, 'unknown');
+});
+
+test('play: a player that starts the item while the command is unanswered is a success, not a timeout (D202)', async () => {
+  const run = async ({ sessions, command }) => {
+    let polls = 0;
+    const fetchImpl = async (url, init) => {
+      const u = new URL(url);
+      if (u.pathname === '/playQueues') return new Response(JSON.stringify({ MediaContainer: { playQueueID: 7 } }), { status: 200 });
+      if (u.pathname === '/security/token') return new Response(JSON.stringify({ MediaContainer: { token: 'x' } }), { status: 200 });
+      if (u.pathname === '/status/sessions') return new Response(JSON.stringify({ MediaContainer: { Metadata: sessions(++polls) } }), { status: 200 });
+      return command(init);
+    };
+    const result = await createPlexClient({ serverUrl: 'http://h:32400', token: 't', clientId: 'd', fetchImpl }).play({ key: '3', target: 'tv', machineIdentifier: 'm', pollMs: 5 }).then(({ confirm: _c, ...r }) => r, (e) => ({ kind: e.kind }));
+    return { result, polls };
+  };
+  const mine = [{ ratingKey: '3', Player: { machineIdentifier: 'tv', state: 'playing' } }];
+  const never = () => new Promise(() => {});
+  const timeout = async () => { await new Promise((r) => setTimeout(r, 30)); throw Object.assign(new Error('x'), { name: 'TimeoutError' }); };
+  // The command hangs; the second look finds the session.
+  const hung = await run({ sessions: (n) => (n >= 2 ? mine : []), command: never });
+  assert.deepEqual(hung.result, { queue: true, token: true, reply: 'none yet, and the server shows the player playing', started: true });
+  // Another title on that player, or this title on another player, is not it: the command times out and that is what is said.
+  for (const other of [[{ ratingKey: '9', Player: { machineIdentifier: 'tv', state: 'playing' } }], [{ ratingKey: '3', Player: { machineIdentifier: 'phone', state: 'playing' } }], []]) {
+    assert.deepEqual((await run({ sessions: () => other, command: timeout })).result, { kind: 'timeout' });
+  }
+  // The session shows only at the last look, after the timeout.
+  let late = false;
+  const atLast = await run({ sessions: () => (late ? mine : []), command: async () => { await new Promise((r) => setTimeout(r, 12)); late = true; throw Object.assign(new Error('x'), { name: 'TimeoutError' }); } });
+  assert.deepEqual(atLast.result, { queue: true, token: true, reply: 'none in time, and the server shows the player playing', started: true });
+  // A refused command is refused, whatever the sessions say afterwards.
+  assert.deepEqual((await run({ sessions: () => [], command: async () => new Response('', { status: 404 }) })).result, { kind: 'http' });
+  assert.equal(acceptedText({ title: 'Heat', device: 'TV', server: 'Castle', sent: hung.result }), 'Play now: Castle shows TV playing "Heat" before it answered the command (play queue: yes, token for the player: yes, the answer: none yet, and the server shows the player playing).');
 });
 
 test('flow: a Play now is written to Diagnostics: the accepted command with what it carried, what the server shows afterwards, and every failure or refusal (D201)', async () => {
