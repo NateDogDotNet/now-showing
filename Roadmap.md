@@ -411,6 +411,14 @@ Show posters from other media servers (Jellyfin first, Emby close behind), and m
 - **Constraints:** every adapter maps its own ratings for the household limit and fails closed (unknown is hidden while a limit is set), with its own adversarial review like `content-rating-filter` had. Jellyfin may need cross-origin requests allowed on the server. TMDB's terms are to be checked before it is promised (unconfirmed). Streaming services are out: no public APIs, and scraping breaks their terms.
 - **Order:** the adapter refactor, Jellyfin and Emby are done in 2.4; the TMDB no-server mode is 2.5.
 
+### Kodi as a source
+Show posters from a Kodi library, and what Kodi is playing now, as a fifth source adapter beside Plex, Jellyfin, Emby and TMDB (owner request, 2026-11-25).
+
+- **Why:** some households keep their library in Kodi with no media server, and Kodi is often the player in the same room as the display.
+- **How:** Kodi's JSON-RPC API over HTTP (Settings → Services → Control → "Allow remote control via HTTP"), signed in with Kodi's web-server user name and password. `VideoLibrary.GetMovies` and `VideoLibrary.GetTVShows` give the random pool with `art`, `genre` and `mpaa`; `Player.GetActivePlayers` and `Player.GetItem` give now playing; posters come through Kodi's `/image/` route from the `image://` art paths *(verify all of it on a real Kodi)*. The poster's `tmdbId` can come from `uniqueid.tmdb`, so Poster art and Title as logo work for Kodi too.
+- **Constraints:** Kodi's web server sends no CORS headers *(verify)*, so a browser display probably reaches it through the device helper, which also keeps the password off other hosts. Kodi's `mpaa` field is free text that scrapers fill in different forms (`Rated PG-13`, `PG-13`, a country's own ratings), so the adapter maps it to the US ladder and fails closed like every other adapter, with its own adversarial review. Play now could later use `Player.Open`. A mock Kodi server and real-server checklist rows come with it, as for Jellyfin.
+- **Order:** later, after 2.5; not in the 2.5 run.
+
 ### Multiple displays
 Displays that know about each other, in four modes (D57). This merges the earlier ideas "Synchronised displays", "Remote control" and "Shared settings for several displays" and keeps their names here.
 
