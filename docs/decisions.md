@@ -1396,3 +1396,11 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   9. **Years.** From and To, both optional and inclusive, on `primary_release_date` (movies) or `first_air_date` (shows), from `YYYY-01-01` to `YYYY-12-31`; From later than To is swapped.
   10. **Order, region, language.** `sort_by=popularity.desc`, `region=US` on `now_playing` and `upcoming`, `language=en-US`.
   11. **Pool.** Filled to `randomPoolSize` from at most 5 pages, duplicates (`type:id`) dropped, at most 4 certification lookups at once.
+
+## Owner ruling — 2026-11-26 (stop 5 in `.orchestrator/phases/tmdb-source.md`, answered "defaults" at 2026-11-26T01:48:52Z): D211
+
+- **D211 Four rulings from the `tmdb-source` and `tmdb-ids` reviews (all option a).**
+  1. **First run with no media server.** The first-run card gains a "No media server? Use TMDB" link that opens Settings with TMDB chosen. TMDB stays its own choice in Settings (not a fourth server-type button), so `tests/e2e/emby.spec.mjs` and `tests/e2e/first-run.spec.mjs` are unchanged. Applied in `tmdb-source`.
+  2. **An import that makes TMDB the first server on a display with other servers** shows a toast naming each server it drops, before Save, so Cancel keeps them. Applied in `tmdb-source`.
+  3. **Re-checking cached TMDB titles' ratings** (D37): at most 20 cached TMDB titles per pass, those checked longest ago first, and never on the 1-minute partial-pool retry. A title not yet checked again keeps the rating it was stored with. Plex, Jellyfin and Emby are unchanged. Applied in `tmdb-source`.
+  4. **A Plex item with no `type`** gets no `tmdbId` (fail safe, as every other doubtful case). Applied in `production-house-filter`, the next phase that edits `js/sources/plex.js`.
