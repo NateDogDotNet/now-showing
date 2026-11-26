@@ -1408,3 +1408,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Conductor ruling — 2026-11-26 (`tmdb-source` review r3, N2; to be listed for the owner at the next stop): D212
 
 - **D212 "Never on the one-minute retry" (D211 3) means a retry within 30 minutes of the last TMDB re-rating.** A one-minute retry of a partial pool skips the re-rating of cached TMDB titles only while the last re-rating is under 30 minutes (`POOL_TTL_MS`) old; once it is older, that load re-rates as an ordinary pass would, whatever the pool. Read literally, D211 3 lets a pool that is partial on every build stop the re-rating for good (cold review r2 F5: 1 pass in 6 hours), which defeats D37. The 20-title cap and the oldest-first order are unchanged.
+
+## Conductor ruling — 2026-11-26 (`production-house-filter` pre-flight; to be listed for the owner at the next stop): D213
+
+- **D213 `production-house-filter`'s Output gains `tests/engine.test.js`** to carry `tmdb-source`'s review r3 finding N1/F6: the TMDB re-rating time (D212) is stamped where the ratings are applied, not when the pass starts, so a pass whose pool request fails does not restart the half hour. `js/engine.js` is already in the Output. `docs/spec.md` (in the Output) gets D212's sentence. The Emby half of `tmdb-ids` review F1 is tested in `tests/jellyfin.test.js`, through the client Emby shares; `tests/emby.test.js` stays out.
