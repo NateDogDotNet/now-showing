@@ -1453,3 +1453,9 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 - **D220 Two refinements of D219.**
   1. **Only TMDB's API pauses the art.** A network error, a timeout or a refused key on the images request starts the 10-minute pause (D219 1); a poster file that overruns the 4-second budget or fails to download shows the source's art for that poster only, with no pause. The images request is abandoned when the budget ends, so a late reply changes nothing (no log line, no pause).
   2. **One test per mode.** In TMDB mode, Test connection (after the key) is the key's test and Test key is hidden; under Plex, Jellyfin or Emby, Test key is the key's test. A test's verdict is dropped when the sheet is cancelled or reopened, and the button is never left disabled by a test the sheet no longer shows.
+
+## Conductor ruling — 2026-11-26 (`clear-logo-title` pre-flight; to be listed for the owner at the next stop): D221
+
+- **D221 How the title logo is chosen and fetched.**
+  1. **"The poster's language"** in `clear-logo-title`'s criterion 1 is the Poster art language (D217 3: the display's language when listed, else English), whatever the Poster art choice; a logo in that language is chosen first (highest voted), else a logo with no language, else none, and the title is text.
+  2. **The logo is fetched as the art is** (D219 1, D220 1): within the same 4-second budget per title, paused with the art after an API failure, through the cache-first path and the cache limit under a key that names TMDB, the id and "logo", aged out at 180 days, as a blob drawn by `<img>` (never inlined). The logo is asked for only while Title as logo is on and the title card shows.
