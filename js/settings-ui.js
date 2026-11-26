@@ -8,7 +8,7 @@ import { createPositionMode } from './position.js';
 import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describeProfile, MAX_PROFILES, removeProfile, renameProfile, updateProfile } from './profiles.js';
 import { parseHHMM } from './schedule.js';
 import { LIMITS } from './ratings.js';
-import { belongsTo, genreRequestValue, genresAreAll, memberBelongsTo, offeredRatings, selectionOf } from './selection.js';
+import { belongsTo, genreRequestValue, genresAreAll, houseRequestValue, housesNarrowAList, memberBelongsTo, offeredRatings, selectionOf } from './selection.js';
 import { addressOf as cleanAddress, defaults, followNames, importWithConnection, isConfigured, MAX_SERVERS, oldTokenMayGo, PLAYER_STATES, playerRows, sanitize, serverList, serversDroppedByTmdbImport, setAllowed, tmdbDroppedByImport, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
@@ -166,7 +166,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   let countRun = 0; // bumped whenever the library list is rebuilt or the sheet closes, so a late count is ignored
   // The poster selection the sheet would save (R-SEL-1): set by write(), changed by the lists, saved by Save, like pendingPin.
   // `offered` is what the server listed on the last connection test; a stored choice the server did not list stays shown and ticked.
-  let sel = { libraries: [], genres: [], ratings: [], source: null };
+  let sel = { libraries: [], genres: [], houses: [], ratings: [], source: null };
   // The profiles the dialog would save (R-PROF-1): set by write(), changed by the profile editor, saved by Save, like pendingPin.
   let pendingProfiles = [];
   // The profile open in the sheet (D120 1), or null: { id (null for a new one), name, household } where `household` holds the household's own
@@ -174,6 +174,10 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   let editing = null;
   let offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
   let genreRun = 0; // bumped whenever the genre list is asked for again, so a late genre answer is ignored
+  // The production houses the sheet offers (Run 13): `list` is a server's studios of the ticked libraries, `found` the TMDB companies the last search named. Only a choice: what is ticked is `sel.houses`.
+  let houseOffer = { list: [], found: [], loading: false, failed: false, searched: '', searching: false };
+  const houseCountries = new Map(); // company id -> `origin_country`, filled by every search, so a ticked company keeps its country tag when a later search shows a same-named one (ux r2 N2)
+  let houseRun = 0; // bumped whenever the studio list or a company search is asked for again, so a late answer is ignored
   let sourceRun = 0; // the same for the collection and playlist list: its own counter, so ticking a library never throws its answer away
   let offerClient = null; // the client of the last successful connection test
   // The other servers (up to two) and what the first one is: its own id once known, and whether it is the entry carried over from 2.4.0 (D157 1).
@@ -231,6 +235,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     renderSlots(s.limitSlots); // before the ratings, which are offered up to the loosest of the limit and the slots
     sel = selectionOf(s);
     offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
+    resetHouses();
     genreRun++;
     sourceRun++;
     offerClient = null; // the client of an earlier connection test is not this sheet's: genres and sources come from the server the test finds now
@@ -271,6 +276,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     s.libraryNames = sel.libraries.map((l) => l.name);
     s.libraryKey = s.libraryKeys[0] || '';
     s.libraryName = sel.libraries[0]?.name || '';
+    s.houses = sel.houses; // like the genres: kept while a collection or playlist is the source, and a profile keeps the household's
     s.genres = sel.genres; // kept while a collection or playlist is the source: the engine ignores them there, and the libraries again restore them (D112 item 3)
     s.ratings = sel.ratings; // a tick above the offered range is kept: the engine's intersection with the limit in force decides what is shown (D110 item 6)
     s.source = sel.source;
@@ -465,7 +471,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     field('weighting').value = b.weighting;
     field('noRepeatDays').value = String(b.noRepeatDays);
     field('frameId').value = b.frameId;
-    sel = selectionOf(b);
+    sel = { ...selectionOf(b), houses: sel.houses }; // a profile draws from the household's production houses (it has none of its own), so they pass through
     renderSelection();
     syncDependent();
   }
@@ -480,7 +486,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     $('profile-notice').textContent = ''; // the notice about the last profile kept does not belong to this one
     showBundle(bundleOf(bundle));
     loadGenres(); // the genre list follows the libraries now shown; a load in flight for the household's is dropped (D122 3)
-    $('profile-banner-text').textContent = `Editing the profile \u201c${name}\u201d. The limit, the now-playing rule, the selection, the weighting and days, and the frame below are this profile's. Your own household values are set aside until you press Done or Discard.`;
+    $('profile-banner-text').textContent = `Editing the profile \u201c${name}\u201d. The limit, the now-playing rule, the selection (except the production houses, which stay the household's), the weighting and days, and the frame below are this profile's. Your own household values are set aside until you press Done or Discard.`;
     $('profile-banner-error').hidden = true;
     $('profile-banner').hidden = false;
     $('profile-editor').inert = true;
@@ -938,6 +944,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     $('tmdb-discover').hidden = !discover;
     syncYearsNote();
     syncGenreText(); // "any" or "every" ticked genre: the help says which
+    syncHouseText(); // a house list on a list is only narrowed; on Discover it is not (D216)
   }
 
   /** A year that is not four digits from 1800 to 2200 is ignored by Discover (js/sources/tmdb.js); the field says so rather than showing it as if it counted. */
@@ -955,6 +962,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     renderLibraries();
     renderSource();
     renderGenres();
+    renderHouses();
     renderRatings();
     renderConnected();
   }
@@ -966,6 +974,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
 
   /** Genres are asked for from every ticked library and merged by title. A failed request leaves that library's genres out. Choosing a source does not ask again: the box stays as it was, greyed. */
   async function loadGenres() {
+    loadHouses();
     const run = ++genreRun;
     offered.genres = [];
     offered.genresFailed = false;
@@ -983,6 +992,125 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     for (const g of lists.flat().filter(Boolean)) if (!seen.has(g.title.toLowerCase())) seen.set(g.title.toLowerCase(), g);
     offered.genres = [...seen.values()];
     renderGenres();
+  }
+
+  // ---- production houses (Run 13): a server's studios are listed, a TMDB company is searched by name ----
+
+  function resetHouses() {
+    houseRun++;
+    houseCountries.clear();
+    houseOffer = { list: [], found: [], loading: false, failed: false, searched: '', searching: false, searchingFor: '' };
+  }
+
+  /** The rows: what is ticked, then what was offered (the studios of the ticked libraries, or the companies the search found), once each. */
+  function renderHouses() {
+    const id = (h) => h.key || h.title.toLowerCase();
+    const chosen = new Set(sel.houses.map(id));
+    const rows = [...sel.houses];
+    for (const h of isTmdb() ? houseOffer.found : houseOffer.list) if (!chosen.has(id(h)) && !rows.some((r) => id(r) === id(h))) rows.push(h);
+    // A server's studios are alphabetical; a TMDB search keeps TMDB's own order (best match first), the ticked ones staying on top (ux F6).
+    if (!isTmdb()) rows.sort((a, b) => a.title.localeCompare(b.title));
+    // Two companies of one name are told apart by the country TMDB gives them (ux F6); a company with no known country keeps its plain name.
+    const countries = houseCountries;
+    const names = rows.map((h) => h.title.toLowerCase());
+    const label = (h) => (countries.has(h.key) && names.indexOf(h.title.toLowerCase()) !== names.lastIndexOf(h.title.toLowerCase()) ? `${h.title} (${countries.get(h.key)})` : h.title);
+    const locked = Boolean(sel.source) || Boolean(editing);
+    $('house-search-row').hidden = !isTmdb();
+    $('house-search').disabled = locked;
+    $('house-search-btn').disabled = locked; // never disabled by a search under way: that would drop the keyboard focus the button holds (ux F5)
+    $('house-list').replaceChildren(...rows.map((h) => pickRow(houseRequestValue(h), label(h), chosen.has(id(h)), { disabled: locked, data: { key: h.key, title: h.title } })));
+    syncHouseText(rows.length);
+  }
+
+  /** The count and the help under the production house box. Ticking a house updates only these, so focus and scroll stay. */
+  function syncHouseText(rowCount = $('house-list').children.length) {
+    const locked = Boolean(sel.source) || Boolean(editing);
+    $('house-count').textContent = !locked && sel.houses.length ? `· ${sel.houses.length} chosen` : '';
+    const tmdb = isTmdb();
+    const base = tmdb
+      ? 'A TMDB company: search by name, then tick it. A title shows only when TMDB lists one of the ticked companies for it.'
+      : "A server lists the main studio of each title, usually one, not every production company. A title shows only when its studio is a ticked one.";
+    // The static help is not a live region, so a library tick or a re-render never has it re-read; only the short transient status below is announced (ux r2 N1).
+    const list = housesNarrowAList(sel, formType()); // D216: a house list on a TMDB list only narrows it
+    const listNote = list ? ' This list is only narrowed to those houses; Discover finds every title from them.' : '';
+    const help = editing
+      ? "Production houses are the household's in 2.5, not the profile's. To change them, close the profile first."
+      : sel.source
+        ? 'A collection or playlist takes no production house.'
+        : !tmdb && !rowCount && !houseOffer.loading && !houseOffer.failed
+          ? offerClient
+            ? sel.libraries.length
+              ? 'The ticked libraries list no studios.'
+              : 'Tick a library to see its studios.'
+            : 'Test the connection to load the studios.'
+          : `None ticked: every house. ${base}${listNote}`;
+    const status = locked
+      ? ''
+      : houseOffer.searching
+        ? 'Searching…'
+        : houseOffer.failed
+          ? tmdb
+            ? "Couldn't search TMDB. Test the connection and try again."
+            : "Couldn't load the studios. Test the connection to try again."
+          : houseOffer.loading
+            ? 'Loading the studios…'
+            : tmdb && houseOffer.searched && !houseOffer.found.length
+              ? `No company found for "${houseOffer.searched.slice(0, 40)}".`
+              : tmdb && houseOffer.searched
+                ? `${houseOffer.found.length} ${houseOffer.found.length === 1 ? 'company' : 'companies'} found.`
+                : '';
+    if ($('house-help').textContent !== help) $('house-help').textContent = help;
+    if ($('house-status').textContent !== status) $('house-status').textContent = status; // set only on a change, so ticking a row announces nothing
+  }
+
+  /** A server's studios of every ticked library, merged by name. A failed request leaves that library's studios out. TMDB has no list: it is searched. */
+  async function loadHouses() {
+    const run = ++houseRun;
+    houseOffer = { list: [], found: houseOffer.found, loading: false, failed: false, searched: houseOffer.searched, searching: false, searchingFor: '' };
+    if (isTmdb() || !offerClient || !sel.libraries.length) return renderHouses();
+    houseOffer.loading = true;
+    renderHouses();
+    const client = offerClient;
+    const lists = await Promise.all(sel.libraries.map((l) => client.houses(l.key).catch(() => null)));
+    if (run !== houseRun) return;
+    houseOffer.loading = false;
+    houseOffer.failed = lists.every((l) => l === null);
+    const seen = new Map();
+    for (const h of lists.flat().filter(Boolean)) if (!seen.has(h.title.toLowerCase())) seen.set(h.title.toLowerCase(), h);
+    houseOffer.list = [...seen.values()];
+    renderHouses();
+  }
+
+  /** Searches TMDB for the companies whose name holds what was typed. */
+  async function searchHouses() {
+    const typed = $('house-search').value.trim();
+    if (!typed || !offerClient) {
+      houseOffer.failed = false;
+      houseOffer.searched = '';
+      houseOffer.found = [];
+      renderHouses();
+      if (typed && !offerClient) $('house-status').textContent = 'Test the connection to search TMDB.';
+      return;
+    }
+    if (houseOffer.searching && houseOffer.searchingFor === typed) return; // the same search is under way: a second press waits for it, and the button stays enabled
+    const run = ++houseRun;
+    houseOffer.searching = true;
+    houseOffer.searchingFor = typed;
+    houseOffer.failed = false;
+    renderHouses();
+    try {
+      const found = await offerClient.houses(sel.libraries[0]?.key || '', { query: typed });
+      if (run !== houseRun) return;
+      houseOffer.found = found;
+      for (const h of found) if (h.country) houseCountries.set(h.key, h.country);
+      houseOffer.searched = typed;
+    } catch {
+      if (run !== houseRun) return;
+      houseOffer.failed = true;
+    }
+    houseOffer.searching = false;
+    houseOffer.searchingFor = '';
+    renderHouses();
   }
 
   /** The collections of every movie library and the video playlists, for the "Posters from" list. A failed request leaves its part out. */
@@ -1553,9 +1681,9 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     // A library, genre or collection of a media server means nothing to TMDB and the other way round: moving to or from TMDB sets the selection aside with the
     // type it was made for (the ratings, which mean the same everywhere, stay). Between media servers it stays as stored (D141 3).
     const crossing = from === 'tmdb' || type === 'tmdb';
-    held[from] = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '', userId: field('serverUserId').value, ...(crossing ? { sel: { libraries: sel.libraries, genres: sel.genres, source: sel.source } } : {}) };
+    held[from] = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '', userId: field('serverUserId').value, ...(crossing ? { sel: { libraries: sel.libraries, genres: sel.genres, houses: sel.houses, source: sel.source } } : {}) };
     const back = held[type] || { token: '', url: '', name: '', userId: '' };
-    if (crossing) sel = { ...sel, ...(back.sel ?? { libraries: [], genres: [], source: null }) };
+    if (crossing) sel = { ...sel, ...(back.sel ?? { libraries: [], genres: [], houses: [], source: null }) };
     field('plexToken').value = back.token;
     field('serverUserId').value = back.userId;
     field('serverUrl').value = back.url;
@@ -1563,6 +1691,8 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     field('serverType').value = type;
     dropTest();
     offered = { libraries: [], genres: [], collections: [], playlists: [], counts: {} };
+    resetHouses();
+    $('house-search').value = '';
     offerClient = null;
     countRun++;
     genreRun++;
@@ -1930,6 +2060,16 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   $('genre-list').addEventListener('change', () => {
     sel.genres = [...$('genre-list').querySelectorAll('input:checked')].map((box) => ({ key: box.dataset.key || '', title: box.dataset.title }));
     syncGenreText(); // not renderGenres(): rebuilding the rows would drop keyboard focus and scroll the box back to the top
+  });
+  $('house-list').addEventListener('change', () => {
+    sel.houses = [...$('house-list').querySelectorAll('input:checked')].map((box) => ({ key: box.dataset.key || '', title: box.dataset.title }));
+    syncHouseText(); // not renderHouses(): rebuilding the rows would drop keyboard focus and scroll the box back to the top
+  });
+  $('house-search-btn').addEventListener('click', searchHouses);
+  $('house-search').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault(); // Enter in the search field searches; it never saves the sheet
+    searchHouses();
   });
   $('rating-list').addEventListener('change', () => {
     sel.ratings = [...$('rating-list').querySelectorAll('input:checked')].map((box) => box.value);

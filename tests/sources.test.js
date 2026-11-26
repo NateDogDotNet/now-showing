@@ -45,7 +45,7 @@ test('createSource refuses an unknown serverType with an error of kind config', 
 
 test('the adapter object has exactly the members the interface lists', () => {
   const source = createSource({ ...connection });
-  const expected = ['identity', 'publicIdentity', 'libraries', 'libraryCount', 'sessions', 'pool', 'sourceItems', 'genres', 'collections', 'playlists', 'item', 'items', 'imageUrl', 'nowPlaying', 'label'];
+  const expected = ['identity', 'publicIdentity', 'libraries', 'libraryCount', 'sessions', 'pool', 'sourceItems', 'genres', 'houses', 'collections', 'playlists', 'item', 'items', 'imageUrl', 'nowPlaying', 'label'];
   // The Plex adapter has the common members and, beside them, the members only it has (Play now, D192 4): both lists are pinned, nothing else is there.
   assert.deepEqual(Object.keys(source).sort(), [...expected, ...PLEX_ONLY_MEMBERS].sort());
   assert.deepEqual([...SOURCE_MEMBERS].sort(), [...expected].sort());

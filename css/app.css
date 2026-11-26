@@ -673,6 +673,11 @@ input[type="time"]:focus-within { outline: 2px solid var(--accent); outline-offs
 .pick-list label.check:has(input:disabled) { color: var(--muted); }
 .pick-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr)); max-height: 11.5rem; overflow-y: auto; padding: 4px; border: 1px solid var(--panel-line); border-radius: 8px; overscroll-behavior: contain; }
 .pick-grid:empty { display: none; }
+/* Production house (Run 13): the TMDB company search sits above the ticked list; the field shrinks so the row never scrolls sideways at a phone width or at rotation 90. */
+.house-search { flex-wrap: wrap; }
+.house-search input { flex: 1 1 10rem; min-width: 0; width: auto; box-sizing: border-box; }
+.house-search .btn { flex: 0 0 auto; }
+#house-status:empty { display: none; } /* the short live line (Loading, Searching, N found, errors); no space while it has nothing to say */
 .pick-row { grid-template-columns: repeat(auto-fill, minmax(min(100%, 6.5rem), 1fr)); }
 .pick-list label.check span { min-width: 0; overflow-wrap: anywhere; }
 #selection-fieldset > label { margin-top: 14px; }

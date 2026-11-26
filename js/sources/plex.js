@@ -114,7 +114,7 @@ function tmdbOf(m) {
     ids.add(id);
   }
   if (ids.size !== 1) return {};
-  const tmdbType = m.type === 'show' ? 'tv' : m.type === undefined || m.type === 'movie' ? 'movie' : '';
+  const tmdbType = m.type === 'show' ? 'tv' : m.type === 'movie' ? 'movie' : ''; // an item that names no type gets none: a show read as a movie would fetch another title's art (D211 4)
   return tmdbType ? { tmdbId: [...ids][0], tmdbType } : {};
 }
 
@@ -128,6 +128,7 @@ export function toPoster(m, source) {
   const seriesRating = isEpisode && typeof m.grandparentContentRating === 'string' ? m.grandparentContentRating : '';
   const ownRating = typeof m.contentRating === 'string' ? m.contentRating : '';
   const genres = genresOf(m);
+  const studios = typeof m.studio === 'string' && m.studio.trim() !== '' ? [m.studio.trim()] : []; // the one studio Plex stores for the title (a (verify) row)
   const viewCount = countOf(m.viewCount);
   const audienceRating = ratingOf(m.audienceRating);
   const rating = ratingOf(m.rating);
@@ -146,6 +147,7 @@ export function toPoster(m, source) {
     duration: toMs(m.duration), // ms; the playing item's own length for an episode; 0 = unknown
     summary: trimSummary(m.summary, SUMMARY_MAX), // trimmed here, before it reaches any stored descriptor; '' = none sent (the offline cache never keeps it)
     ...(genres.length ? { genres } : {}), // the item's own genre tags (R-SEL-1): the engine checks a genre selection against these
+    ...(studios.length ? { studios } : {}), // the same for a production-house selection
     // What weighting reads (R-SEL-2): left off when the server sent nothing usable. An unwatched title has no viewCount (a (verify) shape).
     ...(viewCount ? { viewCount } : {}),
     ...(audienceRating !== null ? { audienceRating } : {}),
@@ -409,7 +411,7 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
      * title). `genres` are the filter values Plex lists, joined by commas (OR). The server filters are a convenience (their syntax
      * is unverified): the engine re-checks every poster against the limit, the rating subset and the item's own genres.
      */
-    async pool({ libraryKey, unwatchedOnly = true, size = 100, maxContentRating = '', genres = [], ratings = [] }) {
+    async pool({ libraryKey, unwatchedOnly = true, size = 100, maxContentRating = '', genres = [], houses = [], ratings = [] }) {
       const values = ratings.length ? ratingValues(ratings, maxContentRating) : allowedValues(maxContentRating);
       if (ratings.length && !values.length) return [];
       const c = await get(`/library/sections/${encodeURIComponent(libraryKey)}/all`, {
@@ -418,8 +420,9 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
         sort: 'rating:desc',
         contentRating: values.join(','),
         genre: genres.join(','),
+        studio: houses.some((h) => h.includes(',')) ? '' : houses.join(','), // studio names (OR); a name holding the delimiter leaves the parameter off (D215 2): the engine re-checks every poster against its own studio
         'X-Plex-Container-Start': 0,
-        'X-Plex-Container-Size': maxContentRating || ratings.length ? Math.min(size * 3, 500) : size,
+        'X-Plex-Container-Size': maxContentRating || ratings.length || houses.length ? Math.min(size * 3, 500) : size,
       });
       return (c.Metadata || []).filter((m) => m.thumb).map((m) => toPoster(m, 'random'));
     },
@@ -447,6 +450,13 @@ export function createPlexClient({ serverUrl, token, clientId, fetchImpl = (...a
     async genres(libraryKey) {
       const c = await get(`/library/sections/${encodeURIComponent(libraryKey)}/genre`);
       return (c.Directory || []).filter((d) => typeof d.title === 'string' && d.title.trim() !== '').map((d) => ({ key: d.key === undefined || d.key === null ? '' : String(d.key), title: d.title.trim() }));
+    },
+
+    /** The studios a library lists (`/library/sections/<id>/studio`, a (verify) shape), as `{ key: '', title }`: a studio is matched by its name on every server. */
+    async houses(libraryKey) {
+      const s = await get(`/library/sections/${encodeURIComponent(libraryKey)}/studio`);
+      const names = (s.Directory || []).map((d) => (typeof d?.title === 'string' ? d.title.trim() : '')).filter(Boolean);
+      return [...new Set(names)].map((title) => ({ key: '', title }));
     },
 
     /** The collections of a library, as `{ key, title, smart }` (`/library/sections/<id>/collections`, a (verify) shape). */

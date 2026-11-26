@@ -289,7 +289,7 @@
                 <label>To year <input id="tmdb-to" type="number" min="1800" max="2200" step="1" inputmode="numeric" placeholder="any" /></label>
               </div>
               <p id="tmdb-years-note" class="error small" role="status" hidden></p>
-              <p class="muted small">Genres and ratings are ticked below. A year left blank is any year; From later than To is turned round.</p>
+              <p class="muted small">Genres, production houses and ratings are ticked below. A year left blank is any year; From later than To is turned round.</p>
             </div>
           </div>
           <label id="source-row">Posters from
@@ -297,11 +297,21 @@
               <option value="">The libraries above</option>
             </select>
           </label>
-          <p id="source-help" class="muted small">A collection (smart or not) or a playlist replaces the libraries above and takes no genre.</p>
+          <p id="source-help" class="muted small">A collection (smart or not) or a playlist replaces the libraries above and takes no genre or production house.</p>
           <div id="genre-group" role="group" aria-labelledby="genre-label">
             <span id="genre-label" class="field-label">Genres <span id="genre-count" class="muted"></span></span>
             <ul id="genre-list" class="pick-list pick-grid"></ul>
             <p id="genre-help" class="muted small">None ticked: every genre.</p>
+          </div>
+          <div id="house-group" role="group" aria-labelledby="house-label">
+            <span id="house-label" class="field-label">Production house <span id="house-count" class="muted"></span></span>
+            <div id="house-search-row" class="input-row house-search" hidden>
+              <input id="house-search" type="search" placeholder="Company name, e.g. A24" autocomplete="off" spellcheck="false" aria-label="Search TMDB for a production company" />
+              <button id="house-search-btn" class="btn" type="button">Search</button>
+            </div>
+            <ul id="house-list" class="pick-list pick-grid"></ul>
+            <p id="house-status" class="muted small" role="status" aria-live="polite"></p>
+            <p id="house-help" class="muted small">None ticked: every house.</p>
           </div>
           <div id="rating-group" role="group" aria-labelledby="rating-label">
             <span id="rating-label" class="field-label">Ratings</span>

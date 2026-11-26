@@ -125,6 +125,9 @@ export function parseRatingKey(ratingKey) {
   return m ? { type: m[1], id: m[2] } : null;
 }
 
+/** The production company ids a details reply names, as text (digits only), once each; none when it names none. */
+export const companyIdsOf = (reply) => [...new Set((Array.isArray(reply?.production_companies) ? reply.production_companies : []).map((c) => String(c?.id ?? '')).filter((id) => /^[0-9]+$/.test(id)))];
+
 const POSTER_PATH = /^\/[A-Za-z0-9._-]+$/;
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
 const number = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -135,6 +138,7 @@ export function toPoster(item, type, { rating = '', names = new Map(), source = 
   const date = text(type === 'movie' ? item.release_date : item.first_air_date);
   const genres = (Array.isArray(item.genre_ids) ? item.genre_ids.map((g) => names.get(String(g))) : Array.isArray(item.genres) ? item.genres.map((g) => g?.name) : []).filter((g) => typeof g === 'string' && g.trim() !== '');
   const audience = number(item.vote_average);
+  const companyIds = companyIdsOf(item);
   return {
     ratingKey: `${type}:${id}`,
     title: text(type === 'movie' ? item.title : item.name) || text(item.original_title ?? item.original_name),
@@ -147,6 +151,7 @@ export function toPoster(item, type, { rating = '', names = new Map(), source = 
     summary: trimSummary(item.overview, SUMMARY_MAX),
     ...(genres.length ? { genres } : {}),
     ...(audience ? { audienceRating: audience } : {}),
+    ...(companyIds.length ? { companyIds } : {}), // a list result carries none: a title's details read (every TMDB title has one, D215 1) names its companies
     tmdbId: id,
     tmdbType: type,
   };
@@ -227,13 +232,14 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
   };
 
   /**
-   * The US certification of one title, through the limiter: `{ rating }`, or `{ error }` when the lookup failed (it never throws). A title TMDB holds no
-   * certification record for (a 404) is unrated, not a failure: asking again would not change the answer.
+   * A title's US certification AND its production companies in one details request (`movie/{id}` or `tv/{id}` with the certifications appended), through the
+   * limiter: `{ rating, companyIds }`, or `{ error }` (it never throws). Every title is read this way (D215 1), house list or not: list results carry no companies,
+   * and a poster that carries its companies can be drawn offline under a house list set later. A title TMDB holds no record of (a 404) is unrated, in no house, and not a failure.
    */
-  const certify = (type, id) =>
-    lookups(() => get(type === 'movie' ? `movie/${id}/release_dates` : `tv/${id}/content_ratings`)).then(
-      (reply) => ({ rating: certificationOf(type, reply) }),
-      (error) => (error?.kind === 'http' && error.status === 404 ? { rating: '' } : { error }),
+  const read = (type, id) =>
+    lookups(() => get(`${type}/${id}`, { language: LANGUAGE, append_to_response: type === 'movie' ? 'release_dates' : 'content_ratings' })).then(
+      (reply) => ({ rating: certificationOf(type, type === 'movie' ? reply?.release_dates : reply?.content_ratings), companyIds: companyIdsOf(reply) }),
+      (error) => (error?.kind === 'http' && error.status === 404 ? { rating: '', companyIds: [] } : { error }),
     );
 
   const genreLists = new Map(); // type -> the promise of its { id -> name } map, asked for once
@@ -251,7 +257,7 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
   };
 
   /** The parameters of one page of a list or of Discover (D210 8 to 10). `include_adult=false` goes on every one. */
-  function pageParams(src, page, limit, genres) {
+  function pageParams(src, page, limit, genres, houses) {
     const base = { language: LANGUAGE, include_adult: 'false', page };
     if (src.kind === 'list') return { ...base, ...(REGION_LISTS.has(src.path) ? { region: REGION } : {}) };
     const dates = src.type === 'movie' ? 'primary_release_date' : 'first_air_date';
@@ -260,6 +266,7 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
       sort_by: 'popularity.desc',
       region: REGION,
       with_genres: genres.join(src.mode === 'and' ? ',' : '|'),
+      with_companies: houses.join('|'), // several houses are OR (a pipe); a comma would be AND
       [`${dates}.gte`]: src.from ? `${src.from}-01-01` : '',
       [`${dates}.lte`]: src.to ? `${src.to}-12-31` : '',
       // The server-side certification filter only narrows the request (D210 3); every title is still read and checked below. Movies only: discover/tv has none.
@@ -302,10 +309,11 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
      * rating subset is set and marks the pool partial (`.partial`), so the engine asks again soon (D210 2); every lookup failing, with nothing to show,
      * throws the first one. A page after the first that fails ends the pool there, partial.
      */
-    async pool({ libraryKey, size = 100, maxContentRating = '', genres = [], ratings = [] } = {}) {
+    async pool({ libraryKey, size = 100, maxContentRating = '', genres = [], houses = [], ratings = [] } = {}) {
       const src = sourceOf(libraryKey);
       if (!src) throw noSource(libraryKey);
       const wanted = genres.map(String).filter(Boolean);
+      const companies = houses.map(String).filter(Boolean); // TMDB company ids, any of them
       const names = wanted.length ? await genreNames(src.type) : new Map(); // a pool that cannot tell its titles' genres cannot honour a genre choice: it fails whole
       const found = [];
       const seen = new Set();
@@ -314,7 +322,7 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
       for (let page = 1; page <= MAX_PAGES; page++) {
         let reply;
         try {
-          reply = await get(src.path, pageParams(src, page, maxContentRating, wanted));
+          reply = await get(src.path, pageParams(src, page, maxContentRating, wanted, companies));
           results(reply);
         } catch (err) {
           if (page === 1) throw err;
@@ -329,7 +337,8 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
           // A list takes no genre filter: its titles are narrowed here, before their certifications are read. Discover narrowed them already.
           return src.kind !== 'list' || !wanted.length || (Array.isArray(item.genre_ids) && item.genre_ids.some((g) => wanted.includes(String(g))));
         });
-        const certs = await Promise.all(candidates.map((item) => certify(src.type, item.id)));
+        // Each title is read once with its companies and certification (D215 1): a list or Discover result has no companies, and the cache keeps them.
+        const certs = await Promise.all(candidates.map((item) => read(src.type, item.id)));
         candidates.forEach((item, i) => {
           const { rating, error } = certs[i];
           if (error) {
@@ -337,7 +346,10 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
             firstFailure ??= error;
           }
           // A title whose lookup failed is unrated (''): with a limit or a rating subset set it does not pass, so it is not shown (D210 2); with neither it is.
-          if (ratingPasses(maxContentRating, ratings, rating ?? '')) found.push(toPoster(item, src.type, { rating: rating ?? '', names }));
+          // With a house list a title whose companies are unknown (the lookup failed, or the reply names none) is in no house: it is not shown either.
+          const own = certs[i].companyIds ?? [];
+          if (companies.length && !own.some((c) => companies.includes(c))) return;
+          if (ratingPasses(maxContentRating, ratings, rating ?? '')) found.push(toPoster({ ...item, production_companies: own.map((id) => ({ id })) }, src.type, { rating: rating ?? '', names }));
         });
         if (found.length >= size || page >= (Number(reply.total_pages) || 1)) break;
       }
@@ -354,6 +366,20 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
     async genres(libraryKey) {
       const names = await genreNames(sourceOf(libraryKey)?.type || 'movie');
       return [...names].map(([id, name]) => ({ key: id, title: name }));
+    },
+
+    /**
+     * The production companies whose name matches `query` (`search/company`, a (verify) row), as { key (the company id), title, country? (`origin_country`) }, in TMDB's
+     * order. A blank name asks nothing.
+     */
+    async houses(libraryKey, { query = '' } = {}) {
+      const typed = String(query ?? '').trim();
+      if (!typed) return [];
+      const reply = await get('search/company', { query: typed, page: 1 });
+      const seen = new Set();
+      return results(reply)
+        .filter((c) => c && typeof c === 'object' && /^[0-9]+$/.test(String(c.id)) && typeof c.name === 'string' && c.name.trim() !== '' && !seen.has(String(c.id)) && seen.add(String(c.id)))
+        .map((c) => ({ key: String(c.id), title: c.name.trim(), ...(typeof c.origin_country === 'string' && c.origin_country.trim() ? { country: c.origin_country.trim() } : {}) }));
     },
 
     async collections() {
@@ -375,13 +401,13 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
     },
 
     /**
-     * The certifications of several titles, for the cached titles' re-rating (D37): `{ ratingKey, contentRating }` of each title whose lookup answered.
+     * The certifications and company ids of several titles, for the cached titles' re-rating (D37, D215 1): `{ ratingKey, contentRating, companyIds? }` of each title whose lookup answered.
      * One that failed is absent, which the caller stores as unrated (hidden under a limit). Not full posters: nothing else reads them.
      */
     async items(ratingKeys = []) {
       const wanted = [...new Set(ratingKeys.map((k) => String(k)))].map((k) => [k, parseRatingKey(k)]).filter(([, id]) => id);
-      const certs = await Promise.all(wanted.map(([, id]) => certify(id.type, id.id)));
-      return wanted.flatMap(([ratingKey, id], i) => (certs[i].error ? [] : [{ ratingKey, contentRating: certs[i].rating, source: 'static', tmdbId: id.id, tmdbType: id.type }]));
+      const certs = await Promise.all(wanted.map(([, id]) => read(id.type, id.id)));
+      return wanted.flatMap(([ratingKey, id], i) => (certs[i].error ? [] : [{ ratingKey, contentRating: certs[i].rating, ...(certs[i].companyIds.length ? { companyIds: certs[i].companyIds } : {}), source: 'static', tmdbId: id.id, tmdbType: id.type }]));
     },
 
     /** A poster file at about this width. No key: the image host needs none, and a key must never reach a URL (D210 4). */

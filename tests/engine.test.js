@@ -4,6 +4,7 @@ import { createEngine } from '../js/engine.js';
 import { defaults } from '../js/settings.js';
 import { createSource } from '../js/sources/index.js';
 import { createPosterCache } from '../js/poster-cache.js';
+import { selectionOf } from '../js/selection.js';
 
 // The fake stands in for an adapter: reading a session is the Plex adapter's own nowPlaying, so these cases keep their Plex session shapes.
 const { nowPlaying } = createSource({ serverUrl: 'http://s', plexToken: 't' });
@@ -1717,8 +1718,8 @@ test('over a TMDB adapter: with a limit set nothing the US certification refuses
   const fetchImpl = async (url) => {
     const u = new URL(url);
     asked.push(u.pathname);
-    const lookup = /^\/3\/movie\/(\d+)\/release_dates$/.exec(u.pathname);
-    if (lookup) return new Response(JSON.stringify({ results: titles.find(([id]) => id === lookup[1])[1] }));
+    const lookup = /^\/3\/movie\/(\d+)$/.exec(u.pathname);
+    if (lookup) return new Response(JSON.stringify({ id: Number(lookup[1]), release_dates: { results: titles.find(([id]) => id === lookup[1])[1] } }));
     return new Response(JSON.stringify({ page: 1, total_pages: 1, results: titles.map(([id]) => ({ id: Number(id), title: `T${id}`, poster_path: `/${id}.jpg`, release_date: '2020-01-01', genre_ids: [] })) }));
   };
   const settings = { ...defaults(), serverType: 'tmdb', tmdbKey: 'a-read-access-token', libraryKey: 'movie/popular', libraryKeys: ['movie/popular'], maxContentRating: 'PG', unwatchedOnly: false };
@@ -1775,7 +1776,7 @@ test('r2 R3, R8: the empty card of a TMDB household says "that list" and gives n
 // ---- D211 3: the re-rating of cached TMDB titles (D37) is bounded, longest unchecked first, never on the one-minute retry ----
 
 /** An engine over a TMDB source with a limit set, a cache of `keys` whose last checks are `checks`, and spies on what is asked and what is reported. */
-function tmdbRecheck({ keys, checks = new Map(), partialFirst = false, partialAlways = false, serverType = 'tmdb', itemsFail = false }) {
+function tmdbRecheck({ keys, checks = new Map(), partialFirst = false, partialAlways = false, serverType = 'tmdb', itemsFail = false, failPool = () => false }) {
   let t = 1_000_000;
   const asked = [];
   const askedAt = [];
@@ -1783,7 +1784,7 @@ function tmdbRecheck({ keys, checks = new Map(), partialFirst = false, partialAl
   let pools = 0;
   const client = {
     ...fakeClient(),
-    pool: async () => (pools++, Object.assign([{ ...poster('a'), contentRating: 'PG' }, { ...poster('b'), contentRating: 'PG' }], { partial: partialAlways || (partialFirst && pools === 1) })),
+    pool: async () => (pools++, failPool(pools) && (() => { throw new Error('down'); })(), Object.assign([{ ...poster('a'), contentRating: 'PG' }, { ...poster('b'), contentRating: 'PG' }], { partial: partialAlways || (partialFirst && pools === 1) })),
     items: async (ids) => {
       asked.push([...ids]);
       askedAt.push(t);
@@ -1959,4 +1960,152 @@ test('R10: Plex, Jellyfin and Emby re-rate every cached title on the one-minute 
     assert.equal(asked.length, 6, `${serverType}: every build re-rated`);
     assert.ok(asked.every((a) => a.length === 30), `${serverType}: all 30 cached titles each time, no cap`);
   }
+});
+
+// ---- production house (Run 13, production-house-filter): a server's studio, a TMDB company ----
+
+const hp = (k, contentRating, studios, over = {}) => ({ ...poster(k), contentRating, ...(studios ? { studios } : {}), ...over });
+
+test('a house list is sent by name, a server that ignores it cannot widen the pool, and a title with no studio is not drawn', async () => {
+  const libs = { 1: [hp('p1', 'G', ['Pixar']), hp('p2', 'PG', ['pixar']), hp('x1', 'G', ['A24']), hp('x2', 'G', undefined), hp('p3', 'R', ['Pixar'])] };
+  const { engine, client } = selecting({ houses: [{ key: '', title: 'Pixar' }] }, { libs });
+  assert.deepEqual([...(await everyPick(engine, 100))].sort(), ['p1', 'p2', 'p3']);
+  assert.deepEqual(client.calls.pool.map((a) => a.houses), [['Pixar']]);
+});
+
+test('several houses are OR', async () => {
+  const libs = { 1: [hp('p1', 'G', ['Pixar']), hp('x1', 'G', ['A24']), hp('m1', 'G', ['Mock'])] };
+  const { engine } = selecting({ houses: [{ key: '', title: 'Pixar' }, { key: '', title: 'A24' }] }, { libs });
+  assert.deepEqual([...(await everyPick(engine, 100))].sort(), ['p1', 'x1']);
+});
+
+test('a house list never lets in a title the limit refuses (D5, H5)', async () => {
+  const libs = { 1: [hp('x1', 'PG', ['A24']), hp('x2', 'R', ['A24']), hp('x3', '', ['A24']), hp('x4', 'PG-13', ['A24'])] };
+  const { engine } = selecting({ houses: [{ key: '', title: 'A24' }], maxContentRating: 'PG' }, { libs });
+  assert.deepEqual([...(await everyPick(engine, 100))], ['x1']);
+});
+
+test('no house list: the request carries no houses and a title without studios is fine', async () => {
+  const { engine, client } = selecting({}, { libs: { 1: [hp('x', 'G', undefined)] } });
+  assert.deepEqual([...(await everyPick(engine, 3))], ['x']);
+  assert.ok(!('houses' in client.calls.pool[0]));
+});
+
+test('a house list that draws nothing names the house on the empty card', async () => {
+  const { engine } = selecting({ houses: [{ key: '', title: 'Pixar' }] }, { libs: { 1: [hp('x1', 'G', ['A24'])] } });
+  await assert.rejects(engine.decide(), (err) => err.kind === 'empty' && /Movies, production house Pixar/.test(err.message));
+});
+
+test('a TMDB house list is sent by company id', async () => {
+  const calls = [];
+  const client = { ...fakeClient(), pool: async (a) => (calls.push(a), [{ ...poster('movie:1'), contentRating: 'G', companyIds: ['3'] }, { ...poster('movie:2'), contentRating: 'G', companyIds: ['41077'] }, { ...poster('movie:3'), contentRating: 'G' }]) };
+  const settings = { ...defaults(), serverType: 'tmdb', tmdbKey: 'k', libraryKey: 'discover/movie', houses: [{ key: '3', title: 'Pixar' }], showNowPlaying: false };
+  const engine = createEngine({ client, getSettings: () => settings, now: () => 1_000_000, random: spread() });
+  assert.deepEqual([...(await everyPick(engine, 50))], ['movie:1']);
+  assert.deepEqual(calls.map((a) => a.houses), [['3']]);
+});
+
+// ---- D212 / D213: the re-rating time is stamped where the ratings are applied (E1) ----
+
+test('D213: a pass whose pool request fails does not restart the half hour: the next load re-rates', async () => {
+  const keys = tmdbKeys(30);
+  const { engine, askedAt, advance } = tmdbRecheck({ keys, partialAlways: true, failPool: (n) => n === 2 });
+  const start = 1_000_000;
+  await engine.decide({ force: true }); // minute 0: a pass, its pool is partial
+  advance(30 * 60_000);
+  await engine.decide({ force: true }).catch(() => {}); // minute 30: the pass is due, and its pool request fails: nothing is applied
+  advance(60_000);
+  await engine.decide({ force: true }); // minute 31: a retry of the partial pool, but the last re-rating was applied at minute 0
+  assert.deepEqual(askedAt.map((at) => (at - start) / 60_000), [0, 30, 31], 'the load after the failed pass re-rates');
+  advance(60_000);
+  await engine.decide({ force: true }); // minute 32: one minute after a re-rating that was applied: a retry, not a pass
+  assert.equal(askedAt.length, 3);
+});
+
+// ---- D215 1: the re-rating of a cached TMDB title stores the company ids it reads ----
+
+test('D215 1: re-rating a cached TMDB title stores its company ids, so it can be drawn offline under a house list', async () => {
+  const store = new Map();
+  const files = new Map();
+  const caches = { open: async () => ({ put: async (u, r) => void files.set(u, r), match: async (u) => files.get(u)?.clone(), delete: async (u) => files.delete(u) }), delete: async () => true };
+  const storage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  globalThis.location ??= { origin: 'http://localhost' };
+  let clock = 1_000_000;
+  const cache = createPosterCache({ storage, limit: 300, caches, now: () => clock });
+  for (const k of ['movie:1', 'movie:2']) await cache.put({ ratingKey: k, title: k, year: '2020', thumb: `/${k.slice(6)}.jpg`, contentRating: 'PG', libraryKey: 'movie/popular' }, new Blob(['x']), { width: 300, height: 450 });
+  assert.ok(cache.entries().every((e) => !('companyIds' in e)), 'cached with no company ids');
+  const client = {
+    ...fakeClient(),
+    pool: async () => [{ ...poster('a'), contentRating: 'PG' }],
+    items: async (ids) => ids.map((id) => ({ ratingKey: id, contentRating: 'PG', source: 'static', ...(id === 'movie:1' ? { companyIds: ['41077'] } : {}) })),
+  };
+  const settings = { ...defaults(), serverType: 'tmdb', tmdbKey: 'k', libraryKey: 'movie/popular', maxContentRating: 'PG', showNowPlaying: false };
+  const engine = createEngine({ client, getSettings: () => settings, now: () => clock, random: () => 0, cachedKeys: () => cache.entries().map((e) => e.ratingKey), onRatings: (posters, info) => cache.refreshRatings(posters, info) });
+  await engine.decide({ force: true });
+  const byKey = new Map(cache.entries().map((e) => [e.ratingKey, e]));
+  assert.deepEqual(byKey.get('movie:1').companyIds, ['41077']);
+  assert.ok(!('companyIds' in byKey.get('movie:2')));
+  const sel = selectionOf({ libraryKeys: ['movie/popular'], houses: [{ key: '41077', title: 'A24' }] });
+  const seen = new Set();
+  for (let i = 0; i < 20; i++) seen.add((await cache.random(undefined, 'PG', sel))?.poster.ratingKey ?? null);
+  assert.deepEqual([...seen], ['movie:1']);
+});
+
+test('ux F1 (D109 3, D110 4): a house list the pool cannot satisfy gets the same one-sentence advice to tick fewer production houses (K5)', async () => {
+  const msg = async (overrides, clientOpts) => {
+    const { engine } = selecting({ unwatchedOnly: false, ...overrides }, clientOpts);
+    try {
+      await engine.decide();
+    } catch (e) {
+      return e.message;
+    }
+    return '';
+  };
+  const pixar = [{ key: '', title: 'Pixar' }];
+  assert.equal(await msg({ houses: pixar }, { libs: { 1: [] } }), 'No posters found in Movies, production house Pixar (tick fewer production houses).');
+  assert.equal(await msg({ houses: pixar, maxContentRating: 'PG' }, { libs: { 1: [] } }), 'No posters found in Movies, production house Pixar at or below PG (raise the limit or tick fewer production houses).');
+  assert.equal(await msg({ houses: pixar, genres: [{ key: '1', title: 'Western' }] }, { libs: { 1: [] } }), 'No posters found in Movies, genre Western, production house Pixar (tick fewer genres or production houses).');
+  assert.equal(await msg({ houses: pixar, genres: [{ key: '1', title: 'Western' }], ratings: ['G'] }, { libs: { 1: [] } }), 'No posters found in Movies, genre Western, production house Pixar, rated G (tick fewer genres, production houses or ratings).');
+  assert.equal(await msg({ houses: pixar, ratings: ['G'] }, { libs: { 1: [] } }), 'No posters found in Movies, production house Pixar, rated G (tick fewer production houses or ratings).');
+  // A collection or playlist ignores the house list, so it is no advice there.
+  assert.equal(await msg({ houses: pixar, source: { kind: 'playlist', key: '9', title: 'P' } }, { sources: {} }), 'No posters found in the playlist "P" (use the libraries instead of the playlist).');
+});
+
+test('ux F1: the empty card of a TMDB household with a house list says to tick fewer production houses, with or without a limit', async () => {
+  const lists = [{ key: 'movie/popular', type: 'movie', title: 'Popular' }];
+  const emptyCard = async (settings) => {
+    const full = { ...defaults(), plexToken: 't', serverUrl: 'http://s', showNowPlaying: false, serverType: 'tmdb', tmdbKey: 'k', libraryKey: 'movie/popular', libraryKeys: ['movie/popular'], libraryNames: ['Popular'], ...settings };
+    const client = { ...fakeClient({ pool: [] }), libraries: async () => lists };
+    try {
+      await createEngine({ client, getSettings: () => full, now: () => 1_000_000 }).decide();
+    } catch (e) {
+      return e.message;
+    }
+    return '';
+  };
+  const a24 = [{ key: '41077', title: 'A24' }];
+  // D216: a list is only narrowed by the houses, so the one sentence also says Discover finds every title from them.
+  const more = 'choose Discover to find every title from those houses';
+  assert.equal(await emptyCard({ houses: a24 }), `No posters found in Popular, production house A24 (tick fewer production houses or ${more}).`);
+  assert.equal(await emptyCard({ houses: a24, maxContentRating: 'PG' }), `No posters found in Popular, production house A24 at or below PG (raise the limit or tick fewer production houses or ${more}).`);
+  assert.equal(await emptyCard({ houses: a24, genres: [{ key: '35', title: 'Comedy' }] }), `No posters found in Popular, genre Comedy, production house A24 (tick fewer genres or production houses or ${more}).`, 'with a genre too: still one sentence');
+  assert.equal(await emptyCard({ houses: a24, libraryKey: 'movie/top_rated', libraryKeys: ['movie/top_rated'], libraryNames: ['Top rated'] }), `No posters found in Top rated, production house A24 (tick fewer production houses or ${more}).`, 'every list, not only Popular');
+  assert.equal(await emptyCard({ houses: a24, libraryKey: 'tv/popular', libraryKeys: ['tv/popular'], libraryNames: ['Popular TV'] }), `No posters found in Popular TV, production house A24 (tick fewer production houses or ${more}).`, 'a TV list too');
+  // M3: Discover sends with_companies itself, so it is never told to choose Discover.
+  const discover = { libraryKey: 'discover/movie', libraryKeys: ['discover/movie'], libraryNames: ['Discover movies'] };
+  assert.equal(await emptyCard({ houses: a24, ...discover }), 'No posters found in Discover movies, production house A24 (tick fewer production houses).');
+  assert.equal(await emptyCard({ houses: a24, ...discover, libraryKey: 'discover/tv?mode=and', libraryKeys: ['discover/tv?mode=and'] }), 'No posters found in Discover movies, production house A24 (tick fewer production houses).', 'Discover with a mode in its key');
+  // No house list: no Discover advice on a list.
+  assert.equal(await emptyCard({ genres: [{ key: '35', title: 'Comedy' }] }), 'No posters found in Popular, genre Comedy (tick fewer genres).');
+});
+
+test("D214 3: a viewer profile in force draws from the household's house list (a profile has none of its own)", async () => {
+  const pixar = [{ key: '', title: 'Pixar' }];
+  const w = profiled({ houses: pixar });
+  await w.engine.decide().catch(() => null); // the fake pool has no studios: the card is empty, the request is what is read
+  assert.equal(w.client.calls.pool[0].libraryKey, '3', 'the Kids profile is in force');
+  assert.deepEqual(w.client.calls.pool[0].houses, ['Pixar'], "and the pool request carries the household's houses");
+  w.clock.at = new Date(2026, 0, 5, 22, 0).getTime();
+  await w.engine.decide({ force: true }).catch(() => null);
+  assert.deepEqual(w.client.calls.pool.at(-1).houses, ['Pixar'], 'so does the other profile');
 });

@@ -232,6 +232,7 @@ test('a Jellyfin movie maps to the poster shape the engine reads', async () => {
     duration: 90 * 60 * 1000,
     summary: 'On the last night of the season, the owner of a failing picture palace stages one grand show to save it.',
     genres: ['Drama'],
+    studios: ['Mock Pictures'],
     viewCount: 2,
     audienceRating: 7.9,
     tmdbId: '2001',
@@ -725,4 +726,64 @@ test('tmdb ids: the mock lists TMDB ids for some titles and none for others, and
   assert.ok(withId.length > 0 && withId.length < posters.length);
   for (const p of withId) assert.match(p.tmdbId, /^\d+$/);
   for (const p of withId) assert.equal(p.tmdbType, 'movie');
+});
+
+test('tmdb ids (review F1): the collection and the playlist request ask for ProviderIds among their Fields (J1)', async () => {
+  const { source, calls } = connect();
+  await source.sourceItems({ kind: 'collection', key: (await source.collections())[0].key });
+  await source.sourceItems({ kind: 'playlist', key: (await source.playlists())[0].key });
+  const asked = calls.filter((c) => c.url.pathname.startsWith('/Playlists/') || (c.url.pathname === '/Items' && c.url.searchParams.has('ParentId')));
+  assert.equal(asked.length, 2, 'one collection and one playlist request');
+  for (const { url } of asked) assert.ok((url.searchParams.get('Fields') || '').split(',').includes('ProviderIds'), url.href);
+  const listed = await source.sourceItems({ kind: 'playlist', key: (await source.playlists())[0].key }, { unwatchedOnly: false });
+  assert.ok(listed.some((p) => p.tmdbId), 'and a playlist title carries its TMDB id');
+});
+
+// ---- a poster's production house (Run 13, production-house-filter): Studios[].Name ----
+
+test('houses: Studios[].Name becomes the poster studios, and nothing when there is none', () => {
+  const base = { Id: 'm1', Name: 'A', Type: 'Movie' };
+  assert.deepEqual(toPoster({ ...base, Studios: [{ Name: 'Pixar', Id: 'x' }, { Name: ' A24 ' }, { Name: '' }, { Id: 'y' }, null, 'Mock'] }, 'random').studios, ['Pixar', 'A24']);
+  for (const Studios of [undefined, [], 'Pixar', [{ Name: 5 }], {}]) assert.equal('studios' in toPoster({ ...base, Studios }, 'random'), false, JSON.stringify(Studios));
+});
+
+test('houses: every item request asks for Studios among its Fields', async () => {
+  const { source, calls } = connect();
+  const [movies] = await source.libraries();
+  await source.pool({ libraryKey: movies.key });
+  for (const { url } of calls.filter((c) => c.url.searchParams.has('Fields'))) assert.ok(url.searchParams.get('Fields').split(',').includes('Studios'), url.href);
+});
+
+test('houses: pool sends Studios=<names joined by a pipe>, and the mock returns only those titles; none chosen sends nothing', async () => {
+  const { source, calls } = connect();
+  const [movies] = await source.libraries();
+  const some = await source.pool({ libraryKey: movies.key, houses: ['Pixar'], unwatchedOnly: false });
+  assert.equal(calls.at(-1).url.searchParams.get('Studios'), 'Pixar');
+  assert.ok(some.length > 0 && some.every((p) => p.studios.includes('Pixar')), JSON.stringify(some.map((p) => p.studios)));
+  await source.pool({ libraryKey: movies.key, houses: ['Pixar', 'A24'] });
+  assert.equal(calls.at(-1).url.searchParams.get('Studios'), 'Pixar|A24');
+  await source.pool({ libraryKey: movies.key, houses: [] });
+  assert.equal(calls.at(-1).url.searchParams.has('Studios'), false);
+});
+
+test('houses: houses(library) lists the studios of a library, by name; genres() lists genres only (D214 2)', async () => {
+  const { source } = connect();
+  const [movies] = await source.libraries();
+  const list = await source.houses(movies.key);
+  assert.ok(list.some((h) => h.title === 'Pixar'));
+  assert.ok(list.every((h) => h.key === '' && typeof h.title === 'string'));
+  assert.deepEqual(await source.genres(movies.key, { houses: true }), await source.genres(movies.key), 'genres() has no houses switch');
+  assert.ok(!(await source.genres(movies.key)).some((h) => h.title === 'Pixar'), 'and lists no studio');
+});
+
+test('D215 2: a studio name holding a pipe is not sent in Studios=; the request keeps its 3x size', async () => {
+  const { source, calls } = connect();
+  const [movies] = await source.libraries();
+  await source.pool({ libraryKey: movies.key, houses: ['Fox | Searchlight'] });
+  assert.equal(calls.at(-1).url.searchParams.has('Studios'), false, 'no Studios parameter');
+  assert.equal(calls.at(-1).url.searchParams.get('Limit'), '300', 'still 3x the default 100');
+  await source.pool({ libraryKey: movies.key, houses: ['Pixar', 'Fox | Searchlight'] });
+  assert.equal(calls.at(-1).url.searchParams.has('Studios'), false, 'one such name leaves the parameter off for the whole request');
+  await source.pool({ libraryKey: movies.key, houses: ['Lucasfilm Ltd., LLC'] });
+  assert.equal(calls.at(-1).url.searchParams.get('Studios'), 'Lucasfilm Ltd., LLC', 'a comma is no delimiter for Jellyfin: sent as is');
 });

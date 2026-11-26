@@ -75,6 +75,25 @@ export function cleanGenres(v) {
   return out;
 }
 
+/**
+ * Production houses as `{ key, title }` (Run 13): a media server's studio is its name (`key` ''), a TMDB company is its id and name. The title is required;
+ * one entry per id (or, with no id, per name).
+ */
+export function cleanHouses(v) {
+  if (!Array.isArray(v)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const h of v) {
+    const title = h && typeof h === 'object' ? textOf(h.title) : '';
+    const key = title ? textOf(h.key) : '';
+    const id = key || lower(title);
+    if (!title || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ key, title });
+  }
+  return out;
+}
+
 /** The chosen ratings: ladder values only (G, PG, PG-13, R, NC-17), once each, lowest first. */
 export function cleanRatings(v) {
   if (!Array.isArray(v)) return [];
@@ -103,12 +122,12 @@ export function selectionOf(s) {
       ? [{ key: textOf(s.libraryKey), name: typeof s.libraryName === 'string' ? s.libraryName : '' }]
       : [];
   // `multi`: a second server is set, so the pool, the offline cache and the checks name libraries (D156 7). Without it nothing changes from 2.4.0.
-  return { libraries, genres: cleanGenres(s.genres), ratings: cleanRatings(s.ratings), source: cleanSource(s.source), ...(Array.isArray(s.servers) && s.servers.length ? { multi: true } : {}) };
+  return { libraries, genres: cleanGenres(s.genres), houses: cleanHouses(s.houses), ratings: cleanRatings(s.ratings), source: cleanSource(s.source), ...(Array.isArray(s.servers) && s.servers.length ? { multi: true } : {}) };
 }
 
 /** Does the selection narrow the pool beyond one whole library? (More than one library, any genre, any rating subset, a collection or a playlist.) */
 export function narrows(sel) {
-  return sel.multi === true || sel.libraries.length > 1 || sel.genres.length > 0 || sel.ratings.length > 0 || sel.source !== null;
+  return sel.multi === true || sel.libraries.length > 1 || sel.genres.length > 0 || sel.houses.length > 0 || sel.ratings.length > 0 || sel.source !== null;
 }
 
 /** The id a cache entry records for membership of a collection or playlist. */
@@ -119,6 +138,7 @@ export function selectionKey(sel) {
   return JSON.stringify([
     sel.libraries.map((l) => l.key),
     sel.genres.map((g) => [g.key, lower(g.title)]),
+    sel.houses.map((h) => [h.key, lower(h.title)]),
     sel.ratings,
     sel.source ? memberId(sel.source) : '',
   ]);
@@ -162,8 +182,17 @@ export function ratingValues(labels, limit) {
 /** What goes in the `genre` parameter: the filter key Plex lists, else the title. */
 export const genreRequestValue = (g) => g.key || g.title;
 
+/** What goes in the house parameter: a TMDB company's id, else a server studio's name. */
+export const houseRequestValue = (h) => h.key || h.title;
+
 // ---- the gates ----
 
+/**
+ * Is one of the chosen houses among the title's own? A server's studio is matched by name (any case) against `studios`; a TMDB company by id against
+ * `companyIds`. A title that lists none of either is in no house (fails closed): a server or TMDB that ignored the request cannot widen the pool.
+ */
+const hasHouse = (studios, companyIds, chosen) =>
+  chosen.some((h) => (h.key ? Array.isArray(companyIds) && companyIds.some((c) => String(c) === h.key) : Array.isArray(studios) && studios.some((t) => typeof t === 'string' && lower(t.trim()) === lower(h.title))));
 const hasGenre = (titles, chosen) => Array.isArray(titles) && titles.some((t) => typeof t === 'string' && chosen.some((g) => lower(g.title) === lower(t)));
 const onChosenRung = (labels, rating) => {
   const rank = ratingRank(rating);
@@ -180,6 +209,7 @@ export const ratingPasses = (limit, ratings, rating) => allows(limit, rating) &&
 export function posterAllowed(sel, limit, poster) {
   if (!ratingPasses(limit, sel.ratings, poster.contentRating)) return false;
   if (!sel.source && sel.genres.length && !hasGenre(poster.genres, sel.genres)) return false;
+  if (!sel.source && sel.houses.length && !hasHouse(poster.studios, poster.companyIds, sel.houses)) return false;
   return true;
 }
 
@@ -195,6 +225,7 @@ export function entryInSelection(entry, sel, limit) {
   } else {
     if (typeof entry.libraryKey !== 'string' || !sel.libraries.some((l) => l.key === entry.libraryKey)) return false;
     if (sel.genres.length && !hasGenre(entry.genres, sel.genres)) return false;
+    if (sel.houses.length && !hasHouse(entry.studios, entry.companyIds, sel.houses)) return false;
   }
   if (sel.ratings.length && !(allows(limit, entry.contentRating) && onChosenRung(sel.ratings, entry.contentRating))) return false;
   return true;
@@ -210,6 +241,13 @@ const joined = (words, last) => (words.length < 2 ? words.join('') : `${words.sl
  */
 export const genresAreAll = (sel) => (sel?.libraries || []).some((l) => /^discover\/(movie|tv)\?(?:[^#]*&)?mode=and(?:&|$)/.test(String(l?.key ?? '')));
 
+/**
+ * Is a production house list set on a TMDB list (Popular, Top rated, Now playing, Upcoming, a TV list) rather than on Discover (D216)? A list is only
+ * narrowed to the houses, at most the pages D210 11 reads; Discover sends `with_companies` and finds every title. The help and the empty card say so.
+ */
+export const housesNarrowAList = (sel, serverType) =>
+  serverType === 'tmdb' && Boolean(sel?.houses?.length) && !sel.source && !(sel.libraries || []).some((l) => /^discover\//.test(String(l?.key ?? '')));
+
 /** The selection in words, for the empty card: "Movies and Kids Movies, genre Comedy, rated G or PG". */
 export function describeSelection(sel) {
   const parts = [];
@@ -218,6 +256,7 @@ export function describeSelection(sel) {
   } else {
     parts.push(joined(sel.libraries.map((l) => l.name || `library ${l.key}`), 'and'));
     if (sel.genres.length) parts.push(`${sel.genres.length > 1 ? 'genres' : 'genre'} ${joined(sel.genres.map((g) => g.title), genresAreAll(sel) ? 'and' : 'or')}`);
+    if (sel.houses.length) parts.push(`production ${sel.houses.length > 1 ? 'houses' : 'house'} ${joined(sel.houses.map((h) => h.title), 'or')}`);
   }
   if (sel.ratings.length) parts.push(`rated ${joined(sel.ratings, 'or')}`);
   return parts.join(', ');

@@ -18,9 +18,11 @@
 //                                         its CollectionType `movies` to 'movie' and `tvshows` to 'show'
 //   libraryCount(key)                     how many items a library holds, or null; never throws
 //   sessions()                            what is playing now, in the adapter's own shape; only nowPlaying() reads it
-//   pool({ libraryKey, unwatchedOnly, size, maxContentRating, genres, ratings })   posters for the random pool
+//   pool({ libraryKey, unwatchedOnly, size, maxContentRating, genres, houses, ratings })   posters for the random pool; `houses` are studio names (a server) or company ids (TMDB), OR
 //   sourceItems({ kind, key }, opts)      the posters of one collection or playlist; the list has `.listed`, every id the reply held
-//   genres(libraryKey)                    [{ key, title }]
+//   genres(libraryKey)                    [{ key, title }]: the genres only
+//   houses(libraryKey, { query })         [{ key, title }]: production houses (Run 13). A server: the studios of the library (`key` ''; `query` unused). TMDB: the
+//                                         companies whose name matches `query` (`key` the company id, `country` the origin country when TMDB names one)
 //   collections(libraryKey)               [{ key, title, smart }]
 //   playlists()                           [{ key, title }]
 //   item(id)                              one poster, or an error of kind 'http' when it is gone
@@ -41,6 +43,8 @@
 //   duration       ms, 0 when unknown
 //   summary        text trimmed to the shared length limit (SUMMARY_MAX in js/fill.js), '' when none
 //   genres         the item's own genre titles (a genre selection is checked against them); left off when none
+//   studios        a server's studio names for the title, usually one (a production-house selection is checked against them); left off when none
+//   companyIds     TMDB production company ids (text): every TMDB title's details read names its companies (D215 1), so a pool title or a pinned title carries them; left off when TMDB lists none
 //   viewCount, audienceRating, rating    what weighting reads (R-SEL-2); left off when the server sent nothing usable
 //   tmdbId, tmdbType  the title's TMDB id (digits, as text) and 'movie' or 'tv', only when the server's metadata names exactly one; an episode has none
 // The engine adds `libraryKey` and `members` to the pool posters it draws; the adapter does not.
@@ -84,7 +88,7 @@ export { DEFAULT_LIBRARY, discoverKey, sourceOf, validYear } from './tmdb.js'; /
 
 /** The members every adapter object has, in the order the list above gives them. */
 export const SOURCE_MEMBERS = [
-  'label', 'identity', 'publicIdentity', 'libraries', 'libraryCount', 'sessions', 'pool', 'sourceItems', 'genres', 'collections', 'playlists', 'item', 'items', 'imageUrl', 'nowPlaying',
+  'label', 'identity', 'publicIdentity', 'libraries', 'libraryCount', 'sessions', 'pool', 'sourceItems', 'genres', 'houses', 'collections', 'playlists', 'item', 'items', 'imageUrl', 'nowPlaying',
 ];
 
 /** The members only the Plex adapter has (Play now); every adapter has SOURCE_MEMBERS, the Plex adapter and the source over several servers have these too. */
@@ -317,6 +321,11 @@ export function createSources(settings, opts = {}) {
     async genres(libraryKey) {
       const [m, bare] = route(libraryKey);
       return m.source.genres(bare);
+    },
+
+    async houses(libraryKey, options) {
+      const [m, bare] = route(libraryKey);
+      return m.source.houses(bare, options);
     },
 
     async collections(libraryKey) {

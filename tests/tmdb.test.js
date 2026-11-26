@@ -39,7 +39,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
  * A fetch stand-in. `pages` is `{ 'movie/popular': [[item, ...], [item, ...]] }` (a page each), `certs` is `{ 'movie:1': [entries], 'tv:2': [entries] }`, `fail` is
  * `{ 'movie:3': 429 | 'network' }` for a certification lookup, and `when(path, params)` may answer a request first (a Response, or undefined to carry on).
  */
-function stubTmdb({ pages = {}, certs = {}, fail = {}, genres = {}, when = () => undefined, auth = true } = {}) {
+function stubTmdb({ pages = {}, certs = {}, fail = {}, genres = {}, companies = {}, found = {}, when = () => undefined, auth = true } = {}) {
   const calls = [];
   let inFlight = 0;
   let peak = 0;
@@ -52,20 +52,23 @@ function stubTmdb({ pages = {}, certs = {}, fail = {}, genres = {}, when = () =>
     const answered = when(path, params, headers);
     if (answered !== undefined) return answered;
     if (path === 'authentication') return json({ success: true, status_code: 1 });
-    const lookup = /^(movie|tv)\/(\d+)\/(release_dates|content_ratings)$/.exec(path);
-    if (lookup) {
-      const id = `${lookup[1]}:${lookup[2]}`;
+    const genre = /^genre\/(movie|tv)\/list$/.exec(path);
+    if (genre) return json({ genres: genres[genre[1]] ?? [{ id: 35, name: 'Comedy' }, { id: 18, name: 'Drama' }, { id: 28, name: 'Action' }] });
+    const detail = /^(movie|tv)\/(\d+)$/.exec(path);
+    // Every title's details (D215 1): its certifications ride along and, with `companies` (`{ 'movie:1': [3, 41077] }`, or null for a reply that names none), its production companies. A title in none of `certs`, `companies`, `fail` is a 404.
+    const readable = detail && ((`${detail[1]}:${detail[2]}` in companies) || Array.isArray(certs[`${detail[1]}:${detail[2]}`]) || `${detail[1]}:${detail[2]}` in fail);
+    if (readable) {
+      const id = `${detail[1]}:${detail[2]}`;
       inFlight++;
       peak = Math.max(peak, inFlight);
       await new Promise((r) => setTimeout(r, 5));
       inFlight--;
       if (fail[id] === 'network') throw new TypeError('Failed to fetch');
       if (fail[id]) return json({ status_code: 25 }, fail[id]);
-      return id in certs ? json({ id: Number(lookup[2]), results: certs[id] }) : json({ status_code: 34 }, 404);
+      const own = companies[id];
+      return json({ id: Number(detail[2]), ...(own ? { production_companies: own.map((c) => ({ id: c, name: `Company ${c}` })) } : {}), ...(id in certs ? { [detail[1] === 'movie' ? 'release_dates' : 'content_ratings']: { results: certs[id] } } : {}) });
     }
-    const genre = /^genre\/(movie|tv)\/list$/.exec(path);
-    if (genre) return json({ genres: genres[genre[1]] ?? [{ id: 35, name: 'Comedy' }, { id: 18, name: 'Drama' }, { id: 28, name: 'Action' }] });
-    const detail = /^(movie|tv)\/(\d+)$/.exec(path);
+    if (path === 'search/company') return json({ page: 1, results: found[params.query] ?? [], total_pages: 1, total_results: (found[params.query] ?? []).length });
     if (detail) return certs[`${detail[1]}:${detail[2]}`]?.details ? json(certs[`${detail[1]}:${detail[2]}`].details) : json({ status_code: 34 }, 404);
     const list = pages[path];
     if (list) {
@@ -74,7 +77,7 @@ function stubTmdb({ pages = {}, certs = {}, fail = {}, genres = {}, when = () =>
     }
     return json({ status_code: 34 }, 404);
   };
-  return { fetchImpl, calls, get peak() { return peak; }, listCalls: () => calls.filter((c) => !/^(movie|tv)\/\d+\//.test(c.path) && !c.path.startsWith('genre/') && c.path !== 'authentication'), lookups: () => calls.filter((c) => /^(movie|tv)\/\d+\/(release_dates|content_ratings)$/.test(c.path)) };
+  return { fetchImpl, calls, get peak() { return peak; }, listCalls: () => calls.filter((c) => !/^(movie|tv)\/\d+/.test(c.path) && !c.path.startsWith('genre/') && !c.path.startsWith('search/') && c.path !== 'authentication'), lookups: () => calls.filter((c) => /^(movie|tv)\/\d+$/.test(c.path)) };
 }
 const client = (stub, ...key) => createTmdbClient({ key: key.length ? key[0] : TOKEN, fetchImpl: stub.fetchImpl }); // an explicit undefined is no key
 const keys = (posters) => posters.map((p) => p.ratingKey);
@@ -216,7 +219,7 @@ test('a result with adult: true is dropped, whatever its certification, and so i
   });
   const posters = await client(stub).pool({ libraryKey: 'movie/popular', maxContentRating: 'PG' });
   assert.deepEqual(keys(posters), ['movie:2', 'movie:7'], 'adult:true is gone; adult: "yes" is not the flag and the PG title stays');
-  assert.ok(!stub.lookups().some((c) => c.path === 'movie/1/release_dates'), 'no lookup is spent on an adult title');
+  assert.ok(!stub.lookups().some((c) => c.path === 'movie/1'), 'no lookup is spent on an adult title');
 });
 
 // ---- Discover (D210 8, 9, 10) ----
@@ -322,7 +325,7 @@ test('a list takes the ticked genres client-side, before any certification is re
   const posters = await client(stub).pool({ libraryKey: 'movie/popular', genres: ['35'] });
   assert.deepEqual(keys(posters), ['movie:1', 'movie:3', 'movie:5']);
   assert.ok(!('with_genres' in stub.listCalls()[0].params), 'a list has no genre parameter');
-  assert.deepEqual(stub.lookups().map((c) => c.path).sort(), ['movie/1/release_dates', 'movie/3/release_dates', 'movie/5/release_dates']);
+  assert.deepEqual(stub.lookups().map((c) => c.path).sort(), ['movie/1', 'movie/3', 'movie/5']);
 });
 
 // ---- the certification (D203 4, D209 1, D210 1, 3) ----
@@ -386,14 +389,16 @@ test('a show: its US content_ratings rating on the TV ladder; TV-MA at limit PG 
   assert.deepEqual(keys(await client(stub).pool({ libraryKey: 'tv/popular', maxContentRating: 'PG-13' })), ['tv:1', 'tv:3']);
   assert.deepEqual(keys(await client(stub).pool({ libraryKey: 'tv/popular', maxContentRating: 'NC-17' })), ['tv:1', 'tv:2', 'tv:3']);
   assert.equal((await client(stub).pool({ libraryKey: 'tv/popular' })).length, 5, 'no limit: everything, rated or not');
-  assert.ok(stub.lookups().every((c) => /^tv\/\d+\/content_ratings$/.test(c.path)), 'a show is read at content_ratings');
+  assert.ok(stub.lookups().every((c) => /^tv\/\d+$/.test(c.path) && c.params.append_to_response === 'content_ratings'), 'a show is read at its details with content_ratings appended');
 });
 
 test('every list and Discover title is read before it can be shown: the lookup is made for each, movie or show (D210 3)', async () => {
   for (const [key, type, make, cert] of [['movie/top_rated', 'movie', movie, usDates('PG')], ['discover/movie', 'movie', movie, usDates('PG')], ['tv/airing_today', 'tv', show, usRating('TV-Y')], ['discover/tv', 'tv', show, usRating('TV-Y')]]) {
     const stub = stubTmdb({ pages: { [key]: [[make(1), make(2), make(3)]] }, certs: { [`${type}:1`]: [cert], [`${type}:2`]: [cert], [`${type}:3`]: [cert] } });
     await client(stub).pool({ libraryKey: key });
-    assert.deepEqual(stub.lookups().map((c) => c.path).sort(), [1, 2, 3].map((id) => `${type}/${id}/${type === 'movie' ? 'release_dates' : 'content_ratings'}`), key);
+    assert.deepEqual(stub.lookups().map((c) => c.path).sort(), [1, 2, 3].map((id) => `${type}/${id}`), key);
+    assert.ok(stub.lookups().every((c) => c.params.append_to_response === (type === 'movie' ? 'release_dates' : 'content_ratings')), key);
+    assert.ok(!stub.calls.some((c) => /\/(release_dates|content_ratings)$/.test(c.path)), 'no separate certification request');
   }
 });
 
@@ -474,7 +479,7 @@ test('T13 at most five pages are fetched for a pool of 1000, and an id on two pa
   assert.deepEqual(stub.listCalls().map((c) => c.params.page), ['1', '2', '3', '4', '5'], 'five pages and no sixth');
   assert.equal(posters.length, 99, '100 candidates, one repeated');
   assert.equal(new Set(keys(posters)).size, posters.length);
-  assert.equal(stub.lookups().filter((c) => c.path === 'movie/5/release_dates').length, 1, 'the repeat is not read twice');
+  assert.equal(stub.lookups().filter((c) => c.path === 'movie/5').length, 1, 'the repeat is not read twice');
 });
 
 test('the pool is filled to the size asked from as few pages as needed, and cut to it', async () => {
@@ -611,7 +616,7 @@ test('createSource and signInFlow build the TMDB adapter for serverType tmdb fro
   assert.equal(flow.label, 'TMDB');
   assert.equal(flow.needsAddress, false);
   assert.equal(typeof flow.words.couldNotGet('x'), 'string');
-  for (const m of ['label', 'identity', 'publicIdentity', 'libraries', 'libraryCount', 'sessions', 'pool', 'sourceItems', 'genres', 'collections', 'playlists', 'item', 'items', 'imageUrl', 'nowPlaying']) assert.ok(m in source, m);
+  for (const m of ['label', 'identity', 'publicIdentity', 'libraries', 'libraryCount', 'sessions', 'pool', 'sourceItems', 'genres', 'houses', 'collections', 'playlists', 'item', 'items', 'imageUrl', 'nowPlaying']) assert.ok(m in source, m);
 });
 
 test('TMDB is never one of several servers: createSources builds no member for a tmdb entry', async () => {
@@ -651,7 +656,7 @@ test('items() gives the current certification of each cached title; a title whos
   const stub = stubTmdb({ certs: { 'movie:1': [gbDates('18'), usDates('PG')], 'movie:2': [usDates('R')], 'movie:3': [usDates('PG')], 'tv:4': [usRating('TV-MA')], 'movie:5': [gbDates('PG')] }, fail: { 'movie:3': 429 } });
   const got = await client(stub).items(['movie:1', 'movie:2', 'movie:3', 'tv:4', 'movie:5', 'movie:1', 'junk', '77']);
   assert.deepEqual(got.map((p) => [p.ratingKey, p.contentRating]), [['movie:1', 'PG'], ['movie:2', 'R'], ['tv:4', 'TV-MA'], ['movie:5', '']]);
-  assert.equal(stub.lookups().filter((c) => c.path === 'movie/1/release_dates').length, 1, 'a repeated id is asked once');
+  assert.equal(stub.lookups().filter((c) => c.path === 'movie/1').length, 1, 'a repeated id is asked once');
   assert.deepEqual(await client(stubTmdb()).items([]), []);
 });
 
@@ -703,4 +708,142 @@ test('r2 R5 validYear: four digits from 1800 to 2200 as text, anything else is e
   for (const ok of ['1800', '1999', '2020', '2200', ' 2020 ']) assert.equal(validYear(ok), ok.trim(), ok);
   assert.equal(validYear(2020), '2020');
   for (const bad of ['', ' ', '20', '202', '20201', '1799', '2201', '0000', 'abcd', '2020.5', '2e3', '-2020', '+2020', '2020a', null, undefined, {}, [], NaN]) assert.equal(validYear(bad), '', String(bad));
+});
+
+// ---- production house (Run 13, production-house-filter; R-TMDB-2, D203 6, D210, D211, D212) ----
+
+const P3 = 3; // Pixar
+const A24 = 41077;
+const housesStub = (companies, extra = {}) =>
+  stubTmdb({
+    pages: { 'movie/popular': [[movie(1), movie(2), movie(3), movie(4)]], 'discover/movie': [[movie(1), movie(2), movie(3), movie(4)]] },
+    certs: { 'movie:1': [usDates('G')], 'movie:2': [usDates('PG')], 'movie:3': [usDates('R')], 'movie:4': [usDates('PG')] },
+    companies,
+    ...extra,
+  });
+
+test('houses: Discover sends with_companies joined by a pipe (H4), whatever the genre mode, and nothing when none is chosen', async () => {
+  const send = async (key, houses) => (await discoverCall(key, { houses })).params.with_companies;
+  assert.equal(await send('discover/movie', ['3', '41077']), '3|41077');
+  assert.equal(await send('discover/movie?mode=and', ['3', '41077']), '3|41077', 'every-genre mode does not make houses AND');
+  assert.equal(await send('discover/movie', ['3']), '3');
+  assert.equal((await discoverCall('discover/tv', { houses: ['3', '9'] }, 'tv')).params.with_companies, '3|9');
+  assert.ok(!('with_companies' in (await discoverCall('discover/movie', { houses: [] })).params), 'none chosen: no parameter');
+  assert.ok(!('with_companies' in (await discoverCall('discover/movie', {})).params));
+});
+
+test('houses: a list takes no company parameter, the titles are narrowed after their companies are read', async () => {
+  const stub = housesStub({ 'movie:1': [P3], 'movie:2': [A24], 'movie:3': [P3, 9], 'movie:4': [9] });
+  const posters = await client(stub).pool({ libraryKey: 'movie/popular', houses: [String(P3)] });
+  assert.ok(!('with_companies' in stub.listCalls()[0].params));
+  assert.deepEqual(keys(posters), ['movie:1', 'movie:3'], 'only the titles whose companies include Pixar');
+  assert.deepEqual(posters[0].companyIds, ['3']);
+  assert.deepEqual(posters[1].companyIds, ['3', '9']);
+});
+
+test('houses: several houses are OR', async () => {
+  const stub = housesStub({ 'movie:1': [P3], 'movie:2': [A24], 'movie:3': [9], 'movie:4': [8] });
+  assert.deepEqual(keys(await client(stub).pool({ libraryKey: 'movie/popular', houses: ['3', '41077'] })), ['movie:1', 'movie:2']);
+});
+
+test('houses: a title is read with its companies in one details request (the certification rides along) and no separate lookup', async () => {
+  const stub = housesStub({ 'movie:1': [P3], 'movie:2': [P3], 'movie:3': [P3], 'movie:4': [P3] });
+  const posters = await client(stub).pool({ libraryKey: 'movie/popular', houses: ['3'], maxContentRating: 'PG' });
+  assert.deepEqual(keys(posters), ['movie:1', 'movie:2', 'movie:4'], 'the R title is out under the limit');
+  const detail = stub.calls.filter((c) => /^movie\/\d+$/.test(c.path));
+  assert.equal(detail.length, 4);
+  for (const c of detail) assert.equal(c.params.append_to_response, 'release_dates', c.path);
+  assert.equal(stub.lookups().length, 4, 'one request per title: the details, and no second');
+  assert.deepEqual(posters.map((p) => p.contentRating), ['G', 'PG', 'PG']);
+});
+
+test('houses: a TV title is read with content_ratings and its companies', async () => {
+  const stub = stubTmdb({ pages: { 'tv/popular': [[show(7), show(8)]] }, certs: { 'tv:7': [usRating('TV-PG')], 'tv:8': [usRating('TV-PG')] }, companies: { 'tv:7': [P3], 'tv:8': [9] } });
+  const posters = await client(stub).pool({ libraryKey: 'tv/popular', houses: ['3'], maxContentRating: 'PG' });
+  assert.deepEqual(keys(posters), ['tv:7']);
+  assert.equal(stub.calls.find((c) => c.path === 'tv/7').params.append_to_response, 'content_ratings');
+});
+
+test('houses: a house list never lets in a title the limit refuses, nor an unrated one (D5, H5)', async () => {
+  const stub = housesStub({ 'movie:1': [A24], 'movie:2': [A24], 'movie:3': [A24], 'movie:4': [A24] }, { certs: { 'movie:1': [usDates('R')], 'movie:2': [usDates('PG')], 'movie:3': [], 'movie:4': [usDates('PG-13')] } });
+  assert.deepEqual(keys(await client(stub).pool({ libraryKey: 'discover/movie', houses: ['41077'], maxContentRating: 'PG' })), ['movie:2']);
+});
+
+test('houses: a title whose companies are unknown is refused while a house list is set (H7)', async () => {
+  const stub = housesStub({ 'movie:1': null, 'movie:2': [P3], 'movie:3': [], 'movie:4': [P3] });
+  assert.deepEqual(keys(await client(stub).pool({ libraryKey: 'movie/popular', houses: ['3'] })), ['movie:2', 'movie:4'], 'no production_companies, or an empty list, matches no house');
+});
+
+test('houses: a failed details lookup hides its title, marks the pool partial, and every one failing throws the first', async () => {
+  const stub = housesStub({ 'movie:1': [P3], 'movie:2': [P3], 'movie:3': [P3], 'movie:4': [P3] }, { fail: { 'movie:2': 429 } });
+  const posters = await client(stub).pool({ libraryKey: 'movie/popular', houses: ['3'] });
+  assert.deepEqual(keys(posters), ['movie:1', 'movie:3', 'movie:4']);
+  assert.equal(posters.partial, true);
+  const all = housesStub({ 'movie:1': [P3], 'movie:2': [P3], 'movie:3': [P3], 'movie:4': [P3] }, { fail: { 'movie:1': 429, 'movie:2': 429, 'movie:3': 429, 'movie:4': 429 } });
+  await assert.rejects(() => client(all).pool({ libraryKey: 'movie/popular', houses: ['3'] }), (err) => err.kind === 'http' && err.status === 429);
+});
+
+test('houses: a title TMDB holds no record of (404) is refused, and is not a failure', async () => {
+  const stub = housesStub({ 'movie:2': [P3] });
+  const posters = await client(stub).pool({ libraryKey: 'movie/popular', houses: ['3'] });
+  assert.deepEqual(keys(posters), ['movie:2']);
+  assert.equal(posters.partial, false);
+});
+
+test('houses: no more than 4 details lookups are in flight at once, and a list is read for at most 5 pages (D210)', async () => {
+  const many = Array.from({ length: 12 }, (_, i) => movie(i + 1));
+  const stub = stubTmdb({
+    pages: { 'movie/popular': [many, [movie(13)], [movie(14)], [movie(15)], [movie(16)], [movie(17)], [movie(18)]] },
+    certs: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [`movie:${i + 1}`, [usDates('PG')]])),
+    companies: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [`movie:${i + 1}`, [99]])),
+  });
+  await client(stub).pool({ libraryKey: 'movie/popular', houses: ['3'], size: 100 });
+  assert.ok(stub.peak <= MAX_LOOKUPS && stub.peak > 1, `peak ${stub.peak}`);
+  assert.equal(stub.listCalls().length, MAX_PAGES);
+});
+
+test('D215 1: with no house list a Popular title is read through its details request and carries its company ids; one request per title', async () => {
+  const stub = housesStub({ 'movie:1': [P3], 'movie:2': [P3, 9], 'movie:3': null, 'movie:4': [A24] });
+  const posters = await client(stub).pool({ libraryKey: 'movie/popular' });
+  assert.deepEqual(stub.lookups().map((c) => c.path).sort(), ['movie/1', 'movie/2', 'movie/3', 'movie/4']);
+  assert.ok(!stub.calls.some((c) => /\/(release_dates|content_ratings)$/.test(c.path)), 'the old certification request is not made');
+  assert.deepEqual(posters.map((p) => p.companyIds ?? null), [['3'], ['3', '9'], null, ['41077']]);
+  assert.deepEqual(posters.map((p) => p.contentRating), ['G', 'PG', 'R', 'PG'], 'the certification is the same one, read in the same request');
+  assert.ok(!stub.calls.some((c) => 'with_companies' in c.params), 'and no company parameter is sent');
+});
+
+test("D215 1: a cached title's re-rating (items) reads its details and returns the company ids it read", async () => {
+  const stub = stubTmdb({ certs: { 'movie:1': [usDates('PG')], 'tv:4': [usRating('TV-MA')] }, companies: { 'movie:1': [P3, 9], 'tv:4': null } });
+  const got = await client(stub).items(['movie:1', 'tv:4', 'movie:6']);
+  assert.deepEqual(got.map((p) => [p.ratingKey, p.contentRating, p.companyIds ?? null]), [['movie:1', 'PG', ['3', '9']], ['tv:4', 'TV-MA', null], ['movie:6', '', null]]);
+  assert.ok(!stub.calls.some((c) => /\/(release_dates|content_ratings)$/.test(c.path)), 'one details request per title');
+});
+
+test('houses: companies are searched by name (search/company), as { key (the id), title }; a blank name asks nothing; genres() has no houses switch (D214 2)', async () => {
+  const stub = stubTmdb({ found: { A24: [{ id: 41077, name: 'A24', logo_path: null }, { id: 9, name: ' ' }, { id: 'x', name: 'Bad' }, { name: 'No id' }, null] } });
+  const c = client(stub);
+  assert.deepEqual(await c.houses('discover/movie', { query: ' A24 ' }), [{ key: '41077', title: 'A24' }]);
+  const call = stub.calls.find((x) => x.path === 'search/company');
+  assert.equal(call.params.query, 'A24');
+  assert.deepEqual(await c.houses('discover/movie', { query: '   ' }), []);
+  assert.equal(stub.calls.filter((x) => x.path === 'search/company').length, 1, 'a blank name sends no request');
+  assert.deepEqual(await c.houses('discover/movie', { query: 'nothing' }), []);
+  assert.ok((await c.genres('discover/movie', { houses: true, query: 'A24' })).some((g) => g.title === 'Comedy'), 'genres() is the genre list whatever the options');
+  assert.equal(stub.calls.filter((x) => x.path === 'search/company').length, 2, 'and sends no company search');
+});
+
+test('houses: the pinned title (item) carries its company ids', async () => {
+  const stub = stubTmdb({ when: (path) => (path === 'movie/5' ? json({ id: 5, title: 'Five', poster_path: '/p5.jpg', genres: [{ id: 35, name: 'Comedy' }], production_companies: [{ id: 3, name: 'Pixar' }, { id: 9, name: 'Other' }], release_dates: { results: [usDates('G')] } }) : undefined) });
+  const p = await client(stub).item('movie:5');
+  assert.deepEqual(p.companyIds, ['3', '9']);
+});
+
+test('houses: a company result keeps its origin country when TMDB names one, and TMDB order (D214 2, ux F6)', async () => {
+  const stub = stubTmdb({ found: { univ: [{ id: 33, name: 'Universal Pictures', origin_country: 'US' }, { id: 7, name: 'Universal Pictures', origin_country: 'FR' }, { id: 5, name: 'A', origin_country: '' }, { id: 6, name: 'B' }] } });
+  assert.deepEqual(await client(stub).houses('discover/movie', { query: 'univ' }), [
+    { key: '33', title: 'Universal Pictures', country: 'US' },
+    { key: '7', title: 'Universal Pictures', country: 'FR' },
+    { key: '5', title: 'A' },
+    { key: '6', title: 'B' },
+  ]);
 });

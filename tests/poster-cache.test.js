@@ -758,3 +758,42 @@ test('refreshRatings writes nothing when nothing changes, stamped or not', async
   pc.refreshRatings([tmdbPoster(1)], { checked: new Set(['movie:1']) });
   assert.deepEqual(written, [], 'the same rating at the same time is no write (SD wear)');
 });
+
+// ---- production houses (D214 1) ----
+
+test('put records the studios and the TMDB company ids of the poster, non-empty arrays only', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1', studios: ['Pixar'], companyIds: ['3'] }), blob(), size(300));
+  await pc.put(where(2, { libraryKey: '1', studios: [], companyIds: [] }), blob(), size(300));
+  await pc.put(where(3, { libraryKey: '1' }), blob(), size(300));
+  const [one, two2, three] = ['1', '2', '3'].map((k) => pc.entries().find((e) => e.ratingKey === k));
+  assert.deepEqual([one.studios, one.companyIds], [['Pixar'], ['3']]);
+  assert.deepEqual([['studios' in two2, 'companyIds' in two2], ['studios' in three, 'companyIds' in three]], [[false, false], [false, false]]);
+});
+
+test('random() under a house list draws an entry from a chosen studio and refuses one with neither field (D107)', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1', studios: ['Pixar'] }), blob(), size(300));
+  await pc.put(where(2, { libraryKey: '1', studios: ['A24'] }), blob(), size(300));
+  await pc.put(where(3, { libraryKey: '1' }), blob(), size(300));
+  const houses = [{ key: '', title: 'Pixar' }];
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKeys: ['1'], houses })), ['1']);
+});
+
+test('random() under a TMDB house list draws an entry whose company ids hold a chosen one', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  const list = 'discover/movie?mode=or';
+  await pc.put({ ...poster(1, '/t/1', 'G'), ratingKey: 'movie:1', libraryKey: list, companyIds: ['41077', '3'] }, blob(), size(300));
+  await pc.put({ ...poster(2, '/t/2', 'G'), ratingKey: 'movie:2', libraryKey: list, companyIds: ['3'] }, blob(), size(300));
+  await pc.put({ ...poster(3, '/t/3', 'G'), ratingKey: 'movie:3', libraryKey: list }, blob(), size(300));
+  const keys = await drawn(pc, selectionOf({ libraryKeys: [list], houses: [{ key: '41077', title: 'A24' }] }));
+  assert.deepEqual(keys, ['movie:1']);
+});
+
+test('a re-seen poster teaches its entry the studios and company ids (refreshRatings)', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1' }), blob(), size(300));
+  pc.refreshRatings([where(1, { libraryKey: '1', studios: ['Pixar'], companyIds: ['3'] })]);
+  const e = pc.entries()[0];
+  assert.deepEqual([e.studios, e.companyIds], [['Pixar'], ['3']]);
+});

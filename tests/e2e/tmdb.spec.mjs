@@ -346,8 +346,9 @@ tmdbCase('6 with the limit PG an R-certified movie, an uncertified movie and a T
   const allowed = new Set([...NAMES.G, ...NAMES.PG]);
   for (const title of drawn) assert.ok(allowed.has(title), `${title} is within PG`);
   assert.ok(drawn.size > 4, 'the pool is the PG titles');
-  for (const id of [1003, 1004, 1005, 1006, 1008]) assert.ok(seen.some((r) => r.path === `/3/movie/${id}/release_dates`), `title ${id} was read before it could be shown`);
-  assert.ok(!seen.some((r) => r.path === '/3/movie/1007/release_dates'), 'an adult title is dropped before any lookup');
+  for (const id of [1003, 1004, 1005, 1006, 1008]) assert.ok(seen.some((r) => r.path === `/3/movie/${id}` && r.params.append_to_response === 'release_dates'), `title ${id} was read before it could be shown`);
+  assert.ok(!seen.some((r) => /\/(release_dates|content_ratings)$/.test(r.path)), 'a certification is read through the details request, never its own (D215 1)');
+  assert.ok(!seen.some((r) => r.path === '/3/movie/1007'), 'an adult title is dropped before any lookup');
   // The same household on TV: TV-Y7 and TV-PG pass PG; TV-MA and the unrated show do not.
   await openSettings(page);
   await page.selectOption('#tmdb-list', 'tv/popular');
@@ -355,7 +356,7 @@ tmdbCase('6 with the limit PG an R-certified movie, an uncertified movie and a T
   await posterShown(page);
   const shows = new Set(await picks(page, 20));
   assert.deepEqual([...shows].sort(), ['Sunday Sketch', 'Tiny Explorers']);
-  assert.ok(seen.some((r) => r.path === '/3/tv/2003/content_ratings') && seen.some((r) => r.path === '/3/tv/2004/content_ratings'), 'every show is read at content_ratings');
+  assert.ok(seen.some((r) => r.path === '/3/tv/2003' && r.params.append_to_response === 'content_ratings') && seen.some((r) => r.path === '/3/tv/2004' && r.params.append_to_response === 'content_ratings'), 'every show is read at its details with content_ratings');
   // Lowering the limit to G hides the rest at once, with the screen re-checked.
   await openSettings(page);
   await page.selectOption('#tmdb-list', 'movie/popular');
@@ -369,8 +370,8 @@ tmdbCase('6 with the limit PG an R-certified movie, an uncertified movie and a T
 tmdbCase('7 a movie with a PG-13 and an R US entry is refused at PG-13 (D210 1); with the R entry away it is shown', { settings: seed({ maxContentRating: 'PG-13', libraryKey: 'discover/movie?from=2022&to=2022', libraryKeys: ['discover/movie?from=2022&to=2022'], genres: [{ key: '18', title: 'Drama' }] }) }, async ({ page, app }) => {
   const dates = (...certs) => ({ id: 1003, results: [{ iso_3166_1: 'GB', release_dates: [{ certification: '15' }] }, { iso_3166_1: 'US', release_dates: certs.map((certification) => ({ certification, type: 3 })) }] });
   let answer = dates('PG-13', 'R');
-  await page.route('**/3/movie/1003/release_dates**', (route) =>
-    route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: JSON.stringify(answer) }),
+  await page.route(/\/3\/movie\/1003(\?|$)/, (route) =>
+    route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: JSON.stringify({ id: 1003, release_dates: { results: answer.results } }) }),
   );
   await recordDraws(page);
   await page.goto(app.url);
@@ -416,19 +417,19 @@ tmdbCase('9 /__mock/down shows the server-down card naming TMDB, and the status 
 tmdbCase('10 a rate limit (429) on the certification lookups hides the titles, the card does not claim the key is bad, and the next pool build asks again', { settings: seed({ maxContentRating: 'PG' }) }, async ({ page, app }) => {
   const seen = watchTmdb(page);
   let rateLimited = true; // the page's own route answers the lookups until the spec lets the mock answer them (route.fallback)
-  await page.route('**/release_dates**', (route) => (rateLimited ? route.fulfill({ status: 429, headers: { 'access-control-allow-origin': '*', 'retry-after': '1' }, contentType: 'application/json', body: '{"status_code":25}' }) : route.fallback()));
+  await page.route(/\/3\/(movie|tv)\/\d+(\?|$)/, (route) => (rateLimited ? route.fulfill({ status: 429, headers: { 'access-control-allow-origin': '*', 'retry-after': '1' }, contentType: 'application/json', body: '{"status_code":25}' }) : route.fallback()));
   await page.goto(app.url);
   await page.waitForSelector('#empty:not([hidden])');
   assert.doesNotMatch(await cardText(page), /rejected the key/);
   assert.match(await cardText(page), /TMDB returned HTTP 429/);
   assert.deepEqual(await page.$$eval('#empty-actions button', (els) => els.map((e) => e.textContent.trim())), [], 'a 429 is not an auth error: no Sign in again');
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('.poster-layer.active')].length), 0, 'no title is shown on a certification that was not read');
-  const asked = seen.filter((r) => /release_dates$/.test(r.path)).length;
+  const asked = seen.filter((r) => /^\/3\/(movie|tv)\/\d+$/.test(r.path)).length;
   assert.ok(asked > 0);
   rateLimited = false;
   await page.evaluate(() => document.querySelector('[data-action="refresh"]').click());
   await posterShown(page);
-  assert.ok(seen.filter((r) => /release_dates$/.test(r.path)).length > asked, 'the lookups were made again');
+  assert.ok(seen.filter((r) => /^\/3\/(movie|tv)\/\d+$/.test(r.path)).length > asked, 'the lookups were made again');
   check('10 429 on the lookups hides the titles, is not auth, and recovers');
 });
 
@@ -854,6 +855,152 @@ tmdbCase('23 an import that makes TMDB the first server names each server it lea
   check('23 an import that leaves servers out: each named before Save, Cancel keeps them');
 });
 
+// ---------- production house (Run 13, production-house-filter) ----------
+// The mock gives each title one company: Pixar (3) has Paper Moon Rising G, Lantern Road PG and Tiny Explorers; A24 (41077) has Northern Lights Cafe PG-13, Static Bloom R
+// and Sunday Sketch; the rest are Mock Studios (9999).
+
+tmdbCase('24 search "A24", tick it, Save: only A24 titles show; Pixar added is OR; the company is sent by id and no key is stored with it', { settings: seed({ libraryKey: 'discover/movie', libraryKeys: ['discover/movie'], libraryNames: ['Discover movies'] }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await recordDraws(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await testOk(page);
+  assert.equal(await page.isVisible('#house-search-row'), true, 'TMDB has a company search');
+  assert.equal(await page.$$eval('#house-list input', (b) => b.length), 0, 'nothing is listed before a search');
+  await page.fill('#house-search', 'A24');
+  await page.click('#house-search-btn');
+  await page.waitForSelector('#house-list input[data-title="A24"]');
+  assert.deepEqual(await page.$$eval('#house-list li span', (els) => els.map((e) => e.textContent.trim())), ['A24'], 'the search names the company');
+  await page.check('#house-list input[data-title="A24"]');
+  assert.match(await page.textContent('#house-count'), /1 chosen/);
+  await save(page);
+  assert.deepEqual((await stored(page)).houses, [{ key: '41077', title: 'A24' }], 'the id and the name, nothing else');
+  assert.ok(!JSON.stringify((await stored(page)).houses).includes(TOKEN));
+  await posterShown(page);
+  assert.deepEqual([...new Set(await picks(page, 16))].sort(), ['Northern Lights Cafe', 'Static Bloom'], 'only the A24 titles');
+  assert.ok(seen.some((r) => r.path === '/3/discover/movie' && r.params.with_companies === '41077'), 'Discover was asked for the company by id');
+  assert.ok(seen.some((r) => r.path === '/3/search/company' && r.params.query === 'A24'));
+  // Pixar too: the houses are OR.
+  await openSettings(page);
+  await testOk(page);
+  assert.equal(await page.isChecked('#house-list input[data-title="A24"]'), true, 'reopened: the chosen company is a ticked row');
+  await page.fill('#house-search', 'pixar');
+  await page.click('#house-search-btn');
+  await page.waitForSelector('#house-list input[data-title="Pixar"]');
+  await page.check('#house-list input[data-title="Pixar"]');
+  await save(page);
+  assert.deepEqual((await stored(page)).houses.map((h) => h.title).sort(), ['A24', 'Pixar']);
+  await posterShown(page);
+  assert.deepEqual([...new Set(await picks(page, 40))].sort(), ['Lantern Road', 'Northern Lights Cafe', 'Paper Moon Rising', 'Static Bloom'], 'A24 or Pixar');
+  assert.ok(seen.some((r) => r.path === '/3/discover/movie' && r.params.with_companies === '41077|3'), 'several houses are joined by a pipe');
+  check('24 TMDB: a company searched by name, ticked, saved by id, sent as with_companies, OR');
+});
+
+tmdbCase('25 with the limit PG, Pixar and A24 together show Pixar\'s G and PG titles and no PG-13 or R title; a list (Popular) reads each title\'s companies', { settings: seed({ maxContentRating: 'PG', houses: [{ key: '3', title: 'Pixar' }, { key: '41077', title: 'A24' }] }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await recordDraws(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  assert.deepEqual([...new Set(await picks(page, 12))].sort(), ['Lantern Road', 'Paper Moon Rising'], 'Static Bloom (R) and Northern Lights Cafe (PG-13) are A24 titles the limit refuses');
+  assert.ok(seen.some((r) => /^\/3\/movie\/1001$/.test(r.path) && r.params.append_to_response === 'release_dates'), 'a list result has no companies: each title is read with them');
+  assert.ok(!seen.some((r) => r.path === '/3/movie/popular' && 'with_companies' in r.params), 'a list takes no company parameter');
+  check('25 TMDB: the limit stays the ceiling over a house list; a list is narrowed by each title\'s companies');
+});
+
+tmdbCase('26 a house list that no title has is the empty card, which names it', { settings: seed({ houses: [{ key: '9999', title: 'Mock Studios' }, { key: '3', title: 'Pixar' }], maxContentRating: 'G' }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await testOk(page);
+  await page.uncheck('#house-list input[data-title="Pixar"]');
+  await page.uncheck('#house-list input[data-title="Mock Studios"]');
+  await page.fill('#house-search', 'A24');
+  await page.click('#house-search-btn');
+  await page.waitForSelector('#house-list input[data-title="A24"]');
+  await page.check('#house-list input[data-title="A24"]');
+  await save(page);
+  await waitUntil('the empty card names the house', async () => /production house A24/.test(await cardText(page)));
+  assert.match(await cardText(page), /\(raise the limit or tick fewer production houses or choose Discover to find every title from those houses\)/, 'and says how to widen it, Discover included (ux F1, D216)');
+  check('26 the empty card names the production house');
+});
+
+tmdbCase('27 the company search keeps TMDB\'s order, tells same-named companies apart by country, keeps the Search button focused, ignores a repeat of a search under way, and is announced (ux F5, F6)', { settings: seed({ libraryKey: 'discover/movie', libraryKeys: ['discover/movie'], libraryNames: ['Discover movies'] }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await testOk(page);
+  assert.equal(await page.getAttribute('#house-status', 'aria-live'), 'polite', 'the short status line is the live region');
+  assert.equal(await page.getAttribute('#house-help', 'aria-live'), null, 'the static help is not live, so a library tick never has it re-read (ux r2 N1)');
+  await page.fill('#house-search', 'i'); // Pixar, then Mock Studios twice: TMDB's order, not A to Z
+  await page.focus('#house-search-btn');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#house-list input[data-title="Pixar"]');
+  const rows = () => page.$$eval('#house-list li span', (els) => els.map((e) => e.textContent.trim()));
+  assert.deepEqual(await rows(), ['Pixar', 'Mock Studios (US)', 'Mock Studios (FR)'], "TMDB's order, and the two companies of one name told apart by country");
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'house-search-btn', 'the Search button keeps keyboard focus');
+  assert.equal(await page.textContent('#house-status'), '3 companies found.', 'the outcome is in the live status, not in the help');
+  // A ticked company stays on top; a second press of the same search while it is under way sends one request.
+  await page.check('#house-list input[data-key="9998"]');
+  assert.deepEqual(await rows(), ['Pixar', 'Mock Studios (US)', 'Mock Studios (FR)'], 'ticking rebuilds nothing');
+  const before = seen.filter((r) => r.path === '/3/search/company').length;
+  await page.evaluate(() => {
+    const btn = document.getElementById('house-search-btn');
+    btn.click();
+    btn.click();
+  });
+  await waitUntil('the search answered', async () => (await page.textContent('#house-status')) === '3 companies found.' && seen.filter((r) => r.path === '/3/search/company').length > before);
+  assert.equal(seen.filter((r) => r.path === '/3/search/company').length - before, 1, 'two presses of one search in the same turn: one request');
+  assert.deepEqual(await rows(), ['Mock Studios (FR)', 'Pixar', 'Mock Studios (US)'], 'the ticked company is on top, the others in TMDB\'s order');
+  assert.equal(await page.$eval('#house-search-btn', (b) => b.disabled), false, 'the button is never disabled by a search');
+  await page.fill('#house-search', 'zzz');
+  await page.click('#house-search-btn');
+  await waitUntil('no company found', async () => (await page.textContent('#house-status')) === 'No company found for "zzz".');
+  check("27 company search: TMDB's order, countries, focus kept, one request per search, announced");
+});
+
+tmdbCase('28 D216: a house list on a TMDB list says the list is only narrowed and Discover finds every title; Discover and no houses say nothing of it', { settings: seed({ houses: [{ key: '41077', title: 'A24' }] }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await testOk(page);
+  const help = () => page.textContent('#house-help');
+  assert.match(await help(), /only narrowed to those houses; Discover finds every title from them\./, 'Popular with a house ticked');
+  await page.selectOption('#tmdb-list', 'tv/popular');
+  assert.match(await help(), /Discover finds every title/, 'a TV list too');
+  await page.selectOption('#tmdb-list', 'discover/movie');
+  assert.doesNotMatch(await help(), /Discover/, 'Discover itself');
+  await page.selectOption('#tmdb-list', 'movie/top_rated');
+  assert.match(await help(), /Discover finds every title/, 'back on a list');
+  await page.fill('#house-search', 'a24');
+  await page.click('#house-search-btn');
+  await page.waitForSelector('#house-list input[data-title="A24"]');
+  await page.uncheck('#house-list input[data-title="A24"]');
+  assert.doesNotMatch(await help(), /Discover/, 'no house ticked: the list is not narrowed');
+  await page.check('#house-list input[data-title="A24"]');
+  assert.match(await help(), /Discover finds every title/, 'ticked again');
+  check('28 the help says a list is only narrowed and Discover finds every title, only on a list with a house ticked');
+});
+
+tmdbCase('29 ux r2 N2: a ticked company keeps its country tag when a later search shows a company of the same name', { settings: seed({ libraryKey: 'discover/movie', libraryKeys: ['discover/movie'], libraryNames: ['Discover movies'] }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await testOk(page);
+  const rows = () => page.$$eval('#house-list li span', (els) => els.map((e) => e.textContent.trim()));
+  await page.fill('#house-search', 'mock studios fr');
+  await page.click('#house-search-btn');
+  await page.waitForSelector('#house-list input[data-key="9998"]');
+  assert.deepEqual(await rows(), ['Mock Studios'], 'one company of the name: no tag');
+  await page.check('#house-list input[data-key="9998"]');
+  await page.fill('#house-search', 'mock studios us');
+  await page.click('#house-search-btn');
+  await page.waitForSelector('#house-list input[data-key="9999"]');
+  assert.deepEqual(await rows(), ['Mock Studios (FR)', 'Mock Studios (US)'], 'the ticked company is still told apart by the country the first search gave');
+  check('29 a ticked company keeps its country tag across searches');
+});
+
 // ---------- the sheet fits ----------
 
 for (const [label, viewport, extra] of [['a phone', { width: 390, height: 844 }, {}], ['a phone turned (rotation 90)', { width: 390, height: 844 }, { rotation: 90 }], ['a landscape screen', { width: 844, height: 390 }, {}]]) {
@@ -862,11 +1009,11 @@ for (const [label, viewport, extra] of [['a phone', { width: 390, height: 844 },
     await posterShown(page);
     await openSettings(page);
     await page.waitForFunction(() => document.querySelectorAll('#genre-list input').length > 3);
-    for (const id of ['tmdb-connection', 'tmdb-credit', 'tmdb-source-group', 'tmdb-discover']) assert.equal(await page.isVisible(`#${id}`), true, id);
+    for (const id of ['tmdb-connection', 'tmdb-credit', 'tmdb-source-group', 'tmdb-discover', 'house-group', 'house-search-row']) assert.equal(await page.isVisible(`#${id}`), true, id);
     const overflow = await page.evaluate(() => {
       const body = document.querySelector('#settings .sheet-body');
       const box = document.getElementById('settings').getBoundingClientRect();
-      const wide = [...document.querySelectorAll('#tmdb-connection, #tmdb-credit, #tmdb-source-group, #tmdb-discover, .tmdb-type')].filter((el) => el.scrollWidth > el.clientWidth + 1 || el.getBoundingClientRect().right > box.right + 1).map((el) => el.id || el.className);
+      const wide = [...document.querySelectorAll('#tmdb-connection, #tmdb-credit, #tmdb-source-group, #tmdb-discover, .tmdb-type, #house-group, #house-search-row, #house-search')].filter((el) => el.scrollWidth > el.clientWidth + 1 || el.getBoundingClientRect().right > box.right + 1).map((el) => el.id || el.className);
       return { sideways: body.scrollWidth - body.clientWidth, wide };
     });
     assert.deepEqual(overflow, { sideways: 0, wide: [] });

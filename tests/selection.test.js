@@ -8,6 +8,8 @@ import {
   scopeKey,
   splitKey,
   cleanGenres,
+  cleanHouses,
+  houseRequestValue,
   cleanKeys,
   cleanNames,
   cleanRatings,
@@ -30,7 +32,7 @@ const sel = (over = {}) => selectionOf({ libraryKeys: ['1'], libraryNames: ['Mov
 
 test('a 2.2 settings object with only libraryKey is one library and nothing else', () => {
   const s = selectionOf({ libraryKey: '1', libraryName: 'Movies' });
-  assert.deepEqual(s, { libraries: [{ key: '1', name: 'Movies' }], genres: [], ratings: [], source: null });
+  assert.deepEqual(s, { libraries: [{ key: '1', name: 'Movies' }], genres: [], houses: [], ratings: [], source: null });
   assert.equal(narrows(s), false);
 });
 
@@ -390,4 +392,114 @@ test('genresAreAll reads only the Discover library keys of the selection', () =>
   assert.equal(genresAreAll(sel('discover/tv?mode=and&from=2000')), true);
   assert.equal(genresAreAll(sel('1', 'discover/tv?mode=and')), true);
   for (const bad of [sel('discover/tv'), sel('discover/tv?from=2000'), sel('movie/popular?mode=and'), sel(), {}, null, undefined, { libraries: [null, {}] }]) assert.equal(genresAreAll(bad), false);
+});
+
+// ---- Production house (Run 13, production-house-filter; D203 6, D211, D213): a server's studio, a TMDB company ----
+
+const PIXAR = { key: '', title: 'Pixar' };
+const A24 = { key: '', title: 'A24' };
+const PIXAR_TMDB = { key: '3', title: 'Pixar' };
+const A24_TMDB = { key: '41077', title: 'A24' };
+
+test('houses: cleanHouses keeps a title (and an id), drops junk and repeats', () => {
+  assert.deepEqual(cleanHouses([{ key: 3, title: ' Pixar ' }, { key: '3', title: 'Pixar again' }, { title: 'A24' }, { title: 'a24' }, { key: '9' }, null, 'Pixar', { title: '' }]), [{ key: '3', title: 'Pixar' }, { key: '', title: 'A24' }]);
+  assert.deepEqual(cleanHouses('Pixar'), []);
+  assert.deepEqual(cleanHouses(undefined), []);
+  assert.deepEqual(sel().houses, []);
+  assert.deepEqual(sel({ houses: [PIXAR] }).houses, [PIXAR]);
+});
+
+test('houses: a house list narrows, changes the selection key, and is named on the empty card', () => {
+  assert.equal(narrows(sel({ houses: [PIXAR] })), true);
+  assert.equal(narrows(sel({ houses: [] })), false);
+  assert.notEqual(selectionKey(sel({ houses: [PIXAR] })), selectionKey(sel()));
+  assert.notEqual(selectionKey(sel({ houses: [PIXAR] })), selectionKey(sel({ houses: [A24] })));
+  assert.notEqual(selectionKey(sel({ houses: [PIXAR_TMDB] })), selectionKey(sel({ houses: [{ key: '4', title: 'Pixar' }] })));
+  assert.match(describeSelection(sel({ houses: [PIXAR, A24] })), /production houses Pixar or A24/);
+  assert.match(describeSelection(sel({ houses: [PIXAR] })), /production house Pixar/);
+  assert.doesNotMatch(describeSelection(sel()), /production/);
+});
+
+test('houses: houseRequestValue is the TMDB id when there is one, else the name', () => {
+  assert.equal(houseRequestValue(PIXAR_TMDB), '3');
+  assert.equal(houseRequestValue(PIXAR), 'Pixar');
+});
+
+test('posterAllowed: a house list passes a poster whose studio is in it (any case) and refuses one with none', () => {
+  const s = sel({ houses: [PIXAR] });
+  assert.equal(posterAllowed(s, '', P({ studios: ['Pixar'] })), true);
+  assert.equal(posterAllowed(s, '', P({ studios: ['pixar'] })), true, 'case does not matter');
+  assert.equal(posterAllowed(s, '', P({ studios: ['A24'] })), false, 'H1: another house');
+  assert.equal(posterAllowed(s, '', P({ studios: [] })), false);
+  assert.equal(posterAllowed(s, '', P({ studios: undefined })), false, 'a title with no studio fails closed');
+  assert.equal(posterAllowed(s, '', P({ studios: 'Pixar' })), false, 'studios is a list');
+});
+
+test('posterAllowed: a TMDB house list reads the poster company ids', () => {
+  const s = sel({ houses: [PIXAR_TMDB] });
+  assert.equal(posterAllowed(s, '', P({ companyIds: ['3', '9'] })), true);
+  assert.equal(posterAllowed(s, '', P({ companyIds: ['41077'] })), false);
+  assert.equal(posterAllowed(s, '', P({ companyIds: [] })), false);
+  assert.equal(posterAllowed(s, '', P()), false, 'H7: companies unknown: refused');
+  assert.equal(posterAllowed(s, '', P({ studios: ['Pixar'] })), false, 'a name is not a company id');
+});
+
+test('posterAllowed: several houses are OR', () => {
+  const s = sel({ houses: [PIXAR, A24] });
+  assert.equal(posterAllowed(s, '', P({ studios: ['Pixar'] })), true, 'H2: one of two');
+  assert.equal(posterAllowed(s, '', P({ studios: ['A24'] })), true);
+  assert.equal(posterAllowed(s, '', P({ studios: ['Mock Studios'] })), false);
+  assert.equal(posterAllowed(sel({ houses: [PIXAR_TMDB, A24_TMDB] }), '', P({ companyIds: ['41077'] })), true);
+});
+
+test('posterAllowed: an empty house list filters nothing', () => {
+  assert.equal(posterAllowed(sel({ houses: [] }), '', P({ studios: undefined })), true);
+  assert.equal(posterAllowed(sel(), '', P({ studios: ['Pixar'] })), true);
+});
+
+test('posterAllowed: a house list never lets in a title the limit or the rating subset refuses (D5)', () => {
+  const s = sel({ houses: [A24] });
+  assert.equal(posterAllowed(s, 'PG', P({ studios: ['A24'], contentRating: 'R' })), false, 'H5: the limit comes first');
+  assert.equal(posterAllowed(s, 'PG', P({ studios: ['A24'], contentRating: '' })), false, 'unrated under a limit');
+  assert.equal(posterAllowed(s, 'PG', P({ studios: ['A24'], contentRating: 'PG' })), true);
+  assert.equal(posterAllowed(sel({ houses: [A24], ratings: ['G'] }), '', P({ studios: ['A24'], contentRating: 'PG' })), false, 'the rating subset still applies');
+  assert.equal(posterAllowed(sel({ houses: [A24_TMDB] }), 'PG', P({ companyIds: ['41077'], contentRating: 'R' })), false);
+});
+
+test('posterAllowed: a house list works with a genre list (both must hold)', () => {
+  const s = sel({ houses: [PIXAR], genres: [{ key: '', title: 'Comedy' }] });
+  assert.equal(posterAllowed(s, '', P({ studios: ['Pixar'], genres: ['Comedy'] })), true);
+  assert.equal(posterAllowed(s, '', P({ studios: ['Pixar'], genres: ['Drama'] })), false);
+  assert.equal(posterAllowed(s, '', P({ studios: ['A24'], genres: ['Comedy'] })), false);
+});
+
+test('posterAllowed: a collection or playlist takes no house filter, as it takes no genre filter', () => {
+  const s = sel({ houses: [PIXAR], source: { kind: 'collection', key: '101', title: 'DF' } });
+  assert.equal(posterAllowed(s, '', P({ studios: ['A24'] })), true);
+  assert.equal(posterAllowed(s, 'PG', P({ studios: ['A24'], contentRating: 'R' })), false, 'but the limit still applies');
+});
+
+test('entryInSelection: under a house list an entry must record a studio or company id that is in it (D107)', () => {
+  const s = sel({ houses: [PIXAR] });
+  assert.equal(entryInSelection({ libraryKey: '1', studios: ['Pixar'] }, s, ''), true);
+  assert.equal(entryInSelection({ libraryKey: '1', studios: ['A24'] }, s, ''), false);
+  assert.equal(entryInSelection({ libraryKey: '1' }, s, ''), false, 'H3: no studios recorded: never drawn');
+  assert.equal(entryInSelection({ libraryKey: '1', studios: [] }, s, ''), false);
+  assert.equal(entryInSelection({ libraryKey: '2', studios: ['Pixar'] }, s, ''), false, 'right house, wrong library');
+  const t = sel({ houses: [PIXAR_TMDB, A24_TMDB] });
+  assert.equal(entryInSelection({ libraryKey: '1', companyIds: ['41077'] }, t, ''), true, 'OR');
+  assert.equal(entryInSelection({ libraryKey: '1', companyIds: ['9'] }, t, ''), false);
+  assert.equal(entryInSelection({ libraryKey: '1' }, t, ''), false, 'no company ids recorded');
+  assert.equal(entryInSelection({ libraryKey: '1' }, sel({ houses: [] }), ''), true, 'no house list: nothing is asked of the entry');
+});
+
+test('entryInSelection: the rating subset and the limit still apply under a house list', () => {
+  const s = sel({ houses: [PIXAR], ratings: ['G'] });
+  assert.equal(entryInSelection({ libraryKey: '1', studios: ['Pixar'], contentRating: 'G' }, s, ''), true);
+  assert.equal(entryInSelection({ libraryKey: '1', studios: ['Pixar'], contentRating: 'PG' }, s, ''), false);
+});
+
+test('entryInSelection: a source ignores the house list', () => {
+  const s = sel({ houses: [PIXAR], source: { kind: 'collection', key: '101', title: 'DF' } });
+  assert.equal(entryInSelection({ members: ['collection:101'], studios: ['A24'] }, s, ''), true);
 });

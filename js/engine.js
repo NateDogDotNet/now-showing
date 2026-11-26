@@ -4,7 +4,7 @@
 import { anyLimitSet, sanitizeSlots } from './limit-schedule.js';
 import { anyWindow, resolveSettings } from './profiles.js';
 import { allows } from './ratings.js';
-import { describeSelection, genreRequestValue, libraryShares, memberId, narrows, posterAllowed, selectionKey, selectionOf } from './selection.js';
+import { describeSelection, genreRequestValue, houseRequestValue, housesNarrowAList, libraryShares, memberId, narrows, posterAllowed, selectionKey, selectionOf } from './selection.js';
 import { chooseTitle, cleanDays, cleanWeighting, createShownStore } from './weighting.js';
 
 const POOL_TTL_MS = 30 * 60 * 1000;
@@ -32,6 +32,12 @@ function defaultStorage() {
  * playlist listed when it is loaded online (R-SEL-1), for the offline cache. `storage` keeps when each title was last shown, for the
  * no-repeat window (R-SEL-2): without one the display's localStorage is used, and failing that the record lives in memory.
  */
+/** The advice to tick fewer of what narrows the selection (D109 3, D110 4): genres, production houses and ratings in one phrase, or nothing when none is set. */
+function tickFewer(sel) {
+  const kinds = [sel.genres.length && 'genres', sel.houses.length && 'production houses', sel.ratings.length && 'ratings'].filter(Boolean);
+  return kinds.length ? `tick fewer ${kinds.length > 1 ? `${kinds.slice(0, -1).join(', ')} or ${kinds[kinds.length - 1]}` : kinds[0]}` : '';
+}
+
 export function createEngine({ client, getSettings, now = () => Date.now(), random = Math.random, cachedKeys = () => [], cachedChecks = () => new Map(), onRatings = () => {}, onMembers = () => {}, storage = defaultStorage() }) {
   let current = null;
   let session = null; // the latest now-playing snapshot (what the last decide() saw), null when none
@@ -40,7 +46,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
   let poolKey = '';
   let poolAt = 0;
   let poolPartial = false; // the pool is missing a library whose request failed
-  let lastRecheckAt = -Infinity; // when a TMDB re-rating pass last ran (D211 3)
+  let lastRecheckAt = -Infinity; // when a TMDB re-rating pass last had its ratings applied (D211 3, D212, D213): stamped in loadPool, not when the pass starts
   let partialNow = false; // set by fetchSelection while it builds the pool
   const recent = [];
   const shownStore = createShownStore({ storage });
@@ -87,6 +93,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
           request.genres = sel.genres.map(genreRequestValue);
           request.genreTitles = sel.genres.map((g) => g.title); // several servers: each looks the titles up in its own genre list (a key means nothing to another server)
         }
+        if (sel.houses.length) request.houses = sel.houses.map(houseRequestValue); // a server's studio names, or TMDB company ids: the client asks for them, the check below is on each poster's own
         if (sel.ratings.length) request.ratings = ratings;
         const loaded = await client.pool(request);
         if (loaded.partial) partialNow = true; // an adapter that built the pool without some of what it asked for (TMDB: a certification lookup failed) says so, and the pool is asked for again soon (D210 2)
@@ -140,6 +147,9 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
       s.limitSet ? fetchCachedRatings(load, { tmdb: s.serverType === 'tmdb', retry }) : null,
     ]);
     if (ratings) {
+      // D212, D213: the TMDB re-rating time is stamped here, where the ratings are applied. A pass whose pool request failed applied nothing (the load threw above)
+      // and must not start the half hour, or the next load, a retry of the partial pool, would not re-rate (D211 3).
+      if (ratings.checked) lastRecheckAt = now();
       if (ratings.checked) onRatings(ratings, { checked: ratings.checked });
       else onRatings(ratings);
     }
@@ -166,7 +176,6 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
       // D211 3: not on the one-minute retry of a partial pool, and otherwise the titles checked longest ago, at most TMDB_RECHECK_MAX. A title left out is not
       // reported, so the cache keeps the rating it was stored with. The sort is stable: titles with equal (or no) times keep the cache's order.
       if (retry) return null;
-      lastRecheckAt = now();
       const checks = cachedChecks();
       const at = (k) => (Number.isFinite(checks.get(k)) ? checks.get(k) : -Infinity);
       keys = [...keys].sort((a, b) => (at(a) < at(b) ? -1 : at(a) > at(b) ? 1 : 0)).slice(0, TMDB_RECHECK_MAX);
@@ -324,7 +333,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
           ? []
           : sel.source
             ? [`use the libraries instead of the ${sel.source.kind}`, sel.ratings.length && 'tick fewer ratings']
-            : [!tmdb && (await hasUntickedLibrary(sel)) && 'add a library', sel.genres.length && sel.ratings.length ? 'tick fewer genres or ratings' : sel.genres.length ? 'tick fewer genres' : sel.ratings.length && 'tick fewer ratings'];
+            : [!tmdb && (await hasUntickedLibrary(sel)) && 'add a library', tickFewer(sel), housesNarrowAList(sel, s.serverType) && 'choose Discover to find every title from those houses']; // D216: a list is only narrowed by the houses
         const advice = [s.unwatchedOnly && !tmdb && 'try turning off "unwatched only"', s.maxContentRating && (sanitizeSlots(s.limitSlots).length ? 'raise the limit or change the time slots' : 'raise the limit'), ...widen].filter(Boolean).join(' or ');
         const where = `${s.maxContentRating ? ` at or below ${s.maxContentRating}` : ''}${advice ? ` (${advice})` : ''}`;
         throw Object.assign(new Error(`No posters found in ${narrows(sel) ? describeSelection(sel) : tmdb ? 'that list' : 'that library'}${where}.`), { kind: 'empty' });

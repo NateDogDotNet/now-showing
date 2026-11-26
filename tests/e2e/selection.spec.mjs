@@ -610,6 +610,133 @@ selCase('26 the walk: tick R under an R limit, lower the limit to PG, Save, reop
   check('a kept tick above the limit is visible, survives other ticks, and can be unticked');
 });
 
+
+// ---------- production house (Run 13, production-house-filter) ----------
+// The mock Plex gives every title but Encore one studio: Pixar is title 2 (Midnight Projector, PG), 4 (Popcorn Skies, R), 9 and 10 (Captain Crayon and
+// The Little Lantern, G); A24 is 5 (Neon Matinee, TV-MA) and 6 (Last Reel, gb/12); the rest are Mock Pictures.
+
+selCase('27 Settings lists the studios of the ticked libraries; choosing "Pixar" shows only Pixar titles, and Save keeps the name', { settings: seed({ unwatchedOnly: false }) }, async ({ page, app, mock }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await settled(page);
+  await page.waitForFunction(() => document.querySelectorAll('#house-list input').length > 0, null, { timeout: 10000 });
+  assert.deepEqual(await labels(page, '#house-list'), ['A24', 'Mock Pictures', 'Pixar'], "the studios of the ticked library, by name");
+  assert.equal(await page.isVisible('#house-search-row'), false, 'a server has no company search');
+  assert.match(await page.textContent('#house-help'), /main studio of each title, usually one/);
+  await page.check('#house-list input[data-title="Pixar"]');
+  assert.match(await page.textContent('#house-count'), /1 chosen/);
+  await saveSettings(page);
+  assert.deepEqual((await stored(page)).houses, [{ key: '', title: 'Pixar' }]);
+  await page.waitForFunction((titles) => titles.includes((document.querySelector('.poster-layer.active')?.alt || '').replace(/^Poster: /, '')), ['Midnight Projector', 'Popcorn Skies'], { timeout: 10000 });
+  assert.deepEqual(asSorted(new Set(await picks(page, 30))), [2, 4], 'only Pixar titles of Movies');
+  assert.ok((await requests(mock)).some((r) => r.startsWith('/library/sections/1/all?') && /studio=Pixar(&|$)/.test(r)), 'the studio was asked for');
+  // Ticking Kids Movies adds its Pixar titles, and a second house is OR.
+  await openSettings(page);
+  await settled(page);
+  await page.check('#library-list input[value="3"]');
+  await page.waitForFunction(() => document.querySelectorAll('#house-list input').length > 0, null, { timeout: 10000 });
+  await page.check('#house-list input[data-title="A24"]');
+  await saveSettings(page);
+  assert.deepEqual((await stored(page)).houses.map((h) => h.title).sort(), ['A24', 'Pixar']);
+  assert.deepEqual(asSorted(new Set(await picks(page, 80))), [2, 4, 5, 6, 9, 10], 'Pixar or A24, in both libraries');
+  check('27 studios listed by name, Save keeps one, the pool is those titles, two are OR');
+});
+
+selCase('28 a production house never lets in a title the limit refuses: Pixar with the limit PG shows no R title', { settings: seed({ unwatchedOnly: false, maxContentRating: 'PG', houses: [{ key: '', title: 'Pixar' }], ...BOTH }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  assert.deepEqual(asSorted(new Set(await picks(page, 50))), [2, 9, 10], 'Popcorn Skies (R) is a Pixar title and is not shown');
+  check('28 Pixar under PG: 2, 9, 10 and never 4');
+});
+
+selCase('29 a house that no title has is the empty card, which names it', { settings: seed({ unwatchedOnly: false, houses: [{ key: '', title: 'No Such Studio' }] }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await page.waitForFunction(() => !document.getElementById('empty').hidden && /production house No Such Studio/.test(document.getElementById('empty-message').textContent), null, { timeout: 15000 });
+  assert.match(await page.textContent('#empty-message'), /tick fewer production houses\)\.$/, 'and says how to widen it (ux F1)');
+  check('29 the empty card names the production house');
+});
+
+selCase('31 the studio help follows the genre box: before a passed test it asks for one, with no library ticked it asks for a library, then it is the main-studio help (ux F3)', { settings: seed({ unwatchedOnly: false }) }, async ({ page, app, mock }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await settled(page);
+  await page.waitForFunction(() => document.querySelectorAll('#house-list input').length > 0, null, { timeout: 10000 });
+  assert.match(await page.textContent('#house-help'), /main studio of each title, usually one/);
+  assert.equal(await page.getAttribute('#house-help', 'aria-live'), null, 'the static help is not a live region (ux r2 N1)');
+  assert.equal(await page.getAttribute('#house-status', 'aria-live'), 'polite', 'the short status line is');
+  await page.evaluate(() => {
+    window.__helpEdits = 0;
+    new MutationObserver((list) => (window.__helpEdits += list.length)).observe(document.getElementById('house-status'), { childList: true, characterData: true, subtree: true });
+  });
+  await page.check('#house-list input[data-title="Pixar"]');
+  await page.uncheck('#house-list input[data-title="Pixar"]');
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
+  assert.equal(await page.evaluate(() => window.__helpEdits), 0, 'ticking a row does not rewrite the live help, so nothing is announced');
+  await page.uncheck('#library-list input[value="1"]');
+  assert.equal((await page.textContent('#house-help')).trim(), 'Tick a library to see its studios.');
+  await page.check('#library-list input[value="1"]');
+  await page.waitForFunction(() => document.querySelectorAll('#house-list input').length > 0, null, { timeout: 10000 });
+  await page.click('#settings-cancel');
+  await page.waitForFunction(() => !document.getElementById('settings').open);
+  await mock.down(); // the connection test of the second open cannot succeed: there is no client to ask
+  await openSettings(page);
+  await page.waitForFunction(() => /^✗/.test(document.getElementById('test-result').textContent), null, { timeout: 15000 });
+  assert.equal((await page.textContent('#house-help')).trim(), 'Test the connection to load the studios.');
+  await mock.up();
+  check('31 studio help: test the connection, tick a library, the main-studio help');
+});
+
+selCase("32 a viewer profile open in Settings: the houses are shown locked, a line says they are the household's and how to change them, and the banner names the exception (D214 3)", { settings: seed({ unwatchedOnly: false, maxContentRating: 'PG-13', houses: [{ key: '', title: 'Pixar' }] }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await settled(page);
+  await page.waitForFunction(() => document.querySelectorAll('#house-list input').length > 0, null, { timeout: 10000 });
+  await page.fill('#profile-name', 'Kids');
+  await page.click('#profile-add');
+  await page.waitForSelector('#profile-banner:not([hidden])');
+  assert.equal((await page.textContent('#house-help')).trim(), "Production houses are the household's in 2.5, not the profile's. To change them, close the profile first.");
+  assert.match(await page.textContent('#profile-banner-text'), /the selection \(except the production houses, which stay the household's\)/);
+  assert.equal(await page.$$eval('#house-list input', (boxes) => boxes.every((b) => b.disabled) && boxes.some((b) => b.checked)), true, "the household's Pixar is shown ticked and locked");
+  await page.click('#profile-done');
+  await page.waitForSelector('#profile-banner', { state: 'hidden' });
+  assert.match(await page.textContent('#house-help'), /main studio of each title/, 'the line goes with the profile');
+  assert.equal(await page.$$eval('#house-list input', (boxes) => boxes.some((b) => b.disabled)), false);
+  await saveSettings(page);
+  assert.deepEqual((await stored(page)).houses, [{ key: '', title: 'Pixar' }], "the household's list is untouched");
+  check('32 profile: houses locked, the line and the banner say so');
+});
+
+for (const [label, viewport, extra] of [['a phone', { width: 390, height: 844 }, {}], ['a phone turned (rotation 90)', { width: 390, height: 844 }, { rotation: 90 }]]) {
+  selCase(`30 many studios scroll in their own box on ${label}, with no sideways scroll`, { settings: seed(extra), viewport, hasTouch: true, isMobile: true }, async ({ page, context, app }) => {
+    const many = Array.from({ length: 70 }, (_, i) => ({ key: `Studio ${i + 1}`, title: `Production house number ${i + 1} with a long name` }));
+    await context.route(/\/library\/sections\/\d+\/studio/, (route) =>
+      route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: JSON.stringify({ MediaContainer: { Directory: many } }) }),
+    );
+    await page.goto(app.url);
+    await posterShown(page);
+    await openSettings(page);
+    await settled(page);
+    await page.waitForFunction(() => document.querySelectorAll('#house-list input').length === 70, null, { timeout: 10000 });
+    const box = await page.$eval('#house-list', (el) => ({ client: el.clientHeight, scroll: el.scrollHeight }));
+    assert.ok(box.scroll > box.client && box.client <= 260, `the list scrolls inside a bounded box: ${JSON.stringify(box)}`);
+    const over = await page.evaluate(() => {
+      const body = document.querySelector('#settings .sheet-body');
+      const group = document.getElementById('house-group');
+      const dialog = document.getElementById('settings').getBoundingClientRect();
+      return { sideways: body.scrollWidth - body.clientWidth, group: group.scrollWidth - group.clientWidth, outside: group.getBoundingClientRect().right > dialog.right + 1 };
+    });
+    assert.deepEqual(over, { sideways: 0, group: 0, outside: false });
+    await page.focus('#house-list li:nth-child(40) input');
+    await page.keyboard.press('Space');
+    assert.match(await page.textContent('#house-count'), /1 chosen/);
+    assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('#house-list li:nth-child(40) input')), true, 'focus stays on the ticked box');
+    check(`30 ${label}: 70 studios, bounded box, no sideways scroll`);
+  });
+}
+
 // ---------- run ----------
 
 const WORKERS = Number(process.env.E2E_SELECTION_WORKERS || 4);

@@ -4,7 +4,7 @@
 import { sanitizeSlots } from './limit-schedule.js';
 import { cleanProfiles } from './profiles.js';
 import { parseHHMM } from './schedule.js';
-import { belongsTo, cleanGenres, cleanKeys, cleanNames, cleanRatings, cleanServerId, cleanSource, keyFor, memberBelongsTo, splitKey } from './selection.js';
+import { belongsTo, cleanGenres, cleanHouses, cleanKeys, cleanNames, cleanRatings, cleanServerId, cleanSource, keyFor, memberBelongsTo, splitKey } from './selection.js';
 import { cleanDays, cleanWeighting } from './weighting.js';
 
 export const STORAGE_KEY = 'plexPoster.settings';
@@ -156,6 +156,7 @@ const SCHEMA = {
   libraryKeys: [[], (v) => cleanKeys(v)],
   libraryNames: [[], (v) => cleanNames(v)],
   genres: [[], (v) => cleanGenres(v)],
+  houses: [[], (v) => cleanHouses(v)], // production houses (Run 13): a server's studio names, or TMDB company ids and names; OR; never a key
   ratings: [[], (v) => cleanRatings(v)],
   source: [null, (v) => cleanSource(v)],
   username: ['', str],
@@ -495,7 +496,7 @@ export function fromImport(text, current = defaults()) {
   if (known.length === 0) throw new Error('No recognised settings in file.');
   const merged = { ...current };
   // A 2.2-shaped file names one library: it replaces the whole selection (that library, no genres, no rating subset, no source), not just the list.
-  if (known.includes('libraryKey') && !known.includes('libraryKeys')) Object.assign(merged, { libraryKeys: [], libraryNames: [], genres: [], ratings: [], source: null });
+  if (known.includes('libraryKey') && !known.includes('libraryKeys')) Object.assign(merged, { libraryKeys: [], libraryNames: [], genres: [], houses: [], ratings: [], source: null });
   for (const k of known) merged[k] = incoming[k];
   // A server in the file with no token of its own keeps the token of the server it replaces only when it is the same server at the same
   // address (the same id, type and address): a token never travels to another address (D157 4, D144 1).
@@ -554,7 +555,7 @@ function moveSelection(settings, from, to) {
 }
 
 const EARLY_CONNECTION = ['serverType', 'serverUrl', 'plexToken', 'serverUserId', 'serverName', 'serverId', 'serverCarried', 'servers']; // only the connection keys wait for the reads (D162 5)
-const EARLY_SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'ratings', 'source'];
+const EARLY_SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'houses', 'ratings', 'source'];
 const EARLY_PIN = ['staticRatingKey', 'staticTitle'];
 const EARLY_PROFILE_SELECTION = ['libraryKeys', 'libraryNames', 'genres', 'ratings', 'source']; // what a viewer profile draws from; its limit and the rest of its bundle do not wait
 const takeFrom = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));

@@ -26,12 +26,14 @@ export function expired(entry, now) {
   return typeof saved !== 'number' || !Number.isFinite(saved) || saved > now || now - saved >= TMDB_MAX_AGE_MS;
 }
 
-/** The fields that say where a poster belongs: its library, its own genres, the collections or playlists it was listed in. */
+/** The fields that say where a poster belongs: its library, its own genres, its studios or company ids, the collections or playlists it was listed in. */
 function recorded(p) {
   return {
     ...(typeof p?.libraryKey === 'string' && p.libraryKey ? { libraryKey: p.libraryKey } : {}),
     ...(Array.isArray(p?.genres) && p.genres.length ? { genres: p.genres } : {}),
     ...(Array.isArray(p?.members) && p.members.length ? { members: p.members } : {}),
+    ...(Array.isArray(p?.studios) && p.studios.length ? { studios: p.studios } : {}), // a server's studio names (Run 13), so a house list can narrow offline
+    ...(Array.isArray(p?.companyIds) && p.companyIds.length ? { companyIds: p.companyIds } : {}), // a TMDB title's company ids
   };
 }
 

@@ -303,7 +303,7 @@ test('settings saved before 2.3 with only libraryKey load as that one library an
   assert.deepEqual([settings.genres, settings.ratings, settings.source], [[], [], null]);
   const before = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryName: 'Movies', maxContentRating: 'PG' };
   for (const k of Object.keys(before)) if (!['libraryKeys', 'libraryNames'].includes(k)) assert.deepEqual(settings[k], before[k], `${k} unchanged`);
-  assert.deepEqual(selectionOf(settings), { libraries: [{ key: '1', name: 'Movies' }], genres: [], ratings: [], source: null });
+  assert.deepEqual(selectionOf(settings), { libraries: [{ key: '1', name: 'Movies' }], genres: [], houses: [], ratings: [], source: null });
 });
 
 test('a library list sets libraryKey and libraryName to its first library, and the names line up with the keys', () => {
@@ -324,7 +324,7 @@ test('an empty library list leaves libraryKey alone (that is a 2.2 file)', () =>
 test('genres, ratings and a source survive save and load, an export and an import', () => {
   const chosen = {
     libraryKeys: ['1', '3'], libraryNames: ['Movies', 'Kids Movies'],
-    genres: [{ key: '12', title: 'Comedy' }], ratings: ['G', 'PG'], source: { kind: 'collection', key: '102', title: 'Top Rated' },
+    genres: [{ key: '12', title: 'Comedy' }], houses: [{ key: '', title: 'Pixar' }, { key: '41077', title: 'A24' }], ratings: ['G', 'PG'], source: { kind: 'collection', key: '102', title: 'Top Rated' },
   };
   const storage = memoryStorage();
   save(storage, { ...defaults(), ...chosen });
@@ -1127,6 +1127,7 @@ const heldBase = () =>
     libraryKeys: ['1', '@jf-id-1/b1'],
     libraryNames: ['Movies', 'JF Movies'],
     genres: ['Drama'],
+    houses: [{ key: '', title: 'Pixar' }],
     ratings: ['PG'],
     source: { kind: 'collection', key: '77', title: 'Old collection' },
     staticRatingKey: '42',
@@ -1135,8 +1136,8 @@ const heldBase = () =>
     servers: [JF()],
   });
 /** What the sheet hands in for a Save: the new selection and pin (ids of the new server), the connection keys as typed. */
-const newPicks = { libraryKey: '5', libraryKeys: ['5'], libraryNames: ['New Movies'], genres: ['Horror'], ratings: ['R'], source: { kind: 'playlist', key: '88', title: 'New list' }, staticRatingKey: '99', staticTitle: 'New pin' };
-const SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'ratings', 'source'];
+const newPicks = { libraryKey: '5', libraryKeys: ['5'], libraryNames: ['New Movies'], genres: ['Horror'], houses: [{ key: '', title: 'A24' }], ratings: ['R'], source: { kind: 'playlist', key: '88', title: 'New list' }, staticRatingKey: '99', staticTitle: 'New pin' };
+const SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'houses', 'ratings', 'source'];
 const PIN = ['staticRatingKey', 'staticTitle'];
 const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
 const CONNECTION = ['serverType', 'serverUrl', 'plexToken', 'serverUserId', 'serverName', 'serverId', 'serverCarried', 'servers'];
@@ -1573,4 +1574,23 @@ test('D211 2: a file that makes TMDB the first server names the display\'s other
   for (const junk of ['{', 'null', '[]', '', '5']) assert.deepEqual(serversDroppedByTmdbImport(junk, current), [], junk);
   // The stored display is not touched by asking.
   assert.equal(current.servers.length, 2);
+});
+
+test('houses: the default is none, junk is none, a list survives save, load, export and import without a key (H6)', () => {
+  assert.deepEqual(defaults().houses, []);
+  assert.deepEqual(sanitize({ houses: 'Pixar' }).houses, []);
+  assert.deepEqual(sanitize({ houses: [{ title: 'Pixar' }, { title: 'pixar' }, { key: 3 }] }).houses, [{ key: '', title: 'Pixar' }]);
+  const chosen = { houses: [{ key: '', title: 'Pixar' }, { key: '41077', title: 'A24' }], tmdbKey: 'SECRET-TMDB-KEY-0123456789abcdef' };
+  const storage = memoryStorage();
+  save(storage, { ...defaults(), ...chosen });
+  assert.deepEqual(load(storage).settings.houses, chosen.houses);
+  const file = toExport({ ...defaults(), ...chosen });
+  assert.deepEqual(file.settings.houses, chosen.houses, 'exported');
+  assert.ok(!JSON.stringify(file).includes('SECRET-TMDB-KEY'), 'a key is never in the export');
+  assert.deepEqual(fromImport(JSON.stringify(file), defaults()).houses, chosen.houses, 'imported');
+});
+
+test('houses: a hand-written 2.2 file that sets only libraryKey clears the house list with the rest of the selection', () => {
+  const merged = fromImport(JSON.stringify({ libraryKey: '3' }), sanitize({ ...defaults(), houses: [{ key: '', title: 'Pixar' }] }));
+  assert.deepEqual(merged.houses, []);
 });

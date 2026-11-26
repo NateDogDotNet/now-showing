@@ -15,7 +15,8 @@
 // missing or unknown external_source (the mock answers 422, status_code 22).
 //
 // Beyond the shapes above: discover honours the years (`primary_release_date.gte/lte` for movies, `first_air_date.gte/lte` for shows, inclusive), and
-// `movie/{id}` and `tv/{id}` answer a title's details, with `release_dates` or `content_ratings` when `append_to_response` names them (both (verify)).
+// `movie/{id}` and `tv/{id}` answer a title's details, with `release_dates` or `content_ratings` when `append_to_response` names them (both (verify)); the details carry
+// `production_companies` (the title's one company: `[{ id, name, logo_path, origin_country }]`, a (verify) shape), which a list or discover result does not.
 //
 // Control routes (no key; GET or POST), each answers `{ mode }`:
 //   /__mock/down        every /3 request answers 503 (status_code 11)
@@ -57,6 +58,7 @@ export const COMPANIES = [
   { id: 41077, name: 'A24', logo_path: null, origin_country: 'US' },
   { id: 3, name: 'Pixar', logo_path: null, origin_country: 'US' },
   { id: 9999, name: 'Mock Studios', logo_path: null, origin_country: 'US' },
+  { id: 9998, name: 'Mock Studios', logo_path: null, origin_country: 'FR' }, // a second company of one name, found by search only: no title has it
 ];
 const [A24, PIXAR, MOCK] = COMPANIES.map((c) => c.id);
 
@@ -332,6 +334,7 @@ export async function startMockTmdb({ port = 0, host = '127.0.0.1' } = {}) {
       return send(200, {
         ...rest,
         genres: names,
+        production_companies: COMPANIES.filter((c) => c.id === t.company),
         ...(append.includes('release_dates') && t.kind === 'movie' ? { release_dates: { results: empty ? [] : t.releases } } : {}),
         ...(append.includes('content_ratings') && t.kind === 'tv' ? { content_ratings: { results: empty ? [] : t.ratings } } : {}),
       });
@@ -353,7 +356,7 @@ export async function startMockTmdb({ port = 0, host = '127.0.0.1' } = {}) {
     }
     if (route === 'search/company') {
       const needle = (q.get('query') || '').toLowerCase();
-      const found = empty || !needle ? [] : COMPANIES.filter((c) => c.name.toLowerCase().includes(needle));
+      const found = empty || !needle ? [] : COMPANIES.filter((c) => `${c.name} ${c.origin_country}`.toLowerCase().includes(needle));
       return send(200, { page: 1, results: found, total_pages: 1, total_results: found.length });
     }
     if ((m = /^find\/(.+)$/.exec(route))) {
