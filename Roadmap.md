@@ -285,7 +285,7 @@ Time slots, each with its own household limit, for example G from 06:00 when the
 - **Order:** first of the 2.3 features (done), since it was small and needed nothing new. The "Seasonal schedules" idea shares its schedule editor and follows it.
 
 ### Viewer profiles
-Shipped in 2.3 with a limit, the now-playing rule, a selection, weighting and a frame (see "Done in 2.3"); what follows is the original idea. Still open: music and captions in a profile, and following the Plex Home user of the session now playing.
+Shipped in 2.3 with a limit, the now-playing rule, a selection, weighting and a frame (see "Done in 2.3"); what follows is the original idea. Still open: music and captions in a profile, a production house list per profile (2.5 keeps one household-wide list, D214 3), and following the Plex Home user of the session now playing.
 
 Named bundles (Kids, Teens, Adults) of household limit, poster selection, frame style, music and captions (D64).
 

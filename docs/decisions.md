@@ -1412,3 +1412,10 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Conductor ruling — 2026-11-26 (`production-house-filter` pre-flight; to be listed for the owner at the next stop): D213
 
 - **D213 `production-house-filter`'s Output gains `tests/engine.test.js`** to carry `tmdb-source`'s review r3 finding N1/F6: the TMDB re-rating time (D212) is stamped where the ratings are applied, not when the pass starts, so a pass whose pool request fails does not restart the half hour. `js/engine.js` is already in the Output. `docs/spec.md` (in the Output) gets D212's sentence. The Emby half of `tmdb-ids` review F1 is tested in `tests/jellyfin.test.js`, through the client Emby shares; `tests/emby.test.js` stays out.
+
+## Owner ruling — 2026-11-26 (stop 6 in `.orchestrator/phases/production-house-filter.md`, answered "defaults" at 2026-11-26T14:42:24Z): D214
+
+- **D214 Three `production-house-filter` rulings (all option a); D212 and D213 stand as written.**
+  1. **Offline posters under a house list.** `production-house-filter`'s Output gains `js/poster-cache.js` and `tests/poster-cache.test.js`: a cached entry records the poster's `studios` (server) and TMDB company ids, so an offline entry from a chosen house is drawn under a house list. An entry without them is still never drawn under a house list (D107).
+  2. **Studios and company search are their own source request.** The Output gains `tests/sources.test.js`: a source gains its own clearly named member for its studios (servers) and for a company search by name (TMDB), in place of a switch on `genres`. `genres` returns genres only.
+  3. **Production house is household-wide in 2.5.** A viewer profile draws from the household's house list, and the list is locked while a profile is open in Settings, with a line that says so. Per-profile houses go on the Roadmap (Viewer profiles).
