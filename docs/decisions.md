@@ -1465,3 +1465,9 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 - **D222 A logo is shown only when it can be read; offline it comes from the cache.**
   1. **A dark logo is text.** Before a logo replaces the title line, its visible pixels are measured on a canvas (the blob is same-origin): when their mean relative luminance is under 0.35, the title is shown as text instead (the card's background is near black). No other logo is tried.
   2. **Offline**, a cached title whose entry carries its TMDB id (a TMDB-mode entry, or one stored with TMDB art) shows its cached logo when the logo index holds one; otherwise its title is text. No request is made offline.
+
+## Conductor ruling — 2026-11-26 (`clear-logo-title` reviews r2; to be listed for the owner at the next stop): D223
+
+- **D223 Two refinements of D222.**
+  1. **The dark-logo cut is a contrast rule.** A logo is shown when its visible pixels' mean relative luminance gives at least 4.5:1 contrast against black (WCAG's ratio for text): a mean of 0.175 or more. This replaces D222 1's 0.35, which also turned readable red and blue logos into text. Under 0.175 the title is text, as before; no other logo is tried.
+  2. **Offline needs the key too.** D222 2's cached logo is shown only under the rules in force now, the TMDB key among them: with the key cleared, a cached title's logo is not shown offline either, as online.
