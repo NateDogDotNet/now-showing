@@ -1429,3 +1429,10 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner ruling — 2026-11-26 (stop 7 in `.orchestrator/phases/production-house-filter.md`, answered "defaults" at 2026-11-26T15:57:00Z): D216
 
 - **D216 A production house on a TMDB list (option a); D215 stands as written.** A TMDB list (Popular, Top rated, Now playing, Upcoming, the TV lists) stays as chosen under a house list: its titles are narrowed to the chosen houses, at most the 5 pages D210 11 reads. While a house list is set on a list, Settings' production-house help says a list is only narrowed and that Discover finds every title from those houses; the "No posters" card, when a house list on a list leaves nothing to show, says the same in its one-sentence advice (D109 3, D110 4). Discover sends `with_companies` as before.
+
+## Owner ruling — 2026-11-26 (stop 8 in `.orchestrator/phases/artwork-sources.md`, answered "defaults" at 2026-11-26T16:49:01Z): D217
+
+- **D217 Three `artwork-sources` rulings (all option a).**
+  1. **The TMDB key under a Plex, Jellyfin or Emby display.** Settings' new "Poster art" section holds the same `tmdbKey` field (one setting, D203, D210 5), with Show/Hide and Clear, for every server type; the TMDB credit shows while a key is set. Clearing it there clears it for TMDB mode too. Closes `tmdb-source` ux F7.
+  2. **Posters with no TMDB id.** The now-playing poster keeps the server's art (no extra server request for its id). A cached poster keeps the art it was saved with, so offline shows what was shown online. Closes `tmdb-ids` F3.
+  3. **The "In <language>" choice** is a fixed list of about 20 common poster languages (ISO 639-1), each shown in its own name; on first use the display's own language is chosen when it is in the list, else English.
