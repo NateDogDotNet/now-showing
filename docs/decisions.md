@@ -1459,3 +1459,9 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 - **D221 How the title logo is chosen and fetched.**
   1. **"The poster's language"** in `clear-logo-title`'s criterion 1 is the Poster art language (D217 3: the display's language when listed, else English), whatever the Poster art choice; a logo in that language is chosen first (highest voted), else a logo with no language, else none, and the title is text.
   2. **The logo is fetched as the art is** (D219 1, D220 1): within the same 4-second budget per title, paused with the art after an API failure, through the cache-first path and the cache limit under a key that names TMDB, the id and "logo", aged out at 180 days, as a blob drawn by `<img>` (never inlined). The logo is asked for only while Title as logo is on and the title card shows.
+
+## Conductor ruling — 2026-11-26 (`clear-logo-title` reviews r1; to be listed for the owner at the next stop): D222
+
+- **D222 A logo is shown only when it can be read; offline it comes from the cache.**
+  1. **A dark logo is text.** Before a logo replaces the title line, its visible pixels are measured on a canvas (the blob is same-origin): when their mean relative luminance is under 0.35, the title is shown as text instead (the card's background is near black). No other logo is tried.
+  2. **Offline**, a cached title whose entry carries its TMDB id (a TMDB-mode entry, or one stored with TMDB art) shows its cached logo when the logo index holds one; otherwise its title is text. No request is made offline.
