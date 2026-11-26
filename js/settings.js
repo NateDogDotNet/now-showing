@@ -120,6 +120,41 @@ const rotation = (v, d) => {
   return [0, 90, 180, 270].includes(n) ? n : d;
 };
 
+/** "As the source gives it" (the default), "Textless when TMDB has it", "In <language> when TMDB has it", "Largest TMDB poster". */
+export const ART_MODES = ['source', 'textless', 'language', 'largest'];
+
+/** The poster languages the choice offers (D217 3): about 20 common ISO 639-1 codes, each in its own name. */
+export const LANGUAGES = [
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Español' },
+  { code: 'fr', name: 'Français' },
+  { code: 'de', name: 'Deutsch' },
+  { code: 'it', name: 'Italiano' },
+  { code: 'pt', name: 'Português' },
+  { code: 'nl', name: 'Nederlands' },
+  { code: 'sv', name: 'Svenska' },
+  { code: 'da', name: 'Dansk' },
+  { code: 'no', name: 'Norsk' },
+  { code: 'fi', name: 'Suomi' },
+  { code: 'pl', name: 'Polski' },
+  { code: 'cs', name: 'Čeština' },
+  { code: 'hu', name: 'Magyar' },
+  { code: 'tr', name: 'Türkçe' },
+  { code: 'el', name: 'Ελληνικά' },
+  { code: 'ru', name: 'Русский' },
+  { code: 'ja', name: '日本語' },
+  { code: 'ko', name: '한국어' },
+  { code: 'zh', name: '中文' },
+];
+
+/** The language chosen on first use (D217 3): the display's own when it is in the list, else English. `navLanguage` is a browser language tag such as `fr-CA`. */
+export function defaultArtLanguage(navLanguage) {
+  const code = typeof navLanguage === 'string' ? navLanguage.trim().toLowerCase().split(/[-_]/)[0] : '';
+  return ART_CODES.includes(code) ? code : 'en';
+}
+
+const ART_CODES = LANGUAGES.map((l) => l.code);
+
 /** Each entry: [default, sanitiser]. Sanitisers coerce bad input back to the default. */
 const SCHEMA = {
   // Connection
@@ -137,6 +172,10 @@ const SCHEMA = {
   // The TMDB key (R-TMDB-1, D210 5): a TMDB read access token or a 32-character v3 key, typed as written (js/sources/tmdb.js reads its form). It is its own setting,
   // not the Plex token's: it stays through a change of server type, so a household can go to a media server and back. It is a secret (SECRET_KEYS).
   tmdbKey: ['', str],
+  // Poster art (R-ART-1, D217): which image a poster with a TMDB id shows, from TMDB when a key is set (js/artwork.js). 'source' is the server's (or TMDB's own list) art, as before.
+  posterArt: ['source', oneOf(...ART_MODES)],
+  // The language of 'language' art: one of the listed ISO 639-1 codes; the display's own language when listed, else English (D217 3).
+  posterArtLanguage: [defaultArtLanguage(globalThis.navigator?.language), (v, d) => (LANGUAGES.some((l) => l.code === v) ? v : d)],
   // Several servers (R-SRC-4, D156, D157). The keys above describe the FIRST server, as they did in 2.4.0, and `servers` holds up to two more.
   // `serverId` is the first server's own id, '' while it has not been read (a 2.4.0 object has none): it is recorded when the household
   // changes the address or adds a server, never rewritten on upgrade. `serverCarried` marks the entry that owns the bare ids (the offline

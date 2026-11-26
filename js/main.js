@@ -1,5 +1,6 @@
 // App bootstrap: wires settings, Plex, the poster engine, display and controls together.
 
+import { createArtwork } from './artwork.js';
 import { createBackoff } from './backoff.js';
 import { createBrightnessTimer } from './brightness-timer.js';
 import { createDisplay } from './display.js';
@@ -33,6 +34,7 @@ const carriedPlayback = takeCarriedPlayback();
 const storage = safeStorage();
 const log = createLog();
 const cache = createPosterCache({ storage, limit: () => state.settings.posterCacheLimit });
+const artwork = createArtwork({ cache, getSettings: () => state.settings, log }); // TMDB poster art for a poster with a TMDB id, when chosen and a key is set (R-ART-1)
 const display = createDisplay();
 const helper = createHelper({ log });
 const clientIdValue = getClientId(storage);
@@ -246,6 +248,12 @@ async function showPoster(poster, image) {
 
 async function fetchImage(poster, { skipCache = false } = {}) {
   const size = requestSize(display.posterSize(), window.devicePixelRatio || 1);
+  // TMDB art first, when the household chose it and the poster has a TMDB id: cache first, then TMDB. No art (any reason, a failure included) is the source's own image below.
+  const art = await artwork.image(poster, size, { skipCache });
+  if (art) {
+    if (art.cached) cachedBlobs.add(art.blob);
+    return art.blob;
+  }
   const url = client.imageUrl(poster.thumb, size);
   if (state.directImages) return url;
   const hit = skipCache ? null : await cache.lookup(poster, size).catch(() => null);

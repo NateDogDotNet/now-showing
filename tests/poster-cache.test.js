@@ -797,3 +797,48 @@ test('a re-seen poster teaches its entry the studios and company ids (refreshRat
   const e = pc.entries()[0];
   assert.deepEqual([e.studios, e.companyIds], [['Pixar'], ['3']]);
 });
+
+// ---- TMDB art on a server's poster (artwork-sources, D217): it ages like a TMDB entry; the server's own entries do not ----
+
+const artPoster = (n, key = `tmdb-art:movie:60${n}:textless`) => ({ ratingKey: String(n), title: `S${n}`, year: '2020', thumb: key, contentRating: 'PG' });
+
+test('a server poster holding TMDB art is served while it is under 180 days old and not from the 180th day on (art, offline draw included)', async () => {
+  for (const [age, served] of [[0, true], [LIFE - 1, true], [LIFE, false], [LIFE + DAY, false]]) {
+    const { clock, pc } = clocked();
+    await pc.put(artPoster(1), blob('art'), size(600));
+    clock.t += age;
+    assert.equal((await pc.lookup(artPoster(1), size(600))) !== null, served, `lookup at ${age} ms`);
+    assert.equal((await pc.random(undefined, '', null)) !== null, served, `offline draw at ${age} ms`);
+  }
+});
+
+test('an art entry with no stored time, or one in the future, is expired; the same server poster with its own thumb never is', async () => {
+  const storage = memoryStorage();
+  const pc = createPosterCache({ storage, caches: fakeCaches().caches, now: () => 1_800_000_000_000 });
+  await pc.put(artPoster(1), blob('a'), size(600));
+  await pc.put(poster(2), blob('b'), size(600));
+  const index = JSON.parse(storage.getItem('plexPoster.posterIndex'));
+  for (const e of index) delete e.savedAt;
+  storage.setItem('plexPoster.posterIndex', JSON.stringify(index));
+  assert.equal(await pc.lookup(artPoster(1), size(600)), null);
+  assert.ok(await pc.lookup(poster(2), size(600)), 'a server thumb with no time is served as before');
+  for (let i = 0; i < 10; i++) assert.equal((await pc.random(undefined, '', null)).poster.ratingKey, '2');
+});
+
+test('art is looked up by its own key: a lookup with the server thumb, or with another art key, misses; the stored width must still reach the request', async () => {
+  const { pc } = clocked();
+  await pc.put(artPoster(1), blob('art'), size(600));
+  assert.ok(await pc.lookup(artPoster(1), size(600)));
+  assert.equal(await pc.lookup(artPoster(1, '/library/metadata/1/thumb/9'), size(600)), null, 'the server thumb is another key');
+  assert.equal(await pc.lookup(artPoster(1, 'tmdb-art:movie:601:largest'), size(600)), null, 'another mode is another key');
+  assert.equal(await pc.lookup(artPoster(1), size(900)), null, 'too narrow');
+  await pc.put(poster(1, '/library/metadata/1/thumb/9'), blob('plain'), size(600));
+  assert.equal(await pc.lookup(artPoster(1), size(600)), null, 'a poster saved again with the source art no longer answers to the art key');
+});
+
+test('a thumb that merely contains the prefix is not art', async () => {
+  const { clock, pc } = clocked();
+  await pc.put(poster(1, '/x/tmdb-art:movie:1:textless'), blob('a'), size(600));
+  clock.t += 5 * LIFE;
+  assert.ok(await pc.lookup(poster(1, '/x/tmdb-art:movie:1:textless'), size(600)));
+});

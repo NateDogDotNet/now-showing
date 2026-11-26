@@ -188,10 +188,13 @@ function limiter(max) {
 }
 
 /** One JSON request. Messages name TMDB and never the address (it carries the key in the v3 form). */
-async function request(url, { headers, fetchImpl, timeoutMs = 10000 }) {
+async function request(url, { headers, fetchImpl, timeoutMs = 10000, signal = null }) {
+  // A caller's signal (the poster art's budget, D220 1) ends the request as well as the timeout does; one already ended sends nothing (a lookup that waited its turn behind the cap).
+  if (signal?.aborted) throw new SourceError('TMDB did not respond in time.', { kind: 'timeout' });
   let res;
   try {
-    res = await fetchImpl(url, { method: 'GET', headers: { Accept: 'application/json', ...headers }, signal: timeoutSignal(timeoutMs) });
+    const timeout = timeoutSignal(timeoutMs);
+    res = await fetchImpl(url, { method: 'GET', headers: { Accept: 'application/json', ...headers }, signal: signal && typeof AbortSignal.any === 'function' ? AbortSignal.any([timeout, signal]) : signal || timeout });
   } catch (err) {
     const timedOut = err && (err.name === 'TimeoutError' || err.name === 'AbortError');
     throw new SourceError(timedOut ? 'TMDB did not respond in time.' : 'Could not reach TMDB (network or CORS error).', { kind: timedOut ? 'timeout' : 'network' });
@@ -220,11 +223,11 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
   const headers = form.kind === 'token' ? { Authorization: `Bearer ${form.value}` } : {};
   const lookups = limiter(MAX_LOOKUPS);
 
-  const get = (path, params = {}) => {
+  const get = (path, params = {}, signal = null) => {
     if (!form.kind) return Promise.reject(new SourceError('Enter your TMDB key in Settings.', { kind: 'auth' }));
     // The message is about the key and holds none of it. Kind `auth`: the card and the test line then offer Sign in again, which goes to the key field.
     if (form.kind === 'token' && !headerSafe(form.value)) return Promise.reject(new SourceError('The TMDB key holds a character a key never has. Paste it again, whole, from your TMDB account.', { kind: 'auth' }));
-    return request(buildUrl(API_BASE, path, { ...params, ...(form.kind === 'v3' ? { api_key: form.value } : {}) }), { headers, fetchImpl });
+    return request(buildUrl(API_BASE, path, { ...params, ...(form.kind === 'v3' ? { api_key: form.value } : {}) }), { headers, fetchImpl, signal });
   };
   const results = (reply) => {
     if (!reply || !Array.isArray(reply.results)) throw new SourceError('Could not read the TMDB reply: it holds no list of titles.', { kind: 'parse' });
@@ -408,6 +411,18 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
       const wanted = [...new Set(ratingKeys.map((k) => String(k)))].map((k) => [k, parseRatingKey(k)]).filter(([, id]) => id);
       const certs = await Promise.all(wanted.map(([, id]) => read(id.type, id.id)));
       return wanted.flatMap(([ratingKey, id], i) => (certs[i].error ? [] : [{ ratingKey, contentRating: certs[i].rating, ...(certs[i].companyIds.length ? { companyIds: certs[i].companyIds } : {}), source: 'static', tmdbId: id.id, tmdbType: id.type }]));
+    },
+
+    /**
+     * The posters TMDB holds for one title, by its own id and type (never a search), as TMDB lists them (`file_path`, `iso_639_1`, `width`, `vote_average`): `[]` when the reply
+     * names none. `languages` are the `include_image_language` codes asked for (`null` is the textless ones). A failure throws, as every request here does; the poster art
+     * (js/artwork.js) turns that into the source's own art. It goes through the same cap of MAX_LOOKUPS at once. `signal` ends the request when it aborts (D220 1).
+     */
+    async images(type, id, languages = [], { signal = null } = {}) {
+      if ((type !== 'movie' && type !== 'tv') || !/^[0-9]+$/.test(String(id))) throw gone();
+      const codes = languages.map(String).filter((c) => /^[a-z]{2}$|^null$/.test(c));
+      const reply = await lookups(() => get(`${type}/${id}/images`, { include_image_language: codes.join(',') }, signal));
+      return Array.isArray(reply?.posters) ? reply.posters : [];
     },
 
     /** A poster file at about this width. No key: the image host needs none, and a key must never reach a URL (D210 4). */

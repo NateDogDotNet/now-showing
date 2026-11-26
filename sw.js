@@ -11,6 +11,7 @@ const SHELL = [
   'manifest.webmanifest',
   'css/app.css',
   'js/main.js',
+  'js/artwork.js',
   'js/backoff.js',
   'js/brightness.js',
   'js/brightness-timer.js',

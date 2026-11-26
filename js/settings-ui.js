@@ -2,6 +2,7 @@
 
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
+import { LANGUAGES } from './artwork.js';
 import { createSource, createSources, DEFAULT_LIBRARY, discoverKey, needsSources, readPlayers, readServerId, signInFlow, sourceOf, validYear } from './sources/index.js';
 import { describeLimitNow, MAX_SLOTS, NO_LIMIT, wasUnreadable } from './limit-schedule.js';
 import { createPositionMode } from './position.js';
@@ -161,6 +162,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   // The sign-in controls show when nothing is connected yet, or after Change; otherwise the "Connected to" card does.
   let connectionOpen = true;
   let testing = false;
+  let keyTestRun = 0; // the same for Test key (Poster art): bumped by an edit of the key, so a late answer for the old key is ignored
   let testRun = 0; // bumped when the connection under test is dropped (a type change, an import, a fresh open): a late answer is then ignored
   let keepOriginal = false; // set when the sheet closes FOR position mode: the close event then leaves the preview and `original` alone
   let countRun = 0; // bumped whenever the library list is rebuilt or the sheet closes, so a late count is ignored
@@ -211,6 +213,20 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     ...[...FRAMES, NO_FRAME, { id: CUSTOM_FRAME_ID, name: 'Custom image…' }].map((f) => new Option(f.name, f.id)),
   );
 
+  // Poster art (R-ART-1, D217): the languages are listed in their own names; the language choice shows only while "In a language" is chosen.
+  field('posterArtLanguage').replaceChildren(...LANGUAGES.map((l) => Object.assign(new Option(l.name, l.code), { lang: l.code }))); // each name is read in its own language
+  const syncArt = () => {
+    const mode = field('posterArt').value;
+    $('art-language-row').hidden = mode !== 'language' && mode !== 'largest'; // Largest uses the language too (D218, D219 3)
+    $('art-language-help').hidden = mode !== 'largest';
+    // The help describes the Language select only while it is shown (a hidden description is still read by a screen reader).
+    if (mode === 'largest') field('posterArtLanguage').setAttribute('aria-describedby', 'art-language-help');
+    else field('posterArtLanguage').removeAttribute('aria-describedby');
+    // R-ART-1: "In <language> when TMDB has it", the language in its own name.
+    const name = LANGUAGES.find((l) => l.code === field('posterArtLanguage').value)?.name ?? 'a language';
+    field('posterArt').querySelector('option[value="language"]').textContent = `In ${name} when TMDB has it`;
+  };
+
   function write(s) {
     for (const el of form.elements) {
       if (!el.name || !(el.name in s)) continue;
@@ -222,6 +238,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     promoted = null;
     removedNames = [];
     dropTest();
+    resetKeyTest(); // a verdict is about the sheet it was made in (a fresh open, an import)
     syncServerType();
     // The household toggle is UI-only: on when a limit is set; off stores ''. The select keeps PG-13 while off.
     $('household-toggle').checked = Boolean(s.maxContentRating);
@@ -660,12 +677,20 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     $('pin-clear-btn').hidden = !set;
   }
 
+  // The Plex token and the TMDB key each have their own Show state: showing one never shows the other (each still asks the PIN).
   function setTokenShown(shown) {
     field('plexToken').type = shown ? 'text' : 'password';
     $('token-toggle').textContent = shown ? 'Hide' : 'Show';
+    $('token-toggle').setAttribute('aria-label', shown ? 'Hide token' : 'Show token');
+  }
+  function setKeyShown(shown) {
     field('tmdbKey').type = shown ? 'text' : 'password';
     $('tmdb-key-toggle').textContent = shown ? 'Hide' : 'Show';
     $('tmdb-key-toggle').setAttribute('aria-label', shown ? 'Hide key' : 'Show key');
+  }
+  function hideSecrets() {
+    setTokenShown(false);
+    setKeyShown(false);
   }
 
   // ---- the rotation time: buttons in minutes over the stored seconds ----
@@ -764,6 +789,9 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     $('signin-controls').hidden = !connectionOpen || tmdb; // the manual token and URL fold stays where it is: it is how a token is shown or exported
     $('manual-connection').hidden = tmdb; // no "Add a server" either: it shows only with an address (renderServers), and TMDB has none (D210 5)
     $('tmdb-credit').hidden = !(tmdb || field('tmdbKey').value.trim());
+    // TMDB's connection is its key, which lives in Poster art: Test connection sits after it there (D219 2). A media server keeps the button in its connection.
+    (tmdb ? $('art-test-slot') : $('test-home')).append($('test-block'));
+    $('art-test-key').hidden = tmdb; // one test per mode (D220 2): in TMDB mode Test connection tests the key, so Test key is not offered
     renderConnected();
   }
 
@@ -775,6 +803,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   }
 
   function syncDependent() {
+    syncArt();
     $('custom-frame-row').hidden = field('frameId').value !== CUSTOM_FRAME_ID;
     // Showing or hiding the Household options keeps the toggle where it was on screen, so the schedule and the profiles come into view
     // below it instead of the sheet's scroll position moving the toggle away.
@@ -1231,6 +1260,51 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
         testing = false;
         $('test-btn').disabled = false;
       }
+    }
+  }
+
+  /**
+   * Test key (D219 2), in Poster art for every server type: `GET /3/authentication` with the key typed, and a line of its own. The key is never in the line: SourceError messages
+   * name TMDB and never the address or the key. Refused, not answering (no network, a timeout, a TMDB 5xx) and connected are the three verdicts.
+   */
+  async function testKey() {
+    const key = field('tmdbKey').value.trim();
+    const line = (text) => writeLine($('art-test-result'), text);
+    if (!key) return line('Enter your TMDB key first.');
+    line('Connecting…');
+    const run = ++keyTestRun;
+    $('art-test-btn').disabled = true;
+    try {
+      await createSource({ serverType: 'tmdb', tmdbKey: key }, { clientId, version }).identity();
+      if (run === keyTestRun) line('✓ Connected to TMDB');
+    } catch (err) {
+      const down = err?.kind === 'network' || err?.kind === 'timeout' || (err?.kind === 'http' && err.status >= 500);
+      if (run === keyTestRun) line(`✗ ${down ? 'TMDB is not answering. Try again in a moment.' : err.message}`);
+    } finally {
+      if (run === keyTestRun) $('art-test-btn').disabled = false;
+    }
+  }
+
+  /** Writes a result line only when its text changes (it is a live region: the same words are not announced again). */
+  const writeLine = (el, text) => {
+    if (el.textContent !== text) el.replaceChildren(document.createTextNode(text));
+  };
+
+  /** Ends any Test key and its verdict: the answer of one still running is ignored, the button is enabled again and the line is empty (D220 2). */
+  function resetKeyTest() {
+    keyTestRun++;
+    $('art-test-btn').disabled = false;
+    $('art-test-result').replaceChildren();
+  }
+
+  /** The key was edited or cleared: an earlier verdict (here, and Test connection's in TMDB mode) is not about this key (ux F5). */
+  function dropKeyVerdict() {
+    keyTestRun++;
+    $('art-test-btn').disabled = false;
+    if ($('art-test-result').textContent) writeLine($('art-test-result'), 'Key not tested yet. Press Test key.');
+    if (isTmdb()) {
+      dropTest();
+      if ($('test-result').textContent !== 'Connection not tested yet. Press Test connection.') setResult('Connection not tested yet. Press Test connection.');
     }
   }
 
@@ -1698,6 +1772,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     genreRun++;
     sourceRun++;
     $('test-result').replaceChildren();
+    resetKeyTest();
     connectionOpen = !(back.token && back.url);
     syncServerType();
     renderSelection();
@@ -1709,7 +1784,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
    * for a later task, so `dialog.open` is already false while it has not run yet: nothing may rely on that event alone.
    */
   function closeSheet() {
-    setTokenShown(false);
+    hideSecrets();
     countRun++;
     dialog.close();
   }
@@ -1946,7 +2021,8 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   dialog.addEventListener('close', () => {
     if (!dialog.open) stopSlotStatusTimer(); // a close queued before a reopen (position mode's Done) must not stop the open sheet's timer
     closePreset();
-    setTokenShown(false); // the token is hidden again whenever the sheet closes
+    hideSecrets(); // the token and the key are hidden again whenever the sheet closes
+    if (!keepOriginal) resetKeyTest(); // Cancel (or Save) ends the sheet: a Test key verdict does not outlive it (D220 2)
     $('jf-pass').value = '';
     $('add-pass').value = '';
     addAbort?.abort();
@@ -2158,13 +2234,24 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   }
   field('tmdbKey').addEventListener('input', () => {
     $('tmdb-credit').hidden = !(isTmdb() || field('tmdbKey').value.trim());
+    dropKeyVerdict();
+  });
+  $('art-test-btn').addEventListener('click', testKey);
+  field('posterArt').addEventListener('change', syncArt);
+  field('posterArtLanguage').addEventListener('change', syncArt);
+  // Clear empties the one TMDB key (D217 1): it is stored by Save like every other change, and TMDB mode has no key either from then on.
+  $('tmdb-key-clear').addEventListener('click', () => {
+    field('tmdbKey').value = '';
+    field('tmdbKey').dispatchEvent(new Event('input', { bubbles: true }));
+    setKeyShown(false);
+    field('tmdbKey').focus();
   });
   $('tmdb-key-toggle').addEventListener('click', async () => {
     if (field('tmdbKey').type === 'password') {
       if (!(await requestPin()) || !dialog.open) return; // showing the key needs the PIN, as showing the token does; hiding it does not
-      setTokenShown(true);
+      setKeyShown(true);
     } else {
-      setTokenShown(false);
+      setKeyShown(false);
     }
   });
   $('token-toggle').addEventListener('click', async () => {
@@ -2310,7 +2397,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       form.dataset.serverName = original.serverName;
       write(original);
       syncSlotStatus();
-      setTokenShown(false);
+      hideSecrets();
       $('advanced').open = false;
       $('manual-connection').open = Boolean(original.plexToken && !original.serverName);
       closePreset();

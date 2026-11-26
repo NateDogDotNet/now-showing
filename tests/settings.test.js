@@ -1594,3 +1594,15 @@ test('houses: a hand-written 2.2 file that sets only libraryKey clears the house
   const merged = fromImport(JSON.stringify({ libraryKey: '3' }), sanitize({ ...defaults(), houses: [{ key: '', title: 'Pixar' }] }));
   assert.deepEqual(merged.houses, []);
 });
+
+// ---- Poster art (artwork-sources, R-ART-1, D217) ----
+
+test('posterArt and posterArtLanguage travel in an export and an import, and the key beside them stays a secret', () => {
+  const s = { ...defaults(), posterArt: 'language', posterArtLanguage: 'fr', tmdbKey: TMDB_KEY };
+  const file = toExport(s);
+  assert.deepEqual([file.settings.posterArt, file.settings.posterArtLanguage, 'tmdbKey' in file.settings], ['language', 'fr', false]);
+  const back = fromImport(JSON.stringify(file), defaults());
+  assert.deepEqual([back.posterArt, back.posterArtLanguage], ['language', 'fr']);
+  assert.equal(sanitize({ ...s, posterArt: 'weird' }).posterArt, 'source', 'an unknown choice is "As the source gives it": no TMDB request');
+  assert.equal(defaults().posterArt, 'source');
+});

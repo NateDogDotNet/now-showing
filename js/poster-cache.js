@@ -15,13 +15,15 @@ const DEFAULT_LIMIT = 100;
 export const TMDB_MAX_AGE_MS = 180 * 86_400_000;
 /** A TMDB poster's `ratingKey` (`movie:603`, `tv:1399`): no other source's id has this form. */
 const TMDB_KEY = /^(movie|tv):[0-9]+$/;
+/** The `thumb` of an entry that holds TMDB art (js/artwork.js): `tmdb-art:movie:603:textless`. A server's own thumb never has this form. */
+const TMDB_ART = /^tmdb-art:(movie|tv):[0-9]+:/;
 
 /**
- * Is this entry too old to serve (D210 6, 7)? Only a TMDB entry can be: the age is `now - savedAt`, and 180 days exactly is expired; an entry with no stored time
+ * Is this entry too old to serve (D210 6, 7)? Only a TMDB entry can be, and so can an entry that holds TMDB art (a server's poster shown from TMDB, whatever its own id): the age is `now - savedAt`, and 180 days exactly is expired; an entry with no stored time
  * (or one that is not a finite number) or with a time in the future is expired too. The other sources' entries never are (their behaviour is as it was).
  */
 export function expired(entry, now) {
-  if (!TMDB_KEY.test(String(entry?.ratingKey ?? ''))) return false;
+  if (!TMDB_KEY.test(String(entry?.ratingKey ?? '')) && !TMDB_ART.test(String(entry?.thumb ?? ''))) return false;
   const saved = entry.savedAt;
   return typeof saved !== 'number' || !Number.isFinite(saved) || saved > now || now - saved >= TMDB_MAX_AGE_MS;
 }

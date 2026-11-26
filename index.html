@@ -150,13 +150,7 @@
           <input name="serverUserId" type="hidden" />
 
           <div id="tmdb-connection" class="tmdb-connection" hidden>
-            <label>TMDB key
-              <span class="input-row">
-                <input name="tmdbKey" type="password" autocomplete="off" spellcheck="false" />
-                <button type="button" class="btn small" id="tmdb-key-toggle" aria-label="Show key">Show</button>
-              </span>
-            </label>
-            <p class="muted small">Paste your TMDB read access token, or a 32-character v3 API key, from your TMDB account's API settings. It stays on this display and is sent only to TMDB.</p>
+            <p class="muted small">TMDB needs only its key. Enter and test it under Poster art, just below.</p>
           </div>
 
           <div id="connected-card" class="connected-card" hidden>
@@ -206,14 +200,13 @@
             </label>
           </details>
 
-          <div class="input-row">
-            <button type="button" class="btn" id="test-btn">Test connection</button>
-          </div>
-          <p id="test-result" class="test-result muted small" aria-live="polite"></p>
-          <!-- TMDB's credit (D203 1): its own sentence and logo, here in Settings only and never on the display. Shown while TMDB is the server type or a TMDB key is set. -->
-          <div id="tmdb-credit" class="tmdb-credit" hidden>
-            <img src="assets/tmdb/tmdb-logo.svg" alt="TMDB" width="77" height="10" />
-            <p class="muted small">This application uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.</p>
+          <div id="test-home">
+            <div id="test-block">
+              <div class="input-row">
+                <button type="button" class="btn" id="test-btn">Test connection</button>
+              </div>
+              <p id="test-result" class="test-result muted small" aria-live="polite"></p>
+            </div>
           </div>
         <div id="servers-fieldset" class="servers" role="group" aria-label="Media servers">
           <p id="servers-help" class="muted small" hidden>Posters can come from up to three servers, in any mix of Plex, Jellyfin and Emby. One household limit applies to every poster, whichever server it came from.</p>
@@ -247,6 +240,47 @@
           </details>
           <p id="add-status" class="muted small" aria-live="polite"></p>
         </div>
+        </fieldset>
+
+        <!-- Poster art (R-ART-1, D217): the image a poster with a TMDB id shows. The one TMDB key field (tmdbKey, D203) lives here for every server type; with it cleared TMDB mode has no key either. -->
+        <fieldset id="art-fieldset">
+          <legend>Poster art</legend>
+          <label>Image to show
+            <select name="posterArt">
+              <option value="source">As the source gives it</option>
+              <option value="textless">Textless when TMDB has it</option>
+              <option value="language">In English when TMDB has it</option>
+              <option value="largest">Largest TMDB poster</option>
+            </select>
+          </label>
+          <label id="art-language-row" hidden>Language
+            <select name="posterArtLanguage"></select>
+          </label>
+          <p id="art-language-help" class="muted small" hidden>Largest shows textless, English or that language.</p>
+          <p id="art-help" class="muted small">TMDB art replaces a poster's image, never the title, and only for titles that have a TMDB id. Without a TMDB key, or when TMDB has no such poster, the source's own image is shown.</p>
+          <div class="tmdb-connection">
+            <label for="tmdb-key-input">TMDB key</label>
+            <span class="input-row">
+              <input name="tmdbKey" id="tmdb-key-input" type="password" autocomplete="off" spellcheck="false" aria-describedby="tmdb-key-help" />
+              <button type="button" class="btn small" id="tmdb-key-toggle" aria-label="Show key">Show</button>
+              <button type="button" class="btn small" id="tmdb-key-clear" aria-label="Clear key">Clear</button>
+            </span>
+            <p id="tmdb-key-help" class="muted small">Paste your TMDB read access token, or a 32-character v3 API key, from your TMDB account's API settings. It stays on this display and is sent only to TMDB. It is the one TMDB key: Clear removes it for TMDB posters too, once you save.</p>
+          </div>
+          <!-- Test connection moves here, after the key, while TMDB is the server type (js/settings-ui.js); a media server keeps it in its connection. -->
+          <div id="art-test-slot"></div>
+          <!-- Test key is the key's test under Plex, Jellyfin and Emby; in TMDB mode Test connection (above) is, and this block is hidden (D220 2). -->
+          <div id="art-test-key">
+            <div class="input-row">
+              <button type="button" class="btn" id="art-test-btn">Test key</button>
+            </div>
+            <p id="art-test-result" class="test-result muted small" aria-live="polite"></p>
+          </div>
+          <!-- TMDB's credit (D203 1): its own sentence and logo, here in Settings only and never on the display. Shown while TMDB is the server type or a TMDB key is set. -->
+          <div id="tmdb-credit" class="tmdb-credit" hidden>
+            <img src="assets/tmdb/tmdb-logo.svg" alt="TMDB" width="77" height="10" />
+            <p class="muted small">This application uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.</p>
+          </div>
         </fieldset>
 
         <fieldset id="selection-fieldset">
