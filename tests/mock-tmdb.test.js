@@ -339,3 +339,39 @@ test('control: /__mock/empty empties lists, discover, search, find and images; /
   assert.equal((await get('/3/movie/1001/images')).body.posters.length, 3);
   assert.ok((await get('/3/search/company?query=a24')).body.results.length === 1);
 });
+
+// ---- the years filter (D206 1) and the details route, added by tmdb-source ----
+
+test('discover/movie: primary_release_date.gte and .lte keep the titles of those years, inclusive', async () => {
+  // Titles are released on 06-15 of 2000 + i (the filler), 2017 to 2024 (the named ones).
+  const from = (await get('/3/discover/movie?primary_release_date.gte=2023-01-01')).body.results;
+  assert.deepEqual(from.map((m) => m.release_date.slice(0, 4)).sort(), ['2023', '2024']);
+  const upTo = (await get('/3/discover/movie?primary_release_date.lte=2003-12-31')).body.results;
+  assert.deepEqual(upTo.map((m) => m.release_date.slice(0, 4)).sort(), ['2001', '2002', '2003']);
+  const both = (await get('/3/discover/movie?primary_release_date.gte=2018-01-01&primary_release_date.lte=2019-12-31')).body.results;
+  assert.deepEqual(both.map((m) => m.release_date.slice(0, 4)).sort(), ['2018', '2019']);
+  assert.deepEqual((await get('/3/discover/movie?primary_release_date.gte=2030-01-01')).body.results, []);
+  assert.equal((await get('/3/discover/movie?primary_release_date.gte=&primary_release_date.lte=')).body.total_results, 23, 'an empty bound filters nothing (the adult title is out by default)');
+});
+
+test('discover/tv: first_air_date.gte and .lte keep the shows of those years; the movie parameters do not apply to it', async () => {
+  assert.deepEqual(ids(await get('/3/discover/tv?first_air_date.gte=2021-01-01')).sort(), [2003, 2004]);
+  assert.deepEqual(ids(await get('/3/discover/tv?first_air_date.lte=2019-12-31')), [2002]);
+  assert.deepEqual(ids(await get('/3/discover/tv?first_air_date.gte=2020-01-01&first_air_date.lte=2020-12-31')), [2001]);
+  assert.equal(ids(await get('/3/discover/tv?primary_release_date.gte=2030-01-01')).length, 4, 'not a TV parameter');
+  assert.equal(ids(await get('/3/discover/movie?first_air_date.gte=2030-01-01')).length, 20, 'not a movie parameter');
+});
+
+test('movie/{id} and tv/{id}: the details, with the appended certifications; an unknown id is 404', async () => {
+  const movie = await get('/3/movie/1004?append_to_response=release_dates');
+  assert.equal(movie.status, 200);
+  assert.equal(movie.body.title, 'Static Bloom');
+  assert.deepEqual(movie.body.genres.map((g) => g.name).sort(), ['Drama', 'Horror']);
+  assert.equal(movie.body.release_dates.results.find((r) => r.iso_3166_1 === 'US').release_dates.some((d) => d.certification === 'R'), true);
+  assert.ok(!('release_dates' in (await get('/3/movie/1004')).body), 'only when asked for');
+  const show = await get('/3/tv/2003?append_to_response=content_ratings');
+  assert.equal(show.body.name, 'Harbor Nights');
+  assert.equal(show.body.content_ratings.results.find((r) => r.iso_3166_1 === 'US').rating, 'TV-MA');
+  assert.equal((await get('/3/movie/424242')).status, 404);
+  assert.equal((await get('/3/tv/1004')).status, 404, 'a movie id is no show');
+});

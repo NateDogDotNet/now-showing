@@ -13,6 +13,7 @@ import {
   cleanRatings,
   cleanSource,
   describeSelection,
+  genresAreAll,
   entryInSelection,
   genreRequestValue,
   libraryShares,
@@ -363,4 +364,30 @@ test('every poster from every server passes the limit in force, whichever server
     assert.equal(posterAllowed(sel, 'PG', from(id, 'PG')), true);
     for (const above of ['PG-13', 'R', 'NC-17', '', undefined, 'TV-MA', '15']) assert.equal(posterAllowed(sel, 'PG', from(id, above)), false, `${id} ${above}`);
   }
+});
+
+// ---- TMDB Discover's "every ticked genre" (Run 13, tmdb-source r2: R4) ----
+
+test('describeSelection joins genres with "and" when Discover is set to every ticked genre, and with "or" otherwise', () => {
+  const genres = [{ key: '35', title: 'Comedy' }, { key: '18', title: 'Drama' }, { key: '27', title: 'Horror' }];
+  const of = (key, extra = {}) => describeSelection(selectionOf({ libraryKeys: [key], libraryNames: ['Discover TV'], genres, ...extra }));
+  assert.equal(of('discover/tv?mode=and'), 'Discover TV, genres Comedy, Drama and Horror');
+  assert.equal(of('discover/movie?from=2000&mode=and&to=2010'), 'Discover TV, genres Comedy, Drama and Horror', 'the mode is found among the other parts of the key');
+  assert.equal(of('discover/tv?mode=and', { genres: genres.slice(0, 2) }), 'Discover TV, genres Comedy and Drama');
+  assert.equal(of('discover/tv?mode=and', { genres: genres.slice(0, 1), ratings: ['PG'] }), 'Discover TV, genre Comedy, rated PG');
+  assert.equal(of('discover/tv'), 'Discover TV, genres Comedy, Drama or Horror', 'any ticked genre is unchanged');
+  assert.equal(of('discover/tv?mode=or'), 'Discover TV, genres Comedy, Drama or Horror');
+  assert.equal(of('movie/popular'), 'Discover TV, genres Comedy, Drama or Horror', 'a list takes any ticked genre');
+  assert.equal(of('1'), 'Discover TV, genres Comedy, Drama or Horror', 'a media server library does too');
+  assert.equal(of('mode=and'), 'Discover TV, genres Comedy, Drama or Horror', 'only a Discover key says "every"');
+  assert.equal(of('discover/tv?mode=android'), 'Discover TV, genres Comedy, Drama or Horror');
+  assert.equal(of('discover/tv?xmode=and'), 'Discover TV, genres Comedy, Drama or Horror');
+});
+
+test('genresAreAll reads only the Discover library keys of the selection', () => {
+  const sel = (...keys) => ({ libraries: keys.map((key) => ({ key, name: '' })) });
+  assert.equal(genresAreAll(sel('discover/movie?mode=and')), true);
+  assert.equal(genresAreAll(sel('discover/tv?mode=and&from=2000')), true);
+  assert.equal(genresAreAll(sel('1', 'discover/tv?mode=and')), true);
+  for (const bad of [sel('discover/tv'), sel('discover/tv?from=2000'), sel('movie/popular?mode=and'), sel(), {}, null, undefined, { libraries: [null, {}] }]) assert.equal(genresAreAll(bad), false);
 });

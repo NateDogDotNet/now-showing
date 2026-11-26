@@ -11,6 +11,21 @@ const PREFIX = '/__posters__/';
 
 const DEFAULT_LIMIT = 100;
 
+/** How long a TMDB image or reply may be kept (D203 8, D210 6): 180 days, counted from the time the entry was stored on this display. */
+export const TMDB_MAX_AGE_MS = 180 * 86_400_000;
+/** A TMDB poster's `ratingKey` (`movie:603`, `tv:1399`): no other source's id has this form. */
+const TMDB_KEY = /^(movie|tv):[0-9]+$/;
+
+/**
+ * Is this entry too old to serve (D210 6, 7)? Only a TMDB entry can be: the age is `now - savedAt`, and 180 days exactly is expired; an entry with no stored time
+ * (or one that is not a finite number) or with a time in the future is expired too. The other sources' entries never are (their behaviour is as it was).
+ */
+export function expired(entry, now) {
+  if (!TMDB_KEY.test(String(entry?.ratingKey ?? ''))) return false;
+  const saved = entry.savedAt;
+  return typeof saved !== 'number' || !Number.isFinite(saved) || saved > now || now - saved >= TMDB_MAX_AGE_MS;
+}
+
 /** The fields that say where a poster belongs: its library, its own genres, the collections or playlists it was listed in. */
 function recorded(p) {
   return {
@@ -29,7 +44,7 @@ function joined(before, poster) {
 }
 
 // `limit` is a number or a function returning one, re-read on every put so a settings change applies.
-export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = globalThis.caches } = {}) {
+export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = globalThis.caches, now = () => Date.now() } = {}) {
   const maxEntries = () => {
     const v = typeof limit === 'function' ? limit() : limit;
     const numeric = typeof v === 'number' || (typeof v === 'string' && v.trim() !== '');
@@ -73,7 +88,8 @@ export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = glo
       const contentRating = poster.seriesRating || (poster.episodeRating ? stored || '' : poster.contentRating || '');
       // Where it belongs (R-SEL-1): the library and genres the poster says replace what the entry recorded (a poster that says nothing, the playing title or a pin, keeps it); memberships accumulate.
       const membership = { ...recorded(before), ...recorded(poster), ...joined(before, poster) };
-      const meta = { ratingKey: poster.ratingKey, title: poster.title, year: poster.year, thumb: poster.thumb, contentRating, ...(poster.duration ? { duration: poster.duration } : {}), ...membership, width: size.width, height: size.height, savedAt: Date.now() };
+      // A TMDB title also records when its rating was last read (`checkedAt`, D211 3): what it was stored with was read just now.
+      const meta = { ratingKey: poster.ratingKey, title: poster.title, year: poster.year, thumb: poster.thumb, contentRating, ...(poster.duration ? { duration: poster.duration } : {}), ...membership, width: size.width, height: size.height, savedAt: now(), ...(TMDB_KEY.test(String(poster.ratingKey)) ? { checkedAt: now() } : {}) };
       const list = [meta, ...readIndex().filter((e) => e.ratingKey !== poster.ratingKey)];
       const evicted = list.splice(maxEntries());
       writeIndex(list);
@@ -85,8 +101,10 @@ export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = glo
      * for the offline fallback. One index read and at most one index write for the whole list. Only the rating of an
      * existing entry changes (no re-order, no blob write); nothing is written when every rating already matches or
      * no poster is cached. An episode's own rating is not its show's (D73): without a series rating it changes nothing (D75).
+     * `checked` (a Set of rating keys, D211 3) names the titles whose rating was really read just now: a TMDB entry among them records the time (`checkedAt`);
+     * the engine asks for the TMDB entries checked longest ago first, and one with no `checkedAt` counts as checked longest ago. Other sources' entries record nothing.
      */
-    refreshRatings(posters) {
+    refreshRatings(posters, { checked } = {}) {
       const list = readIndex();
       let changed = false;
       for (const poster of posters) {
@@ -96,6 +114,10 @@ export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = glo
         const contentRating = poster.seriesRating || poster.contentRating || '';
         if (entry.contentRating !== contentRating) {
           entry.contentRating = contentRating;
+          changed = true;
+        }
+        if (checked?.has(poster.ratingKey) && TMDB_KEY.test(entry.ratingKey) && entry.checkedAt !== now()) {
+          entry.checkedAt = now();
           changed = true;
         }
         // An entry cached before 2.3 learns where it belongs the first time it is seen online under a selection.
@@ -163,7 +185,7 @@ export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = glo
     async lookup(poster, size) {
       if (!available) return null;
       const entry = readIndex().find((e) => e.ratingKey === poster.ratingKey);
-      if (!entry || entry.thumb !== poster.thumb || !(entry.width >= size.width)) return null;
+      if (!entry || entry.thumb !== poster.thumb || !(entry.width >= size.width) || expired(entry, now())) return null; // an expired TMDB image is fetched again (D210 6)
       try {
         return await this.get(poster.ratingKey);
       } catch {
@@ -179,7 +201,8 @@ export function createPosterCache({ storage, limit = DEFAULT_LIMIT, caches = glo
      * is gone is never drawn, however it got there. A server that is only down is still in the list: its entries are drawn.
      */
     async random(excludeKey, maxContentRating = '', selection = null, known = () => true) {
-      const list = readIndex().filter((e) => known(e.ratingKey) && allows(maxContentRating, e.contentRating) && entryInSelection(e, selection, maxContentRating));
+      const at = now();
+      const list = readIndex().filter((e) => known(e.ratingKey) && !expired(e, at) && allows(maxContentRating, e.contentRating) && entryInSelection(e, selection, maxContentRating)); // an expired TMDB entry is never shown, offline included (D210 7)
       const pool = list.length > 1 ? list.filter((e) => e.ratingKey !== excludeKey) : list;
       for (const meta of pool.sort(() => Math.random() - 0.5)) {
         const blob = await this.get(meta.ratingKey);

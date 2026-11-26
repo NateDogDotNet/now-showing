@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createEngine } from '../js/engine.js';
 import { defaults } from '../js/settings.js';
 import { createSource } from '../js/sources/index.js';
+import { createPosterCache } from '../js/poster-cache.js';
 
 // The fake stands in for an adapter: reading a session is the Plex adapter's own nowPlaying, so these cases keep their Plex session shapes.
 const { nowPlaying } = createSource({ serverUrl: 'http://s', plexToken: 't' });
@@ -1680,4 +1681,282 @@ test('with several servers a pool that fails everywhere names each server by its
   assert.equal(await failure(named), 'Could not reach Home Plex (network or CORS error). Could not reach Mock Jellyfin (network or CORS error).');
   const plain = make(err('Could not reach Plex (network or CORS error).'), err('Could not reach Jellyfin (network or CORS error).'));
   assert.equal(await failure(plain), 'Could not reach Plex (network or CORS error). Could not reach Jellyfin (network or CORS error).', 'an error that names no server is joined as it is');
+});
+
+// ---- a TMDB source (Run 13, tmdb-source): a pool the adapter says is partial, and the household limit over real adapter output ----
+
+test('a pool the adapter marks partial is asked for again after a minute; a whole pool is kept for half an hour (D210 2)', async () => {
+  for (const [partial, wait, loads] of [[true, 61_000, 2], [true, 30_000, 1], [false, 61_000, 1], [false, 31 * 60_000, 2]]) {
+    let t = 1_000_000;
+    let pools = 0;
+    const client = { ...fakeClient(), pool: async () => (pools++, Object.assign([poster('a'), poster('b')], { partial })) };
+    const engine = createEngine({ client, getSettings: () => ({ ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', showNowPlaying: false }), now: () => t, random: () => 0 });
+    await engine.decide({ force: true });
+    t += wait;
+    await engine.decide({ force: true });
+    assert.equal(pools, loads, `partial ${partial}, after ${wait} ms`);
+  }
+});
+
+test('a partial pool from one adapter call does not hide a library that failed, and a library that failed still marks the pool partial', async () => {
+  let t = 1_000_000;
+  let pools = 0;
+  const client = { ...fakeClient(), libraryCount: async () => 5, pool: async (r) => (pools++, r.libraryKey === 'bad' ? Promise.reject(Object.assign(new Error('x'), { kind: 'network' })) : [poster('a')]) };
+  const settings = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryKeys: ['1', 'bad'], showNowPlaying: false };
+  const engine = createEngine({ client, getSettings: () => settings, now: () => t, random: () => 0 });
+  assert.equal((await engine.decide({ force: true })).poster.ratingKey, 'a');
+  t += 61_000;
+  await engine.decide({ force: true });
+  assert.equal(pools, 4, 'both libraries were asked for again after a minute');
+});
+
+test('over a TMDB adapter: with a limit set nothing the US certification refuses is ever drawn, and nothing is playing', async () => {
+  const dates = (...certs) => [{ iso_3166_1: 'US', release_dates: certs.map((certification) => ({ certification })) }];
+  const titles = [['1', dates('G')], ['2', dates('PG')], ['3', dates('R')], ['4', dates('')], ['5', dates('PG-13', 'R')], ['6', [{ iso_3166_1: 'GB', release_dates: [{ certification: 'PG' }] }]], ['7', dates('PG', 'NC-17')]];
+  const asked = [];
+  const fetchImpl = async (url) => {
+    const u = new URL(url);
+    asked.push(u.pathname);
+    const lookup = /^\/3\/movie\/(\d+)\/release_dates$/.exec(u.pathname);
+    if (lookup) return new Response(JSON.stringify({ results: titles.find(([id]) => id === lookup[1])[1] }));
+    return new Response(JSON.stringify({ page: 1, total_pages: 1, results: titles.map(([id]) => ({ id: Number(id), title: `T${id}`, poster_path: `/${id}.jpg`, release_date: '2020-01-01', genre_ids: [] })) }));
+  };
+  const settings = { ...defaults(), serverType: 'tmdb', tmdbKey: 'a-read-access-token', libraryKey: 'movie/popular', libraryKeys: ['movie/popular'], maxContentRating: 'PG', unwatchedOnly: false };
+  const client = createSource(settings, { fetchImpl });
+  let t = 1_000_000;
+  const engine = createEngine({ client, getSettings: () => settings, now: () => t, random: Math.random });
+  const drawn = new Set();
+  for (let i = 0; i < 40; i++) {
+    t += 400_000;
+    const d = await engine.decide({ force: true });
+    assert.equal(d.poster.source, 'random');
+    assert.equal(d.poster.libraryKey, 'movie/popular');
+    drawn.add(d.poster.ratingKey);
+    engine.shown(d.poster);
+  }
+  assert.deepEqual([...drawn].sort(), ['movie:1', 'movie:2'], 'G and PG only: R, empty, PG-13 + R, no US entry and PG + NC-17 never');
+  assert.ok(asked.every((p) => p.startsWith('/3/movie/')), 'nothing but TMDB list and certification requests; no sessions request');
+  assert.equal(engine.session, null);
+});
+
+test('r2 R3, R8: the empty card of a TMDB household says "that list" and gives no "unwatched only" and no "add a library" advice; the other types keep their words', async () => {
+  const lists = [{ key: 'movie/popular', type: 'movie', title: 'Popular' }, { key: 'movie/top_rated', type: 'movie', title: 'Top rated' }];
+  const emptyCard = async (settings, libs) => {
+    const full = { ...defaults(), plexToken: 't', serverUrl: 'http://s', showNowPlaying: false, ...settings };
+    const client = { ...fakeClient({ pool: [] }), libraries: async () => libs };
+    try {
+      await createEngine({ client, getSettings: () => full, now: () => 1_000_000 }).decide();
+    } catch (e) {
+      assert.equal(e.kind, 'empty');
+      return e.message;
+    }
+    return '';
+  };
+  const tmdb = { serverType: 'tmdb', tmdbKey: 'k', libraryKey: 'movie/popular', libraryKeys: ['movie/popular'], libraryNames: ['Popular'], unwatchedOnly: true };
+  assert.equal(await emptyCard(tmdb, lists), 'No posters found in that list.', 'no unwatched advice, and a list is a list');
+  assert.equal(await emptyCard({ ...tmdb, maxContentRating: 'PG' }, lists), 'No posters found in that list at or below PG (raise the limit).');
+  assert.equal(await emptyCard({ ...tmdb, maxContentRating: 'PG', ratings: ['R'] }, lists), 'No posters found in Popular, rated R at or below PG (raise the limit or tick fewer ratings).');
+  assert.equal(await emptyCard({ ...tmdb, genres: [{ key: '35', title: 'Comedy' }] }, lists), 'No posters found in Popular, genre Comedy (tick fewer genres).', 'a narrowing names the list and gives only the genre advice: no "add a library"');
+  const every = { ...tmdb, libraryKey: 'discover/tv?mode=and', libraryKeys: ['discover/tv?mode=and'], libraryNames: ['Discover TV'], genres: [{ key: '16', title: 'Animation' }, { key: '35', title: 'Comedy' }] };
+  assert.equal(await emptyCard(every, lists), 'No posters found in Discover TV, genres Animation and Comedy (tick fewer genres).', 'every ticked genre reads "and"');
+  assert.equal(await emptyCard({ ...every, libraryKey: 'discover/tv', libraryKeys: ['discover/tv'] }, lists), 'No posters found in Discover TV, genres Animation or Comedy (tick fewer genres).');
+  // The other types, with the same settings: the words and the advice are as they were.
+  const plex = { serverType: 'plex', libraryKey: '1', libraryKeys: ['1'], unwatchedOnly: true };
+  const movies = [{ key: '1', type: 'movie', title: 'Movies' }];
+  assert.equal(await emptyCard(plex, movies), 'No posters found in that library (try turning off "unwatched only").');
+  assert.equal(await emptyCard({ ...plex, serverType: 'jellyfin' }, movies), 'No posters found in that library (try turning off "unwatched only").');
+  assert.equal(await emptyCard({ ...plex, serverType: 'emby' }, movies), 'No posters found in that library (try turning off "unwatched only").');
+  assert.equal(
+    await emptyCard({ ...plex, genres: [{ key: 'x', title: 'Western' }] }, [...movies, { key: '3', type: 'movie', title: 'Kids' }]),
+    'No posters found in library 1, genre Western (try turning off "unwatched only" or add a library or tick fewer genres).',
+  );
+});
+
+// ---- D211 3: the re-rating of cached TMDB titles (D37) is bounded, longest unchecked first, never on the one-minute retry ----
+
+/** An engine over a TMDB source with a limit set, a cache of `keys` whose last checks are `checks`, and spies on what is asked and what is reported. */
+function tmdbRecheck({ keys, checks = new Map(), partialFirst = false, partialAlways = false, serverType = 'tmdb', itemsFail = false }) {
+  let t = 1_000_000;
+  const asked = [];
+  const askedAt = [];
+  const reported = [];
+  let pools = 0;
+  const client = {
+    ...fakeClient(),
+    pool: async () => (pools++, Object.assign([{ ...poster('a'), contentRating: 'PG' }, { ...poster('b'), contentRating: 'PG' }], { partial: partialAlways || (partialFirst && pools === 1) })),
+    items: async (ids) => {
+      asked.push([...ids]);
+      askedAt.push(t);
+      if (itemsFail) throw new Error('down');
+      return ids.map((id) => ({ ratingKey: id, contentRating: 'PG', source: 'static' }));
+    },
+  };
+  const settings = { ...defaults(), serverType, tmdbKey: 'k', plexToken: 't', serverUrl: 'http://s', libraryKey: serverType === 'tmdb' ? 'movie/popular' : '1', maxContentRating: 'PG', showNowPlaying: false };
+  const engine = createEngine({ client, getSettings: () => settings, now: () => t, random: () => 0, cachedKeys: () => keys, cachedChecks: () => checks, onRatings: (list, info) => reported.push({ list, info }) });
+  return { engine, asked, askedAt, reported, advance: (ms) => (t += ms), pools: () => pools };
+}
+const tmdbKeys = (n) => Array.from({ length: n }, (_, i) => `movie:${i + 1}`);
+
+test('D211 3: a pass re-checks at most 20 cached TMDB titles, the 20 checked longest ago, and reports only those', async () => {
+  const keys = tmdbKeys(30);
+  // Checked at times 3000, 2900, ... : movie:30 longest ago; movie:1 newest. No title has no time here.
+  const checks = new Map(keys.map((k, i) => [k, 3000 - i * 100]));
+  const { engine, asked, reported } = tmdbRecheck({ keys, checks });
+  await engine.decide({ force: true });
+  assert.equal(asked.length, 1, 'one request, not one per batch of a hundred');
+  assert.deepEqual([...asked[0]].sort(), keys.slice(10).sort(), 'the 20 checked longest ago: movie:11 to movie:30');
+  assert.equal(asked[0].length, 20);
+  assert.equal(reported.length, 1);
+  assert.deepEqual(reported[0].list.map((p) => p.ratingKey).sort(), keys.slice(10).sort(), 'the others are not reported: they keep the rating they were stored with');
+  assert.deepEqual([...reported[0].info.checked].sort(), keys.slice(10).sort());
+});
+
+test('D211 3: a title with no time counts as checked longest ago, ties keep the cache order, and fewer than 20 are all asked', async () => {
+  const keys = tmdbKeys(30);
+  const checks = new Map(keys.slice(0, 25).map((k, i) => [k, 5000 + i])); // the last five have no time
+  const none = tmdbRecheck({ keys, checks });
+  await none.engine.decide({ force: true });
+  assert.deepEqual(none.asked[0].slice(0, 5), keys.slice(25), 'the five with no time come first');
+  assert.deepEqual(none.asked[0].slice(5), keys.slice(0, 15), 'then the oldest times');
+  const noTimes = tmdbRecheck({ keys });
+  await noTimes.engine.decide({ force: true });
+  assert.deepEqual(noTimes.asked[0], keys.slice(0, 20), 'no time anywhere: the first 20 of the cache');
+  const some = tmdbRecheck({ keys: tmdbKeys(7), checks: new Map([['movie:1', 9], ['movie:2', Number.NaN], ['movie:3', 'x']]) });
+  await some.engine.decide({ force: true });
+  assert.equal(some.asked[0].length, 7);
+  assert.deepEqual(some.asked[0].slice(-1), ['movie:1'], 'a time that is no number counts as none; the one real time is the newest');
+});
+
+test('D211 3: never on the one-minute retry of a partial pool; the next ordinary pass asks again', async () => {
+  const keys = tmdbKeys(30);
+  const { engine, asked, advance, pools } = tmdbRecheck({ keys, partialFirst: true });
+  await engine.decide({ force: true });
+  assert.equal(asked.length, 1);
+  advance(61_000); // the partial pool is asked for again
+  await engine.decide({ force: true });
+  assert.equal(pools(), 2, 'the pool was built again');
+  assert.equal(asked.length, 1, 'but no TMDB title was re-checked on that retry');
+  advance(31 * 60_000);
+  await engine.decide({ force: true });
+  assert.equal(pools(), 3);
+  assert.equal(asked.length, 2, 'an ordinary pass checks again');
+  // A pool that was whole is not a retry, even after a minute and a half.
+  const whole = tmdbRecheck({ keys });
+  await whole.engine.decide({ force: true });
+  whole.advance(31 * 60_000);
+  await whole.engine.decide({ force: true });
+  assert.equal(whole.asked.length, 2);
+});
+
+test('D211 3: a lookup that failed is stored unrated and is not reported as checked', async () => {
+  const keys = tmdbKeys(3);
+  const failing = tmdbRecheck({ keys, itemsFail: true });
+  await failing.engine.decide({ force: true });
+  assert.deepEqual([...failing.reported[0].list], keys.map((k) => ({ ratingKey: k, contentRating: '' })), 'fail closed: stored unrated');
+  assert.equal(failing.reported[0].info.checked.size, 0, 'and not counted as checked, so it is first in line next time');
+});
+
+test('D211 3: Plex, Jellyfin and Emby re-check every cached title as before, with no cap and nothing reported as checked', async () => {
+  for (const serverType of ['plex', 'jellyfin', 'emby']) {
+    const keys = Array.from({ length: 250 }, (_, i) => String(i + 1));
+    const { engine, asked, reported } = tmdbRecheck({ keys, serverType });
+    await engine.decide({ force: true });
+    assert.deepEqual(asked.map((a) => a.length), [100, 100, 50], serverType);
+    assert.equal(reported[0].list.length, 250);
+    assert.equal(reported[0].info, undefined, 'onRatings is called with the list alone');
+  }
+});
+
+test('D211 3 with the poster cache: the 20 checked are stamped, the 10 left keep their stored rating, and the next pass starts with them', async () => {
+  const store = new Map();
+  const files = new Map();
+  const caches = { open: async () => ({ put: async (u, r) => void files.set(u, r), match: async (u) => files.get(u)?.clone(), delete: async (u) => files.delete(u) }), delete: async () => true };
+  const storage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  globalThis.location ??= { origin: 'http://localhost' };
+  let clock = 1_000_000;
+  const cache = createPosterCache({ storage, limit: 300, caches, now: () => clock });
+  const keys = tmdbKeys(30);
+  for (const k of keys) {
+    clock += 10; // stored one after the other: movie:1 first
+    await cache.put({ ratingKey: k, title: k, year: '2020', thumb: `/${k.slice(6)}.jpg`, contentRating: 'PG' }, new Blob(['x']), { width: 300, height: 450 });
+  }
+  assert.ok(cache.entries().every((e) => e.checkedAt === e.savedAt), 'a stored poster was read when it was stored');
+  const asked = [];
+  const client = {
+    ...fakeClient(),
+    pool: async () => [{ ...poster('a'), contentRating: 'PG' }],
+    items: async (ids) => (asked.push([...ids]), ids.map((id) => ({ ratingKey: id, contentRating: 'R', source: 'static' }))), // every title was re-rated up to R
+  };
+  const settings = { ...defaults(), serverType: 'tmdb', tmdbKey: 'k', libraryKey: 'movie/popular', maxContentRating: 'PG', showNowPlaying: false };
+  const engine = createEngine({
+    client,
+    getSettings: () => settings,
+    now: () => clock,
+    random: () => 0,
+    cachedKeys: () => cache.entries().map((e) => e.ratingKey),
+    cachedChecks: () => new Map(cache.entries().map((e) => [e.ratingKey, e.checkedAt])),
+    onRatings: (posters, info) => cache.refreshRatings(posters, info),
+  });
+  clock += 1000;
+  await engine.decide({ force: true });
+  assert.deepEqual([...asked[0]].sort(), keys.slice(0, 20).sort(), 'the 20 stored longest ago');
+  const byKey = new Map(cache.entries().map((e) => [e.ratingKey, e]));
+  for (const k of keys.slice(0, 20)) assert.deepEqual([byKey.get(k).contentRating, byKey.get(k).checkedAt], ['R', clock], `${k}: re-rated and stamped`);
+  for (const k of keys.slice(20)) assert.deepEqual([byKey.get(k).contentRating, byKey.get(k).checkedAt !== clock], ['PG', true], `${k}: keeps the stored rating, not stamped`);
+  // The next ordinary pass: the ten not yet checked come first, then the ones checked earliest of the rest.
+  clock += 31 * 60_000;
+  await engine.decide({ force: true });
+  assert.deepEqual(asked[1].slice(0, 10).sort(), keys.slice(20).sort(), 'the ten left over are asked first');
+  assert.equal(asked[1].length, 20);
+  // An entry with no time at all is first of all.
+  const index = JSON.parse(store.get('plexPoster.posterIndex'));
+  for (const e of index) if (e.ratingKey === 'movie:15') delete e.checkedAt;
+  store.set('plexPoster.posterIndex', JSON.stringify(index));
+  clock += 31 * 60_000;
+  await engine.decide({ force: true });
+  assert.equal(asked[2][0], 'movie:15');
+});
+
+test('D211 3 over hours: a pool that is partial on every build still has its cached TMDB titles re-rated every half hour, and never on the one-minute retries between', async () => {
+  const keys = tmdbKeys(30);
+  const { engine, asked, askedAt, advance, pools } = tmdbRecheck({ keys, partialAlways: true });
+  const start = 1_000_000;
+  for (let minute = 0; minute <= 360; minute++) {
+    await engine.decide({ force: true });
+    advance(60_000);
+  }
+  assert.equal(pools(), 361, 'the partial pool was built again every minute');
+  const minutes = askedAt.map((at) => (at - start) / 60_000);
+  assert.deepEqual(minutes, Array.from({ length: 13 }, (_, i) => i * 30), 'a pass at the start and every 30 minutes after the last, none on the retries between');
+  for (const a of asked) assert.equal(a.length, 20);
+});
+
+test('D211 3: the half hour is counted from the last re-rating, not from the pool built in between', async () => {
+  const keys = tmdbKeys(30);
+  const { engine, askedAt, advance } = tmdbRecheck({ keys, partialAlways: true });
+  await engine.decide({ force: true });
+  advance(29 * 60_000);
+  await engine.decide({ force: true }); // a retry of the partial pool, 29 minutes after the pass: the pool is built again, nothing is re-rated
+  assert.equal(askedAt.length, 1);
+  advance(60_000);
+  await engine.decide({ force: true }); // the pool built a minute ago is partial: the retry comes exactly 30 minutes after the pass, which is a pass
+  assert.equal(askedAt.length, 2, 'the pool built at minute 29 does not restart the half hour');
+  advance(60_000);
+  await engine.decide({ force: true });
+  assert.equal(askedAt.length, 2, 'and the next retry, a minute after that pass, is not one');
+});
+
+test('R10: Plex, Jellyfin and Emby re-rate every cached title on the one-minute retry of a partial pool, as they did before D211', async () => {
+  for (const serverType of ['plex', 'jellyfin', 'emby']) {
+    const keys = Array.from({ length: 30 }, (_, i) => String(i + 1));
+    const { engine, asked, advance, pools } = tmdbRecheck({ keys, serverType, partialAlways: true });
+    await engine.decide({ force: true });
+    for (let minute = 1; minute <= 5; minute++) {
+      advance(60_000);
+      await engine.decide({ force: true });
+    }
+    assert.equal(pools(), 6, `${serverType}: the partial pool was built again each minute`);
+    assert.equal(asked.length, 6, `${serverType}: every build re-rated`);
+    assert.ok(asked.every((a) => a.length === 30), `${serverType}: all 30 cached titles each time, no cap`);
+  }
 });

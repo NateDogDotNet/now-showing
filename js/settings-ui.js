@@ -2,14 +2,14 @@
 
 import { formatMinutes, presetFor, secondsFromMinutes } from './duration.js';
 import { FRAMES, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
-import { createSource, createSources, needsSources, readPlayers, readServerId, signInFlow } from './sources/index.js';
+import { createSource, createSources, DEFAULT_LIBRARY, discoverKey, needsSources, readPlayers, readServerId, signInFlow, sourceOf, validYear } from './sources/index.js';
 import { describeLimitNow, MAX_SLOTS, NO_LIMIT, wasUnreadable } from './limit-schedule.js';
 import { createPositionMode } from './position.js';
 import { addProfile, BUNDLE_KEYS, bundleHasSource, bundleOf, checkName, describeProfile, MAX_PROFILES, removeProfile, renameProfile, updateProfile } from './profiles.js';
 import { parseHHMM } from './schedule.js';
 import { LIMITS } from './ratings.js';
-import { belongsTo, genreRequestValue, memberBelongsTo, offeredRatings, selectionOf } from './selection.js';
-import { addressOf as cleanAddress, defaults, followNames, importWithConnection, isConfigured, MAX_SERVERS, oldTokenMayGo, PLAYER_STATES, playerRows, sanitize, serverList, setAllowed, toExport } from './settings.js';
+import { belongsTo, genreRequestValue, genresAreAll, memberBelongsTo, offeredRatings, selectionOf } from './selection.js';
+import { addressOf as cleanAddress, defaults, followNames, importWithConnection, isConfigured, MAX_SERVERS, oldTokenMayGo, PLAYER_STATES, playerRows, sanitize, serverList, serversDroppedByTmdbImport, setAllowed, tmdbDroppedByImport, toExport } from './settings.js';
 import { actionButton, downloadJson, sleep, toast } from './util.js';
 
 const LAYOUT_KEYS = ['posterScale', 'posterOffsetX', 'posterOffsetY'];
@@ -62,7 +62,19 @@ const EMBY_TEXT = {
   position: 'Connect to Emby first, then you can position the poster.',
 };
 const EMBY_DESCRIPTION = 'Full-screen Emby movie poster display with a decorative frame — built for always-on screens.';
-const SERVER_WORDS = { jellyfin: [JELLYFIN_TEXT, JELLYFIN_DESCRIPTION], emby: [EMBY_TEXT, EMBY_DESCRIPTION] };
+// TMDB has no sign-in: the lines about a code or a token read as a key to enter (the card and the sign-in controls stay hidden for it).
+const TMDB_TEXT = {
+  lead: 'Enter your TMDB key in Settings.',
+  hint: 'Welcome! Enter your TMDB key, choose where the posters come from, then save.',
+  legend: 'TMDB connection',
+  signin: 'Enter your TMDB key',
+  'panel-lead': 'Enter your TMDB key in Settings.',
+  token: 'TMDB key',
+  user: 'Only for this user',
+  position: 'Connect to TMDB first, then you can position the poster.',
+};
+const TMDB_DESCRIPTION = 'Full-screen movie poster display with a decorative frame, showing posters from TMDB — built for always-on screens.';
+const SERVER_WORDS = { jellyfin: [JELLYFIN_TEXT, JELLYFIN_DESCRIPTION], emby: [EMBY_TEXT, EMBY_DESCRIPTION], tmdb: [TMDB_TEXT, TMDB_DESCRIPTION] };
 
 /** Sets every data-srv line (and the page description) to the words of this server type; Plex, or one no adapter knows, reads the index.html words. */
 export function applyServerText(type, root = document) {
@@ -645,6 +657,9 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   function setTokenShown(shown) {
     field('plexToken').type = shown ? 'text' : 'password';
     $('token-toggle').textContent = shown ? 'Hide' : 'Show';
+    field('tmdbKey').type = shown ? 'text' : 'password';
+    $('tmdb-key-toggle').textContent = shown ? 'Hide' : 'Show';
+    $('tmdb-key-toggle').setAttribute('aria-label', shown ? 'Hide key' : 'Show key');
   }
 
   // ---- the rotation time: buttons in minutes over the stored seconds ----
@@ -738,8 +753,11 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   }
 
   function renderConnection() {
-    $('connected-card').hidden = connectionOpen;
-    $('signin-controls').hidden = !connectionOpen; // the manual token and URL fold stays where it is: it is how a token is shown or exported
+    const tmdb = isTmdb(); // TMDB has no card, no sign-in and no address: its key field is the whole connection
+    $('connected-card').hidden = connectionOpen || tmdb;
+    $('signin-controls').hidden = !connectionOpen || tmdb; // the manual token and URL fold stays where it is: it is how a token is shown or exported
+    $('manual-connection').hidden = tmdb; // no "Add a server" either: it shows only with an address (renderServers), and TMDB has none (D210 5)
+    $('tmdb-credit').hidden = !(tmdb || field('tmdbKey').value.trim());
     renderConnected();
   }
 
@@ -842,7 +860,7 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
         : offered.genresFailed
         ? "Couldn't load the genres. Test the connection to try again."
         : rowCount
-          ? 'None ticked: every genre. A title shows only when it matches a ticked genre and, when ratings are ticked, a ticked rating.'
+          ? `None ticked: every genre. A title shows only when it ${genresAreAll(sel) ? 'has every ticked genre' : 'matches a ticked genre'} and, when ratings are ticked, a ticked rating.`
           : offerClient
             ? sel.libraries.length
               ? 'The ticked libraries list no genres.'
@@ -879,7 +897,61 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     select.value = value;
   }
 
+  // ---- TMDB (R-TMDB-1): the pool is one choice from a list, and Discover adds its own years and genre mode; the choice is the library key (js/sources/tmdb.js) ----
+
+  const isTmdb = () => formType() === 'tmdb';
+
+  /**
+   * Shows the TMDB choice in place of the libraries and collections when TMDB is the type, and puts the sheet's `sel` in it. With `controls` the choice
+   * is written into the controls (the sheet opened, a type was chosen, a file was imported); without, they stay as typed (the years while somebody types).
+   * A stored library key that is no TMDB choice (a media server's) becomes the default list, with no genre: its ids mean nothing to TMDB.
+   */
+  function renderTmdbSource({ controls = true } = {}) {
+    const tmdb = isTmdb();
+    $('tmdb-source-group').hidden = !tmdb;
+    $('library-group').hidden = tmdb;
+    $('source-row').hidden = tmdb;
+    $('source-help').hidden = tmdb;
+    if (!tmdb) return;
+    let src = sourceOf(sel.libraries[0]?.key);
+    if (!src) {
+      sel.libraries = [{ key: DEFAULT_LIBRARY, name: 'Popular' }];
+      sel.genres = [];
+      sel.source = null;
+      src = sourceOf(DEFAULT_LIBRARY);
+    }
+    $('tmdb-discover').hidden = src.kind !== 'discover';
+    if (!controls) return;
+    $('tmdb-list').value = src.path;
+    $('tmdb-mode').value = src.kind === 'discover' ? src.mode : 'or';
+    $('tmdb-from').value = src.kind === 'discover' ? src.from : '';
+    $('tmdb-to').value = src.kind === 'discover' ? src.to : '';
+    syncYearsNote();
+  }
+
+  /** The choice the TMDB controls show, as the library the sheet would save. */
+  function readTmdbChoice() {
+    const base = $('tmdb-list').value;
+    const discover = base.startsWith('discover/');
+    const key = discover ? discoverKey({ type: base.endsWith('/tv') ? 'tv' : 'movie', mode: $('tmdb-mode').value, from: $('tmdb-from').value, to: $('tmdb-to').value }) : base;
+    sel.libraries = [{ key, name: $('tmdb-list').selectedOptions[0]?.textContent.trim() || '' }];
+    $('tmdb-discover').hidden = !discover;
+    syncYearsNote();
+    syncGenreText(); // "any" or "every" ticked genre: the help says which
+  }
+
+  /** A year that is not four digits from 1800 to 2200 is ignored by Discover (js/sources/tmdb.js); the field says so rather than showing it as if it counted. */
+  function syncYearsNote() {
+    const bad = [['From', 'tmdb-from'], ['To', 'tmdb-to']]
+      .map(([label, id]) => [label, $(id), $(id).value.trim()])
+      .filter(([, , value]) => value !== '' && !validYear(value));
+    for (const id of ['tmdb-from', 'tmdb-to']) $(id).toggleAttribute('aria-invalid', bad.some(([, el]) => el.id === id));
+    $('tmdb-years-note').hidden = bad.length === 0;
+    $('tmdb-years-note').textContent = bad.map(([label, , value]) => `${label} year "${value.slice(0, 12)}" is not a year from 1800 to 2200, so it is ignored.`).join(' ');
+  }
+
   function renderSelection() {
+    renderTmdbSource();
     renderLibraries();
     renderSource();
     renderGenres();
@@ -1002,9 +1074,42 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     return false;
   }
 
+  /** Test connection for TMDB: `GET /3/authentication` with the key typed; nothing else is asked, and no address is involved. */
+  async function testTmdb(s) {
+    if (!s.tmdbKey) {
+      setResult('Enter your TMDB key first.');
+      return false;
+    }
+    setResult('Connecting…');
+    const run = ++testRun;
+    testing = true;
+    $('test-btn').disabled = true;
+    try {
+      const client = createSource(s, { clientId, version });
+      await client.identity();
+      if (run !== testRun) return false;
+      offerClient = client;
+      setResult('✓ Connected to TMDB');
+      log.info('Connection test OK: TMDB');
+      loadGenres();
+      return true;
+    } catch (err) {
+      if (run !== testRun) return false;
+      setResult(`✗ ${err.message}`, err.kind);
+      log.warn(`Connection test failed: ${err.message}`);
+      return false;
+    } finally {
+      if (run === testRun) {
+        testing = false;
+        $('test-btn').disabled = false;
+      }
+    }
+  }
+
   async function testConnection() {
     if (testing) return false;
     const s = read();
+    if (s.serverType === 'tmdb') return testTmdb(s);
     if (!s.serverUrl || !s.plexToken) {
       setResult(formType() !== 'plex' ? 'Enter the server address and sign in first.' : 'Enter a token and server URL first (or sign in).');
       return false;
@@ -1078,6 +1183,10 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     const list = sheetServers();
     const first = list[0];
     $('server-list').hidden = list.length < 2;
+    // TMDB cannot be one of several servers (D210 5): while other servers are in the list the choice is not offered.
+    const crowded = list.length > 1;
+    form.querySelector('input[name="serverTypeTmdb"]').disabled = crowded;
+    $('tmdb-pick-help').textContent = crowded ? 'TMDB cannot be one of several servers. Remove the other servers to use it.' : 'No media server? Show posters from TMDB instead.';
     // The heading names the type's own words for one server; for several it names none of them (a Jellyfin or Emby server is no "Plex connection").
     const legend = document.querySelector('legend[data-srv="legend"]');
     if (legend && list.length > 1) legend.textContent = 'Media server connections'; // one server is the "Connected to" card above: the list shows from two
@@ -1279,6 +1388,12 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
    */
   async function signIn({ token = null, userId = '' } = {}) {
     cancelSignIn();
+    if (isTmdb()) {
+      // TMDB signs in with a key typed here, not a code: the fix for a rejected key is to enter another.
+      setResult('TMDB did not accept the key. Enter a valid key, then press Test connection.');
+      field('tmdbKey').focus();
+      return;
+    }
     const sign = flow();
     if (sign.needsAddress) {
       if (!sign.serverUrl) {
@@ -1393,6 +1508,15 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   function syncServerType() {
     const type = formType();
     for (const radio of form.querySelectorAll('input[name="serverTypePick"]')) radio.checked = radio.value === type;
+    const tmdb = type === 'tmdb';
+    for (const radio of form.querySelectorAll('input[name="serverTypeTmdb"]')) radio.checked = tmdb; // its own group: the three above are unchecked here, not by the browser
+    $('tmdb-connection').hidden = !tmdb;
+    for (const row of form.querySelectorAll('[data-media-only]')) row.hidden = tmdb; // nothing plays on TMDB, and it has no watched state or users
+    // "Unwatched titles first" favours by watch count, which TMDB titles do not have: the choice is not offered (a stored one reads as "Nothing" while the sheet is for TMDB).
+    const unwatchedChoice = field('weighting').querySelector('option[value="unwatched"]');
+    unwatchedChoice.hidden = tmdb;
+    unwatchedChoice.disabled = tmdb;
+    if (tmdb && field('weighting').value === 'unwatched') field('weighting').value = 'off';
     const addressed = type === 'jellyfin' || type === 'emby'; // the types that sign in at an address the household types
     const codeless = type === 'emby'; // Emby has no code to approve: the user name and password form is its only sign-in and shows open
     $('jf-address-row').hidden = !addressed;
@@ -1426,8 +1550,12 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     const from = formType();
     if (type === from) return;
     cancelSignIn();
-    held[from] = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '', userId: field('serverUserId').value };
+    // A library, genre or collection of a media server means nothing to TMDB and the other way round: moving to or from TMDB sets the selection aside with the
+    // type it was made for (the ratings, which mean the same everywhere, stay). Between media servers it stays as stored (D141 3).
+    const crossing = from === 'tmdb' || type === 'tmdb';
+    held[from] = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '', userId: field('serverUserId').value, ...(crossing ? { sel: { libraries: sel.libraries, genres: sel.genres, source: sel.source } } : {}) };
     const back = held[type] || { token: '', url: '', name: '', userId: '' };
+    if (crossing) sel = { ...sel, ...(back.sel ?? { libraries: [], genres: [], source: null }) };
     field('plexToken').value = back.token;
     field('serverUserId').value = back.userId;
     field('serverUrl').value = back.url;
@@ -1441,8 +1569,8 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     sourceRun++;
     $('test-result').replaceChildren();
     connectionOpen = !(back.token && back.url);
-    renderSelection();
     syncServerType();
+    renderSelection();
     renderConnection();
   }
 
@@ -1732,12 +1860,13 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
     }
     if (token) signIn({ token, userId });
     else if (wantSignIn) signIn();
-    else if (test || (auto && original.plexToken && original.serverUrl)) testConnection();
+    else if (test || (auto && (original.serverType === 'tmdb' ? original.tmdbKey : original.plexToken && original.serverUrl))) testConnection();
   }
 
   /** The first-run card's choice of server type and address, put in the sheet's controls. */
   function takeConnection(type, url) {
     chooseServerType(type);
+    if (type === 'tmdb') field('tmdbKey').focus({ preventScroll: false }); // TMDB has only a key to enter: the cursor is in it
     if (url) {
       field('serverUrl').value = url;
       $('jf-address').value = url;
@@ -1874,6 +2003,30 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   }
   $('server-select').addEventListener('change', (e) => useServer(Number(e.target.value)));
   $('test-btn').addEventListener('click', testConnection);
+  for (const radio of form.querySelectorAll('input[name="serverTypeTmdb"]')) radio.addEventListener('change', () => radio.checked && chooseServerType('tmdb'));
+  $('tmdb-list').addEventListener('change', () => {
+    const before = sourceOf(sel.libraries[0]?.key)?.type;
+    readTmdbChoice();
+    if (before !== sourceOf(sel.libraries[0].key).type) sel.genres = []; // a movie genre id is not a show's
+    renderTmdbSource({ controls: false });
+    renderConnected();
+    loadGenres();
+  });
+  for (const id of ['tmdb-mode', 'tmdb-from', 'tmdb-to']) {
+    $(id).addEventListener('input', readTmdbChoice);
+    $(id).addEventListener('change', readTmdbChoice);
+  }
+  field('tmdbKey').addEventListener('input', () => {
+    $('tmdb-credit').hidden = !(isTmdb() || field('tmdbKey').value.trim());
+  });
+  $('tmdb-key-toggle').addEventListener('click', async () => {
+    if (field('tmdbKey').type === 'password') {
+      if (!(await requestPin()) || !dialog.open) return; // showing the key needs the PIN, as showing the token does; hiding it does not
+      setTokenShown(true);
+    } else {
+      setTokenShown(false);
+    }
+  });
   $('token-toggle').addEventListener('click', async () => {
     if (field('plexToken').type === 'password') {
       if (!(await requestPin()) || !dialog.open) return; // showing the token needs the PIN; hiding it does not
@@ -1952,7 +2105,9 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       const from = formType();
       const away = { token: field('plexToken').value, url: field('serverUrl').value, name: form.dataset.serverName || '', userId: field('serverUserId').value };
       // A file for another server (another type, or another address) never receives this display's token: without its own, none is kept (D142 2, D144 1).
-      const { settings: s, setAside } = importWithConnection(text, read());
+      const before = read(); // the household as the sheet holds it, for what the file would leave out
+      const { settings: s, setAside } = importWithConnection(text, before);
+      const leftOut = serversDroppedByTmdbImport(text, before).map((e) => e.name || typeLabel(e.type));
       write(s);
       if (setAside) {
         held[from] = away;
@@ -1960,7 +2115,16 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
         setResult('Connection not tested yet. Press Test connection.'); // the old server's "✓ … libraries" is not this connection's (D147 3)
       }
       onPreview(s);
-      toast('Settings imported — review and press Save.');
+      // One notice, so none of it is lost to the next: TMDB cannot be one of several servers (D210 5), and what the file would leave out is named before Save (D211 2).
+      toast(
+        [
+          'Settings imported — review and press Save.',
+          tmdbDroppedByImport(text),
+          leftOut.length ? `TMDB is your only source in this file, so ${joinServers(leftOut)} would be left out. Cancel keeps ${leftOut.length > 1 ? 'them' : 'it'}.` : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
       log.info(`Imported settings from ${file.name}`);
     } catch (err) {
       $('form-error').textContent = `Import failed: ${err.message}`;

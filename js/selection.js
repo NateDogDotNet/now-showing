@@ -204,6 +204,12 @@ export function entryInSelection(entry, sel, limit) {
 
 const joined = (words, last) => (words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} ${last} ${words[words.length - 1]}`);
 
+/**
+ * Does the selection ask for a title with EVERY ticked genre (a TMDB Discover choice made with "every ticked genre", `?mode=and` in its library key)? Any other
+ * selection takes a title with any ticked genre. The words and the genre help follow it.
+ */
+export const genresAreAll = (sel) => (sel?.libraries || []).some((l) => /^discover\/(movie|tv)\?(?:[^#]*&)?mode=and(?:&|$)/.test(String(l?.key ?? '')));
+
 /** The selection in words, for the empty card: "Movies and Kids Movies, genre Comedy, rated G or PG". */
 export function describeSelection(sel) {
   const parts = [];
@@ -211,7 +217,7 @@ export function describeSelection(sel) {
     parts.push(`the ${sel.source.kind}${sel.source.title ? ` "${sel.source.title}"` : ''}`);
   } else {
     parts.push(joined(sel.libraries.map((l) => l.name || `library ${l.key}`), 'and'));
-    if (sel.genres.length) parts.push(`${sel.genres.length > 1 ? 'genres' : 'genre'} ${joined(sel.genres.map((g) => g.title), 'or')}`);
+    if (sel.genres.length) parts.push(`${sel.genres.length > 1 ? 'genres' : 'genre'} ${joined(sel.genres.map((g) => g.title), genresAreAll(sel) ? 'and' : 'or')}`);
   }
   if (sel.ratings.length) parts.push(`rated ${joined(sel.ratings, 'or')}`);
   return parts.join(', ');

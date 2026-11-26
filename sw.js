@@ -44,6 +44,7 @@ const SHELL = [
   'js/sources/index.js',
   'js/sources/jellyfin.js',
   'js/sources/plex.js',
+  'js/sources/tmdb.js',
   'js/tv-power.js',
   'js/util.js',
   'js/weighting.js',
@@ -55,6 +56,7 @@ const SHELL = [
   'assets/icons/icon-512.png',
   'assets/icons/icon-maskable-512.png',
   'assets/icons/apple-touch-icon.png',
+  'assets/tmdb/tmdb-logo.svg',
 ];
 
 self.addEventListener('install', (event) => {

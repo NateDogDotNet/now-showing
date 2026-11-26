@@ -12,6 +12,8 @@ const PARTIAL_POOL_TTL_MS = 60 * 1000; // a pool built without a library that fa
 const HISTORY = 10;
 const RECHECK_BATCH = 100; // cached titles asked about per re-rating request (D37)
 const RECHECK_REQUESTS = 3; // the poster cache holds at most 300 titles, so one pool load makes at most 3 requests
+/** TMDB has no batch request: each cached title costs a lookup of its own, so a pass re-checks at most this many, the ones checked longest ago first (D211 3). */
+export const TMDB_RECHECK_MAX = 20;
 
 /** The display's own localStorage, or null where there is none (a unit test, a blocked browser). */
 function defaultStorage() {
@@ -24,11 +26,13 @@ function defaultStorage() {
 
 /**
  * `cachedKeys()` lists the rating keys in the offline poster cache and `onRatings(posters)` receives their current
- * ratings (D37). Both are optional: without them nothing is re-checked. `onMembers(id, keys)` hears the rating keys a collection or
+ * ratings (D37). For TMDB (D211 3) `cachedChecks()` is a Map of rating key to the time (ms) its rating was last read, a key with no time counting as
+ * checked longest ago; a pass then asks for at most TMDB_RECHECK_MAX titles, the longest unchecked first, never on the one-minute retry of a partial pool (a retry within half an hour of the last re-rating: after that an ordinary pass re-rates, whatever the pool), and
+ * `onRatings(posters, { checked })` says which keys were really asked about (a title left out keeps the rating it was stored with). Both are optional: without them nothing is re-checked. `onMembers(id, keys)` hears the rating keys a collection or
  * playlist listed when it is loaded online (R-SEL-1), for the offline cache. `storage` keeps when each title was last shown, for the
  * no-repeat window (R-SEL-2): without one the display's localStorage is used, and failing that the record lives in memory.
  */
-export function createEngine({ client, getSettings, now = () => Date.now(), random = Math.random, cachedKeys = () => [], onRatings = () => {}, onMembers = () => {}, storage = defaultStorage() }) {
+export function createEngine({ client, getSettings, now = () => Date.now(), random = Math.random, cachedKeys = () => [], cachedChecks = () => new Map(), onRatings = () => {}, onMembers = () => {}, storage = defaultStorage() }) {
   let current = null;
   let session = null; // the latest now-playing snapshot (what the last decide() saw), null when none
   let lastRotateAt = 0;
@@ -36,6 +40,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
   let poolKey = '';
   let poolAt = 0;
   let poolPartial = false; // the pool is missing a library whose request failed
+  let lastRecheckAt = -Infinity; // when a TMDB re-rating pass last ran (D211 3)
   let partialNow = false; // set by fetchSelection while it builds the pool
   const recent = [];
   const shownStore = createShownStore({ storage });
@@ -83,7 +88,9 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
           request.genreTitles = sel.genres.map((g) => g.title); // several servers: each looks the titles up in its own genre list (a key means nothing to another server)
         }
         if (sel.ratings.length) request.ratings = ratings;
-        return (await client.pool(request)).map((p) => ({ ...p, libraryKey }));
+        const loaded = await client.pool(request);
+        if (loaded.partial) partialNow = true; // an adapter that built the pool without some of what it asked for (TMDB: a certification lookup failed) says so, and the pool is asked for again soon (D210 2)
+        return loaded.map((p) => ({ ...p, libraryKey }));
       }),
     );
     // One library failing leaves the pool to the others (D110 item 3). When the ones that answered gave nothing, that is a connection
@@ -97,7 +104,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
       if (client.multi && messages.length > 1) throw Object.assign(new Error(messages.join(' ')), { kind: failed.reason?.kind, ...(failed.reason?.status ? { status: failed.reason.status } : {}) });
       throw failed.reason;
     }
-    partialNow = Boolean(failed);
+    partialNow = partialNow || Boolean(failed);
     return posters;
   }
 
@@ -113,6 +120,10 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
 
   async function loadPool(s, sel) {
     const key = `${selectionKey(sel)}|${s.unwatchedOnly}|${s.randomPoolSize}|${s.maxContentRating}`;
+    // The pool is asked for again because it was built partial a minute ago, not because it grew old, and TMDB re-rated cached titles within the last
+    // POOL_TTL_MS: that retry does not re-rate them again (D211 3). The time of the last re-rating counts, not the pool's age, so a run of partial pools
+    // (every build partial, a minute apart) cannot keep the re-rating from ever running: half an hour after the last one an ordinary pass re-rates.
+    const retry = poolPartial && key === poolKey && now() - lastRecheckAt < POOL_TTL_MS;
     if (pool.length && key === poolKey && now() - poolAt < (poolPartial ? PARTIAL_POOL_TTL_MS : POOL_TTL_MS)) return pool;
     // The re-check (D37) is fetched alongside the pool request, not after it (D80). Plex is asked only for allowed
     // ratings (`client.pool` passes the limit); the local gate is `permitted()` at pick time, and nothing filters the
@@ -126,9 +137,12 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
         load.poolFailed = true;
         throw err;
       }),
-      s.limitSet ? fetchCachedRatings(load) : null,
+      s.limitSet ? fetchCachedRatings(load, { tmdb: s.serverType === 'tmdb', retry }) : null,
     ]);
-    if (ratings) onRatings(ratings);
+    if (ratings) {
+      if (ratings.checked) onRatings(ratings, { checked: ratings.checked });
+      else onRatings(ratings);
+    }
     pool = loaded;
     poolKey = key;
     poolAt = now();
@@ -145,9 +159,18 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
    * `load.poolFailed` is set when this load's pool request fails: the loop then stops sending batches.
    * Returns the list for onRatings, or null when there is nothing cached.
    */
-  async function fetchCachedRatings(load) {
-    const keys = cachedKeys();
+  async function fetchCachedRatings(load, { tmdb = false, retry = false } = {}) {
+    let keys = cachedKeys();
     if (!keys.length) return null;
+    if (tmdb) {
+      // D211 3: not on the one-minute retry of a partial pool, and otherwise the titles checked longest ago, at most TMDB_RECHECK_MAX. A title left out is not
+      // reported, so the cache keeps the rating it was stored with. The sort is stable: titles with equal (or no) times keep the cache's order.
+      if (retry) return null;
+      lastRecheckAt = now();
+      const checks = cachedChecks();
+      const at = (k) => (Number.isFinite(checks.get(k)) ? checks.get(k) : -Infinity);
+      keys = [...keys].sort((a, b) => (at(a) < at(b) ? -1 : at(a) > at(b) ? 1 : 0)).slice(0, TMDB_RECHECK_MAX);
+    }
     const byKey = new Map();
     for (let n = 0; n < RECHECK_REQUESTS && n * RECHECK_BATCH < keys.length; n++) {
       if (load.poolFailed) break;
@@ -157,7 +180,8 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
         // nothing in this batch is confirmed: its keys are stored as unrated below
       }
     }
-    return keys.map((k) => byKey.get(k) ?? { ratingKey: k, contentRating: '' });
+    const list = keys.map((k) => byKey.get(k) ?? { ratingKey: k, contentRating: '' });
+    return tmdb ? Object.assign(list, { checked: new Set(byKey.keys()) }) : list; // only a title whose rating was read counts as checked
   }
 
   /** The sessions to look at: those already in hand, else a fetch. A refused call (401/403) means nothing is playing (K18). */
@@ -294,14 +318,16 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
         // Each piece of advice is given only when it could help: "unwatched only" must be on, a limit must be set (K54).
         // While the selection narrows, the advice also says how to widen it, in the same one sentence (D109 item 3, D110 item 4): "add a
         // library" only when the server has a movie library that is not ticked.
+        // A TMDB household has no libraries and no watched state: it is told neither "add a library" nor "unwatched only", and the list is a list (R-TMDB-1).
+        const tmdb = s.serverType === 'tmdb';
         const widen = !narrows(sel)
           ? []
           : sel.source
             ? [`use the libraries instead of the ${sel.source.kind}`, sel.ratings.length && 'tick fewer ratings']
-            : [(await hasUntickedLibrary(sel)) && 'add a library', sel.genres.length && sel.ratings.length ? 'tick fewer genres or ratings' : sel.genres.length ? 'tick fewer genres' : sel.ratings.length && 'tick fewer ratings'];
-        const advice = [s.unwatchedOnly && 'try turning off "unwatched only"', s.maxContentRating && (sanitizeSlots(s.limitSlots).length ? 'raise the limit or change the time slots' : 'raise the limit'), ...widen].filter(Boolean).join(' or ');
+            : [!tmdb && (await hasUntickedLibrary(sel)) && 'add a library', sel.genres.length && sel.ratings.length ? 'tick fewer genres or ratings' : sel.genres.length ? 'tick fewer genres' : sel.ratings.length && 'tick fewer ratings'];
+        const advice = [s.unwatchedOnly && !tmdb && 'try turning off "unwatched only"', s.maxContentRating && (sanitizeSlots(s.limitSlots).length ? 'raise the limit or change the time slots' : 'raise the limit'), ...widen].filter(Boolean).join(' or ');
         const where = `${s.maxContentRating ? ` at or below ${s.maxContentRating}` : ''}${advice ? ` (${advice})` : ''}`;
-        throw Object.assign(new Error(`No posters found in ${narrows(sel) ? describeSelection(sel) : 'that library'}${where}.`), { kind: 'empty' });
+        throw Object.assign(new Error(`No posters found in ${narrows(sel) ? describeSelection(sel) : tmdb ? 'that list' : 'that library'}${where}.`), { kind: 'empty' });
       }
       return { poster: next, reason: playbackEnded ? 'playback ended' : force ? 'manual refresh' : 'rotation' };
     },

@@ -1,6 +1,9 @@
 // The source-adapter interface (D134): the engine, the display, Settings and the first-run card talk to a media server
 // only through the object `createSource(settings)` returns, and never import an adapter module themselves. Plex is the
-// first adapter, Jellyfin the second and Emby the third; `serverType` in the settings picks it ('plex', 'jellyfin' or 'emby', and Plex when the setting is absent).
+// first adapter, Jellyfin the second and Emby the third; `serverType` in the settings picks it ('plex', 'jellyfin', 'emby' or 'tmdb', and Plex when the setting is absent).
+// TMDB (js/sources/tmdb.js, R-TMDB-1) is the fourth: a source for a household with no media server. It is built from `settings.tmdbKey` alone (no address and
+// no sign-in code), its "libraries" are the TMDB lists and Discover choices, its poster `ratingKey` is `movie:<id>` or `tv:<id>`, and nothing is ever playing
+// (`sessions()` is `[]`, `nowPlaying()` is null). It is never one of several servers: `createSources` builds no member for it (D210 5).
 //
 // What an adapter object holds (every member below, and nothing else). Items keep their server's own ids: a poster's
 // `ratingKey` is the server's id, stored as it is (the offline cache, the pinned poster and the no-repeat history key on it).
@@ -72,10 +75,12 @@ import { KINDS, SourceError } from './errors.js';
 import { createEmbyClient, embySignIn } from './emby.js';
 import { createJellyfinClient, jellyfinSignIn } from './jellyfin.js';
 import { createPlexClient, discoverPlayers, discoverServerPlayers, plexSignIn } from './plex.js';
+import { createTmdbClient, tmdbSignIn } from './tmdb.js';
 import { belongsTo, cleanServerId, keyFor, splitKey } from '../selection.js';
 import { serverList } from '../settings.js';
 
 export { KINDS, SourceError };
+export { DEFAULT_LIBRARY, discoverKey, sourceOf, validYear } from './tmdb.js'; // what the Settings sheet needs to write a TMDB choice as a library key (it imports no adapter itself)
 
 /** The members every adapter object has, in the order the list above gives them. */
 export const SOURCE_MEMBERS = [
@@ -100,6 +105,7 @@ export function createSource(settings, { clientId, fetchImpl, version } = {}) {
   if (type === 'plex') return createPlexClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, fetchImpl });
   if (type === 'jellyfin') return createJellyfinClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, version, fetchImpl });
   if (type === 'emby') return createEmbyClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, version, userId: settings?.serverUserId, fetchImpl });
+  if (type === 'tmdb') return createTmdbClient({ key: settings?.tmdbKey, fetchImpl });
   throw unknownType(type);
 }
 
@@ -113,6 +119,7 @@ export function signInFlow(settings, { fetchImpl, version } = {}) {
   if (type === 'plex') return plexSignIn;
   if (type === 'jellyfin') return jellyfinSignIn({ serverUrl: settings?.serverUrl || '', fetchImpl, version });
   if (type === 'emby') return embySignIn({ serverUrl: settings?.serverUrl || '', fetchImpl, version, userId: settings?.serverUserId || '' });
+  if (type === 'tmdb') return tmdbSignIn;
   throw unknownType(type);
 }
 
@@ -202,6 +209,7 @@ export async function readServerId(type, url, opts = {}) {
 export function createSources(settings, opts = {}) {
   const members = serverList(settings).map((entry) => {
     try {
+      if (entry.type === 'tmdb') return { entry, source: null }; // TMDB is never one of several servers (D210 5): an entry that says so contributes nothing
       const source = createSource({ serverType: entry.type, serverUrl: entry.url, plexToken: entry.token, serverUserId: entry.userId }, opts);
       // A server that does not know its own id cannot have its ids scoped (unless it is the carried one): it contributes nothing.
       return { entry, source: entry.carried || entry.id ? source : null };

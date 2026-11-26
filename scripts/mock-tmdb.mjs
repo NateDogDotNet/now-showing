@@ -14,6 +14,9 @@
 // `include_image_language` combine on the images route (the mock reads only include_image_language); the status and body of find/{id} with a
 // missing or unknown external_source (the mock answers 422, status_code 22).
 //
+// Beyond the shapes above: discover honours the years (`primary_release_date.gte/lte` for movies, `first_air_date.gte/lte` for shows, inclusive), and
+// `movie/{id}` and `tv/{id}` answer a title's details, with `release_dates` or `content_ratings` when `append_to_response` names them (both (verify)).
+//
 // Control routes (no key; GET or POST), each answers `{ mode }`:
 //   /__mock/down        every /3 request answers 503 (status_code 11)
 //   /__mock/badkey      every /3 request answers 401, even with the demo token
@@ -311,10 +314,28 @@ export async function startMockTmdb({ port = 0, host = '127.0.0.1' } = {}) {
           items = items.filter((t) => MOVIE_LADDER.indexOf(certOf(t)) !== -1 && MOVIE_LADDER.indexOf(certOf(t)) <= top);
         }
       }
+      // The years (D206 1): `primary_release_date.gte/lte` for movies and `first_air_date.gte/lte` for shows, inclusive, on the YYYY-MM-DD dates.
+      const dates = movie ? 'primary_release_date' : 'first_air_date';
+      if (q.get(`${dates}.gte`)) items = items.filter((t) => t.releaseDate >= q.get(`${dates}.gte`));
+      if (q.get(`${dates}.lte`)) items = items.filter((t) => t.releaseDate <= q.get(`${dates}.lte`));
       return send(200, empty ? emptyPage : page(items.sort(byPopularity), q.get('page')));
     }
 
     let m;
+    // The details of one title (the pin reads it): the fields of a list item, its genres by name, and `release_dates` / `content_ratings` when `append_to_response` names them.
+    if ((m = /^(movie|tv)\/(\d+)$/.exec(route))) {
+      const t = find(m[1] === 'movie' ? MOVIES : SHOWS, m[2]);
+      if (!t) return send(404, ERRORS[404]);
+      const { genre_ids: genreIds, ...rest } = listItem(t);
+      const names = (t.kind === 'movie' ? MOVIE_GENRES : TV_GENRES).filter((g) => genreIds.includes(g.id));
+      const append = (q.get('append_to_response') || '').split(',');
+      return send(200, {
+        ...rest,
+        genres: names,
+        ...(append.includes('release_dates') && t.kind === 'movie' ? { release_dates: { results: empty ? [] : t.releases } } : {}),
+        ...(append.includes('content_ratings') && t.kind === 'tv' ? { content_ratings: { results: empty ? [] : t.ratings } } : {}),
+      });
+    }
     if ((m = /^(movie|tv)\/(\d+)\/images$/.exec(route))) {
       const t = find(m[1] === 'movie' ? MOVIES : SHOWS, m[2]);
       if (!t) return send(404, ERRORS[404]);

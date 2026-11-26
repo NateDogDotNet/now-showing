@@ -100,7 +100,8 @@ function rebuildClient() {
         getSettings: () => state.settings,
         // D37: while a limit is set, each online pool load re-confirms the cached titles' ratings.
         cachedKeys: () => cache.entries().map((e) => e.ratingKey),
-        onRatings: (posters) => cache.refreshRatings(posters),
+        cachedChecks: () => new Map(cache.entries().map((e) => [e.ratingKey, e.checkedAt])), // TMDB: when each title's rating was last read (D211 3)
+        onRatings: (posters, info) => cache.refreshRatings(posters, info),
         onMembers: (id, keys) => cache.syncMembers(id, keys), // a collection or playlist listed online: entries that left it lose the membership
       })
     : null;
@@ -295,7 +296,7 @@ async function tick({ force = false, notify = false } = {}) {
     const decision = state.asleep || state.tvWaking ? null : await engine.decide({ force: force || document.body.classList.contains('poster-blocked'), sessions, sessionsError });
     let refused = false; // a poster was fetched but the limit no longer allows it
     if (decision) {
-      cache.refreshRatings([decision.poster]); // seen online: its stored rating follows Plex (C7M2)
+      cache.refreshRatings([decision.poster], { checked: new Set([decision.poster.ratingKey]) }); // seen online: its stored rating follows Plex (C7M2); read just now
       let image = await fetchImage(decision.poster);
       // (Asleep by now: the download began before sleep did; it is not drawn under the veil.)
       let drawn = false;
@@ -437,8 +438,8 @@ const FIXES = {
 };
 const FIXES_BY_KIND = { auth: ['signin'], network: ['diagnostics', 'test'], timeout: ['diagnostics', 'test'], empty: ['unwatched'] };
 
-// A fix that cannot help is not offered: turning "unwatched only" off does nothing when it is already off.
-const FIX_APPLIES = { unwatched: (s) => s.unwatchedOnly };
+// A fix that cannot help is not offered: turning "unwatched only" off does nothing when it is already off, and nothing on TMDB, which has no watched state (its row is hidden).
+const FIX_APPLIES = { unwatched: (s) => s.unwatchedOnly && serverTypeOf(s) !== 'tmdb' };
 
 /** The fixes for an error kind, as [{ id, label }]; none for a kind the table does not know. */
 const fixesFor = (kind) =>
@@ -673,7 +674,7 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
   // wake tick must already use the new connection, not read a session or a pool from the old one.
   // The poster selection compares by what it draws, not by object: every Save makes new lists.
   const connectionChanged =
-    ['serverType', 'plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some((k) => prev[k] !== state.settings[k]) ||
+    ['serverType', 'plexToken', 'tmdbKey', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some((k) => prev[k] !== state.settings[k]) ||
     serversKey(prev) !== serversKey(state.settings) ||
     selectionKey(selectionOf(before)) !== selectionKey(selectionOf(inForceSettings())); // what is drawn: the profile's selection while a slot names one
   if (connectionChanged || !engine) rebuildClient();
@@ -767,7 +768,7 @@ async function requestSettings(options = {}) {
   pendingToken = null;
   pendingUserId = '';
   pendingConnection = null;
-  settingsUI.open({ ...options, token, userId, ...(connection ?? {}) });
+  settingsUI.open({ ...options, token, userId, ...(options.serverType ? {} : (connection ?? {})) }); // the type a caller names (the card's TMDB link) is the one that opens
   syncFirstRun(); // the sheet is its own place to sign in: the card's code steps aside
   tv.probeHelper();
 }
@@ -802,8 +803,9 @@ const settingsUI = createSettingsUI({
     } catch {
       // a type this build has no adapter for is named as it was written
     }
-    // A switch that leaves no token cannot show posters yet: it says the type changed and asks to sign in (D144 3).
-    if (!s.plexToken) return toast(`The server type is now ${label}. Sign in to ${label} to show its posters. The offline posters, the pinned poster and the no-repeat history were cleared.`);
+    // A switch that leaves no token cannot show posters yet: it says the type changed and asks to sign in (D144 3). TMDB has a key, not a sign-in.
+    if (now === 'tmdb' && !s.tmdbKey) return toast('The server type is now TMDB. Enter your TMDB key to show its posters. The offline posters, the pinned poster and the no-repeat history were cleared.');
+    if (now !== 'tmdb' && !s.plexToken) return toast(`The server type is now ${label}. Sign in to ${label} to show its posters. The offline posters, the pinned poster and the no-repeat history were cleared.`);
     toast(`Now showing posters from ${label}. The offline posters, the pinned poster and the no-repeat history were cleared.`);
   },
   fixesFor,
@@ -946,8 +948,8 @@ function renderDiagnostics() {
     'Secure context': window.isSecureContext ? 'yes' : 'no',
     'Daily reload': reload.dailyReloadRow(),
     Installed: matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches ? 'yes' : 'no (running in a tab)',
-    Server: s.serverUrl ? `${s.serverName || ''} ${s.serverUrl}`.trim() : '—',
-    Token: s.plexToken ? `${s.plexToken.slice(0, 4)}…` : '—',
+    Server: serverTypeOf(s) === 'tmdb' ? 'TMDB' : s.serverUrl ? `${s.serverName || ''} ${s.serverUrl}`.trim() : '—',
+    Token: serverTypeOf(s) === 'tmdb' ? (s.tmdbKey ? `${s.tmdbKey.slice(0, 4)}…` : '—') : s.plexToken ? `${s.plexToken.slice(0, 4)}…` : '—', // the first 4 characters of a key and no more
     Library: s.libraryKey ? `${s.libraryName || ''} (key ${s.libraryKey})` : '—',
     'Now playing': s.showNowPlaying ? `on${s.username ? ` for ${s.username}` : ''}` : 'off',
     Poster: p ? `${p.title}${p.year ? ` (${p.year})` : ''} — ${p.source}` : '—',
@@ -1412,7 +1414,8 @@ const cardConnection = () => (addressed(firstRun.type) || firstRun.type !== serv
 const firstRunFlow = () => signInFlow(firstRunSettings(), { version: VERSION });
 
 // A pending token ends the flow too: the display is signed in, it only needs somebody to finish in Settings.
-const firstRunWanted = () => bootSettled && !isConfigured(state.settings) && !settingsUI.isOpen && !state.asleep && !pendingToken;
+// A display whose type is TMDB has no code to show: it asks for the key in Settings, so the card never starts a plex.tv code for it.
+const firstRunWanted = () => bootSettled && !isConfigured(state.settings) && !settingsUI.isOpen && !state.asleep && !pendingToken && serverTypeOf(state.settings) !== 'tmdb';
 
 /** Starts or stops the code flow to match whether it is wanted. Cheap to call; called wherever that can change. */
 function syncFirstRun() {
@@ -1426,7 +1429,8 @@ function syncFirstRun() {
 }
 
 /** What the empty card says on an unconfigured display: the invitation, or, once a code was approved, what is left to do. */
-const unconfiguredMessage = () => (pendingToken ? 'Signed in. Open settings to finish.' : `Connect to your ${(firstRunCtl ? firstRunFlow() : signIn()).label} server to get started.`);
+const unconfiguredMessage = () =>
+  pendingToken ? 'Signed in. Open settings to finish.' : serverTypeOf(state.settings) === 'tmdb' && !firstRunCtl ? 'Enter your TMDB key in Settings to get started.' : `Connect to your ${(firstRunCtl ? firstRunFlow() : signIn()).label} server to get started.`;
 
 /** `rest` shows only the status: while the display waits to ask again, "enter this code" over empty squares would mislead. */
 function showFirstRun(code, status, { rest = false } = {}) {
@@ -1478,6 +1482,11 @@ for (const radio of document.querySelectorAll('input[name="firstrunType"]')) {
     restartFirstRun();
   });
 }
+// D211 1: no media server. Settings opens (after the PIN, when one is set) with TMDB chosen and the key field ready; nothing is stored until Save.
+$('firstrun-tmdb').addEventListener('click', (e) => {
+  e.preventDefault(); // it is a link in words only: no address changes
+  requestSettings({ serverType: 'tmdb' });
+});
 $('firstrun-address').addEventListener('submit', (e) => {
   e.preventDefault();
   const url = $('firstrun-url').value.trim().replace(/\/+$/, '');

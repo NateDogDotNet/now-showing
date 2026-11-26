@@ -87,6 +87,8 @@
             <input id="firstrun-pass" type="password" autocomplete="off" />
             <input type="submit" class="btn primary" value="Sign in" />
           </form>
+          <!-- D211 1: a household with no media server. TMDB is not a fourth server type here (the card's choice is the three above); this opens Settings with TMDB chosen. -->
+          <p class="firstrun-tmdb"><a href="#settings" class="linklike" id="firstrun-tmdb">No media server? Use TMDB</a></p>
         </div>
         <div id="empty-actions" class="empty-actions"></div>
         <button type="button" class="btn primary" data-action="settings">Open settings</button>
@@ -139,8 +141,23 @@
             <label class="seg-opt"><input type="radio" name="serverTypePick" value="jellyfin" /><span>Jellyfin</span></label>
             <label class="seg-opt"><input type="radio" name="serverTypePick" value="emby" /><span>Emby</span></label>
           </div>
+          <!-- TMDB is not a media server: it is the choice for a household with none, so it sits apart from the three above (its own radio group, set by js/settings-ui.js). -->
+          <p id="tmdb-pick-help" class="muted small">No media server? Show posters from TMDB instead.</p>
+          <div class="seg tmdb-type" role="radiogroup" aria-label="No media server">
+            <label class="seg-opt"><input type="radio" name="serverTypeTmdb" value="tmdb" /><span>TMDB</span></label>
+          </div>
           <input name="serverType" type="hidden" />
           <input name="serverUserId" type="hidden" />
+
+          <div id="tmdb-connection" class="tmdb-connection" hidden>
+            <label>TMDB key
+              <span class="input-row">
+                <input name="tmdbKey" type="password" autocomplete="off" spellcheck="false" />
+                <button type="button" class="btn small" id="tmdb-key-toggle" aria-label="Show key">Show</button>
+              </span>
+            </label>
+            <p class="muted small">Paste your TMDB read access token, or a 32-character v3 API key, from your TMDB account's API settings. It stays on this display and is sent only to TMDB.</p>
+          </div>
 
           <div id="connected-card" class="connected-card" hidden>
             <p id="connected-text" class="connected-text">Connected</p>
@@ -193,6 +210,11 @@
             <button type="button" class="btn" id="test-btn">Test connection</button>
           </div>
           <p id="test-result" class="test-result muted small" aria-live="polite"></p>
+          <!-- TMDB's credit (D203 1): its own sentence and logo, here in Settings only and never on the display. Shown while TMDB is the server type or a TMDB key is set. -->
+          <div id="tmdb-credit" class="tmdb-credit" hidden>
+            <img src="assets/tmdb/tmdb-logo.svg" alt="TMDB" width="77" height="10" />
+            <p class="muted small">This application uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.</p>
+          </div>
         <div id="servers-fieldset" class="servers" role="group" aria-label="Media servers">
           <p id="servers-help" class="muted small" hidden>Posters can come from up to three servers, in any mix of Plex, Jellyfin and Emby. One household limit applies to every poster, whichever server it came from.</p>
           <ul id="server-list" class="server-list" aria-label="Your media servers"></ul>
@@ -235,7 +257,42 @@
               <li class="muted small">Test the connection to load your libraries.</li>
             </ul>
           </div>
-          <label>Posters from
+          <div id="tmdb-source-group" role="group" aria-labelledby="tmdb-list-label" hidden>
+            <label><span id="tmdb-list-label">Posters from</span>
+              <select id="tmdb-list">
+                <optgroup label="Movies">
+                  <option value="movie/popular">Popular</option>
+                  <option value="movie/top_rated">Top rated</option>
+                  <option value="movie/now_playing">Now playing in theatres</option>
+                  <option value="movie/upcoming">Upcoming</option>
+                </optgroup>
+                <optgroup label="TV">
+                  <option value="tv/popular">TV: Popular</option>
+                  <option value="tv/on_the_air">TV: On the air</option>
+                  <option value="tv/airing_today">TV: Airing today</option>
+                </optgroup>
+                <optgroup label="Your own choice">
+                  <option value="discover/movie">Discover movies</option>
+                  <option value="discover/tv">Discover TV</option>
+                </optgroup>
+              </select>
+            </label>
+            <div id="tmdb-discover" hidden>
+              <label>Several genres
+                <select id="tmdb-mode">
+                  <option value="or">Any ticked genre</option>
+                  <option value="and">Every ticked genre</option>
+                </select>
+              </label>
+              <div class="input-row tmdb-years">
+                <label>From year <input id="tmdb-from" type="number" min="1800" max="2200" step="1" inputmode="numeric" placeholder="any" /></label>
+                <label>To year <input id="tmdb-to" type="number" min="1800" max="2200" step="1" inputmode="numeric" placeholder="any" /></label>
+              </div>
+              <p id="tmdb-years-note" class="error small" role="status" hidden></p>
+              <p class="muted small">Genres and ratings are ticked below. A year left blank is any year; From later than To is turned round.</p>
+            </div>
+          </div>
+          <label id="source-row">Posters from
             <select id="source-select" aria-describedby="source-help">
               <option value="">The libraries above</option>
             </select>
@@ -256,12 +313,12 @@
 
         <fieldset>
           <legend>What to show</legend>
-          <label class="check"><input name="showNowPlaying" type="checkbox" /> Show what's playing right now</label>
-          <label><span data-srv="user">Only for this Plex user</span> <span class="muted">(blank = anyone)</span>
+          <label class="check" data-media-only><input name="showNowPlaying" type="checkbox" /> Show what's playing right now</label>
+          <label data-media-only><span data-srv="user">Only for this Plex user</span> <span class="muted">(blank = anyone)</span>
             <input name="username" type="text" autocomplete="off" spellcheck="false" />
           </label>
-          <label class="check"><input name="includeEpisodes" type="checkbox" /> Include TV episodes (shows the series poster)</label>
-          <label class="check"><input name="unwatchedOnly" type="checkbox" /> Random posters: unwatched only</label>
+          <label class="check" data-media-only><input name="includeEpisodes" type="checkbox" /> Include TV episodes (shows the series poster)</label>
+          <label class="check" data-media-only><input name="unwatchedOnly" type="checkbox" /> Random posters: unwatched only</label>
           <label>Favour in random posters
             <select name="weighting" aria-describedby="weighting-help">
               <option value="off">Nothing: every title equally</option>

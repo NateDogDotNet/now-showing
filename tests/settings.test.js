@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addressOf, defaults, earlySettings, followNames, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, NO_SERVER_MEANING, oldTokenMayGo, PLAYER_STATES, playerRows, removedServers, sanitize, save, SECRET_KEYS, serverList, setAllowed, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
+import { addressOf, cleanServer, defaults, earlySettings, followNames, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, NO_SERVER_MEANING, oldTokenMayGo, PLAYER_STATES, playerRows, removedServers, sanitize, save, SECRET_KEYS, serverList, serversDroppedByTmdbImport, setAllowed, settleServers, STORAGE_KEY, tmdbDroppedByImport, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -1464,4 +1464,113 @@ test('players are sorted by name with numbers in order: "Player 2" before "Playe
   const names = ['Player 10', 'Player 2', 'player 1', 'TV 9', 'TV 10', 'Player 11', 'Player 20', 'Alpha'];
   const listed = names.map((name, i) => ({ id: `p${i}`, name, present: true }));
   assert.deepEqual(playerRows([], listed).map((r) => r.name), ['Alpha', 'player 1', 'Player 2', 'Player 10', 'Player 11', 'Player 20', 'TV 9', 'TV 10']);
+});
+
+// ---- the TMDB key and server type (Run 13, tmdb-source: R-TMDB-1, D210 5) ----
+
+const TMDB_KEY = 'eyJhbGciOiJIUzI1NiJ9.a-tmdb-read-access-token';
+
+test('T4 the TMDB key is a secret: kept out of an export unless the PIN was given, and then written as plain text, like the Plex token', () => {
+  assert.ok(SECRET_KEYS.includes('tmdbKey'));
+  const s = { ...defaults(), serverType: 'tmdb', tmdbKey: TMDB_KEY, libraryKey: 'movie/popular' };
+  for (const opts of [undefined, {}, { includeSecrets: false }]) {
+    const file = toExport(s, opts);
+    assert.equal('tmdbKey' in file.settings, false);
+    assert.ok(!JSON.stringify(file).includes(TMDB_KEY), 'the value is nowhere in the file');
+  }
+  assert.equal(toExport(s, { includeSecrets: true }).settings.tmdbKey, TMDB_KEY);
+  assert.equal('tmdbKey' in withoutSecrets(s), false);
+  // The Plex token's own rule is as it was, with both set.
+  const both = { ...s, plexToken: 'plex-secret' };
+  assert.deepEqual(['plexToken' in toExport(both).settings, 'tmdbKey' in toExport(both).settings], [false, false]);
+  assert.deepEqual([toExport(both, { includeSecrets: true }).settings.plexToken, toExport(both, { includeSecrets: true }).settings.tmdbKey], ['plex-secret', TMDB_KEY]);
+});
+
+test('an import with no TMDB key keeps the stored one; a file with one replaces it; either way the key survives a change of server type', () => {
+  const current = { ...defaults(), serverType: 'tmdb', tmdbKey: TMDB_KEY, libraryKey: 'movie/popular' };
+  assert.equal(fromImport({ rotateSeconds: 60 }, current).tmdbKey, TMDB_KEY);
+  assert.equal(fromImport(JSON.stringify(toExport(current)), current).tmdbKey, TMDB_KEY, 'an export without secrets is a file without a key');
+  assert.equal(fromImport({ tmdbKey: 'theirs' }, current).tmdbKey, 'theirs');
+  // To another server type and back (D210 5): the key is its own setting, set aside by nothing.
+  const toPlex = importWithConnection({ serverType: 'plex', serverUrl: 'http://friend:32400', plexToken: 'p' }, current).settings;
+  assert.equal(toPlex.serverType, 'plex');
+  assert.equal(toPlex.tmdbKey, TMDB_KEY);
+  assert.equal(importWithConnection({ serverType: 'tmdb' }, toPlex).settings.tmdbKey, TMDB_KEY);
+  const away = sanitize({ ...current, serverType: 'jellyfin', serverUrl: 'http://jf:8096', plexToken: 'jf' });
+  assert.equal(away.tmdbKey, TMDB_KEY);
+  assert.equal(sanitize({ ...away, serverType: 'tmdb' }).tmdbKey, TMDB_KEY);
+  assert.equal(sanitize({ tmdbKey: `  ${TMDB_KEY}  ` }).tmdbKey, TMDB_KEY, 'trimmed, as typed otherwise');
+  assert.equal(sanitize({ tmdbKey: 5 }).tmdbKey, '');
+  assert.equal(defaults().tmdbKey, '');
+  // Stored, it is read back.
+  const storage = memoryStorage();
+  save(storage, current);
+  assert.equal(load(storage).settings.tmdbKey, TMDB_KEY);
+});
+
+test('a display with a TMDB key and a list is configured; without either, or with the key of another type, it is not', () => {
+  const tmdb = { ...defaults(), serverType: 'tmdb' };
+  assert.equal(isConfigured(tmdb), false);
+  assert.equal(isConfigured({ ...tmdb, tmdbKey: TMDB_KEY }), false, 'a key and no list');
+  assert.equal(isConfigured({ ...tmdb, libraryKey: 'movie/popular' }), false, 'a list and no key');
+  assert.equal(isConfigured({ ...tmdb, tmdbKey: TMDB_KEY, libraryKey: 'movie/popular' }), true);
+  assert.equal(isConfigured({ ...tmdb, tmdbKey: TMDB_KEY, staticRatingKey: 'movie:603' }), true, 'a pin alone is enough, as for a server');
+  assert.equal(isConfigured({ ...tmdb, tmdbKey: TMDB_KEY, libraryKey: 'movie/popular', plexToken: 't', serverUrl: 'http://s' }), true, 'the Plex fields are not read');
+  assert.equal(isConfigured({ ...defaults(), tmdbKey: TMDB_KEY, libraryKey: '1' }), false, 'a Plex display needs its own token and address; the TMDB key does not stand in');
+  assert.equal(isConfigured({ ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1' }), true);
+});
+
+test('TMDB cannot be one of several servers: an entry of type tmdb in `servers` is dropped, and a TMDB first server keeps no other server (D210 5)', () => {
+  const extra = (type, id) => ({ id, type, url: `http://${id}.test:8096`, token: 't', userId: '', name: id });
+  assert.equal(cleanServer(extra('tmdb', 'x')), null);
+  assert.equal(cleanServer(extra(' tmdb ', 'x')), null, 'a padded type is the same type');
+  assert.ok(cleanServer(extra('jellyfin', 'x')));
+  const mixed = sanitize({ serverType: 'plex', serverUrl: 'http://p', plexToken: 't', serverId: 'p1', servers: [extra('tmdb', 'a'), extra('jellyfin', 'b')] });
+  assert.deepEqual(mixed.servers.map((e) => e.id), ['b']);
+  assert.equal(serverList(mixed).length, 2);
+  const first = sanitize({ serverType: 'tmdb', tmdbKey: TMDB_KEY, libraryKey: 'movie/popular', serverId: 'old-plex-id', serverCarried: false, servers: [extra('jellyfin', 'b')] });
+  assert.deepEqual([first.servers, first.serverId, first.serverCarried], [[], '', true]);
+  assert.equal(serverList(first).length, 1);
+  assert.equal(serverList(first)[0].type, 'tmdb');
+});
+
+test('an import that lists TMDB as an extra server says so, once; a file that asks nothing of the kind says nothing', () => {
+  const entry = { id: 'x', type: 'tmdb', url: 'http://x.test', token: 't' };
+  const asked = (settings) => tmdbDroppedByImport(JSON.stringify({ format: 'plex-poster-display/settings', version: 1, settings }));
+  assert.match(asked({ serverType: 'plex', servers: [entry] }), /TMDB cannot be one of several servers/);
+  assert.match(asked({ servers: [{ id: 'j', type: 'jellyfin', url: 'http://j' }, entry] }), /that entry/);
+  assert.match(tmdbDroppedByImport({ servers: [entry] }), /that entry/, 'a bare object (a hand-written config.json) too');
+  assert.match(asked({ serverType: 'tmdb', servers: [{ id: 'j', type: 'jellyfin', url: 'http://j' }] }), /other servers/);
+  for (const quiet of [{}, { serverType: 'tmdb' }, { serverType: 'plex', servers: [] }, { servers: [{ id: 'j', type: 'jellyfin', url: 'http://j' }] }, { servers: 'x' }, { servers: [null, 5] }]) assert.equal(asked(quiet), '', JSON.stringify(quiet));
+  for (const junk of ['{', 'null', '[]', '5', '']) assert.equal(tmdbDroppedByImport(junk), '', junk);
+  // And the import itself drops it.
+  const merged = fromImport({ serverType: 'plex', serverUrl: 'http://p', plexToken: 't', servers: [entry, { id: 'j', type: 'jellyfin', url: 'http://j', token: 'jt' }] }, defaults());
+  assert.deepEqual(merged.servers.map((e) => e.type), ['jellyfin']);
+});
+
+test('a change between a media server and TMDB is a change of server type in every way a Save reads it', async () => {
+  const plex = { ...defaults(), serverType: 'plex', serverUrl: 'http://p:32400', plexToken: 'pt', libraryKey: '1', serverId: 'pid' };
+  const tmdb = { ...plex, serverType: 'tmdb', serverUrl: '', plexToken: '', tmdbKey: TMDB_KEY, libraryKey: 'movie/popular' };
+  const never = async () => assert.fail('no server is asked who it is');
+  const there = await settleServers(plex, sanitize(tmdb), never);
+  assert.deepEqual([there.next.serverType, there.next.tmdbKey, there.removed, there.gone, there.promoted], ['tmdb', TMDB_KEY, [], [], false]);
+  const back = await settleServers(sanitize(tmdb), sanitize({ ...tmdb, serverType: 'plex', serverUrl: 'http://p:32400', plexToken: 'pt2' }), never);
+  assert.deepEqual([back.next.serverType, back.next.tmdbKey, back.removed, back.gone], ['plex', TMDB_KEY, [], []], 'the key is still there after the switch back');
+});
+
+test('D211 2: a file that makes TMDB the first server names the display\'s other servers it would leave out, and no secret', () => {
+  const extra = (id, type, name = '') => ({ id, type, url: `http://${id}.test:8096`, token: `secret-${id}`, userId: '', name });
+  const current = sanitize({ serverType: 'plex', serverUrl: 'http://p:32400', plexToken: 'plex-secret', serverId: 'p1', libraryKey: '1', servers: [extra('jf', 'jellyfin', 'Den Jellyfin'), extra('em', 'emby')] });
+  const file = (settings) => JSON.stringify({ format: 'plex-poster-display/settings', version: 1, settings });
+  const dropped = serversDroppedByTmdbImport(file({ serverType: 'tmdb', libraryKey: 'movie/popular' }), current);
+  assert.deepEqual(dropped, [{ type: 'jellyfin', name: 'Den Jellyfin', url: 'http://jf.test:8096' }, { type: 'emby', name: '', url: 'http://em.test:8096' }], 'each, in order; an unnamed one carries its type for the words');
+  assert.ok(!JSON.stringify(dropped).includes('secret'), 'no token, no key');
+  assert.deepEqual(serversDroppedByTmdbImport({ serverType: 'tmdb' }, current).length, 2, 'a bare object (config.json) too');
+  // A file that asks for no such thing drops none.
+  for (const quiet of [{ serverType: 'plex', serverUrl: 'http://other:32400', plexToken: 't' }, { rotateSeconds: 60 }, { serverType: 'jellyfin', serverUrl: 'http://j:8096', plexToken: 't' }]) assert.deepEqual(serversDroppedByTmdbImport(file(quiet), current), [], JSON.stringify(quiet));
+  assert.deepEqual(serversDroppedByTmdbImport(file({ serverType: 'tmdb' }), sanitize({ serverType: 'plex', serverUrl: 'http://p', plexToken: 't' })), [], 'a display with one server loses none');
+  assert.deepEqual(serversDroppedByTmdbImport(file({ serverType: 'tmdb' }), sanitize({ serverType: 'tmdb', tmdbKey: 'k' })), []);
+  for (const junk of ['{', 'null', '[]', '', '5']) assert.deepEqual(serversDroppedByTmdbImport(junk, current), [], junk);
+  // The stored display is not touched by asking.
+  assert.equal(current.servers.length, 2);
 });

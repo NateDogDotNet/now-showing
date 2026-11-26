@@ -30,6 +30,9 @@ const hex = (v, d) => (typeof v === 'string' && /^[0-9a-f]*$/i.test(v) ? v : d);
 /** The address of a server as it is compared and stored: trimmed, with no trailing slash. */
 export const addressOf = (v) => (typeof v === 'string' ? v.trim().replace(/[\s/]+$/, '') : '');
 
+/** The server type of a household with no media server (R-TMDB-1): one source, never one of several. */
+const TMDB = 'tmdb';
+
 /** How many servers a household may have, the first one included (D156 7). */
 export const MAX_SERVERS = 3;
 
@@ -43,7 +46,7 @@ export function cleanServer(v) {
   const id = cleanServerId(v.id);
   const type = typeof v.type === 'string' ? v.type.trim().slice(0, 40) : '';
   const url = addressOf(v.url);
-  if (!id || !type || !url) return null;
+  if (!id || !type || !url || type === TMDB) return null; // TMDB has no address and is never one of several servers (D210 5)
   return { id, type, url, token: str(v.token, ''), userId: str(v.userId, ''), name: str(v.name, '') };
 }
 
@@ -131,6 +134,9 @@ const SCHEMA = {
   // Emby adapter needs it; Plex and Jellyfin leave it empty. It belongs to the token and the address it came with and is set aside with them.
   serverUserId: ['', str],
   serverName: ['', str],
+  // The TMDB key (R-TMDB-1, D210 5): a TMDB read access token or a 32-character v3 key, typed as written (js/sources/tmdb.js reads its form). It is its own setting,
+  // not the Plex token's: it stays through a change of server type, so a household can go to a media server and back. It is a secret (SECRET_KEYS).
+  tmdbKey: ['', str],
   // Several servers (R-SRC-4, D156, D157). The keys above describe the FIRST server, as they did in 2.4.0, and `servers` holds up to two more.
   // `serverId` is the first server's own id, '' while it has not been read (a 2.4.0 object has none): it is recorded when the household
   // changes the address or adds a server, never rewritten on upgrade. `serverCarried` marks the entry that owns the bare ids (the offline
@@ -237,7 +243,7 @@ const SCHEMA = {
 const CONNECTION_KEYS = ['serverUrl', 'plexToken', 'libraryKey', 'libraryKeys'];
 
 /** Keys that hold secrets and are optional on export. */
-export const SECRET_KEYS = ['plexToken', 'servers.token'];
+export const SECRET_KEYS = ['plexToken', 'tmdbKey', 'servers.token'];
 // A key written `list.field` is the field `field` of every entry of the list `list`: each extra server holds its own token (D157 4).
 
 /**
@@ -278,6 +284,11 @@ export function sanitize(input = {}) {
 
 /** A server whose id is already in the list is not a second server: the later entry is dropped (D157 6). The first server's id counts when it is known. */
 function reconcileServers(out) {
+  if (out.serverType === TMDB) {
+    // TMDB is the household's one source (D210 5): no other server, no server id, and the bare ids are its own.
+    Object.assign(out, { servers: [], serverId: '', serverCarried: true });
+    return out;
+  }
   const seen = new Set(out.serverId ? [out.serverId] : []);
   out.servers = out.servers.filter((e) => !seen.has(e.id) && seen.add(e.id));
   return out;
@@ -343,6 +354,7 @@ function reconcileLibraries(out) {
 }
 
 export function isConfigured(s) {
+  if (s.serverType === TMDB) return Boolean(s.tmdbKey && (s.libraryKey || s.staticRatingKey)); // a key and a list (a pin alone is enough, as for a server)
   return Boolean(s.plexToken && s.serverUrl && (s.libraryKey || s.staticRatingKey || s.source?.key)); // a collection or playlist is a source of its own
 }
 
@@ -421,6 +433,41 @@ function sameServer(e, list) {
   const mine = cleanServer({ ...e, token: '' });
   const hit = mine && (Array.isArray(list) ? list : []).find((c) => c && c.id === mine.id && c.type === mine.type && addressOf(c.url) === mine.url);
   return hit && typeof hit.token === 'string' ? hit.token : '';
+}
+
+/**
+ * What an import file asked of TMDB that this build does not do (D210 5): an entry of `servers` whose type is `tmdb`, or other servers beside a first server that
+ * is TMDB. `fromImport` drops them; this says so, in the words of the toast, or '' when the file asked nothing of the kind. Nothing is stored here.
+ */
+export function tmdbDroppedByImport(text) {
+  let parsed;
+  try {
+    parsed = typeof text === 'string' ? JSON.parse(text) : text;
+  } catch {
+    return '';
+  }
+  const incoming = parsed?.format !== undefined && parsed?.settings && typeof parsed.settings === 'object' ? parsed.settings : parsed;
+  const servers = Array.isArray(incoming?.servers) ? incoming.servers : [];
+  if (servers.some((e) => e && typeof e === 'object' && String(e.type).trim() === TMDB)) return 'TMDB cannot be one of several servers, so that entry in the file was left out.';
+  return incoming?.serverType === TMDB && servers.length > 0 ? "TMDB cannot be one of several servers, so the file's other servers were left out." : '';
+}
+
+/**
+ * The servers an import would leave out of a display that has other servers (D211 2): when the file makes TMDB the first server and `current` (the settings
+ * the sheet holds) has extra servers, those are the servers the result no longer has, since TMDB is never one of several (D210 5). Each is
+ * `{ type, name, url }` (the name as stored; the caller words an unnamed one by its type). No token is returned. A file that does not make TMDB the first
+ * server, or a display that already has no other server, drops none. Nothing is stored here.
+ */
+export function serversDroppedByTmdbImport(text, current = defaults()) {
+  let merged;
+  try {
+    merged = fromImport(text, current);
+  } catch {
+    return [];
+  }
+  if (merged.serverType !== TMDB) return [];
+  const had = serverList(sanitize(current)).slice(1);
+  return had.map((e) => ({ type: e.type, name: e.name || '', url: e.url }));
 }
 
 /**
