@@ -1436,3 +1436,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   1. **The TMDB key under a Plex, Jellyfin or Emby display.** Settings' new "Poster art" section holds the same `tmdbKey` field (one setting, D203, D210 5), with Show/Hide and Clear, for every server type; the TMDB credit shows while a key is set. Clearing it there clears it for TMDB mode too. Closes `tmdb-source` ux F7.
   2. **Posters with no TMDB id.** The now-playing poster keeps the server's art (no extra server request for its id). A cached poster keeps the art it was saved with, so offline shows what was shown online. Closes `tmdb-ids` F3.
   3. **The "In <language>" choice** is a fixed list of about 20 common poster languages (ISO 639-1), each shown in its own name; on first use the display's own language is chosen when it is in the list, else English.
+
+## Conductor ruling — 2026-11-26 (`artwork-sources` r1, Q9; to be listed for the owner at the next stop): D218
+
+- **D218 "Largest TMDB poster" chooses among textless posters, English posters and the posters in the Poster art language** (D217 3's setting; the display's language when listed, else English). The widest wins; a tie goes to the better voted, then the first listed. A poster in a language the household did not choose is never shown. The images request asks only for those languages (`include_image_language`, owner (verify) row F4).
