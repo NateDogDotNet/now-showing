@@ -1404,3 +1404,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   2. **An import that makes TMDB the first server on a display with other servers** shows a toast naming each server it drops, before Save, so Cancel keeps them. Applied in `tmdb-source`.
   3. **Re-checking cached TMDB titles' ratings** (D37): at most 20 cached TMDB titles per pass, those checked longest ago first, and never on the 1-minute partial-pool retry. A title not yet checked again keeps the rating it was stored with. Plex, Jellyfin and Emby are unchanged. Applied in `tmdb-source`.
   4. **A Plex item with no `type`** gets no `tmdbId` (fail safe, as every other doubtful case). Applied in `production-house-filter`, the next phase that edits `js/sources/plex.js`.
+
+## Conductor ruling — 2026-11-26 (`tmdb-source` review r3, N2; to be listed for the owner at the next stop): D212
+
+- **D212 "Never on the one-minute retry" (D211 3) means a retry within 30 minutes of the last TMDB re-rating.** A one-minute retry of a partial pool skips the re-rating of cached TMDB titles only while the last re-rating is under 30 minutes (`POOL_TTL_MS`) old; once it is older, that load re-rates as an ordinary pass would, whatever the pool. Read literally, D211 3 lets a pool that is partial on every build stop the re-rating for good (cold review r2 F5: 1 pass in 6 hours), which defeats D37. The 20-title cap and the oldest-first order are unchanged.
