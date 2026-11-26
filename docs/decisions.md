@@ -1447,3 +1447,9 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   1. **A time budget and a back-off.** The art of one poster has 4 seconds in all (images request and image fetch together); past that the source's art shows. After a network error, a timeout or a refused key, no art is asked for 10 minutes (the source's art shows, no error card); a change of the key or of the Poster art choice ends the pause at once.
   2. **Test the key under any server type.** Poster art has a "Test key" button with its own result line (connected, refused, or TMDB not answering), for every server type; in TMDB mode the existing Test connection keeps its job and sits after the key.
   3. **Largest shows the language it uses** (D218): the language row is shown for Largest as well as for "In a language", with a help line, and the cached Largest art is keyed by that language too, so a change of language fetches again.
+
+## Conductor ruling — 2026-11-26 (`artwork-sources` reviews r2; to be listed for the owner at the next stop): D220
+
+- **D220 Two refinements of D219.**
+  1. **Only TMDB's API pauses the art.** A network error, a timeout or a refused key on the images request starts the 10-minute pause (D219 1); a poster file that overruns the 4-second budget or fails to download shows the source's art for that poster only, with no pause. The images request is abandoned when the budget ends, so a late reply changes nothing (no log line, no pause).
+  2. **One test per mode.** In TMDB mode, Test connection (after the key) is the key's test and Test key is hidden; under Plex, Jellyfin or Emby, Test key is the key's test. A test's verdict is dropped when the sheet is cancelled or reopened, and the button is never left disabled by a test the sheet no longer shows.
