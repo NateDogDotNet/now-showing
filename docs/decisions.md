@@ -1475,3 +1475,9 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Conductor ruling — 2026-11-27 (`release-2.5.0` pre-flight; to be listed for the owner at the next stop): D224
 
 - **D224 The 2.5 notice.** "What's new in 2.5" is one toast, shown once per configured display whatever its sources (a TMDB-only household too), naming TMDB as a source (no server needed), Poster art, Title as logo and Production house. Its action "Open settings" opens the sheet through the PIN gate at the Poster art section, the section that holds the TMDB key for every server type (D217 1). A fresh install still shows nothing (D73). The 2.4.3 notice is retired.
+
+## Conductor ruling — 2026-11-27 (`release-2.5.0` r1, Q12 and Q13; to be listed for the owner at the next stop): D225
+
+- **D225 Two refinements of D224.**
+  1. **`tests/e2e/followups.spec.mjs` joins `release-2.5.0`'s Output.** It pins the retired 2.4.3 toast and its Allowed devices focus, so criterion 3's full `npm run test:e2e` cannot pass without it; it changes only to state D224's toast and focus.
+  2. **"Open settings" focuses "Image to show"**, the first control of the Poster art section, scrolled to the top of the sheet's view.
