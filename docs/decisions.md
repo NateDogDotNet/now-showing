@@ -1496,3 +1496,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner answer — 2026-11-27 ("merge"): D228
 
 - **D228 2.5.0 is merged into `main`.** On the owner's word, the branch `2.5` (tip 7aba673f) was merged into `main` with a merge commit (6b746c2e; `npm test` 1356/1356 on the merged tree), then README, Roadmap and docs/spec.md were changed to say 2.5.0 is on `main`. No pull request, tag or GitHub release (D13, D79). The branch `2.5` is kept until the owner deletes it.
+
+## Owner answer — 2026-11-27 ("merge, commit, push, and clean up. I tested 2.5 and it works great."): D229
+
+- **D229 The owner tested 2.5 and it works; the branch is removed.** The owner reports that 2.5 works on his own setup. The (verify) rows of section M stay open until someone runs them row by row against the real TMDB. The local branch `2.5` (merged in 6b746c2e) was deleted; `origin/2.5` is deleted by the owner, because the safety hook blocks remote deletes for the conductor. Two stale run-12 stashes were saved as patches in `/home/nathan/now-showing-run12-local-trail/` and dropped.
