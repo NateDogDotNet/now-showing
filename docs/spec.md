@@ -2,7 +2,7 @@
 
 Baseline: commit `3a7b688` (v2.0.0, PWA rewrite). Run start: `46257c3` (the commit that recorded the owner's rulings). Target: v2.1.0. Companion plan: `docs/integration-plan.md`. Binding rulings: `docs/decisions.md` (D1-D16); every behaviour below that a ruling set cites its D-entry.
 
-Current version: **2.5.0**, on the branch `2.5` (run 13, `release-2.5.0`, D203, D224; no pull request, tag or merge, D13). It adds R-TMDB-1, R-TMDB-2, R-ART-1, R-ART-2 and R-UPG-7 and the production house list (in R-TMDB-2). The target above is the first release this document planned.
+Current version: **2.5.0**, on `main` (run 13, `release-2.5.0`, D203, D224; merged from the branch `2.5` on 2026-11-27, no pull request or tag, D13, D228). It adds R-TMDB-1, R-TMDB-2, R-ART-1, R-ART-2 and R-UPG-7 and the production house list (in R-TMDB-2). The target above is the first release this document planned.
 
 Revision r3 (planning re-dispatch): lean scope per D1, rulings D2-D16 applied, the r1 review findings closed, and the r2 confirmation findings (N1-N10) closed. Q19-Q23 were settled by the conductor at the r2 confirmation (see *Open questions*).
 

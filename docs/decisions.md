@@ -1492,3 +1492,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
   1. D218–D226 are kept as ruled, and the 4-second budget for poster art stays 4 seconds (stop 9 items 1–4, 6, 7).
   2. The three small code fixes outside the release's files are listed on the Roadmap for the next run, not built now (item 5 a): the production-house help wording ("that house" when one is ticked, naming the chosen list); the TMDB key label sits 10 px above its field instead of 4 px; the timing assumption in `clear-logo-title`'s e2e case 57. The five Minor doc drifts the close-time docs check found (`.orchestrator/artifacts/close--keep-docs-current.md`) are listed beside them.
   3. The release (fc0499c0) was committed before this answer; with item 5 (a) nothing in it changes. Branch `2.5` is pushed after this entry, as approved at the policy stop; no PR, merge or tag (D13, D79).
+
+## Owner answer — 2026-11-27 ("merge"): D228
+
+- **D228 2.5.0 is merged into `main`.** On the owner's word, the branch `2.5` (tip 7aba673f) was merged into `main` with a merge commit (6b746c2e; `npm test` 1356/1356 on the merged tree), then README, Roadmap and docs/spec.md were changed to say 2.5.0 is on `main`. No pull request, tag or GitHub release (D13, D79). The branch `2.5` is kept until the owner deletes it.
