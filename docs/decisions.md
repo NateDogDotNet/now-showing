@@ -1481,3 +1481,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 - **D225 Two refinements of D224.**
   1. **`tests/e2e/followups.spec.mjs` joins `release-2.5.0`'s Output.** It pins the retired 2.4.3 toast and its Allowed devices focus, so criterion 3's full `npm run test:e2e` cannot pass without it; it changes only to state D224's toast and focus.
   2. **"Open settings" focuses "Image to show"**, the first control of the Poster art section, scrolled to the top of the sheet's view.
+
+## Conductor ruling — 2026-11-27 (`release-2.5.0` Step 4 r2; to be listed for the owner at the next stop): D226
+
+- **D226 `tests/e2e/metadata.spec.mjs` joins `release-2.5.0`'s Output.** Its case 6 pins the poster-cache index entry's field list, which `production-house-filter` (629b4acc, D214 1) widened with `studios` for offline houses; that phase's runs of record did not include the metadata spec, so the full suite at the release is the first to see it. The case changes only to add `studios` to the expected list (and to say why in its check line); the cache entry is as D214 rules.

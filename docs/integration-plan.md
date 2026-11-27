@@ -1665,8 +1665,8 @@ Facts this section stands on (invocation probes, 2026-11-25; `.orchestrator/arti
 
 ### 77. `release-2.5.0` — Version 2.5.0, its notice and the docs
 - **Goal:** `VERSION` is 2.5.0; a "What's new in 2.5" notice names the TMDB mode, Poster art, Title as logo and Production house; README, Roadmap, the spec and `docs/validation/real-server-extended.md` (new section M: TMDB with a real key, and the new Plex and Jellyfin fields) describe 2.5.0.
-- **Requirements:** R-UPG-7, R-TMDB-1 · **Rulings:** D13, D79, D203, D224, D225 · **Mode:** afk · **Tags:** docs · **Blocked by:** `clear-logo-title`
-- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`, `docs/spec.md`, `docs/validation/real-server-extended.md`, `tests/e2e/release.spec.mjs`, `tests/e2e/lib.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/followups.spec.mjs` (D225 1)
+- **Requirements:** R-UPG-7, R-TMDB-1 · **Rulings:** D13, D79, D203, D224, D225, D226 · **Mode:** afk · **Tags:** docs · **Blocked by:** `clear-logo-title`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`, `docs/spec.md`, `docs/validation/real-server-extended.md`, `tests/e2e/release.spec.mjs`, `tests/e2e/lib.mjs`, `tests/e2e/smoke.spec.mjs`, `tests/e2e/preset.spec.mjs`, `tests/e2e/followups.spec.mjs` (D225 1), `tests/e2e/metadata.spec.mjs` (D226)
 - **Acceptance criteria:**
   1. `grep -q "VERSION = '2.5.0'" sw.js && grep -q "VERSION = '2.5.0'" js/main.js && test "$(grep -c '"version": "2.5.0"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
   2. `grep -qE '^## .*Done in 2\.5' Roadmap.md && grep -q "WHATS_NEW_VERSION = '2.5.0'" js/main.js && grep -q 'not endorsed, certified, or otherwise approved by TMDB' README.md`
