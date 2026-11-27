@@ -244,6 +244,17 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 Still ahead: for a later 2.4.x run (D134 1), the movie-night countdown, birthday and occasion mode, the Picture frame sources, and Play now on Jellyfin and Emby and "Here" (D181 1); with no release number, "On this day", the playlist with Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music.
 
+Carried from 2.5 (D227), for the next run:
+
+- Code: the production-house help wording says "that house" when one is ticked and names the chosen list.
+- Code: the TMDB key label sits 10 px above its field instead of 4 px.
+- Code: the timing assumption in `clear-logo-title`'s e2e case 57.
+- Docs: `docs/spec.md` (traceability row for `release-2.5.0`) lists `tests/e2e/release.spec.mjs`, which the release did not change.
+- Docs: `docs/validation/real-server-extended.md` intro omits section M (a real TMDB key and a Jellyfin or Emby server).
+- Docs: `README.md` "Errors that carry their fix" has no row for a missing or refused TMDB key.
+- Docs: `README.md` layout line for `poster-cache.js` omits the 180-day age of TMDB data.
+- Docs: `README.md` Security notes TMDB bullet omits that Diagnostics shows the key's first 4 characters.
+
 - **Optional:** "Validate on a Raspberry Pi", whenever a Pi is at hand (D79), and the Jellyfin and Emby rows (sections I and J of `docs/validation/real-server-extended.md`), the multiple-servers rows (section K) and the Play now rows (section L) on real servers and players.
 - **Not decided:** whether 2.4.1, 2.4.2 or 2.4.3 is tagged or released. All three were merged to `main` (D170, D180, D198), as 2.4.0 was (D155).
 
