@@ -582,9 +582,12 @@ npm run demo                   # app + mock Plex server (and a mock Jellyfin/Emb
 node scripts/check-precache.mjs   # every js/ file is precached and every precached file exists
 npm ci && npx playwright install chromium   # once, for the browser tests
 npm run test:e2e               # browser tests against the mock server
+npm run test:tmdb-real         # opt-in: checks against the real TMDB with your own key (skips without one)
 ```
 
 `npm run test:e2e` starts one `serve.mjs --mock` and runs each spec in `tests/e2e/` in its own process. Playwright is a dev dependency only; the app has none. It uses ports 18080 (app) and 18401 (mock) by default. Set `E2E_PORT` and `E2E_MOCK_PORT` to other free ports when you run two copies at once, and `E2E_SPEC_TIMEOUT` (seconds, default 180) to change a spec's time limit. Pass spec names to run only those: `npm run test:e2e -- smoke`. Specs that start their own server pick a free port at run time.
+
+`npm run test:tmdb-real` is never part of `npm test`, `npm run test:e2e` or CI, which use the mock TMDB. It runs the app's own TMDB client (`js/sources/tmdb.js`) and the art and logo choosers (`js/artwork.js`) against `api.themoviedb.org` and `image.tmdb.org`, and prints PASS, FAIL or INFO for the rows of section M of [`docs/validation/real-server-extended.md`](docs/validation/real-server-extended.md) that need no media server (V1-T01 to V1-T09 and V1-T12). It reads the key (the v3 API key or the read access token) from `TMDB_KEY`, else from the file named by `TMDB_KEY_FILE`, else from `~/.config/now-showing/tmdb-key`; with none it prints SKIP and exits 0. It never prints the key, sends about 150 requests, stops after the first request if the key is refused, and never bursts to force a 429. Keep the key file outside the repository (`chmod 600` it).
 
 When you change any precached file, bump `VERSION` in `sw.js` (and in `js/main.js`, `package.json` and `package-lock.json`, which holds it twice). Installed clients pick up the new version and reload automatically. Any new file under `js/` also goes into `SHELL` in `sw.js`.
 
