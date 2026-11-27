@@ -89,6 +89,13 @@ const MOVIE_ROWS = [
 // (verify) UserData.PlayCount and UserData.Played: the UserItemDataDto fields were not read (research section 5).
 // (verify) A null field is left out of the reply (an unrated movie has no OfficialRating key); the research does not say Jellyfin does this.
 // (verify) ImageTags.Primary values (tag1, ...) are invented, and the image body is an SVG where a real server sends JPEG or WebP.
+// The studio of each movie (by row index; row 7 has none): `Studios: [{ Name, Id }]` on the item, `Studios=<name>|<name>` on /Items filters by name (OR), and
+// GET /Studios lists the studios of a library. (verify) rows for a real server: the item field, the pipe-delimited filter and the list route.
+const STUDIO_NAMES = ['Mock Pictures', 'Pixar', 'Mock Pictures', 'Pixar', 'A24', 'A24', 'Mock Pictures', undefined, 'Pixar', 'Pixar', 'Mock Pictures', 'Mock Pictures', 'Mock Pictures'];
+const studioItem = (name) => ({ Name: name, Id: hex('f', ['Mock Pictures', 'Pixar', 'A24'].indexOf(name) + 1) });
+
+// TMDB ids the mock knows for some movies (by row index); the rest carry no ProviderIds.Tmdb.
+const TMDB_IDS = { 0: '2001', 1: '2002', 3: '2004', 8: '2009' };
 const MOVIES = MOVIE_ROWS.map(([Name, year, color, rating, minutes, community, genres, plays, Overview, lib], i) => ({
   Id: hex('a', i + 1),
   Name,
@@ -99,11 +106,13 @@ const MOVIES = MOVIE_ROWS.map(([Name, year, color, rating, minutes, community, g
   CommunityRating: community,
   Genres: genres,
   GenreItems: genres.map(genreItem),
+  ...(STUDIO_NAMES[i] ? { Studios: [studioItem(STUDIO_NAMES[i])] } : {}),
   ...(minutes ? { RunTimeTicks: minutes * 60 * TICKS } : {}),
   Overview,
   UserData: { PlayCount: plays, Played: plays > 0 },
   ImageTags: { Primary: `tag${i + 1}` },
   ParentId: LIBS[lib].Id,
+  ...(TMDB_IDS[i] ? { ProviderIds: { Imdb: `tt100${i}`, Tmdb: TMDB_IDS[i] } } : { ProviderIds: { Imdb: `tt100${i}` } }),
   color,
 }));
 const movieNamed = (name) => MOVIES.find((m) => m.Name === name);
@@ -283,6 +292,8 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
       if (ids) pool = pool.filter((i) => ids.includes(i.Id));
       const genreIds = list('genreids');
       if (genreIds) pool = pool.filter((i) => i.GenreItems?.some((g) => genreIds.includes(g.Id)));
+      const studios = list('studios', '|');
+      if (studios) pool = pool.filter((i) => i.Studios?.some((s) => studios.map((n) => n.toLowerCase()).includes(s.Name.toLowerCase())));
       const ratings = list('officialratings', '|');
       if (ratings) pool = pool.filter((i) => ratings.includes(i.OfficialRating));
       if (list('filters')?.includes('IsUnplayed')) pool = pool.filter((i) => !(i.UserData?.PlayCount > 0));
@@ -307,6 +318,14 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
       const parentId = q.get('parentid');
       const used = new Set((parentId ? MOVIES.filter((m) => m.ParentId === parentId) : MOVIES).flatMap((m) => m.Genres));
       const out = GENRES.filter((g) => used.has(g)).map((g) => ({ ...genreItem(g), Type: 'Genre', ServerId: SERVER_ID }));
+      return json(200, { Items: out, TotalRecordCount: out.length });
+    }
+
+    // (verify) /Studios: the route base and the {Items, TotalRecordCount} wrapper are expected, not read.
+    if (req.method === 'GET' && path === '/Studios') {
+      const parentId = q.get('parentid');
+      const used = new Set((parentId ? MOVIES.filter((m) => m.ParentId === parentId) : MOVIES).flatMap((m) => (m.Studios || []).map((s) => s.Name)));
+      const out = ['A24', 'Mock Pictures', 'Pixar'].filter((n) => used.has(n)).map((n) => ({ ...studioItem(n), Type: 'Studio', ServerId: SERVER_ID }));
       return json(200, { Items: out, TotalRecordCount: out.length });
     }
 

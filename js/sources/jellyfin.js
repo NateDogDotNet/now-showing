@@ -17,7 +17,7 @@ import { buildUrl, timeoutSignal } from './http.js';
 
 export const CLIENT_NAME = 'Now Showing';
 const TICKS_PER_MS = 10_000; // RunTimeTicks and PositionTicks are 100 ns ticks (a (verify) row)
-const FIELDS = 'CustomRating,Overview,Genres,GenreItems'; // not in a default item reply (a (verify) row)
+const FIELDS = 'CustomRating,Overview,Genres,GenreItems,ProviderIds,Studios'; // not in a default item reply (a (verify) row)
 const QUICK_CONNECT_LIFE_S = 10 * 60; // Jellyfin's Quick Connect code lasts 10 minutes (D134)
 
 /** The `Authorization` header value: the client's identity, and the token once there is one. */
@@ -47,7 +47,18 @@ const number = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 /** Watched: the server's played flag, or, when it sends none, a play count above 0 (one rule for a collection, a playlist and, with the server's own IsUnplayed filter, the library pool; D143 5). */
 const watched = (item) => (typeof item?.UserData?.Played === 'boolean' ? item.UserData.Played : number(item?.UserData?.PlayCount) > 0);
 const hasImage = (item) => Boolean(text(item?.ImageTags?.Primary));
+const studiosOf = (item) => (Array.isArray(item?.Studios) ? item.Studios.map((s) => s?.Name).filter((n) => typeof n === 'string' && n.trim() !== '').map((n) => n.trim()) : []);
 const genresOf = (item) => (Array.isArray(item?.Genres) ? item.Genres.filter((g) => typeof g === 'string' && g.trim() !== '').map((g) => g.trim()) : []);
+
+/**
+ * The TMDB id of a Movie or Series item (`ProviderIds.Tmdb`, plain digits only): `{ tmdbId, tmdbType }`, or nothing. An episode's own
+ * id is an episode id, not its series', so an episode gets none.
+ */
+function tmdbOf(item) {
+  const id = item.ProviderIds?.Tmdb;
+  const tmdbType = item.Type === 'Movie' ? 'movie' : item.Type === 'Series' ? 'tv' : '';
+  return tmdbType && typeof id === 'string' && /^[0-9]+$/.test(id) ? { tmdbId: id, tmdbType } : {};
+}
 
 /**
  * A Jellyfin item as the poster the engine reads (the interface comment in js/sources/index.js). An episode shows its series: the
@@ -60,6 +71,7 @@ export function toPoster(item, source, { seriesRating } = {}) {
   const plays = number(item.UserData?.PlayCount);
   const audience = number(item.CommunityRating);
   const genres = genresOf(item);
+  const studios = studiosOf(item);
   const series = isEpisode && typeof seriesRating === 'string' && text(seriesRating) ? seriesRating : '';
   const id = String(isEpisode ? item.SeriesId : item.Id);
   return {
@@ -74,8 +86,10 @@ export function toPoster(item, source, { seriesRating } = {}) {
     duration: Math.round(toMs(item.RunTimeTicks) / TICKS_PER_MS),
     summary: trimSummary(item.Overview, SUMMARY_MAX),
     ...(genres.length ? { genres } : {}),
+    ...(studios.length ? { studios } : {}), // the studios the server stores for the title (usually one): a production-house selection is checked against them
     ...(plays ? { viewCount: Math.floor(plays) } : {}),
     ...(audience !== null ? { audienceRating: audience } : {}),
+    ...tmdbOf(item),
   };
 }
 
@@ -241,7 +255,7 @@ export function createMediaBrowserClient({ label, serverUrl, token, headers, pub
      * A random pool from one library: unwatched titles when asked, narrowed by genre ids, and, under a limit or a rating subset, by the
      * OfficialRatings the limit allows, oversampled 3x (at most 500). The filter is a convenience: the engine checks every poster.
      */
-    async pool({ libraryKey, unwatchedOnly = true, size = 100, maxContentRating = '', genres = [], ratings = [] }) {
+    async pool({ libraryKey, unwatchedOnly = true, size = 100, maxContentRating = '', genres = [], houses = [], ratings = [] }) {
       const values = serverRatings(ratings.length ? ratingValues(ratings, maxContentRating) : allowedValues(maxContentRating));
       if (ratings.length && !values.length) return [];
       const reply = await get('Items', {
@@ -251,8 +265,9 @@ export function createMediaBrowserClient({ label, serverUrl, token, headers, pub
         SortBy: 'Random',
         Filters: unwatchedOnly ? 'IsUnplayed' : '',
         GenreIds: listParam(genres),
+        Studios: houses.some((h) => h.includes('|')) ? '' : listParam(houses, '|'), // names, pipe-delimited (a (verify) row); a name holding a pipe leaves the parameter off (D215 2); the engine re-checks every poster against its own studios
         OfficialRatings: listParam(values, '|'),
-        Limit: maxContentRating || ratings.length ? Math.min(size * 3, 500) : size,
+        Limit: maxContentRating || ratings.length || houses.length ? Math.min(size * 3, 500) : size,
         Fields: FIELDS,
       });
       return movies(items(reply)).map((m) => toPoster(m, 'random'));
@@ -276,6 +291,12 @@ export function createMediaBrowserClient({ label, serverUrl, token, headers, pub
       return items(await get('Genres', { ParentId: libraryKey, IncludeItemTypes: 'Movie' }))
         .filter((g) => typeof g.Name === 'string' && g.Name.trim() !== '')
         .map((g) => ({ key: typeof g.Id === 'string' ? g.Id : '', title: g.Name.trim() }));
+    },
+
+    /** The studios the library's movies name (`GET /Studios`, a (verify) row), as `{ key: '', title }`: a studio is matched by its name on every server. */
+    async houses(libraryKey) {
+      const names = items(await get('Studios', { ParentId: libraryKey, IncludeItemTypes: 'Movie' })).map((g) => (typeof g?.Name === 'string' ? g.Name.trim() : '')).filter(Boolean);
+      return [...new Set(names)].map((title) => ({ key: '', title }));
     },
 
     /** The collections (BoxSets) of the server; a BoxSet is not a child of a library, so the library does not narrow them and none is named (`library: ''`). */

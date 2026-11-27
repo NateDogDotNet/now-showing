@@ -2,7 +2,7 @@
 // Plex traffic is never intercepted — posters are cached by the page itself (poster-cache.js).
 //
 // Bump VERSION whenever any file in SHELL changes so clients pick up the update.
-const VERSION = '2.4.8';
+const VERSION = '2.5.0';
 const SHELL_CACHE = `shell-${VERSION}`;
 
 const SHELL = [
@@ -11,6 +11,7 @@ const SHELL = [
   'manifest.webmanifest',
   'css/app.css',
   'js/main.js',
+  'js/artwork.js',
   'js/backoff.js',
   'js/brightness.js',
   'js/brightness-timer.js',
@@ -44,6 +45,7 @@ const SHELL = [
   'js/sources/index.js',
   'js/sources/jellyfin.js',
   'js/sources/plex.js',
+  'js/sources/tmdb.js',
   'js/tv-power.js',
   'js/util.js',
   'js/weighting.js',
@@ -55,6 +57,7 @@ const SHELL = [
   'assets/icons/icon-512.png',
   'assets/icons/icon-maskable-512.png',
   'assets/icons/apple-touch-icon.png',
+  'assets/tmdb/tmdb-logo.svg',
 ];
 
 self.addEventListener('install', (event) => {

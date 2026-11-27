@@ -53,7 +53,8 @@
 //
 // Libraries: 1 Movies (the 8 titles below), 2 Music (type artist, no /all), 3 Kids Movies (5 invented titles, keys 9-13). Every movie
 // carries Genre [{id, tag, filter}], audienceRating and originallyAvailableAt; some carry viewCount and lastViewedAt (watched).
-// /library/sections/<1|3>/all also honours genre=<id or tag>[,<id or tag>] (a comma list is OR); /genre lists the library's genres;
+// /library/sections/<1|3>/all also honours genre=<id or tag>[,<id or tag>] (a comma list is OR) and studio=<name>[,<name>] (OR, by name, any case); /genre lists the library's genres
+// and /studio the studios of its titles. Every title but title 8 carries one `studio` (Pixar, A24 or Mock Pictures; a (verify) shape: Plex stores one studio per title);
 // /library/sections/1/collections and /library/collections/<id>/children serve one regular and one smart collection;
 // /playlists?playlistType=video and /playlists/<id>/items serve one playlist across both movie libraries.
 //
@@ -115,6 +116,12 @@ const KIDS = [
   ['Mini Monster Mash', 2022, '#3c8d2f', 'PG', 4_680_000, 'The monsters under the bed throw a party and invite the child above it.', ['Comedy', 'Animation'], 6.4, '2022-10-14', 0, 0],
 ];
 
+// The studio of each title, by ratingKey (title 8 has none). A real server stores one studio per title as configured.
+const STUDIOS = { 1: 'Mock Pictures', 2: 'Pixar', 3: 'Mock Pictures', 4: 'Pixar', 5: 'A24', 6: 'A24', 7: 'Mock Pictures', 9: 'Pixar', 10: 'Pixar', 11: 'Mock Pictures', 12: 'Mock Pictures', 13: 'Mock Pictures' };
+
+// TMDB ids the mock knows for some titles (by ratingKey); the rest have none. Sent as a Guid list only when the request has includeGuids=1, as Plex does.
+const TMDB_IDS = { 1: '1001', 2: '1002', 4: '1004', 9: '1009', 10: '1010' };
+
 const movie = ([title, year, color, contentRating, duration, summary], n, lib, extra) => ({
   ratingKey: String(n),
   key: `/library/metadata/${n}`,
@@ -125,6 +132,8 @@ const movie = ([title, year, color, contentRating, duration, summary], n, lib, e
   color,
   summary,
   ...(contentRating ? { contentRating } : {}),
+  ...(STUDIOS[n] ? { studio: STUDIOS[n] } : {}),
+  ...(TMDB_IDS[n] ? { Guid: [{ id: `plex://movie/mock${n}` }, { id: `imdb://tt000${n}` }, { id: `tmdb://${TMDB_IDS[n]}` }] } : {}),
   ...(duration ? { duration } : {}),
   rating: 9 - (n - 1) * 0.4,
   ...withExtra(extra),
@@ -339,7 +348,8 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
     query.delete('X-Plex-Token');
     log.push(url.pathname + (query.size ? `?${query}` : ''));
 
-    const strip = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'color' && k !== 'lib'));
+    const guids = url.searchParams.get('includeGuids') === '1';
+    const strip = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'color' && k !== 'lib' && (guids || k !== 'Guid')));
     const path = url.pathname;
     if (path === '/') return json(200, { MediaContainer: { friendlyName: 'Mock Plex', version: '1.40.0.0000-mock', machineIdentifier: machineId } });
     if (path === '/library/sections') {
@@ -397,13 +407,18 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
       if (sessionsStatus !== 200) return json(sessionsStatus, { error: `Mock: sessions answer ${sessionsStatus}` });
       return json(200, { MediaContainer: { size: state.session ? 1 : 0, Metadata: state.session ? [strip(state.session)] : [] } });
     }
-    const section = path.match(/^\/library\/sections\/(\d+)\/(all|genre|collections)$/);
+    const section = path.match(/^\/library\/sections\/(\d+)\/(all|genre|studio|collections)$/);
     if (section && MOVIE_LIBRARIES.has(section[1])) {
       const [, id, what] = section;
       if (what === 'genre') {
         // (verify) Genre list shape: Directory entries { key, title, fastKey } are not confirmed against Plex.
         const used = new Set(inLibrary(id).flatMap((m) => m.Genre.map((g) => g.tag)));
         const Directory = GENRES.filter((g) => used.has(g)).map((g) => ({ key: String(genreTag(g).id), title: g, fastKey: `/library/sections/${id}/all?genre=${genreTag(g).id}` }));
+        return json(200, { MediaContainer: { size: Directory.length, Directory } });
+      }
+      if (what === 'studio') {
+        // (verify) Studio list shape: Directory entries { key, title } are not confirmed against Plex.
+        const Directory = [...new Set(inLibrary(id).map((m) => m.studio).filter(Boolean))].sort().map((name) => ({ key: name, title: name }));
         return json(200, { MediaContainer: { size: Directory.length, Directory } });
       }
       if (what === 'collections') {
@@ -423,7 +438,10 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
       const genres = url.searchParams.get('genre');
       const genreWanted = genres === null ? null : genres.toLowerCase().split(',');
       const hasGenre = (m) => m.Genre.some((g) => genreWanted.includes(String(g.id)) || genreWanted.includes(g.tag.toLowerCase()));
+      const studios = url.searchParams.get('studio');
+      const studioWanted = studios === null ? null : studios.toLowerCase().split(',');
       let items = inLibrary(id).map(current);
+      if (studioWanted) items = items.filter((m) => m.studio && studioWanted.includes(m.studio.toLowerCase()));
       if (allowed) items = items.filter((m) => m.contentRating && allowed.includes(m.contentRating));
       if (genreWanted) items = items.filter(hasGenre);
       const listed = emptyUnwatched && url.searchParams.get('unwatched') === '1' ? [] : items;

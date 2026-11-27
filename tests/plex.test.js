@@ -4,8 +4,8 @@ import { buildUrl, createPin, createPlexClient, discoverPlayers, discoverServerP
 import { formatRuntime } from '../js/duration.js';
 import { allowedValues } from '../js/ratings.js';
 import { pinSignIn } from '../js/settings-ui.js';
-import { readPlayers } from '../js/sources/index.js';
-import { cleanPlayer, PLAYER_ID_MAX, sanitize } from '../js/settings.js';
+import { createSources, readPlayers } from '../js/sources/index.js';
+import { cleanPlayer, defaults, PLAYER_ID_MAX, sanitize } from '../js/settings.js';
 import { PLEX_TV_RESOURCES, startMockPlex } from '../scripts/mock-plex.mjs';
 
 const jsonResponse = (body, status = 200) =>
@@ -829,7 +829,7 @@ test('request for one library, nothing else: the 2.2 request, with no genre and 
   const { calls, client } = poolCalls();
   await client.pool({ libraryKey: '1', unwatchedOnly: true, size: 100 });
   assert.equal(calls[0].pathname, '/library/sections/1/all');
-  assert.deepEqual(ask(calls[0]), { unwatched: '1', sort: 'rating:desc', 'X-Plex-Container-Start': '0', 'X-Plex-Container-Size': '100' });
+  assert.deepEqual(ask(calls[0]), { unwatched: '1', sort: 'rating:desc', 'X-Plex-Container-Start': '0', 'X-Plex-Container-Size': '100', includeGuids: '1' });
 });
 
 test('request for two libraries: one pool request each, with its own size', async () => {
@@ -1057,4 +1057,135 @@ test('publicIdentity reports an unreachable address and an HTTP error as errors,
   await assert.rejects(() => refused.publicIdentity(), (err) => err.kind === 'http');
   const empty = createPlexClient({ serverUrl: 'http://x', token: 't', clientId: 'c', fetchImpl: async () => jsonResponse({ MediaContainer: {} }) });
   assert.equal((await empty.publicIdentity()).machineIdentifier, '');
+});
+
+// ---- a poster's TMDB id (Run 13, tmdb-ids): includeGuids=1 and the Guid entries ----
+
+const withGuids = (...ids) => ({ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t', Guid: ids.map((id) => ({ id })) });
+
+test('tmdb ids: the pool, sourceItems, item and items requests each carry includeGuids=1', async () => {
+  const { calls, client } = poolCalls([{ ratingKey: '2', title: 'B', thumb: '/t/2', type: 'movie' }]);
+  await client.pool({ libraryKey: '1', size: 10 });
+  await client.sourceItems({ kind: 'collection', key: '101' });
+  await client.sourceItems({ kind: 'playlist', key: '201' });
+  await client.item('2');
+  await client.items(['2', '3']);
+  assert.equal(calls.length, 5);
+  for (const url of calls) assert.equal(url.searchParams.get('includeGuids'), '1', url.pathname);
+});
+
+test('tmdb ids: a movie takes the one TMDB Guid among its others, as tmdbId with tmdbType movie', () => {
+  const p = toPoster(withGuids('imdb://tt0111161', 'tmdb://278', 'tvdb://81189'), 'random');
+  assert.equal(p.tmdbId, '278');
+  assert.equal(p.tmdbType, 'movie');
+  assert.equal(toPoster({ ...withGuids('tmdb://5'), type: 'show' }, 'random').tmdbType, 'tv');
+});
+
+test('tmdb ids: no Guid, no TMDB Guid, or an unusable Guid list gives neither field', () => {
+  for (const m of [{ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t' }, withGuids(), withGuids('imdb://tt1'), { ...withGuids(), Guid: 'tmdb://5' }, { ...withGuids(), Guid: [null, {}, { id: 5 }] }]) {
+    const p = toPoster(m, 'random');
+    assert.ok(!('tmdbId' in p) && !('tmdbType' in p), JSON.stringify(m.Guid));
+  }
+});
+
+test('tmdb ids: two different TMDB Guids give no id; the same one listed twice is one id', () => {
+  assert.ok(!('tmdbId' in toPoster(withGuids('tmdb://11', 'tmdb://12'), 'random')));
+  assert.ok(!('tmdbType' in toPoster(withGuids('tmdb://11', 'tmdb://12'), 'random')));
+  assert.equal(toPoster(withGuids('tmdb://11', 'tmdb://11'), 'random').tmdbId, '11');
+});
+
+test('tmdb ids: a TMDB Guid that is not plain digits gives no id, alone or beside a good one', () => {
+  for (const bad of ['tmdb://12a', 'tmdb://', 'tmdb://-5', 'tmdb://+5', 'tmdb:// 5', 'tmdb://5/', 'tmdb://1.5']) {
+    assert.ok(!('tmdbId' in toPoster(withGuids(bad), 'random')), bad);
+    assert.ok(!('tmdbId' in toPoster(withGuids('tmdb://9', bad), 'random')), `9 + ${bad}`);
+  }
+});
+
+test('tmdb ids: an episode never takes its own TMDB Guid and gets no tmdbType without an id', () => {
+  const ep = toPoster({ type: 'episode', ratingKey: '500', grandparentRatingKey: '3', grandparentTitle: 'Show', title: 'Pilot', thumb: '/t', Guid: [{ id: 'tmdb://999' }] }, 'now-playing');
+  assert.ok(!('tmdbId' in ep));
+  assert.ok(!('tmdbType' in ep));
+  assert.equal(ep.ratingKey, '3');
+});
+
+test('tmdb ids: an item of another kind (a season, a collection) takes none', () => {
+  assert.ok(!('tmdbId' in toPoster({ ...withGuids('tmdb://5'), type: 'season' }, 'random')));
+});
+
+test('tmdb ids: every other poster field is unchanged by a TMDB Guid', () => {
+  const plain = toPoster({ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t', year: 1999, contentRating: 'PG' }, 'random');
+  const { tmdbId, tmdbType, ...rest } = toPoster({ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t', year: 1999, contentRating: 'PG', Guid: [{ id: 'tmdb://7' }] }, 'random');
+  assert.equal(tmdbId, '7');
+  assert.equal(tmdbType, 'movie');
+  assert.deepEqual(rest, plain);
+});
+
+// ---- a poster's production house (Run 13, production-house-filter): the studio Plex stores ----
+
+test('houses: a Plex item studio becomes the poster studios, and nothing when there is none', () => {
+  const base = { type: 'movie', ratingKey: '1', title: 'A', thumb: '/t' };
+  assert.deepEqual(toPoster({ ...base, studio: 'Pixar' }, 'random').studios, ['Pixar']);
+  assert.deepEqual(toPoster({ ...base, studio: '  Pixar  ' }, 'random').studios, ['Pixar']);
+  for (const studio of [undefined, '', '   ', 5, null, ['Pixar'], {}]) assert.equal('studios' in toPoster({ ...base, studio }, 'random'), false, JSON.stringify(studio));
+});
+
+test('houses: pool sends studio=<names joined by a comma> and asks for 3x as many, and no studio parameter when none is chosen', async () => {
+  const { calls, client } = poolCalls();
+  await client.pool({ libraryKey: '1', size: 40, houses: ['Pixar', 'A24'] });
+  assert.equal(calls[0].searchParams.get('studio'), 'Pixar,A24');
+  assert.equal(calls[0].searchParams.get('X-Plex-Container-Size'), '120');
+  await client.pool({ libraryKey: '1', size: 40, houses: [] });
+  assert.equal(calls[1].searchParams.has('studio'), false);
+  assert.equal(calls[1].searchParams.get('X-Plex-Container-Size'), '40', 'no house list: the plain size, as before');
+});
+
+test('houses: houses(library) lists the studios a library holds, by name; genres() ignores a houses switch (D214 2)', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(new URL(url));
+    return jsonResponse({ MediaContainer: { Directory: [{ key: 'Pixar', title: 'Pixar' }, { key: 'x', title: ' A24 ' }, { title: 'Pixar' }, { key: '9' }, { title: '' }] } });
+  };
+  const client = createPlexClient({ serverUrl: 'http://h:32400', token: 't', clientId: 'c', fetchImpl });
+  assert.deepEqual(await client.houses('1'), [{ key: '', title: 'Pixar' }, { key: '', title: 'A24' }]);
+  assert.equal(calls[0].pathname, '/library/sections/1/studio');
+  await client.genres('1', { houses: true });
+  assert.equal(calls[1].pathname, '/library/sections/1/genre', 'genres() has no houses switch');
+});
+
+test('D211 4: a Plex item with no type gets no tmdbId (P1)', () => {
+  const noType = { ratingKey: '1', title: 'A', thumb: '/t', Guid: [{ id: 'tmdb://11' }] };
+  const p = toPoster(noType, 'random');
+  assert.ok(!('tmdbId' in p) && !('tmdbType' in p));
+  assert.equal(toPoster({ ...noType, type: 'movie' }, 'random').tmdbId, '11', 'a movie still has its id');
+  assert.equal(toPoster({ ...noType, type: 'show' }, 'random').tmdbType, 'tv');
+});
+
+test('houses: over several servers the house names reach each server, and the studio list is asked of the server a library is on', async () => {
+  const server = await startMockPlex({ port: 0 });
+  try {
+    const url = `http://127.0.0.1:${server.address().port}`;
+    const seen = [];
+    const fetchImpl = (u, init) => (seen.push(new URL(u)), fetch(u, init));
+    const household = { ...defaults(), serverType: 'plex', serverUrl: url, plexToken: 'demo-token', serverId: 'mock', servers: [{ id: 'plex-b', type: 'plex', url, token: 'demo-token', userId: '', name: 'B' }] };
+    const source = createSources(household, { clientId: 'c', version: '1', fetchImpl });
+    const libs = await source.libraries();
+    const second = libs.find((l) => l.server === 'B' && l.title === 'Movies');
+    const posters = await source.pool({ libraryKey: second.key, size: 20, houses: ['Pixar'] });
+    assert.ok(seen.some((u) => u.pathname === '/library/sections/1/all' && u.searchParams.get('studio') === 'Pixar'), 'the house name went to the server');
+    assert.ok(posters.length > 0 && posters.every((p) => p.studios.includes('Pixar')), 'and the mock returned its Pixar titles');
+    assert.deepEqual((await source.houses(second.key)).map((h) => h.title), ['A24', 'Mock Pictures', 'Pixar'], 'the option reaches the server of that library');
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
+});
+
+test('D215 2: a studio name holding a comma is not sent in studio=; the request keeps its 3x size and the client check narrows (K4)', async () => {
+  const { calls, client } = poolCalls();
+  await client.pool({ libraryKey: '1', size: 40, houses: ['Lucasfilm Ltd., LLC'] });
+  assert.equal(calls[0].searchParams.has('studio'), false, 'no studio parameter');
+  assert.equal(calls[0].searchParams.get('X-Plex-Container-Size'), '120', 'still asks for 3x as many titles');
+  await client.pool({ libraryKey: '1', size: 40, houses: ['Pixar', 'Lucasfilm Ltd., LLC'] });
+  assert.equal(calls[1].searchParams.has('studio'), false, 'one such name in the list leaves the parameter off for the whole request');
+  await client.pool({ libraryKey: '1', size: 40, houses: ['Pixar', 'A24'] });
+  assert.equal(calls[2].searchParams.get('studio'), 'Pixar,A24', 'names without a comma are sent as before');
 });

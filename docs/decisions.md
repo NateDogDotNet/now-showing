@@ -1328,3 +1328,167 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner report — 2026-11-25 (after 2.4.8; Nathan: "that works great now")
 
 - **2.4.8 is confirmed on the owner's own server with Plex HTPC**: Play now starts the title and the display says "Playing" (D202 1). This is an owner's report of use, not a run of the checklist: the rows of section L of `docs/validation/real-server-extended.md` stay unticked, and row V1-L05 no longer matches the app since D201 2 (the player now receives a short-lived token, never the display's sign-in). No decision is made here.
+
+## Run 13 policy — 2026-11-25 (Nathan, `/orchestrate 2.5`; the policy stop answered "1. b 2. a 3. a 4. a 5. a 6. a 7. a 8. a 9. a 10. a 11. a 12. a" at 2026-11-25T20:05:07Z): D203
+
+- **D203 Run 13 is 2.5.0: the TMDB no-server mode, Poster art, Title as logo and Production house.** Drafted on the owner's answers ("Draft Run 13", "Adapter + all three extras", "Popular / in theatres + Discover + your filters", "Branch 2.5, no PR/merge/tag"). Seven phases: `mock-tmdb`, `tmdb-ids`, `tmdb-source`, `production-house-filter`, `artwork-sources`, `clear-logo-title`, `release-2.5.0` (plan, Run 13). Branch `2.5` from `main` 9f722923, pushed at the end; no tag, release, pull request or merge unless the owner asks (D13, D79).
+  1. **The TMDB credit (option b).** TMDB's sentence ("uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB") and the TMDB logo appear in Settings (the TMDB section) and in the README. The display shows no TMDB mark.
+  2. **Terms.** Treated as personal, non-commercial use with the household's own key; the README says so.
+  3. **Key form.** Both are accepted: a read access token is sent as `Authorization: Bearer`, a 32-character v3 key as `api_key`.
+  4. **Certification.** Only the US certification counts (movies: `release_dates`; shows: `content_ratings`). None, `""` or an unknown string is unrated, refused while a limit is set (D5).
+  5. **TV.** TMDB mode includes TV lists; each show's rating is read before it can be shown.
+  6. **Production house on a server** is the studio the server stores; in TMDB mode it is any company (`with_companies`).
+  7. **The logo** replaces the title line of the title card; the frames are unchanged.
+  8. **Six months.** TMDB images and replies older than 180 days are fetched again.
+  9. **One TMDB key** serves the source, the art and the logo. TMDB is not one of several servers in this run.
+  10. **(verify)** The logo file type, the TV top-rated list, the TV certification list, the page size, Plex `includeGuids` and Jellyfin `ProviderIds` are rows in `docs/validation/real-server-extended.md` section M, for the owner after the release.
+  11. **Out of scope:** the timing test `tests/device-helper.test.js:595` (1 failure in 3 runs, 2162 ms against 1500 ms), recorded as run 13 unknown U1.
+  12. **Commit trailer:** `Co-Authored-By: Claude <noreply@anthropic.com>`.
+
+## Conductor ruling — 2026-11-25 (run 13 pre-flight; listed at the next stop as made by the conductor alone): D204
+
+- **D204 A browser spec that times out under another session's load is run again as written, never with a longer limit.** On the unchanged tree `9f722923` the `jellyfin` spec took 183 s alone against the runner's 180 s limit (`E2E_SPEC_TIMEOUT`), at a load average of 16 on 4 cores from other sessions' browsers, with 7 GB free; `emby` took 79 s and passed. A criterion that names such a spec runs as the plan writes it, by the conductor, when the load allows (load average under 8 is the aim, not a pass condition); the limit is not raised and no spec is left out. Builders may use a longer limit for their own runs, which are testimony only. A spec that still times out at a quiet moment is a finding against the code.
+
+## Conductor ruling — 2026-11-25 (run 13 pre-flight, before the first dispatch): D205
+
+- **D205 `mock-tmdb`'s Output gains `tests/e2e/smoke.spec.mjs`.** Criterion 2 runs `node tests/e2e/run.mjs smoke` and states a case (a page `fetch` to `api.themoviedb.org` answered by the mock, no outside request); the Output held no spec file to write that case in. The criterion text is unchanged; no builder had returned.
+
+## Conductor rulings — 2026-11-25 (run 13, `mock-tmdb` r1; listed at stop 2 as made by the conductor alone): D206
+
+- **D206 The years filter and two more (verify) rows.**
+  1. **Years (builder question Q1).** `tmdb-source` sends the years choice (`primary_release_date.gte/lte` for movies, `first_air_date.gte/lte` for shows). Its Output gains `scripts/mock-tmdb.mjs` and `tests/mock-tmdb.test.js`, so it may extend the mock to honour them. `mock-tmdb` closes without a years filter.
+  2. **Review findings F3 and F4.** Whether a browser page can read TMDB's `Retry-After` on a 429, and how `language` and `include_image_language` combine on the images route, are (verify) rows in `docs/validation/real-server-extended.md` section M (D203 10). The mock's header lists both, and no phase may depend on reading `Retry-After`.
+
+## Owner ruling — 2026-11-25 (stop 2 in `.orchestrator/phases/mock-tmdb.md`, answered "defaults" at 2026-11-25T20:47:23Z): D207
+
+- **D207 The mock takes the token only as Bearer and the v3 key only as `api_key` (option a; amends `mock-tmdb` criterion 1).** The old text accepted the demo token "as a Bearer header and as `api_key`", which conflicted with D203 3, and the anchored review (F1) showed that an adapter sending the token as `api_key` would pass the mock and fail on TMDB. The new text: 200 "for the demo token as a Bearer header and for the 32-character demo v3 key as `api_key`, 401 otherwise (the demo token sent as `api_key` is 401)". The owner also saw D204, D205 and D206 at that stop and raised nothing.
+
+## Owner ruling — 2026-11-25 (stop 3 in `.orchestrator/phases/tmdb-ids.md`, answered "defaults" at 2026-11-25T22:29:56Z): D208
+
+- **D208 Wait for a quiet host (option a; D204 stands).** The load average is the Proxmox host's (18 to 40 over 30 minutes), not this container's. The conductor keeps waiting, checking every 15 s for up to 8 hours, and runs `tmdb-ids`'s criteria 1 and 2 as written once the 1-minute load is under 8. `tmdb-source` stays blocked until `tmdb-ids` closes. Meanwhile it is prepared without building: a cold reviewer probes its criteria (pre-claim preparation). If the 8 hours pass with no quiet moment, the conductor asks again.
+
+## Conductor rulings — 2026-11-25 (run 13, `tmdb-source` pre-claim; the cold criteria probe `tmdb-source--criteria-probe-r1.md` G1–G34 mapped to existing code in `research--tmdb-gaps-r1.md`; listed at stop 4 as made by the conductor alone): D209
+
+- **D209 `tmdb-source` follows the rules the app already applies to every source.** Each item below is an existing rule, cited, that the TMDB adapter keeps:
+  1. **Rating strings (G3, G4, G6, G2).** `ratingRank` and `allows` (`js/ratings.js:37-54`) decide: trimmed and case-insensitive; `TV-Y7-FV`, `PG13`, `NR`, `Unrated`, `Not Rated`, `X`, `M`, `GP` are unknown, so refused under any limit; one ladder for film and TV (`G = TV-Y = TV-G < PG = TV-Y7 = TV-PG < PG-13 = TV-14 < R = TV-MA < NC-17`, `js/ratings.js:5-20`), so a TV-14 show is refused at limit PG and a movie whose only US value is TV-MA counts as R. No new rating rule is written.
+  2. **A lowered limit (G9).** The pool key holds the limit (`js/engine.js:115`), every draw re-checks (`js/engine.js:292`), and the screen is re-checked every second (`js/main.js:418`, `enforceOnScreen`).
+  3. **Genres (G20).** An empty genre list sends no `with_genres` (`js/engine.js:81-84`, `js/sources/http.js:19-22`).
+  4. **Ratings subset (G22).** The subset is cut by the limit first and an empty subset means no rating filter (`js/engine.js:64-65`, `js/selection.js:174-184`); Unrated is never selectable (`js/selection.js:79-82`).
+  5. **A list item of the other type (G25)** is dropped, as Plex's `sourceItems` filter does (`js/sources/plex.js:437-439`).
+  6. **A failure part-way through a pool (G27).** Posters already fetched are kept and the pool is marked partial; a load with none keeps the previous pool; retries use `js/backoff.js`; the server-down card shows only when nothing is on screen (`js/engine.js:93-134`, `js/main.js:393-402`). `Retry-After` is not read (D206 2).
+  7. **Nothing to show (G28)** is the `empty` kind and its words (`js/engine.js:293-304`), never the server-down card.
+  8. **No poster image (G29):** the title is skipped (`js/sources/plex.js:424`, `js/sources/jellyfin.js:49`).
+  9. **Nothing playing (G30):** `sessions()` resolves `[]` and `nowPlaying()` resolves `null` with no request (`js/sources/index.js:26`, `js/engine.js:260-262`); the list "Now playing in theatres" is a pool choice, never now-playing mode.
+  10. **Export and import (G34):** the key follows the Plex token's rule (`js/settings.js:412-418`, `:449`, `:478-484`; `js/settings-ui.js:1938-1939`): in the file only when the PIN is given, as plain text; a file without a key keeps the stored one.
+  11. **The credit's sentence (G33)** is TMDB's own wording as D203 1 records it: "uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB", in Settings' TMDB section and the README, shown in Settings only while TMDB is the server type or a TMDB key is set.
+
+## Owner ruling — 2026-11-25 (stop 4 in `.orchestrator/phases/tmdb-source.md`, answered "defaults" at 2026-11-25T22:39:45Z): D210
+
+- **D210 The eleven `tmdb-source` rules (all option a).** Written into `tmdb-source`'s criteria before its first dispatch.
+  1. **Several US certifications** (a movie's `release_dates`, a show's `content_ratings`): the strictest non-empty one counts; all empty is unrated.
+  2. **A failed certification lookup** (429, network, server error): the title is not shown while a limit is set and is looked up again at the next pool build; the rest of the pool is kept.
+  3. **Every title** (lists and Discover, movie and TV) has its own US certification read before it can be shown; TMDB's `certification.lte` only narrows the request.
+  4. **The key.** After trimming and removing a leading `Bearer ` (any case), it is a v3 key only when it is exactly 32 hex characters (sent as `api_key`); otherwise it is the read access token (sent as `Authorization: Bearer`). Image requests carry no key. The key is never in a cache key; Diagnostics shows its first 4 characters only. Test connection: 200 with `success: true` is connected; 401, 403 or `success: false` is kind `auth`; anything else is a server that does not answer.
+  5. **Storage.** The key is its own setting (`tmdbKey`), kept across server-type switches (D203 9). A switch to or from TMDB clears the cache, the pin and the history, both ways (R-SRC-2). A change of key or list clears nothing. TMDB cannot be an extra server: the Add a server form does not offer it, and an imported file listing it as an extra server has that entry dropped with a toast.
+  6. **180 days.** Age is measured from the time the entry was stored on this display, as 180 × 86 400 000 ms (≥ is expired); an entry with no time or a time in the future is expired; the rule covers every stored TMDB image and reply.
+  7. **Offline.** Expired TMDB entries are never shown, even offline; with nothing else to show, the server-down card shows.
+  8. **Discover** has a Movies / TV choice with each type's genre list (`genre/movie/list`, `genre/tv/list`); TV ratings are checked per show.
+  9. **Years.** From and To, both optional and inclusive, on `primary_release_date` (movies) or `first_air_date` (shows), from `YYYY-01-01` to `YYYY-12-31`; From later than To is swapped.
+  10. **Order, region, language.** `sort_by=popularity.desc`, `region=US` on `now_playing` and `upcoming`, `language=en-US`.
+  11. **Pool.** Filled to `randomPoolSize` from at most 5 pages, duplicates (`type:id`) dropped, at most 4 certification lookups at once.
+
+## Owner ruling — 2026-11-26 (stop 5 in `.orchestrator/phases/tmdb-source.md`, answered "defaults" at 2026-11-26T01:48:52Z): D211
+
+- **D211 Four rulings from the `tmdb-source` and `tmdb-ids` reviews (all option a).**
+  1. **First run with no media server.** The first-run card gains a "No media server? Use TMDB" link that opens Settings with TMDB chosen. TMDB stays its own choice in Settings (not a fourth server-type button), so `tests/e2e/emby.spec.mjs` and `tests/e2e/first-run.spec.mjs` are unchanged. Applied in `tmdb-source`.
+  2. **An import that makes TMDB the first server on a display with other servers** shows a toast naming each server it drops, before Save, so Cancel keeps them. Applied in `tmdb-source`.
+  3. **Re-checking cached TMDB titles' ratings** (D37): at most 20 cached TMDB titles per pass, those checked longest ago first, and never on the 1-minute partial-pool retry. A title not yet checked again keeps the rating it was stored with. Plex, Jellyfin and Emby are unchanged. Applied in `tmdb-source`.
+  4. **A Plex item with no `type`** gets no `tmdbId` (fail safe, as every other doubtful case). Applied in `production-house-filter`, the next phase that edits `js/sources/plex.js`.
+
+## Conductor ruling — 2026-11-26 (`tmdb-source` review r3, N2; to be listed for the owner at the next stop): D212
+
+- **D212 "Never on the one-minute retry" (D211 3) means a retry within 30 minutes of the last TMDB re-rating.** A one-minute retry of a partial pool skips the re-rating of cached TMDB titles only while the last re-rating is under 30 minutes (`POOL_TTL_MS`) old; once it is older, that load re-rates as an ordinary pass would, whatever the pool. Read literally, D211 3 lets a pool that is partial on every build stop the re-rating for good (cold review r2 F5: 1 pass in 6 hours), which defeats D37. The 20-title cap and the oldest-first order are unchanged.
+
+## Conductor ruling — 2026-11-26 (`production-house-filter` pre-flight; to be listed for the owner at the next stop): D213
+
+- **D213 `production-house-filter`'s Output gains `tests/engine.test.js`** to carry `tmdb-source`'s review r3 finding N1/F6: the TMDB re-rating time (D212) is stamped where the ratings are applied, not when the pass starts, so a pass whose pool request fails does not restart the half hour. `js/engine.js` is already in the Output. `docs/spec.md` (in the Output) gets D212's sentence. The Emby half of `tmdb-ids` review F1 is tested in `tests/jellyfin.test.js`, through the client Emby shares; `tests/emby.test.js` stays out.
+
+## Owner ruling — 2026-11-26 (stop 6 in `.orchestrator/phases/production-house-filter.md`, answered "defaults" at 2026-11-26T14:42:24Z): D214
+
+- **D214 Three `production-house-filter` rulings (all option a); D212 and D213 stand as written.**
+  1. **Offline posters under a house list.** `production-house-filter`'s Output gains `js/poster-cache.js` and `tests/poster-cache.test.js`: a cached entry records the poster's `studios` (server) and TMDB company ids, so an offline entry from a chosen house is drawn under a house list. An entry without them is still never drawn under a house list (D107).
+  2. **Studios and company search are their own source request.** The Output gains `tests/sources.test.js`: a source gains its own clearly named member for its studios (servers) and for a company search by name (TMDB), in place of a switch on `genres`. `genres` returns genres only.
+  3. **Production house is household-wide in 2.5.** A viewer profile draws from the household's house list, and the list is locked while a profile is open in Settings, with a line that says so. Per-profile houses go on the Roadmap (Viewer profiles).
+
+## Conductor ruling — 2026-11-26 (`production-house-filter` review r1, anchored F1 and F3; to be listed for the owner at the next stop): D215
+
+- **D215 Two readings that make a chosen house reliable.**
+  1. **Every TMDB title's certification is read through its details request** (`movie/{id}` or `tv/{id}` with `append_to_response=release_dates` or `content_ratings`), house list or not, so every TMDB poster carries its company ids and a TMDB entry cached with no house list set can still be drawn offline under a later one (D214 1). It is one request per title, as the certification lookup is today; D210's caps (5 pages, 4 lookups at once) and D211 3 / D212 are unchanged. The re-rating of cached TMDB titles stores the company ids it reads.
+  2. **A studio name holding the server's list delimiter** (a comma for Plex, a pipe for Jellyfin and Emby) is not sent in the server's studio parameter; the request is then made without that parameter and the client-side check on each poster's own studios does the narrowing. The parameter only ever narrows; the client check decides.
+
+## Owner ruling — 2026-11-26 (stop 7 in `.orchestrator/phases/production-house-filter.md`, answered "defaults" at 2026-11-26T15:57:00Z): D216
+
+- **D216 A production house on a TMDB list (option a); D215 stands as written.** A TMDB list (Popular, Top rated, Now playing, Upcoming, the TV lists) stays as chosen under a house list: its titles are narrowed to the chosen houses, at most the 5 pages D210 11 reads. While a house list is set on a list, Settings' production-house help says a list is only narrowed and that Discover finds every title from those houses; the "No posters" card, when a house list on a list leaves nothing to show, says the same in its one-sentence advice (D109 3, D110 4). Discover sends `with_companies` as before.
+
+## Owner ruling — 2026-11-26 (stop 8 in `.orchestrator/phases/artwork-sources.md`, answered "defaults" at 2026-11-26T16:49:01Z): D217
+
+- **D217 Three `artwork-sources` rulings (all option a).**
+  1. **The TMDB key under a Plex, Jellyfin or Emby display.** Settings' new "Poster art" section holds the same `tmdbKey` field (one setting, D203, D210 5), with Show/Hide and Clear, for every server type; the TMDB credit shows while a key is set. Clearing it there clears it for TMDB mode too. Closes `tmdb-source` ux F7.
+  2. **Posters with no TMDB id.** The now-playing poster keeps the server's art (no extra server request for its id). A cached poster keeps the art it was saved with, so offline shows what was shown online. Closes `tmdb-ids` F3.
+  3. **The "In <language>" choice** is a fixed list of about 20 common poster languages (ISO 639-1), each shown in its own name; on first use the display's own language is chosen when it is in the list, else English.
+
+## Conductor ruling — 2026-11-26 (`artwork-sources` r1, Q9; to be listed for the owner at the next stop): D218
+
+- **D218 "Largest TMDB poster" chooses among textless posters, English posters and the posters in the Poster art language** (D217 3's setting; the display's language when listed, else English). The widest wins; a tie goes to the better voted, then the first listed. A poster in a language the household did not choose is never shown. The images request asks only for those languages (`include_image_language`, owner (verify) row F4).
+
+## Conductor ruling — 2026-11-26 (`artwork-sources` reviews r1; to be listed for the owner at the next stop): D219
+
+- **D219 Poster art never slows the display, and its key can be tested anywhere.**
+  1. **A time budget and a back-off.** The art of one poster has 4 seconds in all (images request and image fetch together); past that the source's art shows. After a network error, a timeout or a refused key, no art is asked for 10 minutes (the source's art shows, no error card); a change of the key or of the Poster art choice ends the pause at once.
+  2. **Test the key under any server type.** Poster art has a "Test key" button with its own result line (connected, refused, or TMDB not answering), for every server type; in TMDB mode the existing Test connection keeps its job and sits after the key.
+  3. **Largest shows the language it uses** (D218): the language row is shown for Largest as well as for "In a language", with a help line, and the cached Largest art is keyed by that language too, so a change of language fetches again.
+
+## Conductor ruling — 2026-11-26 (`artwork-sources` reviews r2; to be listed for the owner at the next stop): D220
+
+- **D220 Two refinements of D219.**
+  1. **Only TMDB's API pauses the art.** A network error, a timeout or a refused key on the images request starts the 10-minute pause (D219 1); a poster file that overruns the 4-second budget or fails to download shows the source's art for that poster only, with no pause. The images request is abandoned when the budget ends, so a late reply changes nothing (no log line, no pause).
+  2. **One test per mode.** In TMDB mode, Test connection (after the key) is the key's test and Test key is hidden; under Plex, Jellyfin or Emby, Test key is the key's test. A test's verdict is dropped when the sheet is cancelled or reopened, and the button is never left disabled by a test the sheet no longer shows.
+
+## Conductor ruling — 2026-11-26 (`clear-logo-title` pre-flight; to be listed for the owner at the next stop): D221
+
+- **D221 How the title logo is chosen and fetched.**
+  1. **"The poster's language"** in `clear-logo-title`'s criterion 1 is the Poster art language (D217 3: the display's language when listed, else English), whatever the Poster art choice; a logo in that language is chosen first (highest voted), else a logo with no language, else none, and the title is text.
+  2. **The logo is fetched as the art is** (D219 1, D220 1): within the same 4-second budget per title, paused with the art after an API failure, through the cache-first path and the cache limit under a key that names TMDB, the id and "logo", aged out at 180 days, as a blob drawn by `<img>` (never inlined). The logo is asked for only while Title as logo is on and the title card shows.
+
+## Conductor ruling — 2026-11-26 (`clear-logo-title` reviews r1; to be listed for the owner at the next stop): D222
+
+- **D222 A logo is shown only when it can be read; offline it comes from the cache.**
+  1. **A dark logo is text.** Before a logo replaces the title line, its visible pixels are measured on a canvas (the blob is same-origin): when their mean relative luminance is under 0.35, the title is shown as text instead (the card's background is near black). No other logo is tried.
+  2. **Offline**, a cached title whose entry carries its TMDB id (a TMDB-mode entry, or one stored with TMDB art) shows its cached logo when the logo index holds one; otherwise its title is text. No request is made offline.
+
+## Conductor ruling — 2026-11-26 (`clear-logo-title` reviews r2; to be listed for the owner at the next stop): D223
+
+- **D223 Two refinements of D222.**
+  1. **The dark-logo cut is a contrast rule.** A logo is shown when its visible pixels' mean relative luminance gives at least 4.5:1 contrast against black (WCAG's ratio for text): a mean of 0.175 or more. This replaces D222 1's 0.35, which also turned readable red and blue logos into text. Under 0.175 the title is text, as before; no other logo is tried.
+  2. **Offline needs the key too.** D222 2's cached logo is shown only under the rules in force now, the TMDB key among them: with the key cleared, a cached title's logo is not shown offline either, as online.
+
+## Conductor ruling — 2026-11-27 (`release-2.5.0` pre-flight; to be listed for the owner at the next stop): D224
+
+- **D224 The 2.5 notice.** "What's new in 2.5" is one toast, shown once per configured display whatever its sources (a TMDB-only household too), naming TMDB as a source (no server needed), Poster art, Title as logo and Production house. Its action "Open settings" opens the sheet through the PIN gate at the Poster art section, the section that holds the TMDB key for every server type (D217 1). A fresh install still shows nothing (D73). The 2.4.3 notice is retired.
+
+## Conductor ruling — 2026-11-27 (`release-2.5.0` r1, Q12 and Q13; to be listed for the owner at the next stop): D225
+
+- **D225 Two refinements of D224.**
+  1. **`tests/e2e/followups.spec.mjs` joins `release-2.5.0`'s Output.** It pins the retired 2.4.3 toast and its Allowed devices focus, so criterion 3's full `npm run test:e2e` cannot pass without it; it changes only to state D224's toast and focus.
+  2. **"Open settings" focuses "Image to show"**, the first control of the Poster art section, scrolled to the top of the sheet's view.
+
+## Conductor ruling — 2026-11-27 (`release-2.5.0` Step 4 r2; to be listed for the owner at the next stop): D226
+
+- **D226 `tests/e2e/metadata.spec.mjs` joins `release-2.5.0`'s Output.** Its case 6 pins the poster-cache index entry's field list, which `production-house-filter` (629b4acc, D214 1) widened with `studios` for offline houses; that phase's runs of record did not include the metadata spec, so the full suite at the release is the first to see it. The case changes only to add `studios` to the expected list (and to say why in its check line); the cache entry is as D214 rules.
+
+## Owner answer — 2026-11-27 (stop 9, "defaults"): D227
+
+- **D227 Run 13's rulings stand; three fixes are carried.**
+  1. D218–D226 are kept as ruled, and the 4-second budget for poster art stays 4 seconds (stop 9 items 1–4, 6, 7).
+  2. The three small code fixes outside the release's files are listed on the Roadmap for the next run, not built now (item 5 a): the production-house help wording ("that house" when one is ticked, naming the chosen list); the TMDB key label sits 10 px above its field instead of 4 px; the timing assumption in `clear-logo-title`'s e2e case 57. The five Minor doc drifts the close-time docs check found (`.orchestrator/artifacts/close--keep-docs-current.md`) are listed beside them.
+  3. The release (fc0499c0) was committed before this answer; with item 5 (a) nothing in it changes. Branch `2.5` is pushed after this entry, as approved at the policy stop; no PR, merge or tag (D13, D79).

@@ -626,3 +626,219 @@ test('an entry is rated and drawn under the limit in force whichever server it c
   await cache.put({ ...scopedPoster(3), contentRating: '' }, blob(), size(300));
   for (let i = 0; i < 20; i++) assert.equal((await cache.random(undefined, 'PG')).poster.ratingKey, '1', 'the R and the unrated entry of the second server are never drawn');
 });
+
+// ---- a TMDB image or reply older than 180 days is never served (D203 8, D210 6, 7) ----
+
+const DAY = 86_400_000;
+const LIFE = 180 * DAY;
+const tmdbPoster = (n, thumb = `/tmdb-${n}.jpg`, contentRating = 'PG') => ({ ratingKey: `movie:${n}`, title: `T${n}`, year: '2020', thumb, contentRating });
+/** A cache whose clock the test moves. */
+const clocked = (start = 1_800_000_000_000) => {
+  const clock = { t: start };
+  const f = fakeCaches();
+  const pc = createPosterCache({ storage: memoryStorage(), caches: f.caches, now: () => clock.t });
+  return { clock, pc, f };
+};
+
+test('a TMDB entry is served while it is under 180 days old and not from the 180th day on: 180 x 86 400 000 ms exactly is expired (T5)', async () => {
+  for (const [age, served] of [[0, true], [1, true], [LIFE - 1, true], [LIFE, false], [LIFE + 1, false], [LIFE * 2, false]]) {
+    const { clock, pc } = clocked();
+    await pc.put(tmdbPoster(1), blob('art'), size(600));
+    clock.t += age;
+    const hit = await pc.lookup(tmdbPoster(1), size(600));
+    assert.equal(hit !== null, served, `lookup at ${age} ms`);
+    const offline = await pc.random(undefined, '', null);
+    assert.equal(offline !== null, served, `offline draw at ${age} ms`);
+  }
+});
+
+test('a TMDB entry with no stored time, a time that is not a finite number, or a time in the future is expired (T6)', async () => {
+  for (const savedAt of [undefined, null, 'yesterday', NaN, Infinity, -Infinity, {}, [], 1_800_000_000_001, 1_800_000_000_000 + DAY]) {
+    const storage = memoryStorage();
+    const f = fakeCaches();
+    const pc = createPosterCache({ storage, caches: f.caches, now: () => 1_800_000_000_000 });
+    await pc.put(tmdbPoster(1), blob('art'), size(600));
+    const index = JSON.parse(storage.getItem('plexPoster.posterIndex'));
+    if (savedAt === undefined) delete index[0].savedAt;
+    else index[0].savedAt = savedAt;
+    storage.setItem('plexPoster.posterIndex', JSON.stringify(index));
+    assert.equal(await pc.lookup(tmdbPoster(1), size(600)), null, `lookup, savedAt ${String(savedAt)}`);
+    assert.equal(await pc.random(undefined, '', null), null, `offline draw, savedAt ${String(savedAt)}`);
+  }
+  // A time equal to now is an age of zero: served.
+  const { pc } = clocked();
+  await pc.put(tmdbPoster(2), blob('art'), size(600));
+  assert.ok(await pc.lookup(tmdbPoster(2), size(600)));
+});
+
+test('only TMDB entries expire: a Plex, Jellyfin or Emby entry of any age, or with no time, is served as before', async () => {
+  const storage = memoryStorage();
+  const f = fakeCaches();
+  const clock = { t: 1_800_000_000_000 };
+  const pc = createPosterCache({ storage, caches: f.caches, now: () => clock.t });
+  const others = [poster(1), { ...poster(2), ratingKey: 'e3c4b2a1-0000-4000-8000-000000000002' }, { ...poster(3), ratingKey: '@srv-1/77' }, { ...poster(4), ratingKey: 'movie' }];
+  for (const p of others) await pc.put(p, blob('x'), size(600));
+  const index = JSON.parse(storage.getItem('plexPoster.posterIndex'));
+  delete index[0].savedAt;
+  storage.setItem('plexPoster.posterIndex', JSON.stringify(index));
+  clock.t += 5 * LIFE;
+  for (const p of others) assert.ok(await pc.lookup(p, size(600)), p.ratingKey);
+  const seen = new Set();
+  for (let i = 0; i < 60; i++) seen.add((await pc.random(undefined, '', null)).poster.ratingKey);
+  assert.deepEqual([...seen].sort(), others.map((p) => p.ratingKey).sort());
+});
+
+test('an expired TMDB image is fetched again: a fresh put makes it servable, and a fresh entry beside an expired one is the only one drawn offline', async () => {
+  const { clock, pc } = clocked();
+  await pc.put(tmdbPoster(1), blob('old'), size(600));
+  clock.t += LIFE + DAY;
+  assert.equal(await pc.lookup(tmdbPoster(1), size(600)), null);
+  await pc.put(tmdbPoster(2), blob('new'), size(600));
+  for (let i = 0; i < 10; i++) assert.equal((await pc.random(undefined, '', null)).poster.ratingKey, 'movie:2', 'the expired one is never shown, offline included');
+  await pc.put(tmdbPoster(1), blob('again'), size(600));
+  assert.equal(await (await pc.lookup(tmdbPoster(1), size(600))).text(), 'again');
+  assert.equal(JSON.parse(JSON.stringify(pc.entries())).find((e) => e.ratingKey === 'movie:1').savedAt, clock.t, 'the age starts again from the time it was stored');
+});
+
+test('with only expired TMDB entries nothing is drawn offline, whatever the limit', async () => {
+  const { clock, pc } = clocked();
+  for (const n of [1, 2, 3]) await pc.put(tmdbPoster(n), blob('x'), size(600));
+  clock.t += LIFE;
+  assert.equal(await pc.random(undefined, '', null), null);
+  assert.equal(await pc.random(undefined, 'R', null), null);
+  assert.equal(pc.entries().length, 3, 'the index still holds them: re-rating and the count read it');
+});
+
+test('a TMDB poster is cached under its own key, and the key it was fetched with is in no field of the entry', async () => {
+  const { pc } = clocked();
+  await pc.put({ ...tmdbPoster(9), tmdbId: '9', tmdbType: 'movie' }, blob('x'), size(600));
+  const entry = pc.entries()[0];
+  assert.equal(entry.ratingKey, 'movie:9');
+  assert.ok(!/api_key|bearer|eyJ/i.test(JSON.stringify(entry)));
+  assert.equal(entry.savedAt, 1_800_000_000_000);
+});
+
+// ---- D211 3: when a TMDB title's rating was last read (`checkedAt`) ----
+
+test('a TMDB entry records checkedAt beside savedAt when it is stored; no other source\'s entry has one', async () => {
+  const { clock, pc } = clocked();
+  await pc.put(tmdbPoster(1), blob('a'), size(600));
+  await pc.put(poster(2), blob('b'), size(600));
+  await pc.put({ ...poster(3), ratingKey: '@srv/77' }, blob('c'), size(600));
+  const by = new Map(pc.entries().map((e) => [e.ratingKey, e]));
+  assert.deepEqual([by.get('movie:1').checkedAt, by.get('movie:1').savedAt], [clock.t, clock.t]);
+  assert.ok(!('checkedAt' in by.get('2')) && !('checkedAt' in by.get('@srv/77')));
+});
+
+test('refreshRatings with `checked` stamps the TMDB entries really read, only them, and a change of rating alone stamps nothing', async () => {
+  const { clock, pc } = clocked();
+  for (const n of [1, 2, 3]) await pc.put(tmdbPoster(n), blob('x'), size(600));
+  await pc.put(poster(9), blob('x'), size(600));
+  const first = clock.t;
+  clock.t += 5000;
+  pc.refreshRatings([{ ...tmdbPoster(1), contentRating: 'R' }, { ...tmdbPoster(2), contentRating: 'R' }, { ...poster(9), contentRating: 'R' }], { checked: new Set(['movie:1', '9']) });
+  const by = new Map(pc.entries().map((e) => [e.ratingKey, e]));
+  assert.deepEqual([by.get('movie:1').contentRating, by.get('movie:1').checkedAt], ['R', clock.t], 'read: re-rated and stamped');
+  assert.deepEqual([by.get('movie:2').contentRating, by.get('movie:2').checkedAt], ['R', first], 'not named as read: re-rated, not stamped');
+  assert.deepEqual([by.get('movie:3').contentRating, by.get('movie:3').checkedAt], ['PG', first], 'not mentioned: untouched');
+  assert.equal('checkedAt' in by.get('9'), false, 'a media server\'s entry records no check time');
+  assert.equal(by.get('9').contentRating, 'R', 'and is re-rated as before');
+  clock.t += 5000;
+  pc.refreshRatings([{ ...tmdbPoster(3), contentRating: 'PG' }]);
+  assert.equal(pc.entries().find((e) => e.ratingKey === 'movie:3').checkedAt, first, 'without `checked` the old call stamps nothing');
+});
+
+test('refreshRatings writes nothing when nothing changes, stamped or not', async () => {
+  const storage = memoryStorage();
+  const pc = createPosterCache({ storage, caches: fakeCaches().caches, now: () => 5 });
+  await pc.put(tmdbPoster(1), blob('x'), size(600));
+  const written = [];
+  const setItem = storage.setItem;
+  storage.setItem = (k, v) => (written.push(k), setItem(k, v));
+  pc.refreshRatings([tmdbPoster(1)], { checked: new Set(['movie:1']) });
+  assert.deepEqual(written, [], 'the same rating at the same time is no write (SD wear)');
+});
+
+// ---- production houses (D214 1) ----
+
+test('put records the studios and the TMDB company ids of the poster, non-empty arrays only', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1', studios: ['Pixar'], companyIds: ['3'] }), blob(), size(300));
+  await pc.put(where(2, { libraryKey: '1', studios: [], companyIds: [] }), blob(), size(300));
+  await pc.put(where(3, { libraryKey: '1' }), blob(), size(300));
+  const [one, two2, three] = ['1', '2', '3'].map((k) => pc.entries().find((e) => e.ratingKey === k));
+  assert.deepEqual([one.studios, one.companyIds], [['Pixar'], ['3']]);
+  assert.deepEqual([['studios' in two2, 'companyIds' in two2], ['studios' in three, 'companyIds' in three]], [[false, false], [false, false]]);
+});
+
+test('random() under a house list draws an entry from a chosen studio and refuses one with neither field (D107)', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1', studios: ['Pixar'] }), blob(), size(300));
+  await pc.put(where(2, { libraryKey: '1', studios: ['A24'] }), blob(), size(300));
+  await pc.put(where(3, { libraryKey: '1' }), blob(), size(300));
+  const houses = [{ key: '', title: 'Pixar' }];
+  assert.deepEqual(await drawn(pc, selectionOf({ libraryKeys: ['1'], houses })), ['1']);
+});
+
+test('random() under a TMDB house list draws an entry whose company ids hold a chosen one', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  const list = 'discover/movie?mode=or';
+  await pc.put({ ...poster(1, '/t/1', 'G'), ratingKey: 'movie:1', libraryKey: list, companyIds: ['41077', '3'] }, blob(), size(300));
+  await pc.put({ ...poster(2, '/t/2', 'G'), ratingKey: 'movie:2', libraryKey: list, companyIds: ['3'] }, blob(), size(300));
+  await pc.put({ ...poster(3, '/t/3', 'G'), ratingKey: 'movie:3', libraryKey: list }, blob(), size(300));
+  const keys = await drawn(pc, selectionOf({ libraryKeys: [list], houses: [{ key: '41077', title: 'A24' }] }));
+  assert.deepEqual(keys, ['movie:1']);
+});
+
+test('a re-seen poster teaches its entry the studios and company ids (refreshRatings)', async () => {
+  const pc = createPosterCache({ storage: memoryStorage(), caches: fakeCaches().caches });
+  await pc.put(where(1, { libraryKey: '1' }), blob(), size(300));
+  pc.refreshRatings([where(1, { libraryKey: '1', studios: ['Pixar'], companyIds: ['3'] })]);
+  const e = pc.entries()[0];
+  assert.deepEqual([e.studios, e.companyIds], [['Pixar'], ['3']]);
+});
+
+// ---- TMDB art on a server's poster (artwork-sources, D217): it ages like a TMDB entry; the server's own entries do not ----
+
+const artPoster = (n, key = `tmdb-art:movie:60${n}:textless`) => ({ ratingKey: String(n), title: `S${n}`, year: '2020', thumb: key, contentRating: 'PG' });
+
+test('a server poster holding TMDB art is served while it is under 180 days old and not from the 180th day on (art, offline draw included)', async () => {
+  for (const [age, served] of [[0, true], [LIFE - 1, true], [LIFE, false], [LIFE + DAY, false]]) {
+    const { clock, pc } = clocked();
+    await pc.put(artPoster(1), blob('art'), size(600));
+    clock.t += age;
+    assert.equal((await pc.lookup(artPoster(1), size(600))) !== null, served, `lookup at ${age} ms`);
+    assert.equal((await pc.random(undefined, '', null)) !== null, served, `offline draw at ${age} ms`);
+  }
+});
+
+test('an art entry with no stored time, or one in the future, is expired; the same server poster with its own thumb never is', async () => {
+  const storage = memoryStorage();
+  const pc = createPosterCache({ storage, caches: fakeCaches().caches, now: () => 1_800_000_000_000 });
+  await pc.put(artPoster(1), blob('a'), size(600));
+  await pc.put(poster(2), blob('b'), size(600));
+  const index = JSON.parse(storage.getItem('plexPoster.posterIndex'));
+  for (const e of index) delete e.savedAt;
+  storage.setItem('plexPoster.posterIndex', JSON.stringify(index));
+  assert.equal(await pc.lookup(artPoster(1), size(600)), null);
+  assert.ok(await pc.lookup(poster(2), size(600)), 'a server thumb with no time is served as before');
+  for (let i = 0; i < 10; i++) assert.equal((await pc.random(undefined, '', null)).poster.ratingKey, '2');
+});
+
+test('art is looked up by its own key: a lookup with the server thumb, or with another art key, misses; the stored width must still reach the request', async () => {
+  const { pc } = clocked();
+  await pc.put(artPoster(1), blob('art'), size(600));
+  assert.ok(await pc.lookup(artPoster(1), size(600)));
+  assert.equal(await pc.lookup(artPoster(1, '/library/metadata/1/thumb/9'), size(600)), null, 'the server thumb is another key');
+  assert.equal(await pc.lookup(artPoster(1, 'tmdb-art:movie:601:largest'), size(600)), null, 'another mode is another key');
+  assert.equal(await pc.lookup(artPoster(1), size(900)), null, 'too narrow');
+  await pc.put(poster(1, '/library/metadata/1/thumb/9'), blob('plain'), size(600));
+  assert.equal(await pc.lookup(artPoster(1), size(600)), null, 'a poster saved again with the source art no longer answers to the art key');
+});
+
+test('a thumb that merely contains the prefix is not art', async () => {
+  const { clock, pc } = clocked();
+  await pc.put(poster(1, '/x/tmdb-art:movie:1:textless'), blob('a'), size(600));
+  clock.t += 5 * LIFE;
+  assert.ok(await pc.lookup(poster(1, '/x/tmdb-art:movie:1:textless'), size(600)));
+});

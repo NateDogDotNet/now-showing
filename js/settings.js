@@ -4,7 +4,7 @@
 import { sanitizeSlots } from './limit-schedule.js';
 import { cleanProfiles } from './profiles.js';
 import { parseHHMM } from './schedule.js';
-import { belongsTo, cleanGenres, cleanKeys, cleanNames, cleanRatings, cleanServerId, cleanSource, keyFor, memberBelongsTo, splitKey } from './selection.js';
+import { belongsTo, cleanGenres, cleanHouses, cleanKeys, cleanNames, cleanRatings, cleanServerId, cleanSource, keyFor, memberBelongsTo, splitKey } from './selection.js';
 import { cleanDays, cleanWeighting } from './weighting.js';
 
 export const STORAGE_KEY = 'plexPoster.settings';
@@ -30,6 +30,9 @@ const hex = (v, d) => (typeof v === 'string' && /^[0-9a-f]*$/i.test(v) ? v : d);
 /** The address of a server as it is compared and stored: trimmed, with no trailing slash. */
 export const addressOf = (v) => (typeof v === 'string' ? v.trim().replace(/[\s/]+$/, '') : '');
 
+/** The server type of a household with no media server (R-TMDB-1): one source, never one of several. */
+const TMDB = 'tmdb';
+
 /** How many servers a household may have, the first one included (D156 7). */
 export const MAX_SERVERS = 3;
 
@@ -43,7 +46,7 @@ export function cleanServer(v) {
   const id = cleanServerId(v.id);
   const type = typeof v.type === 'string' ? v.type.trim().slice(0, 40) : '';
   const url = addressOf(v.url);
-  if (!id || !type || !url) return null;
+  if (!id || !type || !url || type === TMDB) return null; // TMDB has no address and is never one of several servers (D210 5)
   return { id, type, url, token: str(v.token, ''), userId: str(v.userId, ''), name: str(v.name, '') };
 }
 
@@ -117,6 +120,41 @@ const rotation = (v, d) => {
   return [0, 90, 180, 270].includes(n) ? n : d;
 };
 
+/** "As the source gives it" (the default), "Textless when TMDB has it", "In <language> when TMDB has it", "Largest TMDB poster". */
+export const ART_MODES = ['source', 'textless', 'language', 'largest'];
+
+/** The poster languages the choice offers (D217 3): about 20 common ISO 639-1 codes, each in its own name. */
+export const LANGUAGES = [
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Español' },
+  { code: 'fr', name: 'Français' },
+  { code: 'de', name: 'Deutsch' },
+  { code: 'it', name: 'Italiano' },
+  { code: 'pt', name: 'Português' },
+  { code: 'nl', name: 'Nederlands' },
+  { code: 'sv', name: 'Svenska' },
+  { code: 'da', name: 'Dansk' },
+  { code: 'no', name: 'Norsk' },
+  { code: 'fi', name: 'Suomi' },
+  { code: 'pl', name: 'Polski' },
+  { code: 'cs', name: 'Čeština' },
+  { code: 'hu', name: 'Magyar' },
+  { code: 'tr', name: 'Türkçe' },
+  { code: 'el', name: 'Ελληνικά' },
+  { code: 'ru', name: 'Русский' },
+  { code: 'ja', name: '日本語' },
+  { code: 'ko', name: '한국어' },
+  { code: 'zh', name: '中文' },
+];
+
+/** The language chosen on first use (D217 3): the display's own when it is in the list, else English. `navLanguage` is a browser language tag such as `fr-CA`. */
+export function defaultArtLanguage(navLanguage) {
+  const code = typeof navLanguage === 'string' ? navLanguage.trim().toLowerCase().split(/[-_]/)[0] : '';
+  return ART_CODES.includes(code) ? code : 'en';
+}
+
+const ART_CODES = LANGUAGES.map((l) => l.code);
+
 /** Each entry: [default, sanitiser]. Sanitisers coerce bad input back to the default. */
 const SCHEMA = {
   // Connection
@@ -131,6 +169,15 @@ const SCHEMA = {
   // Emby adapter needs it; Plex and Jellyfin leave it empty. It belongs to the token and the address it came with and is set aside with them.
   serverUserId: ['', str],
   serverName: ['', str],
+  // The TMDB key (R-TMDB-1, D210 5): a TMDB read access token or a 32-character v3 key, typed as written (js/sources/tmdb.js reads its form). It is its own setting,
+  // not the Plex token's: it stays through a change of server type, so a household can go to a media server and back. It is a secret (SECRET_KEYS).
+  tmdbKey: ['', str],
+  // Poster art (R-ART-1, D217): which image a poster with a TMDB id shows, from TMDB when a key is set (js/artwork.js). 'source' is the server's (or TMDB's own list) art, as before.
+  posterArt: ['source', oneOf(...ART_MODES)],
+  // The language of 'language' art: one of the listed ISO 639-1 codes; the display's own language when listed, else English (D217 3).
+  posterArtLanguage: [defaultArtLanguage(globalThis.navigator?.language), (v, d) => (LANGUAGES.some((l) => l.code === v) ? v : d)],
+  // Title as logo (R-ART-2, D221): the title line of the title card is the title's logo art from TMDB when the poster has a TMDB id, a key is set and TMDB has a logo; else text (js/artwork.js).
+  titleLogo: [false, bool],
   // Several servers (R-SRC-4, D156, D157). The keys above describe the FIRST server, as they did in 2.4.0, and `servers` holds up to two more.
   // `serverId` is the first server's own id, '' while it has not been read (a 2.4.0 object has none): it is recorded when the household
   // changes the address or adds a server, never rewritten on upgrade. `serverCarried` marks the entry that owns the bare ids (the offline
@@ -150,6 +197,7 @@ const SCHEMA = {
   libraryKeys: [[], (v) => cleanKeys(v)],
   libraryNames: [[], (v) => cleanNames(v)],
   genres: [[], (v) => cleanGenres(v)],
+  houses: [[], (v) => cleanHouses(v)], // production houses (Run 13): a server's studio names, or TMDB company ids and names; OR; never a key
   ratings: [[], (v) => cleanRatings(v)],
   source: [null, (v) => cleanSource(v)],
   username: ['', str],
@@ -237,7 +285,7 @@ const SCHEMA = {
 const CONNECTION_KEYS = ['serverUrl', 'plexToken', 'libraryKey', 'libraryKeys'];
 
 /** Keys that hold secrets and are optional on export. */
-export const SECRET_KEYS = ['plexToken', 'servers.token'];
+export const SECRET_KEYS = ['plexToken', 'tmdbKey', 'servers.token'];
 // A key written `list.field` is the field `field` of every entry of the list `list`: each extra server holds its own token (D157 4).
 
 /**
@@ -278,6 +326,11 @@ export function sanitize(input = {}) {
 
 /** A server whose id is already in the list is not a second server: the later entry is dropped (D157 6). The first server's id counts when it is known. */
 function reconcileServers(out) {
+  if (out.serverType === TMDB) {
+    // TMDB is the household's one source (D210 5): no other server, no server id, and the bare ids are its own.
+    Object.assign(out, { servers: [], serverId: '', serverCarried: true });
+    return out;
+  }
   const seen = new Set(out.serverId ? [out.serverId] : []);
   out.servers = out.servers.filter((e) => !seen.has(e.id) && seen.add(e.id));
   return out;
@@ -343,6 +396,7 @@ function reconcileLibraries(out) {
 }
 
 export function isConfigured(s) {
+  if (s.serverType === TMDB) return Boolean(s.tmdbKey && (s.libraryKey || s.staticRatingKey)); // a key and a list (a pin alone is enough, as for a server)
   return Boolean(s.plexToken && s.serverUrl && (s.libraryKey || s.staticRatingKey || s.source?.key)); // a collection or playlist is a source of its own
 }
 
@@ -424,6 +478,41 @@ function sameServer(e, list) {
 }
 
 /**
+ * What an import file asked of TMDB that this build does not do (D210 5): an entry of `servers` whose type is `tmdb`, or other servers beside a first server that
+ * is TMDB. `fromImport` drops them; this says so, in the words of the toast, or '' when the file asked nothing of the kind. Nothing is stored here.
+ */
+export function tmdbDroppedByImport(text) {
+  let parsed;
+  try {
+    parsed = typeof text === 'string' ? JSON.parse(text) : text;
+  } catch {
+    return '';
+  }
+  const incoming = parsed?.format !== undefined && parsed?.settings && typeof parsed.settings === 'object' ? parsed.settings : parsed;
+  const servers = Array.isArray(incoming?.servers) ? incoming.servers : [];
+  if (servers.some((e) => e && typeof e === 'object' && String(e.type).trim() === TMDB)) return 'TMDB cannot be one of several servers, so that entry in the file was left out.';
+  return incoming?.serverType === TMDB && servers.length > 0 ? "TMDB cannot be one of several servers, so the file's other servers were left out." : '';
+}
+
+/**
+ * The servers an import would leave out of a display that has other servers (D211 2): when the file makes TMDB the first server and `current` (the settings
+ * the sheet holds) has extra servers, those are the servers the result no longer has, since TMDB is never one of several (D210 5). Each is
+ * `{ type, name, url }` (the name as stored; the caller words an unnamed one by its type). No token is returned. A file that does not make TMDB the first
+ * server, or a display that already has no other server, drops none. Nothing is stored here.
+ */
+export function serversDroppedByTmdbImport(text, current = defaults()) {
+  let merged;
+  try {
+    merged = fromImport(text, current);
+  } catch {
+    return [];
+  }
+  if (merged.serverType !== TMDB) return [];
+  const had = serverList(sanitize(current)).slice(1);
+  return had.map((e) => ({ type: e.type, name: e.name || '', url: e.url }));
+}
+
+/**
  * Parses an exported file (or a bare settings object, e.g. a hand-written config.json)
  * and merges it over `current`. Throws with a readable message on bad input.
  */
@@ -448,7 +537,7 @@ export function fromImport(text, current = defaults()) {
   if (known.length === 0) throw new Error('No recognised settings in file.');
   const merged = { ...current };
   // A 2.2-shaped file names one library: it replaces the whole selection (that library, no genres, no rating subset, no source), not just the list.
-  if (known.includes('libraryKey') && !known.includes('libraryKeys')) Object.assign(merged, { libraryKeys: [], libraryNames: [], genres: [], ratings: [], source: null });
+  if (known.includes('libraryKey') && !known.includes('libraryKeys')) Object.assign(merged, { libraryKeys: [], libraryNames: [], genres: [], houses: [], ratings: [], source: null });
   for (const k of known) merged[k] = incoming[k];
   // A server in the file with no token of its own keeps the token of the server it replaces only when it is the same server at the same
   // address (the same id, type and address): a token never travels to another address (D157 4, D144 1).
@@ -507,7 +596,7 @@ function moveSelection(settings, from, to) {
 }
 
 const EARLY_CONNECTION = ['serverType', 'serverUrl', 'plexToken', 'serverUserId', 'serverName', 'serverId', 'serverCarried', 'servers']; // only the connection keys wait for the reads (D162 5)
-const EARLY_SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'ratings', 'source'];
+const EARLY_SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'houses', 'ratings', 'source'];
 const EARLY_PIN = ['staticRatingKey', 'staticTitle'];
 const EARLY_PROFILE_SELECTION = ['libraryKeys', 'libraryNames', 'genres', 'ratings', 'source']; // what a viewer profile draws from; its limit and the rest of its bundle do not wait
 const takeFrom = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));

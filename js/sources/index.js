@@ -1,6 +1,9 @@
 // The source-adapter interface (D134): the engine, the display, Settings and the first-run card talk to a media server
 // only through the object `createSource(settings)` returns, and never import an adapter module themselves. Plex is the
-// first adapter, Jellyfin the second and Emby the third; `serverType` in the settings picks it ('plex', 'jellyfin' or 'emby', and Plex when the setting is absent).
+// first adapter, Jellyfin the second and Emby the third; `serverType` in the settings picks it ('plex', 'jellyfin', 'emby' or 'tmdb', and Plex when the setting is absent).
+// TMDB (js/sources/tmdb.js, R-TMDB-1) is the fourth: a source for a household with no media server. It is built from `settings.tmdbKey` alone (no address and
+// no sign-in code), its "libraries" are the TMDB lists and Discover choices, its poster `ratingKey` is `movie:<id>` or `tv:<id>`, and nothing is ever playing
+// (`sessions()` is `[]`, `nowPlaying()` is null). It is never one of several servers: `createSources` builds no member for it (D210 5).
 //
 // What an adapter object holds (every member below, and nothing else). Items keep their server's own ids: a poster's
 // `ratingKey` is the server's id, stored as it is (the offline cache, the pinned poster and the no-repeat history key on it).
@@ -15,9 +18,11 @@
 //                                         its CollectionType `movies` to 'movie' and `tvshows` to 'show'
 //   libraryCount(key)                     how many items a library holds, or null; never throws
 //   sessions()                            what is playing now, in the adapter's own shape; only nowPlaying() reads it
-//   pool({ libraryKey, unwatchedOnly, size, maxContentRating, genres, ratings })   posters for the random pool
+//   pool({ libraryKey, unwatchedOnly, size, maxContentRating, genres, houses, ratings })   posters for the random pool; `houses` are studio names (a server) or company ids (TMDB), OR
 //   sourceItems({ kind, key }, opts)      the posters of one collection or playlist; the list has `.listed`, every id the reply held
-//   genres(libraryKey)                    [{ key, title }]
+//   genres(libraryKey)                    [{ key, title }]: the genres only
+//   houses(libraryKey, { query })         [{ key, title }]: production houses (Run 13). A server: the studios of the library (`key` ''; `query` unused). TMDB: the
+//                                         companies whose name matches `query` (`key` the company id, `country` the origin country when TMDB names one)
 //   collections(libraryKey)               [{ key, title, smart }]
 //   playlists()                           [{ key, title }]
 //   item(id)                              one poster, or an error of kind 'http' when it is gone
@@ -38,7 +43,10 @@
 //   duration       ms, 0 when unknown
 //   summary        text trimmed to the shared length limit (SUMMARY_MAX in js/fill.js), '' when none
 //   genres         the item's own genre titles (a genre selection is checked against them); left off when none
+//   studios        a server's studio names for the title, usually one (a production-house selection is checked against them); left off when none
+//   companyIds     TMDB production company ids (text): every TMDB title's details read names its companies (D215 1), so a pool title or a pinned title carries them; left off when TMDB lists none
 //   viewCount, audienceRating, rating    what weighting reads (R-SEL-2); left off when the server sent nothing usable
+//   tmdbId, tmdbType  the title's TMDB id (digits, as text) and 'movie' or 'tv', only when the server's metadata names exactly one; an episode has none
 // The engine adds `libraryKey` and `members` to the pool posters it draws; the adapter does not.
 // A server-side rating filter in pool() or sourceItems() is an optimisation only: the engine checks every poster against
 // the household limit itself (D5), whatever an adapter returns.
@@ -71,14 +79,16 @@ import { KINDS, SourceError } from './errors.js';
 import { createEmbyClient, embySignIn } from './emby.js';
 import { createJellyfinClient, jellyfinSignIn } from './jellyfin.js';
 import { createPlexClient, discoverPlayers, discoverServerPlayers, plexSignIn } from './plex.js';
+import { createTmdbClient, tmdbSignIn } from './tmdb.js';
 import { belongsTo, cleanServerId, keyFor, splitKey } from '../selection.js';
 import { serverList } from '../settings.js';
 
 export { KINDS, SourceError };
+export { DEFAULT_LIBRARY, discoverKey, sourceOf, validYear } from './tmdb.js'; // what the Settings sheet needs to write a TMDB choice as a library key (it imports no adapter itself)
 
 /** The members every adapter object has, in the order the list above gives them. */
 export const SOURCE_MEMBERS = [
-  'label', 'identity', 'publicIdentity', 'libraries', 'libraryCount', 'sessions', 'pool', 'sourceItems', 'genres', 'collections', 'playlists', 'item', 'items', 'imageUrl', 'nowPlaying',
+  'label', 'identity', 'publicIdentity', 'libraries', 'libraryCount', 'sessions', 'pool', 'sourceItems', 'genres', 'houses', 'collections', 'playlists', 'item', 'items', 'imageUrl', 'nowPlaying',
 ];
 
 /** The members only the Plex adapter has (Play now); every adapter has SOURCE_MEMBERS, the Plex adapter and the source over several servers have these too. */
@@ -99,6 +109,7 @@ export function createSource(settings, { clientId, fetchImpl, version } = {}) {
   if (type === 'plex') return createPlexClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, fetchImpl });
   if (type === 'jellyfin') return createJellyfinClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, version, fetchImpl });
   if (type === 'emby') return createEmbyClient({ serverUrl: settings?.serverUrl, token: settings?.plexToken, clientId, version, userId: settings?.serverUserId, fetchImpl });
+  if (type === 'tmdb') return createTmdbClient({ key: settings?.tmdbKey, fetchImpl });
   throw unknownType(type);
 }
 
@@ -112,6 +123,7 @@ export function signInFlow(settings, { fetchImpl, version } = {}) {
   if (type === 'plex') return plexSignIn;
   if (type === 'jellyfin') return jellyfinSignIn({ serverUrl: settings?.serverUrl || '', fetchImpl, version });
   if (type === 'emby') return embySignIn({ serverUrl: settings?.serverUrl || '', fetchImpl, version, userId: settings?.serverUserId || '' });
+  if (type === 'tmdb') return tmdbSignIn;
   throw unknownType(type);
 }
 
@@ -201,6 +213,7 @@ export async function readServerId(type, url, opts = {}) {
 export function createSources(settings, opts = {}) {
   const members = serverList(settings).map((entry) => {
     try {
+      if (entry.type === 'tmdb') return { entry, source: null }; // TMDB is never one of several servers (D210 5): an entry that says so contributes nothing
       const source = createSource({ serverType: entry.type, serverUrl: entry.url, plexToken: entry.token, serverUserId: entry.userId }, opts);
       // A server that does not know its own id cannot have its ids scoped (unless it is the carried one): it contributes nothing.
       return { entry, source: entry.carried || entry.id ? source : null };
@@ -308,6 +321,11 @@ export function createSources(settings, opts = {}) {
     async genres(libraryKey) {
       const [m, bare] = route(libraryKey);
       return m.source.genres(bare);
+    },
+
+    async houses(libraryKey, options) {
+      const [m, bare] = route(libraryKey);
+      return m.source.houses(bare, options);
     },
 
     async collections(libraryKey) {

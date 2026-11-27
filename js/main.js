@@ -1,5 +1,6 @@
 // App bootstrap: wires settings, Plex, the poster engine, display and controls together.
 
+import { createArtwork, logosIn } from './artwork.js';
 import { createBackoff } from './backoff.js';
 import { createBrightnessTimer } from './brightness-timer.js';
 import { createDisplay } from './display.js';
@@ -26,13 +27,17 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.4.8';
+export const VERSION = '2.5.0';
 
 const carriedPlayback = takeCarriedPlayback();
 
 const storage = safeStorage();
 const log = createLog();
 const cache = createPosterCache({ storage, limit: () => state.settings.posterCacheLimit });
+// The logos of Title as logo (R-ART-2, D221, Q11) are kept in a cache of their own: a Cache API store of their own, the same cache limit, an index of their own, so the offline rotation never draws a logo as a poster.
+const logoStorage = { getItem: (k) => storage.getItem(k === 'plexPoster.posterIndex' ? 'plexPoster.logoIndex' : k), setItem: (k, v) => storage.setItem(k === 'plexPoster.posterIndex' ? 'plexPoster.logoIndex' : k, v), removeItem: (k) => storage.removeItem(k === 'plexPoster.posterIndex' ? 'plexPoster.logoIndex' : k) };
+const logoCache = createPosterCache({ storage: logoStorage, limit: () => state.settings.posterCacheLimit, caches: logosIn(globalThis.caches) }); // its blobs are in a store of their own: clearing one cache never deletes the other's blobs
+const artwork = createArtwork({ cache, logoCache, getSettings: () => state.settings, log }); // TMDB poster art (R-ART-1) and title logos (R-ART-2) for a poster with a TMDB id, when chosen and a key is set
 const display = createDisplay();
 const helper = createHelper({ log });
 const clientIdValue = getClientId(storage);
@@ -100,7 +105,8 @@ function rebuildClient() {
         getSettings: () => state.settings,
         // D37: while a limit is set, each online pool load re-confirms the cached titles' ratings.
         cachedKeys: () => cache.entries().map((e) => e.ratingKey),
-        onRatings: (posters) => cache.refreshRatings(posters),
+        cachedChecks: () => new Map(cache.entries().map((e) => [e.ratingKey, e.checkedAt])), // TMDB: when each title's rating was last read (D211 3)
+        onRatings: (posters, info) => cache.refreshRatings(posters, info),
         onMembers: (id, keys) => cache.syncMembers(id, keys), // a collection or playlist listed online: entries that left it lose the membership
       })
     : null;
@@ -226,11 +232,13 @@ function updateNowPlaying() {
  * the image was downloading or decoding. Returns false, drawing nothing, when it is not allowed; the caller
  * must then not mark it shown (the next tick picks another). A successful draw ends a block.
  */
-async function showPoster(poster, image) {
+async function showPoster(poster, image, logo = null, asked = logoKey(state.settings)) {
   if (!allowedOnScreen(poster) || !inSelectionNow(poster)) return false; // a draw that finishes after a boundary meets the selection in force now (D120 6)
   document.querySelectorAll('.poster-layer.cut').forEach((img) => img.classList.remove('cut'));
   const outgoing = display.currentPoster;
-  await display.show(poster, image);
+  await display.show(poster, image, { logo });
+  logoAsked = { poster, key: asked }; // the settings the logo was asked under, taken before it was fetched: a save during the fetch leaves it differing from the settings now
+  if (asked !== logoKey(state.settings)) void syncLogo(); // so ask again now, under the settings now
   lastDrawAt = performance.now();
   if (!allowedOnScreen(poster) || !inSelectionNow(poster)) {
     blockPoster(); // the limit was tightened, or the selection changed, during the decode
@@ -243,8 +251,39 @@ async function showPoster(poster, image) {
   return true;
 }
 
+/** What the logo of the poster on screen was last asked for under, so a change of settings that leaves it the same asks nothing more (one logo request per shown title). */
+let logoAsked = { poster: null, key: '' };
+const logoKey = (s) => [s.titleLogo, s.showTitle, s.posterArtLanguage, Boolean(s.tmdbKey)].join('|');
+
+/** After a settings change: the poster on screen has no logo yet and the settings now ask for one, so ask (a poster being drawn has asked already, with its image). */
+async function syncLogo() {
+  const poster = display.currentPoster;
+  const key = logoKey(state.settings);
+  if (!poster || (logoAsked.poster === poster && logoAsked.key === key)) return;
+  logoAsked = { poster, key };
+  const blob = await fetchLogo(poster); // a stored copy needs no request: a change of language, key or title card is asked again, and what no longer applies is taken away
+  if (display.currentPoster !== poster || logoAsked.poster !== poster || logoAsked.key !== key) return;
+  if (blob) display.setLogo(poster, blob);
+  else if (display.hasLogo(poster)) display.setLogo(poster, null);
+}
+
+/**
+ * The title's logo art as a Blob, or null (Title as logo off, no key, no id, none at TMDB, too dark to read, or it failed or was slow: the title stays text). It never throws.
+ * A poster drawn from the offline cache gets the stored logo of its TMDB id, and no request is made for it (D222 2).
+ */
+async function fetchLogo(poster) {
+  const got = poster?.source === 'cache' ? await artwork.cachedLogo(poster).catch(() => null) : await artwork.logo(poster).catch(() => null);
+  return got?.blob ?? null;
+}
+
 async function fetchImage(poster, { skipCache = false } = {}) {
   const size = requestSize(display.posterSize(), window.devicePixelRatio || 1);
+  // TMDB art first, when the household chose it and the poster has a TMDB id: cache first, then TMDB. No art (any reason, a failure included) is the source's own image below.
+  const art = await artwork.image(poster, size, { skipCache });
+  if (art) {
+    if (art.cached) cachedBlobs.add(art.blob);
+    return art.blob;
+  }
   const url = client.imageUrl(poster.thumb, size);
   if (state.directImages) return url;
   const hit = skipCache ? null : await cache.lookup(poster, size).catch(() => null);
@@ -295,13 +334,14 @@ async function tick({ force = false, notify = false } = {}) {
     const decision = state.asleep || state.tvWaking ? null : await engine.decide({ force: force || document.body.classList.contains('poster-blocked'), sessions, sessionsError });
     let refused = false; // a poster was fetched but the limit no longer allows it
     if (decision) {
-      cache.refreshRatings([decision.poster]); // seen online: its stored rating follows Plex (C7M2)
-      let image = await fetchImage(decision.poster);
+      cache.refreshRatings([decision.poster], { checked: new Set([decision.poster.ratingKey]) }); // seen online: its stored rating follows Plex (C7M2); read just now
+      const asked = logoKey(state.settings); // what the logo is asked under: taken here, not at the draw
+      let [image, logo] = await Promise.all([fetchImage(decision.poster), fetchLogo(decision.poster)]); // one logo request for the title shown, beside its poster, within the same budget
       // (Asleep by now: the download began before sleep did; it is not drawn under the veil.)
       let drawn = false;
       if (!state.asleep) {
         try {
-          drawn = await showPoster(decision.poster, image);
+          drawn = await showPoster(decision.poster, image, logo, asked);
           refused = !drawn;
         } catch (err) {
           if (!cachedBlobs.has(image)) throw err;
@@ -311,7 +351,7 @@ async function tick({ force = false, notify = false } = {}) {
           image = await fetchImage(decision.poster, { skipCache: true });
           if (!state.asleep) {
             // (Sleep may have begun during this second download too.)
-            drawn = await showPoster(decision.poster, image);
+            drawn = await showPoster(decision.poster, image, logo, asked); // the retry keeps the logo that was fetched
             refused = !drawn;
           }
         }
@@ -373,7 +413,8 @@ async function handleFailure(err, { notify = false } = {}) {
       const cached = await cache.random(current?.ratingKey, limitNow(), selectionOf(inForceSettings()), keyInList).catch(() => null);
       if (!cached) break;
       try {
-        if (!(await showPoster(cached.poster, cached.blob))) continue; // no longer allowed: not drawn, not shown
+        const asked = logoKey(state.settings);
+        if (!(await showPoster(cached.poster, cached.blob, await fetchLogo(cached.poster), asked))) continue; // no longer allowed: not drawn, not shown
       } catch {
         log.warn(`Cached poster "${cached.poster.title}" is unreadable; dropping it.`);
         await cache.delete(cached.poster.ratingKey).catch(() => {});
@@ -437,8 +478,8 @@ const FIXES = {
 };
 const FIXES_BY_KIND = { auth: ['signin'], network: ['diagnostics', 'test'], timeout: ['diagnostics', 'test'], empty: ['unwatched'] };
 
-// A fix that cannot help is not offered: turning "unwatched only" off does nothing when it is already off.
-const FIX_APPLIES = { unwatched: (s) => s.unwatchedOnly };
+// A fix that cannot help is not offered: turning "unwatched only" off does nothing when it is already off, and nothing on TMDB, which has no watched state (its row is hidden).
+const FIX_APPLIES = { unwatched: (s) => s.unwatchedOnly && serverTypeOf(s) !== 'tmdb' };
 
 /** The fixes for an error kind, as [{ id, label }]; none for a kind the table does not know. */
 const fixesFor = (kind) =>
@@ -667,13 +708,14 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
     log.warn(err.message);
     if (!preview) toast(err.message);
   }
+  syncLogo(); // Title as logo turned on (or the title card, the key, the language changed) with a poster on screen: its logo is asked for once
   if (preview) return;
 
   // The Plex client is rebuilt BEFORE evaluateSleep() below (C8M2, D28): when this Save is what wakes the display, the
   // wake tick must already use the new connection, not read a session or a pool from the old one.
   // The poster selection compares by what it draws, not by object: every Save makes new lists.
   const connectionChanged =
-    ['serverType', 'plexToken', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some((k) => prev[k] !== state.settings[k]) ||
+    ['serverType', 'plexToken', 'tmdbKey', 'serverUrl', 'libraryKey', 'unwatchedOnly', 'randomPoolSize'].some((k) => prev[k] !== state.settings[k]) ||
     serversKey(prev) !== serversKey(state.settings) ||
     selectionKey(selectionOf(before)) !== selectionKey(selectionOf(inForceSettings())); // what is drawn: the profile's selection while a slot names one
   if (connectionChanged || !engine) rebuildClient();
@@ -683,7 +725,10 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
     const alone = serverList(state.settings).length === 1;
     if (alone && engine) engine.clearShown();
     if (alone && !engine) createShownStore({ storage }).clear(); // no client to ask (not signed in to the new server yet): the record is in storage all the same
-    if (alone) await cache.clear().catch((err) => log.warn(`Could not clear the poster cache: ${err.message}`));
+    if (alone) {
+      await cache.clear().catch((err) => log.warn(`Could not clear the poster cache: ${err.message}`));
+      await logoCache.clear().catch((err) => log.warn(`Could not clear the logo cache: ${err.message}`)); // the logo index and its blobs go with the posters'
+    }
     updatePinButton();
     log.info(`Server type is now ${serverTypeOf(state.settings)}: the poster cache, the pinned poster and the no-repeat history were cleared.`);
   }
@@ -767,7 +812,7 @@ async function requestSettings(options = {}) {
   pendingToken = null;
   pendingUserId = '';
   pendingConnection = null;
-  settingsUI.open({ ...options, token, userId, ...(connection ?? {}) });
+  settingsUI.open({ ...options, token, userId, ...(options.serverType ? {} : (connection ?? {})) }); // the type a caller names (the card's TMDB link) is the one that opens
   syncFirstRun(); // the sheet is its own place to sign in: the card's code steps aside
   tv.probeHelper();
 }
@@ -802,15 +847,20 @@ const settingsUI = createSettingsUI({
     } catch {
       // a type this build has no adapter for is named as it was written
     }
-    // A switch that leaves no token cannot show posters yet: it says the type changed and asks to sign in (D144 3).
-    if (!s.plexToken) return toast(`The server type is now ${label}. Sign in to ${label} to show its posters. The offline posters, the pinned poster and the no-repeat history were cleared.`);
+    // A switch that leaves no token cannot show posters yet: it says the type changed and asks to sign in (D144 3). TMDB has a key, not a sign-in.
+    if (now === 'tmdb' && !s.tmdbKey) return toast('The server type is now TMDB. Enter your TMDB key to show its posters. The offline posters, the pinned poster and the no-repeat history were cleared.');
+    if (now !== 'tmdb' && !s.plexToken) return toast(`The server type is now ${label}. Sign in to ${label} to show its posters. The offline posters, the pinned poster and the no-repeat history were cleared.`);
     toast(`Now showing posters from ${label}. The offline posters, the pinned poster and the no-repeat history were cleared.`);
   },
   fixesFor,
   runFix,
-  onClearCache: () => cache.clear(),
+  onClearCache: async () => {
+    await logoCache.clear();
+    await cache.clear();
+  },
   onReset: async () => {
     storage.removeItem(STORAGE_KEY);
+    await logoCache.clear();
     await cache.clear();
     location.reload();
   },
@@ -946,8 +996,8 @@ function renderDiagnostics() {
     'Secure context': window.isSecureContext ? 'yes' : 'no',
     'Daily reload': reload.dailyReloadRow(),
     Installed: matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches ? 'yes' : 'no (running in a tab)',
-    Server: s.serverUrl ? `${s.serverName || ''} ${s.serverUrl}`.trim() : '—',
-    Token: s.plexToken ? `${s.plexToken.slice(0, 4)}…` : '—',
+    Server: serverTypeOf(s) === 'tmdb' ? 'TMDB' : s.serverUrl ? `${s.serverName || ''} ${s.serverUrl}`.trim() : '—',
+    Token: serverTypeOf(s) === 'tmdb' ? (s.tmdbKey ? `${s.tmdbKey.slice(0, 4)}…` : '—') : s.plexToken ? `${s.plexToken.slice(0, 4)}…` : '—', // the first 4 characters of a key and no more
     Library: s.libraryKey ? `${s.libraryName || ''} (key ${s.libraryKey})` : '—',
     'Now playing': s.showNowPlaying ? `on${s.username ? ` for ${s.username}` : ''}` : 'off',
     Poster: p ? `${p.title}${p.year ? ` (${p.year})` : ''} — ${p.source}` : '—',
@@ -1412,7 +1462,8 @@ const cardConnection = () => (addressed(firstRun.type) || firstRun.type !== serv
 const firstRunFlow = () => signInFlow(firstRunSettings(), { version: VERSION });
 
 // A pending token ends the flow too: the display is signed in, it only needs somebody to finish in Settings.
-const firstRunWanted = () => bootSettled && !isConfigured(state.settings) && !settingsUI.isOpen && !state.asleep && !pendingToken;
+// A display whose type is TMDB has no code to show: it asks for the key in Settings, so the card never starts a plex.tv code for it.
+const firstRunWanted = () => bootSettled && !isConfigured(state.settings) && !settingsUI.isOpen && !state.asleep && !pendingToken && serverTypeOf(state.settings) !== 'tmdb';
 
 /** Starts or stops the code flow to match whether it is wanted. Cheap to call; called wherever that can change. */
 function syncFirstRun() {
@@ -1426,7 +1477,8 @@ function syncFirstRun() {
 }
 
 /** What the empty card says on an unconfigured display: the invitation, or, once a code was approved, what is left to do. */
-const unconfiguredMessage = () => (pendingToken ? 'Signed in. Open settings to finish.' : `Connect to your ${(firstRunCtl ? firstRunFlow() : signIn()).label} server to get started.`);
+const unconfiguredMessage = () =>
+  pendingToken ? 'Signed in. Open settings to finish.' : serverTypeOf(state.settings) === 'tmdb' && !firstRunCtl ? 'Enter your TMDB key in Settings to get started.' : `Connect to your ${(firstRunCtl ? firstRunFlow() : signIn()).label} server to get started.`;
 
 /** `rest` shows only the status: while the display waits to ask again, "enter this code" over empty squares would mislead. */
 function showFirstRun(code, status, { rest = false } = {}) {
@@ -1478,6 +1530,11 @@ for (const radio of document.querySelectorAll('input[name="firstrunType"]')) {
     restartFirstRun();
   });
 }
+// D211 1: no media server. Settings opens (after the PIN, when one is set) with TMDB chosen and the key field ready; nothing is stored until Save.
+$('firstrun-tmdb').addEventListener('click', (e) => {
+  e.preventDefault(); // it is a link in words only: no address changes
+  requestSettings({ serverType: 'tmdb' });
+});
 $('firstrun-address').addEventListener('submit', (e) => {
   e.preventDefault();
   const url = $('firstrun-url').value.trim().replace(/\/+$/, '');
@@ -1659,42 +1716,34 @@ async function boot() {
   announceWhatsNew();
 }
 
-// ---------- The upgrade notice (R-UPG-6) ----------
+// ---------- The upgrade notice (R-UPG-7) ----------
 
 const WHATS_NEW_KEY = 'plexPoster.whatsNew';
-const WHATS_NEW_VERSION = '2.4.3';
+const WHATS_NEW_VERSION = '2.5.0';
 
 /**
- * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new
- * and pointed at the Allowed devices section (through the normal PIN gate), where Play now is turned on (D196 2, 3).
- * An unconfigured display is a fresh install, not an upgrade, so it shows nothing; neither does a household with no Plex server,
- * since Play now is for Plex posters only. Every one of them gets the marker written, so it never shows again. The 2.4.1 notice is retired.
- * Open settings scrolls the section as near the top of the view as the end of the sheet allows (it is the last section, so on an ordinary sheet it cannot reach the top),
- * and the control that has focus is inside the visible part of the sheet (D197 1).
+ * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new and pointed at the Poster art section
+ * (through the normal PIN gate), which holds the one TMDB key for every server type (D224, D217 1). It is one toast for every configured display, whatever its sources:
+ * a TMDB-only, a Jellyfin-only and an Emby-only household too, since TMDB needs no media server. An unconfigured display is a fresh install, not an upgrade, so it shows
+ * nothing (D73); it gets the marker written all the same, as does every display, so the notice never shows again. The 2.4.3 notice and its Plex-only rule are retired.
+ * Open settings scrolls the section as near the top of the view as the sheet allows, and the control that has focus ("Image to show", the section's first control) is
+ * inside the visible part of the sheet (the rule of D197 1).
  */
 function announceWhatsNew() {
   if (storage.getItem(WHATS_NEW_KEY) === WHATS_NEW_VERSION) return;
   storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION);
   if (!isConfigured(state.settings)) return;
-  if (!serverList(state.settings).some((e) => e.type === 'plex')) return;
-  toast("What's new in 2.4.3: Play now sends the poster on screen to a Plex player you allow.", {
+  toast("What's new in 2.5: TMDB can be a poster source with no media server, Poster art and Title as logo use TMDB's images, and Production house narrows the pool by studio.", {
     action: 'Open settings',
     onAction: async () => {
       await requestSettings(); // through the PIN gate; the sheet opens at its top
       if (!settingsUI.isOpen) return;
-      const button = document.getElementById('players-open'); // "Show allowed devices": the list is not opened here, it asks the PIN itself (D187)
-      const section = button.closest('fieldset');
-      // The button is not rendered while the list is already open (it can be, through position mode, which keeps the list open): then the first visible control of the
-      // open list takes the focus, or the list's status line (it has tabindex -1) when the list has none (D197 2).
-      const open = button.getClientRects().length === 0;
-      const target = open ? ([...document.querySelectorAll('#players-body button, #players-body input')].find((el) => el.getClientRects().length > 0) ?? document.getElementById('players-status')) : button;
-      section.scrollIntoView({ block: 'start' }); // the Allowed devices section as near the top of the view as the end of the sheet allows,
-      target.focus({ preventScroll: true }); // and focus on that control
-      // Where the section and the button do not both fit (a short view, a turned sheet), the focused control must still be in the visible part of the sheet body:
-      // bring it to the middle of the view. A control already in view stays where it is, so the section stays as near the top as the sheet's end allowed.
-      const body = target.closest('.sheet-body').getBoundingClientRect();
-      const at = target.getBoundingClientRect();
-      if (at.top < body.top || at.bottom > body.bottom || at.left < body.left || at.right > body.right) target.scrollIntoView({ block: 'center', inline: 'nearest' });
+      const section = document.getElementById('art-fieldset'); // Poster art
+      const target = section.querySelector('select[name="posterArt"]'); // "Image to show": always shown, the section's first control
+      // The section is put as near the top of the view as the sheet allows, and the focus goes to its first control, which sits directly under the section's heading:
+      // wherever the section's top is in view, so is that control, at every size and rotation (preset.spec checks 20 of them). No second scroll is needed (D197 1).
+      section.scrollIntoView({ block: 'start' });
+      target.focus({ preventScroll: true });
     },
     ms: 20_000,
   });

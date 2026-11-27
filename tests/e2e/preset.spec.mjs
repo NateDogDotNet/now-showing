@@ -1,8 +1,9 @@
-// Recommended protection (R-PROT-5, D4, D5, D6, Q20) and the upgrade toast (R-UPG-6).
+// Recommended protection (R-PROT-5, D4, D5, D6, Q20) and the upgrade toast (R-UPG-7).
 // Every case names pixelShift: false and dailyReload: false (convention 7) unless it tests them.
 
 import assert from 'node:assert/strict';
 import { createPinAuth } from '../../js/kiosk.js';
+import { TOKEN } from '../../scripts/mock-tmdb.mjs';
 import { withApp } from './lib.mjs';
 
 const check = (name) => console.log(`  ok  ${name}`);
@@ -142,7 +143,8 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   check('button sits in Display protection');
 });
 
-// ---- the upgrade toast ----
+
+// ---- the upgrade toast (R-UPG-7, D224) ----
 // Sets the marker once per tab (null removes it), so a reload keeps whatever the app wrote since.
 const markerOnce = (page, value) =>
   page.addInitScript((v) => {
@@ -154,7 +156,20 @@ const markerOnce = (page, value) =>
 const clearMarkerOnce = (page) => markerOnce(page, null);
 const marker = (page) => page.evaluate(() => localStorage.getItem('plexPoster.whatsNew'));
 const toastState = (page) => page.evaluate(() => ({ hidden: document.getElementById('toast').hidden, text: document.getElementById('toast').textContent, buttons: [...document.querySelectorAll('#toast button')].map((b) => b.textContent) }));
-const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.4\.3/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+const waitToast = (page) => page.waitForFunction(() => !document.getElementById('toast').hidden && /What's new in 2\.5/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+// The page has finished loading and drawing, so the end of boot (where the notice is decided) has run: the network is idle and two frames have drawn.
+const bootDone = async (page) => {
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+};
+const NOTICE = "What's new in 2.5: TMDB can be a poster source with no media server, Poster art and Title as logo use TMDB's images, and Production house narrows the pool by studio.";
+// Every source a household can have: one toast each (D224), with no rule about which server it has. A TMDB-only household has a key and no server.
+const HOUSEHOLDS = [
+  ['plex', { settings: seed() }],
+  ['jellyfin', { settings: seed({ serverType: 'jellyfin' }) }],
+  ['emby', { settings: seed({ serverType: 'emby' }) }],
+  ['tmdb', { serveArgs: [], tmdb: true, settings: { serverType: 'tmdb', tmdbKey: TOKEN, libraryKey: 'movie/popular', libraryKeys: ['movie/popular'], libraryNames: ['Popular'], showNowPlaying: false, pixelShift: false, dailyReload: false } }],
+];
 
 await withApp({ settings: seed() }, async ({ page, app }) => {
   await clearMarkerOnce(page);
@@ -162,117 +177,119 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await waitToast(page);
   const t = await toastState(page);
   assert.ok(t.buttons.includes('Open settings'), `buttons: ${t.buttons}`);
-  assert.ok(t.text.includes("What's new in 2.4.3: Play now sends the poster on screen to a Plex player you allow."), `words: ${t.text}`);
-  assert.ok(!t.text.includes('2.4.1') && !t.text.includes('more than one server'), `the 2.4.1 notice is retired: ${t.text}`);
-  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.4.3', 'marker written');
+  assert.equal(t.text.replace('Open settings', '').trim(), NOTICE, `words: ${t.text}`);
+  for (const word of ['TMDB', 'Poster art', 'Title as logo', 'Production house']) assert.ok(t.text.includes(word), `the notice names ${word}: ${t.text}`);
+  assert.ok(!t.text.includes('2.4.3') && !t.text.includes('Play now'), `the 2.4.3 notice is retired: ${t.text}`);
+  assert.equal(await marker(page), '2.5.0', 'marker written');
   await page.reload();
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
-  await page.waitForTimeout(1500);
+  await bootDone(page);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'not shown again after a reload');
   check('upgrade toast shows once for a configured install');
 });
 
-// A 2.4 install (marker '2.4') and a 2.4.1 install (marker '2.4.1', which 2.4.2 kept) are told about 2.4.3 once, and the marker moves on.
-for (const old of ['2.4', '2.4.1']) await withApp({ settings: seed() }, async ({ page, app }) => {
+// A 2.4 install (marker '2.4'), a 2.4.1 install (marker '2.4.1', which 2.4.2 kept) and a 2.4.3 install (the last release's marker) are told about 2.5 once, and the marker moves on.
+for (const old of ['2.4', '2.4.1', '2.4.3']) await withApp({ settings: seed() }, async ({ page, app }) => {
   await markerOnce(page, old);
   await page.goto(app.url);
   await waitToast(page);
-  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.4.3', 'marker becomes 2.4.3');
+  assert.equal(await marker(page), '2.5.0', 'marker becomes 2.5.0');
   await page.reload();
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
-  await page.waitForTimeout(1500);
+  await bootDone(page);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'not shown again after a reload');
-  check(`marker '${old}': the 2.4.3 toast shows once and the marker becomes 2.4.3`);
+  check(`marker '${old}': the 2.5 toast shows once and the marker becomes 2.5.0`);
 });
 
-// A household with no Plex server among its servers (Play now is for Plex posters only) sees no notice, and its marker is written all the same, so adding
-// a Plex server later does not show it. A Jellyfin and an Emby household, from a marker of an earlier release.
-for (const type of ['jellyfin', 'emby']) await withApp({ settings: seed({ serverType: type }) }, async ({ page, app }) => {
-  await markerOnce(page, '2.4.1');
-  await page.goto(app.url);
-  await page.waitForFunction(() => localStorage.getItem('plexPoster.whatsNew') === '2.4.3', null, { timeout: 10000 });
-  assert.equal((await toastState(page)).hidden, true, `a ${type}-only household: no toast`);
-  assert.ok(!(await toastState(page)).text.includes("What's new"), `a ${type}-only household: no notice words`);
-  assert.equal(await marker(page), '2.4.3', 'the marker is written');
-  // The marker is what keeps the notice away later: add a Plex server to the stored settings and reload, and still nothing shows.
-  await page.evaluate(() => {
-    const st = JSON.parse(localStorage.getItem('plexPoster.settings'));
-    st.servers = [{ id: '90000000000000000000000000000003', type: 'plex', url: 'http://127.0.0.1:1', token: 'plex-demo-token', userId: '', name: 'Added Plex' }];
-    localStorage.setItem('plexPoster.settings', JSON.stringify(st));
-  });
-  await page.reload();
-  await page.waitForLoadState('networkidle');
-  const kept = await page.evaluate(() => ({ servers: JSON.parse(localStorage.getItem('plexPoster.settings')).servers?.length, hidden: document.getElementById('toast').hidden, text: document.getElementById('toast').textContent }));
-  assert.equal(kept.servers, 1, `the Plex server was added to the stored settings: ${JSON.stringify(kept)}`);
-  assert.ok(!kept.text.includes("What's new"), `a Plex server added later does not show the notice: ${JSON.stringify(kept)}`);
-  assert.equal(await marker(page), '2.4.3', 'the marker stays');
-  check(`a ${type}-only household: no notice, the marker is written as 2.4.3, and a Plex server added later shows none`);
-});
-
-// A household whose Plex server is its second server (a Jellyfin first) is a household with a Plex server: it is told.
-await withApp({ settings: seed({ serverType: 'jellyfin', servers: [{ id: '90000000000000000000000000000002', type: 'plex', url: 'http://127.0.0.1:1', token: 'plex-demo-token', userId: '', name: 'Mock Plex' }] }) }, async ({ page, app }) => {
-  await markerOnce(page, '2.4.1');
+// D224: the toast is for every configured display whatever its sources (the 2.4.3 rule, a Plex server among them, is retired): a Plex, a Jellyfin, an Emby and a TMDB-only
+// household each see it once, from a marker of the last release, and the marker moves to 2.5.0.
+for (const [type, opts] of HOUSEHOLDS) await withApp(opts, async ({ page, app }) => {
+  await markerOnce(page, '2.4.3');
   await page.goto(app.url);
   await waitToast(page);
-  assert.equal(await marker(page), '2.4.3');
-  check('a Jellyfin first server with a Plex second one: the notice shows');
+  const t = await toastState(page);
+  assert.equal(t.text.replace('Open settings', '').trim(), NOTICE, `a ${type} household: the one notice: ${t.text}`);
+  assert.deepEqual(t.buttons, ['Open settings'], `a ${type} household: one action`);
+  assert.equal(await marker(page), '2.5.0', `a ${type} household: the marker moves to 2.5.0`);
+  await page.reload();
+  await bootDone(page);
+  assert.ok(!(await toastState(page)).text.includes("What's new"), `a ${type} household: not shown again after a reload`);
+  check(`a ${type} household: the 2.5 toast shows once, the marker becomes 2.5.0`);
 });
 
-// Waits until the Allowed devices section has settled where Open settings put it (D196 3). The connection test and the library, genre and collection
+// Waits until the Poster art section has settled where Open settings put it (D224, the rule of D196 3 and D197 1). The connection test and the library, genre and collection
 // requests have all answered (the network is idle) and two frames have drawn, so the browser has finished moving the sheet's content; then the
-// position is read. The wait is on that state, not on a delay: the sheet is open, "Show allowed devices" has focus and it is inside the sheet body's visible box.
-const playersLanded = async (page) => {
+// position is read. The wait is on that state, not on a delay: the sheet is open, "Image to show" has focus and it is inside the sheet body's visible box.
+const ART = '#art-fieldset select[name="posterArt"]';
+const artLanded = async (page) => {
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   await page.waitForFunction(
-    () => {
-      const b = document.getElementById('players-open').getBoundingClientRect();
+    (sel) => {
+      const el = document.querySelector(sel);
+      const b = el.getBoundingClientRect();
       const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
-      return document.getElementById('settings').open && document.activeElement === document.getElementById('players-open') && b.top >= body.top - 1 && b.bottom <= body.bottom + 1 && b.left >= body.left - 1 && b.right <= body.right + 1;
+      return document.getElementById('settings').open && document.activeElement === el && b.top >= body.top - 1 && b.bottom <= body.bottom + 1 && b.left >= body.left - 1 && b.right <= body.right + 1;
     },
-    null,
+    ART,
     { timeout: 8000 },
   );
 };
-// Where the section, its button and the sheet body are, for the assertions: the section at the top of the view (or as near as the end of the sheet lets it be,
-// the section being the last one) where it and the button both fit; the button in the visible box and not covered where they do not.
-const playersWhere = (page) =>
-  page.evaluate(() => {
-    const f = document.getElementById('players-fieldset').getBoundingClientRect();
-    const bodyEl = document.querySelector('#settings .sheet-body');
-    const body = bodyEl.getBoundingClientRect();
-    const b = document.getElementById('players-open').getBoundingClientRect();
+// Where the section, its first control and the sheet body are, for the assertions: the section at the top of the view where it and the control both fit (Poster art is
+// not the last section, so nothing stops the scroll short of the top); the control in the visible box and not covered where they do not.
+const artWhere = (page) =>
+  page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    const f = document.getElementById('art-fieldset').getBoundingClientRect();
+    const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
+    const b = el.getBoundingClientRect();
     const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
     return {
       section: { top: f.top, bottom: f.bottom, left: f.left, right: f.right },
       body: { top: body.top, bottom: body.bottom, left: body.left, right: body.right },
       button: { top: b.top, bottom: b.bottom, left: b.left, right: b.right },
-      atEnd: bodyEl.scrollTop + bodyEl.clientHeight >= bodyEl.scrollHeight - 1,
-      focused: document.activeElement === document.getElementById('players-open'),
-      covered: hit !== document.getElementById('players-open'),
-      listOpen: !document.getElementById('players-body').hidden,
+      focused: document.activeElement === el,
+      covered: hit !== el,
       serversFocused: document.activeElement?.closest('#servers-fieldset') !== null,
+      playersFocused: document.activeElement?.closest('#players-fieldset') !== null,
     };
-  });
+  }, ART);
 const buttonInView = (w) => w.button.top >= w.body.top - 1 && w.button.bottom <= w.body.bottom + 1 && w.button.left >= w.body.left - 1 && w.button.right <= w.body.right + 1;
 const sectionFits = (w) => w.section.bottom - w.section.top <= w.body.bottom - w.body.top;
-// At rotation 0 the section is at the top of the view where it fits (or the sheet ends before it can be); the turned sheets are checked by the button's box only.
-const sectionAtTop = (w) => w.section.top >= w.body.top - 1 && (w.section.top < w.body.top + 80 || w.atEnd);
+// At rotation 0 the section's top edge is the top of the sheet body where it fits; the turned sheets are checked by the control's box only.
+const sectionAtTop = (w) => Math.abs(w.section.top - w.body.top) <= 2;
 
-await withApp({ settings: seed() }, async ({ page, app }) => {
+for (const [width, height] of [[1280, 720], [390, 844]]) {
+  await withApp({ settings: seed(), viewport: { width, height } }, async ({ page, app }) => {
+    await clearMarkerOnce(page);
+    await page.goto(app.url);
+    await waitToast(page);
+    await page.click('#toast button:has-text("Open settings")');
+    await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
+    await artLanded(page).catch(() => {}); // the assertions below report where it is if it never gets there
+    const where = await artWhere(page);
+    assert.equal(where.focused, true, `focus is on "Image to show" at ${width}x${height}: ${JSON.stringify(where)}`);
+    assert.equal(where.serversFocused || where.playersFocused, false, 'focus is not in the server list or Allowed devices');
+    assert.ok(buttonInView(where) && !where.covered, `the focused control is in the sheet body's visible box and not covered at ${width}x${height}: ${JSON.stringify(where)}`);
+    assert.ok(!sectionFits(where) || sectionAtTop(where), `the Poster art section is at the top of the view at ${width}x${height}: ${JSON.stringify(where)}`);
+    check(`Open settings at ${width}x${height}: Settings opens at the Poster art section, focus on "Image to show", in view`);
+  });
+}
+
+// The same from a TMDB-only household, whose key lives in this section too (D217 1).
+await withApp(HOUSEHOLDS.find(([type]) => type === 'tmdb')[1], async ({ page, app }) => {
   await clearMarkerOnce(page);
   await page.goto(app.url);
   await waitToast(page);
   await page.click('#toast button:has-text("Open settings")');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-  await playersLanded(page).catch(() => {}); // the assertions below report where it is if it never gets there
-  const where = await playersWhere(page);
-  assert.equal(where.focused, true, `focus is on "Show allowed devices": ${JSON.stringify(where)}`);
-  assert.equal(where.serversFocused, false, 'focus is not in the server list');
-  assert.ok(buttonInView(where) && !where.covered, `the focused button is in the sheet body's visible box and not covered: ${JSON.stringify(where)}`);
-  assert.ok(!sectionFits(where) || sectionAtTop(where), `the Allowed devices section is at the top of the view: ${JSON.stringify(where)}`);
-  assert.equal(where.listOpen, false, 'the notice does not open the list');
-  check('Open settings opens Settings at the Allowed devices section, with focus on "Show allowed devices" and the list closed');
+  await artLanded(page).catch(() => {});
+  const where = await artWhere(page);
+  assert.equal(where.focused, true, `focus is on "Image to show": ${JSON.stringify(where)}`);
+  assert.ok(buttonInView(where) && !where.covered, `the focused control is in view: ${JSON.stringify(where)}`);
+  assert.ok(!sectionFits(where) || sectionAtTop(where), `the Poster art section is at the top of the view: ${JSON.stringify(where)}`);
+  assert.equal(await page.evaluate(() => document.getElementById('tmdb-key-input').getClientRects().length > 0), true, 'the TMDB key field is in the section, shown');
+  check('Open settings from a TMDB-only household: Poster art at the top, focus on "Image to show"');
 });
 
 // D128 1: ticking "Household with children" reveals the limit, the schedule and the profiles. The toggle stays where it was on screen
@@ -310,7 +327,8 @@ for (const how of ['mouse', 'keyboard']) {
   });
 }
 
-// D128 1: a slow server answers the library, collection and playlist lists late. the notice's Open settings still lands at the Allowed devices section once they arrive,
+
+// D128 1: a slow server answers the library, collection and playlist lists late. The notice's Open settings still lands at the Poster art section once they arrive,
 // and a sheet opened with the gear and scrolled by the reader does not move when they arrive.
 const slowLists = (page) =>
   page.route(/\/(library\/sections|playlists)/, async (route) => {
@@ -325,18 +343,19 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await page.click('#toast button:has-text("Open settings")');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
   await settled(page);
-  await playersLanded(page).catch(() => {});
-  const where = await playersWhere(page);
-  assert.equal(where.focused, true, `focus is on "Show allowed devices" once the late lists arrived: ${JSON.stringify(where)}`);
-  assert.ok(buttonInView(where) && !where.covered, `the button is in view once the late lists arrived: ${JSON.stringify(where)}`);
-  assert.ok(!sectionFits(where) || sectionAtTop(where), `the Allowed devices section is at the top once the late lists arrived: ${JSON.stringify(where)}`);
-  check('Open settings lands at the Allowed devices section when the lists arrive late');
+  await artLanded(page).catch(() => {});
+  const where = await artWhere(page);
+  assert.equal(where.focused, true, `focus is on "Image to show" once the late lists arrived: ${JSON.stringify(where)}`);
+  assert.ok(buttonInView(where) && !where.covered, `the control is in view once the late lists arrived: ${JSON.stringify(where)}`);
+  assert.ok(!sectionFits(where) || sectionAtTop(where), `the Poster art section is at the top once the late lists arrived: ${JSON.stringify(where)}`);
+  check('Open settings lands at the Poster art section when the lists arrive late');
 });
 await withApp({ settings: seed() }, async ({ page, app }) => {
   await slowLists(page);
   await openSettings(page, app);
   const place = () => page.evaluate(() => document.getElementById('layout-fieldset').getBoundingClientRect().top);
-  await page.evaluate(() => { document.querySelector('#settings .sheet-body').scrollTop = 1200; });
+  // Scrolled to a section below the lists (not to a fixed offset: Poster art made the sheet longer, and 1200 px now falls in the Poster selection section, the one that grows).
+  await page.evaluate(() => document.getElementById('layout-fieldset').scrollIntoView({ block: 'start' }));
   const before = await place();
   await settled(page);
   const after = await place();
@@ -354,17 +373,26 @@ await withApp({ settings: seed({ settingsPinHash: auth.hash, settingsPinSalt: au
   for (const d of PIN) await page.click(`#pin-dialog [data-key="${d}"]`);
   await page.click('#pin-dialog [data-key="ok"]');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-  await playersLanded(page).catch(() => {});
-  const where = await playersWhere(page);
-  assert.equal(where.focused, true, `focus is on "Show allowed devices" after the PIN: ${JSON.stringify(where)}`);
-  assert.ok(buttonInView(where) && !where.covered, `the button is in view after the PIN: ${JSON.stringify(where)}`);
-  assert.ok(!sectionFits(where) || sectionAtTop(where), `Allowed devices section at the top after the PIN: ${JSON.stringify(where)}`);
-  check('Open settings goes through the PIN gate and lands on Allowed devices');
+  await artLanded(page).catch(() => {});
+  const where = await artWhere(page);
+  assert.equal(where.focused, true, `focus is on "Image to show" after the PIN: ${JSON.stringify(where)}`);
+  assert.ok(buttonInView(where) && !where.covered, `the control is in view after the PIN: ${JSON.stringify(where)}`);
+  assert.ok(!sectionFits(where) || sectionAtTop(where), `the Poster art section is at the top after the PIN: ${JSON.stringify(where)}`);
+  check('Open settings goes through the PIN gate and lands on Poster art');
 });
 
 // A cancelled PIN opens nothing and moves no focus; a wrong one opens nothing either.
 await withApp({ settings: seed({ settingsPinHash: auth.hash, settingsPinSalt: auth.salt }) }, async ({ page, app }) => {
   await clearMarkerOnce(page);
+  // Records every scrollIntoView on the Poster art section: a closed sheet must not be scrolled or focused after a refused PIN.
+  await page.addInitScript(() => {
+    window.__artScrolls = 0;
+    const scroll = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (...args) {
+      if (this.id === 'art-fieldset') window.__artScrolls++;
+      return scroll.apply(this, args);
+    };
+  });
   await page.goto(app.url);
   await waitToast(page);
   await page.focus('#toast button:has-text("Open settings")');
@@ -377,32 +405,32 @@ await withApp({ settings: seed({ settingsPinHash: auth.hash, settingsPinSalt: au
   await page.click('#pin-cancel');
   await page.waitForFunction(() => !document.getElementById('pin-dialog').open, null, { timeout: 5000 });
   assert.equal(await isOpen(page, 'settings'), false, 'a cancelled PIN opens nothing');
-  assert.notEqual(await page.evaluate(() => document.activeElement?.id), 'players-open', 'no focus moved to "Show allowed devices"');
-  assert.equal(await page.evaluate(() => document.getElementById('players-body').hidden), true, 'the list stays closed');
-  check('a wrong and a cancelled PIN open nothing and move no focus to Allowed devices');
+  assert.notEqual(await page.evaluate((sel) => document.activeElement === document.querySelector(sel), ART), true, 'no focus moved to "Image to show"');
+  assert.equal(await page.evaluate(() => window.__artScrolls), 0, 'the Poster art section was not scrolled while Settings stayed closed');
+  check('a wrong and a cancelled PIN open nothing and move no focus to Poster art');
 });
 
-// From two servers the notice still lands on Allowed devices (not on the server list, whatever the household's servers), with focus on "Show allowed devices".
+// From two servers the notice still lands on Poster art (not on the server list, whatever the household's servers), with focus on "Image to show".
 await withApp({ settings: seed({ serverName: 'Mock Plex', servers: [{ id: '90000000000000000000000000000001', type: 'jellyfin', url: 'http://127.0.0.1:1', token: 'jf-demo-token', userId: '', name: 'Mock Jellyfin' }] }) }, async ({ page, app }) => {
   await clearMarkerOnce(page);
   await page.goto(app.url);
   await waitToast(page);
   await page.click('#toast button:has-text("Open settings")');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-  await playersLanded(page).catch(() => {});
-  const where = await playersWhere(page);
+  await artLanded(page).catch(() => {});
+  const where = await artWhere(page);
   assert.equal(await page.evaluate(() => !document.getElementById('server-list').hidden), true, 'two servers: the list shows');
-  assert.equal(where.focused, true, `focus is on "Show allowed devices", not on the first Remove button: ${JSON.stringify(where)}`);
+  assert.equal(where.focused, true, `focus is on "Image to show", not on the first Remove button: ${JSON.stringify(where)}`);
   assert.equal(where.serversFocused, false, 'no focus in the server section');
-  assert.ok(!sectionFits(where) || sectionAtTop(where), `Allowed devices section at the top: ${JSON.stringify(where)}`);
-  check('Open settings from two servers: Allowed devices at the top, focus on "Show allowed devices"');
+  assert.ok(!sectionFits(where) || sectionAtTop(where), `the Poster art section is at the top: ${JSON.stringify(where)}`);
+  check('Open settings from two servers: Poster art at the top, focus on "Image to show"');
 });
 
-// D196 3 (the rule of D179 4, carried to the new target): at each rotation the sheet is turned, and "Show allowed devices" must be inside the sheet body's visible box
+// The rule of D196 3, D179 4 and D197 1, carried to the new target: at each rotation the sheet is turned, and "Image to show" must be inside the sheet body's visible box
 // with nothing over its centre, at a wide and at a tall screen; where the section fits it is at the top of the view (rotation 0). The wait is on the sheet being
-// open and the button focused and in the box, not on a delay.
-// The first two sizes are the 2.4.2 ones; the last three are small enough that the section and the button do not both fit the visible part of the sheet at some
-// rotation (a short view, or a turned narrow one), which is where the focused button must be brought into view.
+// open and the control focused and in the box, not on a delay.
+// The first two sizes are the 2.4.2 ones; the last three are small enough that the section and the control do not both fit the visible part of the sheet at some
+// rotation (a short view, or a turned narrow one), which is where the focused control must be brought into view.
 const SIZES = [[390, 844], [844, 390], [320, 568], [360, 300], [568, 320]];
 for (const [label, viewport, rotation] of SIZES.flatMap(([width, height]) => [0, 90, 180, 270].map((r) => [`${width}x${height} rotation ${r}`, { width, height }, r]))) {
   await withApp({ settings: seed({ rotation, serverName: 'Mock Plex', servers: [{ id: '90000000000000000000000000000001', type: 'jellyfin', url: 'http://127.0.0.1:1', token: 'jf-demo-token', userId: '', name: 'Mock Jellyfin' }] }), viewport }, async ({ page, app }) => {
@@ -410,196 +438,16 @@ for (const [label, viewport, rotation] of SIZES.flatMap(([width, height]) => [0,
     await page.goto(app.url);
     await waitToast(page);
     await page.click('#toast button:has-text("Open settings")');
-    await page.waitForFunction(() => document.getElementById('settings').open && document.activeElement === document.getElementById('players-open'), null, { timeout: 5000 });
-    await playersLanded(page).catch(() => {});
-    const where = await playersWhere(page);
-    assert.equal(where.focused, true, `focus is on "Show allowed devices" at ${label}`);
-    assert.ok(buttonInView(where), `"Show allowed devices" is inside the sheet body's visible box at ${label}: ${JSON.stringify(where)}`);
-    assert.equal(where.covered, false, `the element at the button's centre is the button at ${label}: ${JSON.stringify(where)}`);
+    await page.waitForFunction((sel) => document.getElementById('settings').open && document.activeElement === document.querySelector(sel), ART, { timeout: 5000 });
+    await artLanded(page).catch(() => {});
+    const where = await artWhere(page);
+    assert.equal(where.focused, true, `focus is on "Image to show" at ${label}`);
+    assert.ok(buttonInView(where), `"Image to show" is inside the sheet body's visible box at ${label}: ${JSON.stringify(where)}`);
+    assert.equal(where.covered, false, `the element at the control's centre is the control at ${label}: ${JSON.stringify(where)}`);
     if (rotation === 0 && sectionFits(where)) assert.ok(sectionAtTop(where), `the section is at the top of the view at ${label}: ${JSON.stringify(where)}`);
-    assert.equal(where.listOpen, false, `the list stays closed at ${label}`);
-    check(`Open settings at ${label}: "Show allowed devices" is focused, in view and not covered`);
+    check(`Open settings at ${label}: "Image to show" is focused, in view and not covered`);
   });
 }
-
-// D196 3, from the other side: where the section and the button both fit, the section is at the TOP of the view (and the button is not centred). Allowed devices is the last
-// section of the sheet, so the end of the sheet would stop the scroll short of the top; the case adds room below it (a spacer inside the sheet body, as a longer sheet would have),
-// so the top is reachable. Without the section's own scroll it stays where the sheet opened; with the button always centred it sits mid-view: both leave the section off the top.
-for (const [width, height] of [[1280, 720], [390, 844]]) {
-  await withApp({ settings: seed(), viewport: { width, height } }, async ({ page, app }) => {
-    await clearMarkerOnce(page);
-    await page.goto(app.url);
-    await waitToast(page);
-    await page.evaluate(() => {
-      const spacer = document.createElement('div');
-      spacer.style.height = '3000px';
-      document.querySelector('#settings .sheet-body').append(spacer);
-    });
-    await page.click('#toast button:has-text("Open settings")');
-    await page.waitForFunction(() => document.getElementById('settings').open && document.activeElement === document.getElementById('players-open'), null, { timeout: 5000 });
-    await playersLanded(page).catch(() => {});
-    const where = await playersWhere(page);
-    assert.ok(sectionFits(where), `at ${width}x${height} the section fits the view: ${JSON.stringify(where)}`);
-    assert.ok(Math.abs(where.section.top - where.body.top) <= 2, `at ${width}x${height} the Allowed devices section's top edge is at the top of the sheet body: ${JSON.stringify(where)}`);
-    assert.ok(buttonInView(where) && !where.covered && where.focused, `at ${width}x${height} the focused button is in view: ${JSON.stringify(where)}`);
-    check(`Open settings at ${width}x${height} with room below: the Allowed devices section is at the top of the view`);
-  });
-}
-
-// D197 2: with the Allowed devices list already open, "Show allowed devices" is not shown, so the notice's Open settings cannot focus it. The route: the gear, Show allowed
-// devices, Position poster (position mode keeps the list open) and then the notice (still up) pressed. Focus must go to a control of the open list (or its status line), inside
-// the Allowed devices section and inside the visible sheet body, and not stay on Position poster far above. With a PIN, the notice asks for it again.
-// Which control of the open Allowed devices list has focus, by the DOM order of the controls rendered now (never a hard-coded position): the first one is the right one (D197 2).
-// `count` shows the list has more than one control, so "the last one" and "the status line" are different answers from the first.
-const listFocus = (page) =>
-  page.evaluate(() => {
-    const controls = [...document.querySelectorAll('#players-body button, #players-body input')].filter((el) => el.getClientRects().length > 0);
-    const at = document.activeElement;
-    return { count: controls.length, first: controls[0] === at, last: controls.at(-1) === at, status: at === document.getElementById('players-status'), active: at.getAttribute('aria-label') || at.id || at.tagName };
-  });
-
-// The small sizes are where the section and the control do not both fit the view, so the control must be brought into view.
-for (const [withPin, viewport, rotation] of [[false, undefined, 0], [true, undefined, 0], [false, { width: 360, height: 300 }, 0], [false, { width: 320, height: 568 }, 90], [false, { width: 568, height: 320 }, 0]]) {
-  await withApp({ settings: seed({ rotation, ...(withPin ? { settingsPinHash: auth.hash, settingsPinSalt: auth.salt } : {}) }), plexTv: true, ...(viewport ? { viewport } : {}) }, async ({ page, app }) => {
-    const enterPin = async () => {
-      await page.waitForFunction(() => document.getElementById('pin-dialog').open, null, { timeout: 5000 });
-      for (const d of PIN) await page.click(`#pin-dialog [data-key="${d}"]`);
-      await page.click('#pin-dialog [data-key="ok"]');
-      await page.waitForFunction(() => !document.getElementById('pin-dialog').open, null, { timeout: 5000 });
-    };
-    await clearMarkerOnce(page);
-    await page.goto(app.url);
-    await waitToast(page);
-    await page.keyboard.press('s');
-    if (withPin) await enterPin();
-    await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-    await page.click('#players-open');
-    if (withPin) await enterPin();
-    await page.waitForFunction(() => !document.getElementById('players-body').hidden && document.querySelectorAll('#players-list li').length > 0, null, { timeout: 8000 });
-    await page.click('#position-btn');
-    await page.waitForFunction(() => !document.getElementById('settings').open, null, { timeout: 5000 });
-    assert.equal((await toastState(page)).hidden, false, 'the notice is still up in position mode');
-    await page.click('#toast button:has-text("Open settings")');
-    if (withPin) await enterPin();
-    await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-    await page.waitForLoadState('networkidle');
-    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
-    const where = await page.evaluate(() => {
-      const el = document.activeElement;
-      const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
-      const r = el.getBoundingClientRect();
-      return {
-        id: el.id || el.tagName,
-        inSection: el.closest('#players-fieldset') !== null,
-        inBody: r.height > 0 && r.top >= body.top - 1 && r.bottom <= body.bottom + 1 && r.left >= body.left - 1 && r.right <= body.right + 1,
-        buttonHidden: document.getElementById('players-open').hidden,
-        listOpen: !document.getElementById('players-body').hidden,
-      };
-    });
-    assert.ok(where.buttonHidden && where.listOpen, `the list is still open and its button hidden: ${JSON.stringify(where)}`);
-    assert.equal(where.inSection, true, `focus is inside the Allowed devices section${withPin ? ' (with a PIN)' : ''}: ${JSON.stringify(where)}`);
-    assert.equal(where.inBody, true, `the focused control is inside the visible sheet body${withPin ? ' (with a PIN)' : ''}: ${JSON.stringify(where)}`);
-    const which = await listFocus(page);
-    assert.ok(which.count > 1 && which.first && !which.last && !which.status, `focus is on the FIRST rendered control of the list (the first tick), not the last and not the status line: ${JSON.stringify(which)}`);
-    check(`Open settings with the Allowed devices list already open (through position mode)${withPin ? ', with a PIN' : ''}${viewport ? ` at ${viewport.width}x${viewport.height} rotation ${rotation}` : ''}: focus is on a control of the list, in view`);
-  });
-}
-
-// D197 2, which control: a failed read (its first control is "Try again", ahead of the stored entries' Remove buttons) and a read that lists none of the stored entries (their
-// Remove buttons only, so the first Remove). The same route; the focus is on the first rendered control by DOM order, not the last and not the status line.
-for (const [state, answer] of [['failed read', () => [undefined, { status: 500 }]], ['stored entries only', () => [[], {}]]]) {
-  await withApp({ settings: seed({ allowedPlayers: [{ id: 'stored-one', name: 'Stored One' }, { id: 'stored-two', name: 'Stored Two' }] }), plexTv: true }, async ({ page, app, mock }) => {
-    await mock.plexTvSet(...answer());
-    try {
-      await clearMarkerOnce(page);
-      await page.goto(app.url);
-      await waitToast(page);
-      await page.keyboard.press('s');
-      await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-      await page.click('#players-open');
-      await page.waitForFunction(() => !document.getElementById('players-body').hidden && /(Could not read|lists no players)/.test(document.getElementById('players-status').textContent), null, { timeout: 8000 });
-      await page.click('#position-btn');
-      await page.waitForFunction(() => !document.getElementById('settings').open, null, { timeout: 5000 });
-      await page.click('#toast button:has-text("Open settings")');
-      await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
-      const which = await listFocus(page);
-      assert.ok(which.count > 1 && which.first && !which.last && !which.status, `${state}: focus is on the first rendered control: ${JSON.stringify(which)}`);
-      if (state === 'failed read') assert.equal(await page.evaluate(() => document.activeElement.id), 'players-retry', 'the first control of a failed read is "Try again"');
-      else assert.match(which.active, /^Remove /, 'the first control is the first stored entry\'s Remove button');
-      check(`Open settings with the list open (${state}): focus is on the first rendered control`);
-    } finally {
-      await mock.plexTvReset();
-    }
-  });
-}
-
-// D197 2, the list's status line: two states of the open list have no control at all, the read still out with nothing stored ("Reading your players from plex.tv…") and a read
-// that answered with no player and nothing stored ("plex.tv lists no players on your account."). A failed read has "Try again" and a stored entry has its Remove, so these are the
-// states where the notice's Open settings can only focus the status line. Same route as above; the focus is on the line and the line is inside the visible sheet body.
-for (const [state, viewport] of [['loading', undefined], ['empty', undefined], ['loading', { width: 360, height: 300 }], ['empty', { width: 360, height: 300 }]]) {
-  await withApp({ settings: seed(), plexTv: true, ...(viewport ? { viewport } : {}) }, async ({ page, app, mock, context }) => {
-    let release = () => {};
-    if (state === 'loading') {
-      const gate = new Promise((resolve) => (release = resolve));
-      await context.route(/^https:\/\/plex\.tv\/api\/v2\/resources(\?|$)/, async (route) => {
-        await gate;
-        await route.fallback(); // answered by the harness route behind this one
-      });
-    } else await mock.plexTvSet([]);
-    try {
-      await clearMarkerOnce(page);
-      await page.goto(app.url);
-      await waitToast(page);
-      await page.keyboard.press('s');
-      await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-      await page.click('#players-open');
-      await page.waitForFunction((want) => !document.getElementById('players-body').hidden && want.test(document.getElementById('players-status').textContent), state === 'loading' ? /^Reading your players/ : /lists no players/, { timeout: 8000 });
-      await page.click('#position-btn');
-      await page.waitForFunction(() => !document.getElementById('settings').open, null, { timeout: 5000 });
-      await page.click('#toast button:has-text("Open settings")');
-      await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
-      const where = await page.evaluate(() => {
-        const el = document.activeElement;
-        const body = document.querySelector('#settings .sheet-body').getBoundingClientRect();
-        const r = el.getBoundingClientRect();
-        return {
-          id: el.id || el.tagName,
-          controls: document.querySelectorAll('#players-body button:not([hidden]), #players-body input').length,
-          inBody: r.height > 0 && r.top >= body.top - 1 && r.bottom <= body.bottom + 1 && r.left >= body.left - 1 && r.right <= body.right + 1,
-        };
-      });
-      assert.equal(where.controls, 0, `the open list has no control (${state}): ${JSON.stringify(where)}`);
-      assert.equal(where.id, 'players-status', `focus is on the list's status line (${state}): ${JSON.stringify(where)}`);
-      assert.equal(where.inBody, true, `the status line is inside the visible sheet body (${state}): ${JSON.stringify(where)}`);
-      check(`Open settings with the list open and no control in it (${state})${viewport ? ` at ${viewport.width}x${viewport.height}` : ''}: focus is on the status line, in view`);
-    } finally {
-      // Nothing in the case waits after the release: the held read is answered by the harness route behind the gate, and withApp closes the page and fails the case if a plex.tv
-      // request is still unanswered (guardNetwork), so the wait is bounded by the harness, not by a delay here. The empty answer is the shared mock's, so it is put back.
-      release();
-      if (state === 'empty') await mock.plexTvReset();
-    }
-  });
-}
-
-// U2: without any spacer, on the sheet as built, Allowed devices is the last section, so after Open settings the sheet is scrolled to its end (the section as near the top
-// as the sheet allows) and the button is in view. (D197 1)
-for (const [width, height] of [[1280, 720], [390, 844]]) {
-  await withApp({ settings: seed(), viewport: { width, height } }, async ({ page, app }) => {
-    await clearMarkerOnce(page);
-    await page.goto(app.url);
-    await waitToast(page);
-    await page.click('#toast button:has-text("Open settings")');
-    await page.waitForFunction(() => document.getElementById('settings').open && document.activeElement === document.getElementById('players-open'), null, { timeout: 5000 });
-    await playersLanded(page).catch(() => {});
-    const where = await playersWhere(page);
-    assert.equal(where.atEnd, true, `at ${width}x${height} the sheet body is scrolled to its end: ${JSON.stringify(where)}`);
-    assert.ok(buttonInView(where) && !where.covered && where.focused, `at ${width}x${height} the button is in view: ${JSON.stringify(where)}`);
-    check(`Open settings at ${width}x${height} on the sheet as built: scrolled to its end, the button in view`);
-  });
-}
-
 // D168 2: with two servers and no saved serverName the connection test names the first server a moment after the sheet opens, and the list is redrawn with
 // that name. The redraw must leave focus where it was: on the first Remove button. The test's answer is held until the page has been seen with focus on the
 // button, so the redraw comes after (a slow server), and the wait is on the redrawn name, not on a delay. The keyboard then goes on from there.
@@ -640,7 +488,7 @@ await withApp({ settings: seed({ servers: [{ id: '900000000000000000000000000000
   check('Settings opened with the gear, two servers, no saved serverName: the list redraw keeps focus on the first Remove button (slow server, keyboard)');
 });
 
-// D169 2: Settings keeps its scroll position, so a sheet opened with the gear, scrolled away from the Allowed devices section (to the top of the sheet) and cancelled is not
+// D169 2: Settings keeps its scroll position, so a sheet opened with the gear, scrolled away from the Poster art section (to the end of the sheet) and cancelled is not
 // at the section when the notice's Open settings opens it again; the scroll in the handler is what brings the section back. The toast survives the gear open and Cancel.
 await withApp({ settings: seed() }, async ({ page, app }) => {
   await clearMarkerOnce(page);
@@ -651,29 +499,30 @@ await withApp({ settings: seed() }, async ({ page, app }) => {
   await settled(page);
   const away = await page.evaluate(() => {
     const b = document.querySelector('#settings .sheet-body');
-    b.scrollTop = 0;
-    return document.getElementById('players-fieldset').getBoundingClientRect().top - b.getBoundingClientRect().bottom;
+    b.scrollTop = b.scrollHeight;
+    return b.getBoundingClientRect().top - document.getElementById('art-fieldset').getBoundingClientRect().bottom;
   });
-  assert.ok(away > 400, `the sheet is scrolled well away from the Allowed devices section (it starts ${away} px below the view): ${away}`);
+  assert.ok(away > 400, `the sheet is scrolled well away from the Poster art section (it ends ${away} px above the view): ${away}`);
   await page.click('#settings-cancel');
   await page.waitForFunction(() => !document.getElementById('settings').open, null, { timeout: 5000 });
   assert.equal((await toastState(page)).hidden, false, 'the toast is still up after the gear open and Cancel');
   await page.click('#toast button:has-text("Open settings")');
   await page.waitForFunction(() => document.getElementById('settings').open, null, { timeout: 5000 });
-  await playersLanded(page).catch(() => {});
-  const where = await playersWhere(page);
-  assert.equal(where.focused, true, `focus is on "Show allowed devices": ${JSON.stringify(where)}`);
-  assert.ok(buttonInView(where) && !where.covered, `the button is in view: ${JSON.stringify(where)}`);
-  assert.ok(!sectionFits(where) || sectionAtTop(where), `Allowed devices section at the top after a scrolled gear open and Cancel: ${JSON.stringify(where)}`);
-  check('Open settings after a scrolled gear open and Cancel: the Allowed devices section is back at the top');
+  await artLanded(page).catch(() => {});
+  const where = await artWhere(page);
+  assert.equal(where.focused, true, `focus is on "Image to show": ${JSON.stringify(where)}`);
+  assert.ok(buttonInView(where) && !where.covered, `the control is in view: ${JSON.stringify(where)}`);
+  assert.ok(!sectionFits(where) || sectionAtTop(where), `the Poster art section is at the top after a scrolled gear open and Cancel: ${JSON.stringify(where)}`);
+  check('Open settings after a scrolled gear open and Cancel: the Poster art section is back at the top');
 });
+
 
 await withApp({ settings: { pixelShift: false, dailyReload: false } }, async ({ page, app }) => {
   await clearMarkerOnce(page);
   await page.goto(app.url);
   await page.waitForTimeout(2500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'unconfigured: no toast');
-  assert.equal(await page.evaluate(() => localStorage.getItem('plexPoster.whatsNew')), '2.4.3', 'unconfigured: marker written');
+  assert.equal(await marker(page), '2.5.0', 'unconfigured: marker written');
   assert.ok(!(await page.evaluate(() => document.querySelector('#toast button'))) || (await toastState(page)).hidden);
   check('unconfigured install never shows the toast');
 });
@@ -700,7 +549,7 @@ await withApp({ settings: {} }, async ({ page, context, app }) => {
   await page.waitForFunction(() => [...document.querySelectorAll('.poster-layer')].some((i) => i.naturalWidth > 0), null, { timeout: 15000 });
   await page.waitForTimeout(1500);
   assert.ok(!(await toastState(page)).text.includes("What's new"), 'a fresh config.json install shows no upgrade toast');
-  assert.equal(await marker(page), '2.4.3', 'the marker is written');
+  assert.equal(await marker(page), '2.5.0', 'the marker is written');
   check('K60: a config.json-provisioned first boot writes the marker and shows no toast');
 });
 
@@ -710,6 +559,6 @@ await withApp({ settings: seed() }, async ({ page, context, app }) => {
   await clearMarkerOnce(page);
   await page.goto(app.url);
   await waitToast(page);
-  assert.equal(await marker(page), '2.4.3');
+  assert.equal(await marker(page), '2.5.0');
   check('K60: an upgraded stored install (config.json beside it) still shows the toast');
 });

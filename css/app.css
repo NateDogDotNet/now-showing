@@ -187,6 +187,20 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
   pointer-events: none;
 }
 
+/* Title as logo (R-ART-2): the title's logo art takes the title line's place. The line has a height of its own (by the screen, as the text's size is) and the image fits
+   inside it, never past it or past the card's width, whatever shape the logo is. It sits in the title card, so night dim and every display filter reach it as they reach the text. */
+.title-logo-line {
+  height: clamp(36px, 8vmin, 110px);
+}
+.title-logo {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px #000); /* as the text's shadow, lifting a logo off the poster; a logo too dark to read on this card is never drawn (D222 1, D223 1: the title is text) */
+}
+
 /* "Playing in {player}": top of the poster window, over a soft scrim. */
 .player-label {
   position: absolute;
@@ -258,6 +272,11 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
 /* The server type (Plex or Jellyfin): the rotation presets' buttons, a little roomier for a first touch. On the card they sit centred
    above the instruction; in Settings they open the connection section. The Jellyfin address and password forms on the card are
    stacked fields at the card's width, left aligned inside the centred card. */
+/* "No media server? Use TMDB" on the card: text that acts as a link, with a touch-sized target (D211 1). */
+.empty-card .firstrun .firstrun-tmdb { margin: 10px 0 0; }
+.linklike { display: inline-block; padding: 12px 8px; min-height: 44px; box-sizing: border-box; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
+.linklike:hover { filter: brightness(1.2); }
+.linklike:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 .firstrun-type-label { display: block; margin: 0 0 4px; color: var(--muted); font-size: 0.9rem; }
 .firstrun-type { justify-content: center; margin: 0 0 14px; }
 #jf-password summary { padding: 11px 0; min-height: 44px; box-sizing: border-box; }
@@ -668,6 +687,11 @@ input[type="time"]:focus-within { outline: 2px solid var(--accent); outline-offs
 .pick-list label.check:has(input:disabled) { color: var(--muted); }
 .pick-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr)); max-height: 11.5rem; overflow-y: auto; padding: 4px; border: 1px solid var(--panel-line); border-radius: 8px; overscroll-behavior: contain; }
 .pick-grid:empty { display: none; }
+/* Production house (Run 13): the TMDB company search sits above the ticked list; the field shrinks so the row never scrolls sideways at a phone width or at rotation 90. */
+.house-search { flex-wrap: wrap; }
+.house-search input { flex: 1 1 10rem; min-width: 0; width: auto; box-sizing: border-box; }
+.house-search .btn { flex: 0 0 auto; }
+#house-status:empty { display: none; } /* the short live line (Loading, Searching, N found, errors); no space while it has nothing to say */
 .pick-row { grid-template-columns: repeat(auto-fill, minmax(min(100%, 6.5rem), 1fr)); }
 .pick-list label.check span { min-width: 0; overflow-wrap: anywhere; }
 #selection-fieldset > label { margin-top: 14px; }
@@ -891,3 +915,19 @@ body.positioning.dragging.idle.hide-cursor #app * { cursor: grabbing !important;
 /* A server's name over its libraries in the library list when there are several servers. */
 .pick-list .server-heading { margin: 8px 0 0; padding: 2px 4px; font-weight: 600; color: var(--muted); overflow-wrap: anywhere; }
 .pick-list .server-heading:first-child { margin-top: 0; }
+
+/* TMDB (R-TMDB-1): the choice for a household with no media server sits under the three server types, and its credit and choice of posters in the sheet.
+   Nothing here is on the display: TMDB's sentence and logo are in Settings only (D203 1). */
+.tmdb-type { margin: 0 0 10px; }
+.tmdb-type .seg-opt span { min-width: 88px; padding: 10px 16px; text-align: center; }
+.tmdb-type input:disabled + span { opacity: 0.5; cursor: not-allowed; }
+#tmdb-pick-help { margin: 2px 0 0; }
+.tmdb-connection .input-row input { flex: 1 1 auto; min-width: 0; }
+.tmdb-credit { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--panel-line); }
+.tmdb-credit img { display: block; width: 77px; height: auto; max-width: 100%; margin-bottom: 6px; }
+.tmdb-credit p { margin: 0; overflow-wrap: anywhere; }
+#tmdb-source-group { margin-bottom: 4px; }
+.tmdb-years { align-items: flex-end; flex-wrap: wrap; }
+.tmdb-years label { flex: 1 1 8rem; min-width: 0; margin-top: 0; }
+.tmdb-years input[type="number"] { width: 100%; }
+#tmdb-discover > p { margin: 6px 0 0; }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addressOf, defaults, earlySettings, followNames, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, NO_SERVER_MEANING, oldTokenMayGo, PLAYER_STATES, playerRows, removedServers, sanitize, save, SECRET_KEYS, serverList, setAllowed, settleServers, STORAGE_KEY, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
+import { addressOf, cleanServer, defaults, earlySettings, followNames, fromImport, importWithConnection, isConfigured, LOCAL_KEYS, load, MAX_SERVERS, NO_SERVER_MEANING, oldTokenMayGo, PLAYER_STATES, playerRows, removedServers, sanitize, save, SECRET_KEYS, serverList, serversDroppedByTmdbImport, setAllowed, settleServers, STORAGE_KEY, tmdbDroppedByImport, toExport, withoutSecrets, withoutServers } from '../js/settings.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -303,7 +303,7 @@ test('settings saved before 2.3 with only libraryKey load as that one library an
   assert.deepEqual([settings.genres, settings.ratings, settings.source], [[], [], null]);
   const before = { ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1', libraryName: 'Movies', maxContentRating: 'PG' };
   for (const k of Object.keys(before)) if (!['libraryKeys', 'libraryNames'].includes(k)) assert.deepEqual(settings[k], before[k], `${k} unchanged`);
-  assert.deepEqual(selectionOf(settings), { libraries: [{ key: '1', name: 'Movies' }], genres: [], ratings: [], source: null });
+  assert.deepEqual(selectionOf(settings), { libraries: [{ key: '1', name: 'Movies' }], genres: [], houses: [], ratings: [], source: null });
 });
 
 test('a library list sets libraryKey and libraryName to its first library, and the names line up with the keys', () => {
@@ -324,7 +324,7 @@ test('an empty library list leaves libraryKey alone (that is a 2.2 file)', () =>
 test('genres, ratings and a source survive save and load, an export and an import', () => {
   const chosen = {
     libraryKeys: ['1', '3'], libraryNames: ['Movies', 'Kids Movies'],
-    genres: [{ key: '12', title: 'Comedy' }], ratings: ['G', 'PG'], source: { kind: 'collection', key: '102', title: 'Top Rated' },
+    genres: [{ key: '12', title: 'Comedy' }], houses: [{ key: '', title: 'Pixar' }, { key: '41077', title: 'A24' }], ratings: ['G', 'PG'], source: { kind: 'collection', key: '102', title: 'Top Rated' },
   };
   const storage = memoryStorage();
   save(storage, { ...defaults(), ...chosen });
@@ -1127,6 +1127,7 @@ const heldBase = () =>
     libraryKeys: ['1', '@jf-id-1/b1'],
     libraryNames: ['Movies', 'JF Movies'],
     genres: ['Drama'],
+    houses: [{ key: '', title: 'Pixar' }],
     ratings: ['PG'],
     source: { kind: 'collection', key: '77', title: 'Old collection' },
     staticRatingKey: '42',
@@ -1135,8 +1136,8 @@ const heldBase = () =>
     servers: [JF()],
   });
 /** What the sheet hands in for a Save: the new selection and pin (ids of the new server), the connection keys as typed. */
-const newPicks = { libraryKey: '5', libraryKeys: ['5'], libraryNames: ['New Movies'], genres: ['Horror'], ratings: ['R'], source: { kind: 'playlist', key: '88', title: 'New list' }, staticRatingKey: '99', staticTitle: 'New pin' };
-const SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'ratings', 'source'];
+const newPicks = { libraryKey: '5', libraryKeys: ['5'], libraryNames: ['New Movies'], genres: ['Horror'], houses: [{ key: '', title: 'A24' }], ratings: ['R'], source: { kind: 'playlist', key: '88', title: 'New list' }, staticRatingKey: '99', staticTitle: 'New pin' };
+const SELECTION = ['libraryKey', 'libraryName', 'libraryKeys', 'libraryNames', 'genres', 'houses', 'ratings', 'source'];
 const PIN = ['staticRatingKey', 'staticTitle'];
 const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
 const CONNECTION = ['serverType', 'serverUrl', 'plexToken', 'serverUserId', 'serverName', 'serverId', 'serverCarried', 'servers'];
@@ -1464,4 +1465,156 @@ test('players are sorted by name with numbers in order: "Player 2" before "Playe
   const names = ['Player 10', 'Player 2', 'player 1', 'TV 9', 'TV 10', 'Player 11', 'Player 20', 'Alpha'];
   const listed = names.map((name, i) => ({ id: `p${i}`, name, present: true }));
   assert.deepEqual(playerRows([], listed).map((r) => r.name), ['Alpha', 'player 1', 'Player 2', 'Player 10', 'Player 11', 'Player 20', 'TV 9', 'TV 10']);
+});
+
+// ---- the TMDB key and server type (Run 13, tmdb-source: R-TMDB-1, D210 5) ----
+
+const TMDB_KEY = 'eyJhbGciOiJIUzI1NiJ9.a-tmdb-read-access-token';
+
+test('T4 the TMDB key is a secret: kept out of an export unless the PIN was given, and then written as plain text, like the Plex token', () => {
+  assert.ok(SECRET_KEYS.includes('tmdbKey'));
+  const s = { ...defaults(), serverType: 'tmdb', tmdbKey: TMDB_KEY, libraryKey: 'movie/popular' };
+  for (const opts of [undefined, {}, { includeSecrets: false }]) {
+    const file = toExport(s, opts);
+    assert.equal('tmdbKey' in file.settings, false);
+    assert.ok(!JSON.stringify(file).includes(TMDB_KEY), 'the value is nowhere in the file');
+  }
+  assert.equal(toExport(s, { includeSecrets: true }).settings.tmdbKey, TMDB_KEY);
+  assert.equal('tmdbKey' in withoutSecrets(s), false);
+  // The Plex token's own rule is as it was, with both set.
+  const both = { ...s, plexToken: 'plex-secret' };
+  assert.deepEqual(['plexToken' in toExport(both).settings, 'tmdbKey' in toExport(both).settings], [false, false]);
+  assert.deepEqual([toExport(both, { includeSecrets: true }).settings.plexToken, toExport(both, { includeSecrets: true }).settings.tmdbKey], ['plex-secret', TMDB_KEY]);
+});
+
+test('an import with no TMDB key keeps the stored one; a file with one replaces it; either way the key survives a change of server type', () => {
+  const current = { ...defaults(), serverType: 'tmdb', tmdbKey: TMDB_KEY, libraryKey: 'movie/popular' };
+  assert.equal(fromImport({ rotateSeconds: 60 }, current).tmdbKey, TMDB_KEY);
+  assert.equal(fromImport(JSON.stringify(toExport(current)), current).tmdbKey, TMDB_KEY, 'an export without secrets is a file without a key');
+  assert.equal(fromImport({ tmdbKey: 'theirs' }, current).tmdbKey, 'theirs');
+  // To another server type and back (D210 5): the key is its own setting, set aside by nothing.
+  const toPlex = importWithConnection({ serverType: 'plex', serverUrl: 'http://friend:32400', plexToken: 'p' }, current).settings;
+  assert.equal(toPlex.serverType, 'plex');
+  assert.equal(toPlex.tmdbKey, TMDB_KEY);
+  assert.equal(importWithConnection({ serverType: 'tmdb' }, toPlex).settings.tmdbKey, TMDB_KEY);
+  const away = sanitize({ ...current, serverType: 'jellyfin', serverUrl: 'http://jf:8096', plexToken: 'jf' });
+  assert.equal(away.tmdbKey, TMDB_KEY);
+  assert.equal(sanitize({ ...away, serverType: 'tmdb' }).tmdbKey, TMDB_KEY);
+  assert.equal(sanitize({ tmdbKey: `  ${TMDB_KEY}  ` }).tmdbKey, TMDB_KEY, 'trimmed, as typed otherwise');
+  assert.equal(sanitize({ tmdbKey: 5 }).tmdbKey, '');
+  assert.equal(defaults().tmdbKey, '');
+  // Stored, it is read back.
+  const storage = memoryStorage();
+  save(storage, current);
+  assert.equal(load(storage).settings.tmdbKey, TMDB_KEY);
+});
+
+test('a display with a TMDB key and a list is configured; without either, or with the key of another type, it is not', () => {
+  const tmdb = { ...defaults(), serverType: 'tmdb' };
+  assert.equal(isConfigured(tmdb), false);
+  assert.equal(isConfigured({ ...tmdb, tmdbKey: TMDB_KEY }), false, 'a key and no list');
+  assert.equal(isConfigured({ ...tmdb, libraryKey: 'movie/popular' }), false, 'a list and no key');
+  assert.equal(isConfigured({ ...tmdb, tmdbKey: TMDB_KEY, libraryKey: 'movie/popular' }), true);
+  assert.equal(isConfigured({ ...tmdb, tmdbKey: TMDB_KEY, staticRatingKey: 'movie:603' }), true, 'a pin alone is enough, as for a server');
+  assert.equal(isConfigured({ ...tmdb, tmdbKey: TMDB_KEY, libraryKey: 'movie/popular', plexToken: 't', serverUrl: 'http://s' }), true, 'the Plex fields are not read');
+  assert.equal(isConfigured({ ...defaults(), tmdbKey: TMDB_KEY, libraryKey: '1' }), false, 'a Plex display needs its own token and address; the TMDB key does not stand in');
+  assert.equal(isConfigured({ ...defaults(), plexToken: 't', serverUrl: 'http://s', libraryKey: '1' }), true);
+});
+
+test('TMDB cannot be one of several servers: an entry of type tmdb in `servers` is dropped, and a TMDB first server keeps no other server (D210 5)', () => {
+  const extra = (type, id) => ({ id, type, url: `http://${id}.test:8096`, token: 't', userId: '', name: id });
+  assert.equal(cleanServer(extra('tmdb', 'x')), null);
+  assert.equal(cleanServer(extra(' tmdb ', 'x')), null, 'a padded type is the same type');
+  assert.ok(cleanServer(extra('jellyfin', 'x')));
+  const mixed = sanitize({ serverType: 'plex', serverUrl: 'http://p', plexToken: 't', serverId: 'p1', servers: [extra('tmdb', 'a'), extra('jellyfin', 'b')] });
+  assert.deepEqual(mixed.servers.map((e) => e.id), ['b']);
+  assert.equal(serverList(mixed).length, 2);
+  const first = sanitize({ serverType: 'tmdb', tmdbKey: TMDB_KEY, libraryKey: 'movie/popular', serverId: 'old-plex-id', serverCarried: false, servers: [extra('jellyfin', 'b')] });
+  assert.deepEqual([first.servers, first.serverId, first.serverCarried], [[], '', true]);
+  assert.equal(serverList(first).length, 1);
+  assert.equal(serverList(first)[0].type, 'tmdb');
+});
+
+test('an import that lists TMDB as an extra server says so, once; a file that asks nothing of the kind says nothing', () => {
+  const entry = { id: 'x', type: 'tmdb', url: 'http://x.test', token: 't' };
+  const asked = (settings) => tmdbDroppedByImport(JSON.stringify({ format: 'plex-poster-display/settings', version: 1, settings }));
+  assert.match(asked({ serverType: 'plex', servers: [entry] }), /TMDB cannot be one of several servers/);
+  assert.match(asked({ servers: [{ id: 'j', type: 'jellyfin', url: 'http://j' }, entry] }), /that entry/);
+  assert.match(tmdbDroppedByImport({ servers: [entry] }), /that entry/, 'a bare object (a hand-written config.json) too');
+  assert.match(asked({ serverType: 'tmdb', servers: [{ id: 'j', type: 'jellyfin', url: 'http://j' }] }), /other servers/);
+  for (const quiet of [{}, { serverType: 'tmdb' }, { serverType: 'plex', servers: [] }, { servers: [{ id: 'j', type: 'jellyfin', url: 'http://j' }] }, { servers: 'x' }, { servers: [null, 5] }]) assert.equal(asked(quiet), '', JSON.stringify(quiet));
+  for (const junk of ['{', 'null', '[]', '5', '']) assert.equal(tmdbDroppedByImport(junk), '', junk);
+  // And the import itself drops it.
+  const merged = fromImport({ serverType: 'plex', serverUrl: 'http://p', plexToken: 't', servers: [entry, { id: 'j', type: 'jellyfin', url: 'http://j', token: 'jt' }] }, defaults());
+  assert.deepEqual(merged.servers.map((e) => e.type), ['jellyfin']);
+});
+
+test('a change between a media server and TMDB is a change of server type in every way a Save reads it', async () => {
+  const plex = { ...defaults(), serverType: 'plex', serverUrl: 'http://p:32400', plexToken: 'pt', libraryKey: '1', serverId: 'pid' };
+  const tmdb = { ...plex, serverType: 'tmdb', serverUrl: '', plexToken: '', tmdbKey: TMDB_KEY, libraryKey: 'movie/popular' };
+  const never = async () => assert.fail('no server is asked who it is');
+  const there = await settleServers(plex, sanitize(tmdb), never);
+  assert.deepEqual([there.next.serverType, there.next.tmdbKey, there.removed, there.gone, there.promoted], ['tmdb', TMDB_KEY, [], [], false]);
+  const back = await settleServers(sanitize(tmdb), sanitize({ ...tmdb, serverType: 'plex', serverUrl: 'http://p:32400', plexToken: 'pt2' }), never);
+  assert.deepEqual([back.next.serverType, back.next.tmdbKey, back.removed, back.gone], ['plex', TMDB_KEY, [], []], 'the key is still there after the switch back');
+});
+
+test('D211 2: a file that makes TMDB the first server names the display\'s other servers it would leave out, and no secret', () => {
+  const extra = (id, type, name = '') => ({ id, type, url: `http://${id}.test:8096`, token: `secret-${id}`, userId: '', name });
+  const current = sanitize({ serverType: 'plex', serverUrl: 'http://p:32400', plexToken: 'plex-secret', serverId: 'p1', libraryKey: '1', servers: [extra('jf', 'jellyfin', 'Den Jellyfin'), extra('em', 'emby')] });
+  const file = (settings) => JSON.stringify({ format: 'plex-poster-display/settings', version: 1, settings });
+  const dropped = serversDroppedByTmdbImport(file({ serverType: 'tmdb', libraryKey: 'movie/popular' }), current);
+  assert.deepEqual(dropped, [{ type: 'jellyfin', name: 'Den Jellyfin', url: 'http://jf.test:8096' }, { type: 'emby', name: '', url: 'http://em.test:8096' }], 'each, in order; an unnamed one carries its type for the words');
+  assert.ok(!JSON.stringify(dropped).includes('secret'), 'no token, no key');
+  assert.deepEqual(serversDroppedByTmdbImport({ serverType: 'tmdb' }, current).length, 2, 'a bare object (config.json) too');
+  // A file that asks for no such thing drops none.
+  for (const quiet of [{ serverType: 'plex', serverUrl: 'http://other:32400', plexToken: 't' }, { rotateSeconds: 60 }, { serverType: 'jellyfin', serverUrl: 'http://j:8096', plexToken: 't' }]) assert.deepEqual(serversDroppedByTmdbImport(file(quiet), current), [], JSON.stringify(quiet));
+  assert.deepEqual(serversDroppedByTmdbImport(file({ serverType: 'tmdb' }), sanitize({ serverType: 'plex', serverUrl: 'http://p', plexToken: 't' })), [], 'a display with one server loses none');
+  assert.deepEqual(serversDroppedByTmdbImport(file({ serverType: 'tmdb' }), sanitize({ serverType: 'tmdb', tmdbKey: 'k' })), []);
+  for (const junk of ['{', 'null', '[]', '', '5']) assert.deepEqual(serversDroppedByTmdbImport(junk, current), [], junk);
+  // The stored display is not touched by asking.
+  assert.equal(current.servers.length, 2);
+});
+
+test('houses: the default is none, junk is none, a list survives save, load, export and import without a key (H6)', () => {
+  assert.deepEqual(defaults().houses, []);
+  assert.deepEqual(sanitize({ houses: 'Pixar' }).houses, []);
+  assert.deepEqual(sanitize({ houses: [{ title: 'Pixar' }, { title: 'pixar' }, { key: 3 }] }).houses, [{ key: '', title: 'Pixar' }]);
+  const chosen = { houses: [{ key: '', title: 'Pixar' }, { key: '41077', title: 'A24' }], tmdbKey: 'SECRET-TMDB-KEY-0123456789abcdef' };
+  const storage = memoryStorage();
+  save(storage, { ...defaults(), ...chosen });
+  assert.deepEqual(load(storage).settings.houses, chosen.houses);
+  const file = toExport({ ...defaults(), ...chosen });
+  assert.deepEqual(file.settings.houses, chosen.houses, 'exported');
+  assert.ok(!JSON.stringify(file).includes('SECRET-TMDB-KEY'), 'a key is never in the export');
+  assert.deepEqual(fromImport(JSON.stringify(file), defaults()).houses, chosen.houses, 'imported');
+});
+
+test('houses: a hand-written 2.2 file that sets only libraryKey clears the house list with the rest of the selection', () => {
+  const merged = fromImport(JSON.stringify({ libraryKey: '3' }), sanitize({ ...defaults(), houses: [{ key: '', title: 'Pixar' }] }));
+  assert.deepEqual(merged.houses, []);
+});
+
+// ---- Poster art (artwork-sources, R-ART-1, D217) ----
+
+test('posterArt and posterArtLanguage travel in an export and an import, and the key beside them stays a secret', () => {
+  const s = { ...defaults(), posterArt: 'language', posterArtLanguage: 'fr', tmdbKey: TMDB_KEY };
+  const file = toExport(s);
+  assert.deepEqual([file.settings.posterArt, file.settings.posterArtLanguage, 'tmdbKey' in file.settings], ['language', 'fr', false]);
+  const back = fromImport(JSON.stringify(file), defaults());
+  assert.deepEqual([back.posterArt, back.posterArtLanguage], ['language', 'fr']);
+  assert.equal(sanitize({ ...s, posterArt: 'weird' }).posterArt, 'source', 'an unknown choice is "As the source gives it": no TMDB request');
+  assert.equal(defaults().posterArt, 'source');
+});
+
+// ---- Title as logo (clear-logo-title, R-ART-2, D221) ----
+
+test('titleLogo is off by default, takes only a boolean, and travels in an export and an import', () => {
+  assert.equal(defaults().titleLogo, false);
+  assert.equal(sanitize({ titleLogo: true }).titleLogo, true);
+  for (const bad of [1, 'yes', null, {}]) assert.equal(sanitize({ titleLogo: bad }).titleLogo, false, String(bad));
+  const file = toExport({ ...defaults(), titleLogo: true });
+  assert.equal(file.settings.titleLogo, true);
+  assert.equal(fromImport(JSON.stringify(file), defaults()).titleLogo, true);
+  assert.equal(fromImport(JSON.stringify(toExport(defaults())), { ...defaults(), titleLogo: true }).titleLogo, false, 'an export of the default turns it off again');
 });
