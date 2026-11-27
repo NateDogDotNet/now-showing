@@ -187,6 +187,20 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
   pointer-events: none;
 }
 
+/* Title as logo (R-ART-2): the title's logo art takes the title line's place. The line has a height of its own (by the screen, as the text's size is) and the image fits
+   inside it, never past it or past the card's width, whatever shape the logo is. It sits in the title card, so night dim and every display filter reach it as they reach the text. */
+.title-logo-line {
+  height: clamp(36px, 8vmin, 110px);
+}
+.title-logo {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px #000); /* as the text's shadow, lifting a logo off the poster; a logo too dark to read on this card is never drawn (D222 1, D223 1: the title is text) */
+}
+
 /* "Playing in {player}": top of the poster window, over a soft scrim. */
 .player-label {
   position: absolute;

@@ -253,11 +253,15 @@
               <option value="largest">Largest TMDB poster</option>
             </select>
           </label>
-          <label id="art-language-row" hidden>Language
+          <p id="art-help" class="muted small">Poster art replaces a poster's image, not its title, and only for titles that have a TMDB id. Without a TMDB key, or when TMDB has no such poster, the source's own image is shown.</p>
+          <!-- Title as logo (R-ART-2, D221): the title line of the title card is the title's TMDB logo art. It comes before the Language row, which it can reveal, so ticking it never moves it. -->
+          <label class="check"><input name="titleLogo" type="checkbox" aria-describedby="title-logo-help title-logo-status" /> Title as logo</label>
+          <p id="title-logo-help" class="muted small">Shows the title's logo from TMDB in place of the title line below the poster, for titles that have a TMDB id and a logo in the Poster art language, or one with no language; otherwise the title stays text. A dark logo, which the card cannot show, is text too. It needs a TMDB key and "Show title below poster".</p>
+          <p id="title-logo-status" class="muted small" aria-live="polite" hidden></p>
+          <label id="art-language-row" hidden><span id="art-language-label">Language</span>
             <select name="posterArtLanguage"></select>
           </label>
           <p id="art-language-help" class="muted small" hidden>Largest shows textless, English or that language.</p>
-          <p id="art-help" class="muted small">TMDB art replaces a poster's image, never the title, and only for titles that have a TMDB id. Without a TMDB key, or when TMDB has no such poster, the source's own image is shown.</p>
           <div class="tmdb-connection">
             <label for="tmdb-key-input">TMDB key</label>
             <span class="input-row">

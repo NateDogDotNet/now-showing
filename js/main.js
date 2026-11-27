@@ -1,6 +1,6 @@
 // App bootstrap: wires settings, Plex, the poster engine, display and controls together.
 
-import { createArtwork } from './artwork.js';
+import { createArtwork, logosIn } from './artwork.js';
 import { createBackoff } from './backoff.js';
 import { createBrightnessTimer } from './brightness-timer.js';
 import { createDisplay } from './display.js';
@@ -34,7 +34,10 @@ const carriedPlayback = takeCarriedPlayback();
 const storage = safeStorage();
 const log = createLog();
 const cache = createPosterCache({ storage, limit: () => state.settings.posterCacheLimit });
-const artwork = createArtwork({ cache, getSettings: () => state.settings, log }); // TMDB poster art for a poster with a TMDB id, when chosen and a key is set (R-ART-1)
+// The logos of Title as logo (R-ART-2, D221, Q11) are kept in a cache of their own: a Cache API store of their own, the same cache limit, an index of their own, so the offline rotation never draws a logo as a poster.
+const logoStorage = { getItem: (k) => storage.getItem(k === 'plexPoster.posterIndex' ? 'plexPoster.logoIndex' : k), setItem: (k, v) => storage.setItem(k === 'plexPoster.posterIndex' ? 'plexPoster.logoIndex' : k, v), removeItem: (k) => storage.removeItem(k === 'plexPoster.posterIndex' ? 'plexPoster.logoIndex' : k) };
+const logoCache = createPosterCache({ storage: logoStorage, limit: () => state.settings.posterCacheLimit, caches: logosIn(globalThis.caches) }); // its blobs are in a store of their own: clearing one cache never deletes the other's blobs
+const artwork = createArtwork({ cache, logoCache, getSettings: () => state.settings, log }); // TMDB poster art (R-ART-1) and title logos (R-ART-2) for a poster with a TMDB id, when chosen and a key is set
 const display = createDisplay();
 const helper = createHelper({ log });
 const clientIdValue = getClientId(storage);
@@ -229,11 +232,13 @@ function updateNowPlaying() {
  * the image was downloading or decoding. Returns false, drawing nothing, when it is not allowed; the caller
  * must then not mark it shown (the next tick picks another). A successful draw ends a block.
  */
-async function showPoster(poster, image) {
+async function showPoster(poster, image, logo = null, asked = logoKey(state.settings)) {
   if (!allowedOnScreen(poster) || !inSelectionNow(poster)) return false; // a draw that finishes after a boundary meets the selection in force now (D120 6)
   document.querySelectorAll('.poster-layer.cut').forEach((img) => img.classList.remove('cut'));
   const outgoing = display.currentPoster;
-  await display.show(poster, image);
+  await display.show(poster, image, { logo });
+  logoAsked = { poster, key: asked }; // the settings the logo was asked under, taken before it was fetched: a save during the fetch leaves it differing from the settings now
+  if (asked !== logoKey(state.settings)) void syncLogo(); // so ask again now, under the settings now
   lastDrawAt = performance.now();
   if (!allowedOnScreen(poster) || !inSelectionNow(poster)) {
     blockPoster(); // the limit was tightened, or the selection changed, during the decode
@@ -244,6 +249,31 @@ async function showPoster(poster, image) {
   document.body.classList.remove('poster-blocked');
   syncPlayNow();
   return true;
+}
+
+/** What the logo of the poster on screen was last asked for under, so a change of settings that leaves it the same asks nothing more (one logo request per shown title). */
+let logoAsked = { poster: null, key: '' };
+const logoKey = (s) => [s.titleLogo, s.showTitle, s.posterArtLanguage, Boolean(s.tmdbKey)].join('|');
+
+/** After a settings change: the poster on screen has no logo yet and the settings now ask for one, so ask (a poster being drawn has asked already, with its image). */
+async function syncLogo() {
+  const poster = display.currentPoster;
+  const key = logoKey(state.settings);
+  if (!poster || (logoAsked.poster === poster && logoAsked.key === key)) return;
+  logoAsked = { poster, key };
+  const blob = await fetchLogo(poster); // a stored copy needs no request: a change of language, key or title card is asked again, and what no longer applies is taken away
+  if (display.currentPoster !== poster || logoAsked.poster !== poster || logoAsked.key !== key) return;
+  if (blob) display.setLogo(poster, blob);
+  else if (display.hasLogo(poster)) display.setLogo(poster, null);
+}
+
+/**
+ * The title's logo art as a Blob, or null (Title as logo off, no key, no id, none at TMDB, too dark to read, or it failed or was slow: the title stays text). It never throws.
+ * A poster drawn from the offline cache gets the stored logo of its TMDB id, and no request is made for it (D222 2).
+ */
+async function fetchLogo(poster) {
+  const got = poster?.source === 'cache' ? await artwork.cachedLogo(poster).catch(() => null) : await artwork.logo(poster).catch(() => null);
+  return got?.blob ?? null;
 }
 
 async function fetchImage(poster, { skipCache = false } = {}) {
@@ -305,12 +335,13 @@ async function tick({ force = false, notify = false } = {}) {
     let refused = false; // a poster was fetched but the limit no longer allows it
     if (decision) {
       cache.refreshRatings([decision.poster], { checked: new Set([decision.poster.ratingKey]) }); // seen online: its stored rating follows Plex (C7M2); read just now
-      let image = await fetchImage(decision.poster);
+      const asked = logoKey(state.settings); // what the logo is asked under: taken here, not at the draw
+      let [image, logo] = await Promise.all([fetchImage(decision.poster), fetchLogo(decision.poster)]); // one logo request for the title shown, beside its poster, within the same budget
       // (Asleep by now: the download began before sleep did; it is not drawn under the veil.)
       let drawn = false;
       if (!state.asleep) {
         try {
-          drawn = await showPoster(decision.poster, image);
+          drawn = await showPoster(decision.poster, image, logo, asked);
           refused = !drawn;
         } catch (err) {
           if (!cachedBlobs.has(image)) throw err;
@@ -320,7 +351,7 @@ async function tick({ force = false, notify = false } = {}) {
           image = await fetchImage(decision.poster, { skipCache: true });
           if (!state.asleep) {
             // (Sleep may have begun during this second download too.)
-            drawn = await showPoster(decision.poster, image);
+            drawn = await showPoster(decision.poster, image, logo, asked); // the retry keeps the logo that was fetched
             refused = !drawn;
           }
         }
@@ -382,7 +413,8 @@ async function handleFailure(err, { notify = false } = {}) {
       const cached = await cache.random(current?.ratingKey, limitNow(), selectionOf(inForceSettings()), keyInList).catch(() => null);
       if (!cached) break;
       try {
-        if (!(await showPoster(cached.poster, cached.blob))) continue; // no longer allowed: not drawn, not shown
+        const asked = logoKey(state.settings);
+        if (!(await showPoster(cached.poster, cached.blob, await fetchLogo(cached.poster), asked))) continue; // no longer allowed: not drawn, not shown
       } catch {
         log.warn(`Cached poster "${cached.poster.title}" is unreadable; dropping it.`);
         await cache.delete(cached.poster.ratingKey).catch(() => {});
@@ -676,6 +708,7 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
     log.warn(err.message);
     if (!preview) toast(err.message);
   }
+  syncLogo(); // Title as logo turned on (or the title card, the key, the language changed) with a poster on screen: its logo is asked for once
   if (preview) return;
 
   // The Plex client is rebuilt BEFORE evaluateSleep() below (C8M2, D28): when this Save is what wakes the display, the
@@ -692,7 +725,10 @@ async function applySettings(next, { persist = true, preview = false, restartIdl
     const alone = serverList(state.settings).length === 1;
     if (alone && engine) engine.clearShown();
     if (alone && !engine) createShownStore({ storage }).clear(); // no client to ask (not signed in to the new server yet): the record is in storage all the same
-    if (alone) await cache.clear().catch((err) => log.warn(`Could not clear the poster cache: ${err.message}`));
+    if (alone) {
+      await cache.clear().catch((err) => log.warn(`Could not clear the poster cache: ${err.message}`));
+      await logoCache.clear().catch((err) => log.warn(`Could not clear the logo cache: ${err.message}`)); // the logo index and its blobs go with the posters'
+    }
     updatePinButton();
     log.info(`Server type is now ${serverTypeOf(state.settings)}: the poster cache, the pinned poster and the no-repeat history were cleared.`);
   }
@@ -818,9 +854,13 @@ const settingsUI = createSettingsUI({
   },
   fixesFor,
   runFix,
-  onClearCache: () => cache.clear(),
+  onClearCache: async () => {
+    await logoCache.clear();
+    await cache.clear();
+  },
   onReset: async () => {
     storage.removeItem(STORAGE_KEY);
+    await logoCache.clear();
     await cache.clear();
     location.reload();
   },

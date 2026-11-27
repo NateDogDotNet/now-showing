@@ -217,7 +217,17 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   field('posterArtLanguage').replaceChildren(...LANGUAGES.map((l) => Object.assign(new Option(l.name, l.code), { lang: l.code }))); // each name is read in its own language
   const syncArt = () => {
     const mode = field('posterArt').value;
-    $('art-language-row').hidden = mode !== 'language' && mode !== 'largest'; // Largest uses the language too (D218, D219 3)
+    const logo = field('titleLogo').checked;
+    const art = mode === 'language' || mode === 'largest';
+    $('art-language-row').hidden = !art && !logo; // Largest uses the language too (D218, D219 3), and so does the title's logo (D221 1)
+    $('art-language-label').textContent = art && logo ? 'Language (poster art and title logo)' : logo ? 'Language (title logo)' : 'Language'; // the row says what it governs
+    // What the logo is missing, in words (ticked, saved, and nothing shown would be a puzzle): the TMDB key, and the title card.
+    const missing = [];
+    if (!/\S/.test(field('tmdbKey').value.replace(/^\s*bearer(\s+|$)/i, ''))) missing.push('add a TMDB key (below)');
+    if (!field('showTitle').checked) missing.push('turn on "Show title below poster" (under Frame & layout)');
+    const line = logo && missing.length ? `No logo will show until you ${missing.join(' and ')}.` : '';
+    $('title-logo-status').hidden = !logo || !missing.length;
+    if ($('title-logo-status').textContent !== line) $('title-logo-status').textContent = line; // a live region is written only when its words change (D106 3)
     $('art-language-help').hidden = mode !== 'largest';
     // The help describes the Language select only while it is shown (a hidden description is still read by a screen reader).
     if (mode === 'largest') field('posterArtLanguage').setAttribute('aria-describedby', 'art-language-help');
@@ -2239,6 +2249,9 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
   $('art-test-btn').addEventListener('click', testKey);
   field('posterArt').addEventListener('change', syncArt);
   field('posterArtLanguage').addEventListener('change', syncArt);
+  field('titleLogo').addEventListener('change', syncArt);
+  field('showTitle').addEventListener('change', syncArt);
+  field('tmdbKey').addEventListener('input', syncArt);
   // Clear empties the one TMDB key (D217 1): it is stored by Save like every other change, and TMDB mode has no key either from then on.
   $('tmdb-key-clear').addEventListener('click', () => {
     field('tmdbKey').value = '';

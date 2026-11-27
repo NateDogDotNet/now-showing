@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPosterCache, TMDB_MAX_AGE_MS } from '../js/poster-cache.js';
-import { ART_MODES, artPlan, choosePoster, createArtwork, defaultArtLanguage, LANGUAGES } from '../js/artwork.js';
+import { ART_MODES, artPlan, chooseLogo, choosePoster, createArtwork, defaultArtLanguage, entryTmdb, LANGUAGES, LOGO_MIN_LUMINANCE, logoLuminance, logoPlan, logosIn } from '../js/artwork.js';
 import { defaults, sanitize } from '../js/settings.js';
 
 globalThis.location ??= { origin: 'http://localhost' };
@@ -38,7 +38,7 @@ const img = (file, lang, vote, width = 1000) => ({ file_path: file, iso_639_1: l
 const POSTERS = [img('/en.jpg', 'en', 6), img('/null-low.jpg', null, 4), img('/fr.jpg', 'fr', 5), img('/null-high.jpg', null, 5.5)];
 
 /** A stub of fetch: the images route answers `posters` (or fails as told), the image host answers a blob named after the path. `calls` lists every request. */
-function stub({ posters = POSTERS, images = 'ok', file = 'ok' } = {}) {
+function stub({ posters = POSTERS, logos = [], images = 'ok', file = 'ok' } = {}) {
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     const u = new URL(String(url));
@@ -48,7 +48,7 @@ function stub({ posters = POSTERS, images = 'ok', file = 'ok' } = {}) {
       if (images === 'http') return new Response('{}', { status: 503 });
       if (images === 'junk') return new Response('<html>', { status: 200 });
       if (images === 'auth') return new Response('{}', { status: 401 });
-      return new Response(JSON.stringify({ id: 603, posters }), { status: 200 });
+      return new Response(JSON.stringify({ id: 603, posters, logos }), { status: 200 });
     }
     if (u.hostname === 'image.tmdb.org') {
       if (file === 'http') return new Response('', { status: 404 });
@@ -92,14 +92,14 @@ const settle = async () => {
   for (let i = 0; i < 20; i++) await new Promise((resolve) => setImmediate(resolve));
 };
 
-function rig({ settings = {}, stubOpts = {}, limit = 100, start = 1_000_000 } = {}) {
+function rig({ settings = {}, stubOpts = {}, limit = 100, start = 1_000_000, measure = async () => 0.9 } = {}) {
   const clock = { t: start };
   const timers = fakeTimers();
   const s = stub(stubOpts);
   const c = fakeCaches();
   const cache = createPosterCache({ storage: memoryStorage(), limit: () => limit, caches: c.caches, now: () => clock.t });
   const cfg = { posterArt: 'textless', posterArtLanguage: 'fr', tmdbKey: V3, ...settings };
-  const art = createArtwork({ cache, getSettings: () => cfg, fetchImpl: s.fetchImpl, log: { warn() {} }, timers, now: () => clock.t });
+  const art = createArtwork({ cache, getSettings: () => cfg, fetchImpl: s.fetchImpl, log: { warn() {} }, timers, now: () => clock.t, measure: (blob) => measure(blob) }); // a light logo, unless a test says otherwise (the browser measures a real one)
   return { clock, s, c, cache, art, cfg, timers };
 }
 
@@ -648,4 +648,335 @@ test('the settings carry posterArt (default: as the source gives it) and a liste
   assert.equal(sanitize({ posterArtLanguage: 'fr' }).posterArtLanguage, 'fr');
   assert.equal(sanitize({ posterArtLanguage: 'zz' }).posterArtLanguage, d.posterArtLanguage);
   assert.equal(sanitize({ posterArtLanguage: 'FR' }).posterArtLanguage, d.posterArtLanguage);
+});
+
+// ---- Title as logo (R-ART-2, D221): the logo of the poster's own title, by its id, in the Poster art language, else with no language, else none ----
+
+const LOGOS = [img('/logo-en-low.png', 'en', 4, 500), img('/logo-en.png', 'en', 6, 500), img('/logo-fr.png', 'fr', 5, 500), img('/logo-null.png', null, 5.5, 500)];
+const ON = { titleLogo: true, showTitle: true };
+const logoRig = (settings = {}, stubOpts = {}, measure) => rig({ settings: { ...ON, posterArt: 'source', posterArtLanguage: 'en', ...settings }, stubOpts: { logos: LOGOS, ...stubOpts }, measure });
+
+test('chooseLogo: the language first (the best voted), else a logo with no language, else none; a file that is no plain path is never chosen', () => {
+  assert.equal(chooseLogo(LOGOS, 'en'), '/logo-en.png');
+  assert.equal(chooseLogo(LOGOS, 'fr'), '/logo-fr.png');
+  assert.equal(chooseLogo(LOGOS.filter((l) => l.iso_639_1 !== 'fr'), 'fr'), '/logo-null.png', 'no logo in the language: the one with no language');
+  assert.equal(chooseLogo([img('/logo-en.png', 'en', 6, 500)], 'fr'), null, 'a logo in another language never stands in (L1)');
+  assert.equal(chooseLogo([img('/n1.png', null, 3, 500), img('/n2.png', null, 7, 500)], 'fr'), '/n2.png', 'the best voted of those with no language');
+  assert.equal(chooseLogo([img('/n.png', null, 3, 500), img('/x.png', 'en', 1, 500)], 'en'), '/x.png', 'a poorly voted logo in the language still beats a well voted one with none');
+  assert.equal(chooseLogo([img('/only-null.svg', null, 1, 500)], 'en'), '/only-null.svg', 'only a null-language logo (L2)');
+  assert.equal(chooseLogo([img('//evil.example/x.png', 'en', 9, 500), { file_path: '/a b.png', iso_639_1: 'en' }, null, 'x'], 'en'), null);
+  assert.equal(chooseLogo('junk', 'en'), null);
+  assert.equal(chooseLogo([], 'en'), null);
+  assert.equal(chooseLogo(LOGOS, ''), '/logo-null.png', 'no language named: the null-language one');
+});
+
+test('logoPlan: a plan only with the setting on, the title card on, a key, and the poster own id and type; the Poster art choice does not matter', () => {
+  const base = { ...ON, tmdbKey: V3, posterArt: 'source', posterArtLanguage: 'fr' };
+  const plan = logoPlan(SERVER_POSTER, base);
+  assert.deepEqual([plan.type, plan.id, plan.language], ['movie', '603', 'fr']);
+  assert.deepEqual([...plan.languages].sort(), ['fr', 'null']);
+  assert.match(plan.key, /^tmdb-art:movie:603:logo/);
+  assert.ok(plan.key.includes('fr'), 'a change of language is another key');
+  for (const mode of ART_MODES) assert.ok(logoPlan(SERVER_POSTER, { ...base, posterArt: mode }), `Poster art ${mode}`);
+  assert.equal(logoPlan(SERVER_POSTER, { ...base, titleLogo: false }), null, 'the setting off');
+  assert.equal(logoPlan(SERVER_POSTER, { ...base, showTitle: false }), null, 'the title card off (L5)');
+  assert.equal(logoPlan(SERVER_POSTER, { ...base, tmdbKey: '' }), null, 'no key (L6)');
+  assert.equal(logoPlan(SERVER_POSTER, { ...base, tmdbKey: 'Bearer  ' }), null, 'a key that is only "Bearer"');
+  assert.equal(logoPlan({ ...SERVER_POSTER, tmdbId: undefined }, base), null, 'no id');
+  assert.equal(logoPlan({ ...SERVER_POSTER, tmdbType: 'person' }, base), null, 'no movie or tv type');
+  assert.equal(logoPlan({ ...SERVER_POSTER, tmdbId: '6/../x' }, base), null, 'an id that is not digits');
+  assert.equal(logoPlan(null, base), null);
+  assert.equal(logoPlan(SERVER_POSTER, { ...base, posterArtLanguage: 'zz' }).language, 'en', 'a language not on the list is English');
+  assert.equal(logoPlan(SERVER_POSTER, null), null);
+});
+
+test('logo(): one images request by the poster own id and type, the language and no-language logos asked for, then the file; the title is never searched', async () => {
+  const r = logoRig();
+  const got = await r.art.logo(SERVER_POSTER);
+  assert.equal(got.cached, false);
+  assert.equal(await read(got.blob), 'IMAGE /t/p/w500/logo-en.png');
+  assert.deepEqual(r.s.api().map((c) => c.path), ['/3/movie/603/images']);
+  assert.deepEqual(asked(r), ['en', 'null']);
+  assert.deepEqual(r.s.calls.map((c) => c.host), ['api.themoviedb.org', 'image.tmdb.org']);
+});
+
+test('L1: the logo language is the Poster art language, whatever the Poster art choice: fr, with en logos only, is no logo (not the en logo)', async () => {
+  const r = logoRig({ posterArtLanguage: 'fr' }, { logos: [img('/logo-en.png', 'en', 6, 500)] });
+  assert.equal(await r.art.logo(SERVER_POSTER), null);
+  assert.deepEqual(r.s.files(), [], 'no file was fetched');
+  const r2 = logoRig({ posterArtLanguage: 'fr' }, { logos: LOGOS });
+  assert.equal(await read((await r2.art.logo(SERVER_POSTER)).blob), 'IMAGE /t/p/w500/logo-fr.png');
+  const r3 = logoRig({ posterArtLanguage: 'fr', posterArt: 'textless' }, { logos: LOGOS.filter((l) => l.iso_639_1 !== 'fr') });
+  assert.equal(await read((await r3.art.logo(SERVER_POSTER)).blob), 'IMAGE /t/p/w500/logo-null.png', 'with no logo in fr: the one with no language');
+});
+
+test('L2: a title with only a no-language logo shows that logo; a title with none shows none (and fetches no file)', async () => {
+  const r = logoRig({}, { logos: [img('/only-null.png', null, 2, 500)] });
+  assert.equal(await read((await r.art.logo(SERVER_POSTER)).blob), 'IMAGE /t/p/w500/only-null.png');
+  const none = logoRig({}, { logos: [] });
+  assert.equal(await none.art.logo(SERVER_POSTER), null);
+  assert.deepEqual(none.s.files(), []);
+});
+
+test('an SVG logo is asked for at size original, a PNG at w500 (a logo size TMDB lists)', async () => {
+  const r = logoRig({}, { logos: [img('/mark.svg', 'en', 5, 500)] });
+  await r.art.logo(SERVER_POSTER);
+  assert.equal(r.s.files()[0].path, '/t/p/original/mark.svg');
+});
+
+test('L5, L6: the title card off, the setting off, or no key asks TMDB nothing at all; nor does a poster with no id', async () => {
+  for (const [label, settings, poster] of [
+    ['title card off', { showTitle: false }, SERVER_POSTER],
+    ['setting off', { titleLogo: false }, SERVER_POSTER],
+    ['no key', { tmdbKey: '' }, SERVER_POSTER],
+    ['no id', {}, { ...SERVER_POSTER, tmdbId: undefined }],
+    ['now playing', {}, { ...SERVER_POSTER, source: 'now-playing', tmdbId: undefined }],
+  ]) {
+    const r = logoRig(settings);
+    assert.equal(await r.art.logo(poster), null, label);
+    assert.deepEqual(r.s.calls, [], `${label}: no request`);
+  }
+});
+
+test('a failed, junk or empty logo request is no logo and no error: a 503, a 401, junk, a dead network, an unreachable file host, an empty list', async () => {
+  for (const stubOpts of [{ images: 'http' }, { images: 'auth' }, { images: 'junk' }, { images: 'throw' }, { file: 'http' }, { file: 'throw' }, { logos: [] }]) {
+    const r = logoRig({}, stubOpts);
+    assert.equal(await r.art.logo(SERVER_POSTER), null, JSON.stringify(stubOpts));
+  }
+});
+
+test('the logo of a title is stored in its own entry (never the poster entry) and the second time is a hit: TMDB is not asked', async () => {
+  const r = logoRig();
+  await r.art.logo(SERVER_POSTER);
+  await settle();
+  const keys = r.cache.entries().map((e) => e.ratingKey);
+  assert.ok(!keys.includes(SERVER_POSTER.ratingKey), 'the poster entry is not the logo entry');
+  assert.equal(keys.length, 1);
+  const [entry] = r.cache.entries();
+  assert.match(entry.thumb, /^tmdb-art:movie:603:logo/);
+  const again = await r.art.logo(SERVER_POSTER);
+  assert.equal(again.cached, true);
+  assert.equal(r.s.api().length, 1, 'no second images request');
+  r.cfg.posterArtLanguage = 'fr';
+  await r.art.logo(SERVER_POSTER);
+  assert.equal(r.s.api().length, 2, 'another language is another key: fetched again');
+});
+
+test('a logo older than 180 days is fetched again; one day younger is reused', async () => {
+  const r = logoRig();
+  await r.art.logo(SERVER_POSTER);
+  await settle();
+  r.clock.t += TMDB_MAX_AGE_MS - DAY;
+  assert.equal((await r.art.logo(SERVER_POSTER)).cached, true);
+  r.clock.t += DAY;
+  assert.equal((await r.art.logo(SERVER_POSTER)).cached, false);
+  assert.equal(r.s.api().length, 2);
+});
+
+test('a logo kept in a cache of its own never lands in the poster cache, and counts against the limit there', async () => {
+  const c = fakeCaches();
+  const clock = { t: 1_000_000 };
+  const s = stub({ logos: LOGOS });
+  const posters = createPosterCache({ storage: memoryStorage(), limit: () => 100, caches: c.caches, now: () => clock.t });
+  const logos = createPosterCache({ storage: memoryStorage(), limit: () => 1, caches: c.caches, now: () => clock.t });
+  const art = createArtwork({ cache: posters, logoCache: logos, getSettings: () => ({ ...ON, posterArt: 'source', posterArtLanguage: 'en', tmdbKey: V3 }), fetchImpl: s.fetchImpl, log: { warn() {} }, timers: fakeTimers(), now: () => clock.t, measure: async () => 0.9 });
+  await art.logo(SERVER_POSTER);
+  await art.logo({ ...SERVER_POSTER, ratingKey: '42', tmdbId: '604' });
+  await settle();
+  assert.deepEqual(posters.entries(), [], 'the poster cache holds no logo (offline never draws one as a poster)');
+  assert.equal(logos.entries().length, 1, 'the limit of the logo cache evicted the oldest');
+});
+
+test('the logo has the same 4 second budget and the same pause as the art: a TMDB that never answers is no logo, then none is asked for 10 minutes', async () => {
+  const r = logoRig();
+  const art = createArtwork({ cache: r.cache, getSettings: () => r.cfg, fetchImpl: (url) => (new URL(String(url)).hostname === 'api.themoviedb.org' ? NEVER : r.s.fetchImpl(url)), log: { warn() {} }, timers: r.timers, now: () => r.clock.t, measure: async () => 0.9 });
+  const pending = art.logo(SERVER_POSTER);
+  await settle();
+  assert.deepEqual(r.timers.asked, [4000]);
+  r.timers.fire();
+  assert.equal(await pending, null);
+  const second = { ...SERVER_POSTER, ratingKey: '99', tmdbId: '99' };
+  assert.equal(await art.logo(second), null, 'paused: no request');
+  assert.equal(r.timers.asked.length, 1, 'no second request was started');
+  r.clock.t += PAUSE;
+  const again = art.logo(second);
+  await settle();
+  assert.equal(r.timers.asked.length, 2, 'asked again after the pause');
+  r.timers.fire();
+  await again;
+});
+
+test('one pause for the art and the logo: a failed poster images request pauses the logo too, and a change of the key ends it', async () => {
+  const r = logoRig({ posterArt: 'textless' }, { images: 'throw' });
+  assert.equal(await r.art.image(SERVER_POSTER, SIZE), null);
+  assert.equal(r.s.api().length, 1);
+  assert.equal(await r.art.logo(SERVER_POSTER), null);
+  assert.equal(r.s.api().length, 1, 'the logo is not asked for during the pause');
+  r.cfg.tmdbKey = TOKEN;
+  await r.art.logo(SERVER_POSTER);
+  assert.equal(r.s.api().length, 2, 'a changed key ends it');
+});
+
+test('the key goes only to the API host for a logo too, and no cache key, entry or file address carries it', async () => {
+  const r = logoRig();
+  await r.art.logo(SERVER_POSTER);
+  await settle();
+  assert.ok(r.s.files().every((c) => !c.url.includes(V3)));
+  assert.ok(!JSON.stringify(r.cache.entries()).includes(V3));
+  const t = logoRig({ tmdbKey: TOKEN });
+  await t.art.logo(SERVER_POSTER);
+  assert.match(t.s.api()[0].headers.Authorization, /^Bearer /);
+  assert.ok(t.s.files().every((c) => !c.url.includes(TOKEN) && !c.headers.Authorization));
+});
+
+test('the logo does not change the poster art: image() still takes the posters, and a logo request is its own', async () => {
+  const r = logoRig({ posterArt: 'textless' });
+  assert.equal(await read((await r.art.image(SERVER_POSTER, SIZE)).blob), 'IMAGE /t/p/w500/null-high.jpg');
+  assert.equal(await read((await r.art.logo(SERVER_POSTER)).blob), 'IMAGE /t/p/w500/logo-en.png');
+});
+
+// ---- D222: a logo is shown only when it can be read; offline it comes from the cache ----
+
+/** `n` pixels of one colour as canvas image data (RGBA bytes). */
+const px = (n, [r, g, b], a = 255) => Array.from({ length: n }, () => [r, g, b, a]).flat();
+
+test('logoLuminance: the mean relative luminance of the visible pixels only: black 0, white 1, mid grey about 0.21, transparent pixels left out, nothing visible 0', () => {
+  assert.equal(logoLuminance(px(10, [0, 0, 0])), 0);
+  assert.equal(logoLuminance(px(10, [255, 255, 255])), 1);
+  assert.ok(Math.abs(logoLuminance(px(10, [128, 128, 128])) - 0.2158) < 0.001, 'WCAG relative luminance: linear light, not the raw byte');
+  assert.equal(logoLuminance([...px(10, [255, 255, 255]), ...px(90, [0, 0, 0], 0)]), 1, 'a transparent background is not ink');
+  assert.equal(logoLuminance(px(10, [255, 255, 255], 0)), 0, 'nothing visible: not readable');
+  assert.equal(logoLuminance([]), 0);
+  assert.ok(Math.abs(logoLuminance([...px(5, [255, 255, 255]), ...px(5, [0, 0, 0])]) - 0.5) < 1e-9, 'a mean of the visible pixels');
+  assert.equal(LOGO_MIN_LUMINANCE, 0.175, 'D223 1: 4.5:1 against black (WCAG text), not 0.35');
+  assert.ok(logoLuminance(px(10, [255, 0, 0])) >= LOGO_MIN_LUMINANCE, 'pure red (0.2126) is readable on the near-black card');
+  assert.ok(Math.abs(logoLuminance(px(10, [255, 0, 0])) - 0.2126) < 1e-4);
+  assert.ok(logoLuminance(px(10, [17, 17, 17])) < LOGO_MIN_LUMINANCE, 'the mock dark ink (#111) stays text');
+});
+
+test('D222 1, D223 1 (M1, M2, M8): a logo whose visible pixels have a mean luminance under 0.175 is no logo (text), one at 0.175 or over is the logo; no other logo is tried', async () => {
+  for (const [lum, shown] of [[0, false], [0.1, false], [0.1749, false], [0.175, true], [0.2126, true], [0.3499, true], [0.35, true], [0.6, true], [0.95, true]]) {
+    const r = logoRig({}, {}, async () => lum);
+    const got = await r.art.logo(SERVER_POSTER);
+    assert.equal(Boolean(got), shown, `luminance ${lum}`);
+    assert.equal(r.s.api().length, 1, `${lum}: one images request`);
+    assert.equal(r.s.files().length, 1, `${lum}: one logo file, no other logo tried`);
+  }
+  const unreadable = logoRig({}, {}, async () => null);
+  assert.equal(await unreadable.art.logo(SERVER_POSTER), null, 'a logo that cannot be measured is text');
+  const throws = logoRig({}, {}, async () => {
+    throw new Error('canvas');
+  });
+  assert.equal(await throws.art.logo(SERVER_POSTER), null, 'a measure that fails is text, not an error');
+});
+
+test('D222 1: the blob measured is the one fetched, and a stored dark logo is text too', async () => {
+  const seen = [];
+  const r = logoRig({}, {}, async (blob) => {
+    seen.push(await blob.text());
+    return 0.1;
+  });
+  assert.equal(await r.art.logo(SERVER_POSTER), null);
+  assert.deepEqual(seen, ['IMAGE /t/p/w500/logo-en.png']);
+  await settle();
+  assert.equal(await r.art.logo(SERVER_POSTER), null, 'from the cache: still dark');
+  assert.equal(r.s.api().length, 1, 'the stored copy was used: no second request');
+  assert.equal(seen.length, 2);
+});
+
+test('entryTmdb: a cached entry carries its TMDB id in its rating key (TMDB mode) or in the thumb of TMDB art; a server entry with its own art carries none', () => {
+  assert.deepEqual(entryTmdb({ ratingKey: 'movie:603', thumb: '/en.jpg' }), { tmdbType: 'movie', tmdbId: '603' });
+  assert.deepEqual(entryTmdb({ ratingKey: 'tv:1399', thumb: '/x' }), { tmdbType: 'tv', tmdbId: '1399' });
+  assert.deepEqual(entryTmdb({ ratingKey: '41', thumb: 'tmdb-art:movie:603:textless' }), { tmdbType: 'movie', tmdbId: '603' });
+  assert.deepEqual(entryTmdb({ ratingKey: '41', thumb: 'tmdb-art:tv:1399:largest-fr' }), { tmdbType: 'tv', tmdbId: '1399' });
+  for (const e of [{ ratingKey: '41', thumb: '/library/metadata/41/thumb/1700' }, { ratingKey: 'movie:6x', thumb: '' }, { ratingKey: 'person:5', thumb: '' }, { ratingKey: '41', thumb: 'tmdb-art:person:5:x' }, {}, null, undefined]) assert.equal(entryTmdb(e), null, JSON.stringify(e));
+});
+
+test('D222 2 (M3): cachedLogo: a cached TMDB title shows its stored logo, with no request of any kind; none stored is none', async () => {
+  const r = logoRig();
+  await r.art.logo(TMDB_POSTER); // online: the logo is fetched and stored
+  await settle();
+  r.s.calls.length = 0;
+  const offline = { ratingKey: 'movie:603', title: 'The Matrix', thumb: '/en.jpg', source: 'cache' }; // a cache entry carries no tmdbId field
+  const got = await r.art.cachedLogo(offline);
+  assert.equal(await read(got.blob), 'IMAGE /t/p/w500/logo-en.png');
+  assert.equal(got.cached, true);
+  const withArt = await r.art.cachedLogo({ ratingKey: '41', title: 'The Matrix', thumb: 'tmdb-art:movie:603:textless', source: 'cache' });
+  assert.ok(withArt, 'a server title stored with TMDB art carries its id in the thumb');
+  assert.equal(await r.art.cachedLogo({ ratingKey: '41', title: 'The Matrix', thumb: '/library/metadata/41/thumb/1700', source: 'cache' }), null, 'a server poster with its own art carries no id: text');
+  assert.equal(await r.art.cachedLogo({ ratingKey: 'movie:999', title: 'Other', thumb: '/x.jpg', source: 'cache' }), null, 'no logo stored for this title');
+  assert.deepEqual(r.s.calls, [], 'offline: no request at all');
+});
+
+test('D222 2, D223 2 (M10): cachedLogo follows the same rules as the fetch: the setting, the title card, the key (offline needs it too), the language and the age, and a dark one is text', async () => {
+  const entry = { ratingKey: 'movie:603', title: 'The Matrix', thumb: '/en.jpg', source: 'cache' };
+  const ready = async () => {
+    const r = logoRig();
+    await r.art.logo(TMDB_POSTER);
+    await settle();
+    r.s.calls.length = 0;
+    return r;
+  };
+  for (const [label, change] of [['setting off', { titleLogo: false }], ['title card off', { showTitle: false }], ['no key', { tmdbKey: '' }], ['another language', { posterArtLanguage: 'fr' }]]) {
+    const r = await ready();
+    Object.assign(r.cfg, change);
+    assert.equal(await r.art.cachedLogo(entry), null, label);
+    assert.deepEqual(r.s.calls, [], `${label}: no request`);
+  }
+  const old = await ready();
+  old.clock.t += TMDB_MAX_AGE_MS;
+  assert.equal(await old.art.cachedLogo(entry), null, '180 days old: not served');
+  const dark = await ready();
+  const darkArt = createArtwork({ cache: dark.cache, getSettings: () => dark.cfg, fetchImpl: dark.s.fetchImpl, log: { warn() {} }, timers: dark.timers, now: () => dark.clock.t, measure: async () => 0.1 });
+  assert.equal(await darkArt.cachedLogo(entry), null, 'a dark logo from the store is text');
+  assert.deepEqual(dark.s.calls, []);
+});
+
+test('D223 2 (M10): offline needs the TMDB key too: a stored logo is not shown once the key is cleared, and is again when it is back', async () => {
+  const entry = { ratingKey: 'movie:603', title: 'The Matrix', thumb: '/en.jpg', source: 'cache' };
+  const r = logoRig();
+  await r.art.logo(TMDB_POSTER);
+  await settle();
+  r.s.calls.length = 0;
+  assert.ok(await r.art.cachedLogo(entry), 'the key is set: the stored logo');
+  const key = r.cfg.tmdbKey;
+  r.cfg.tmdbKey = '';
+  assert.equal(await r.art.cachedLogo(entry), null, 'the key cleared: text offline, as online');
+  r.cfg.tmdbKey = 'Bearer ';
+  assert.equal(await r.art.cachedLogo(entry), null, 'a "Bearer" with nothing after it is no key');
+  r.cfg.tmdbKey = key;
+  assert.ok(await r.art.cachedLogo(entry), 'the key back: the stored logo again');
+  assert.deepEqual(r.s.calls, [], 'no request at any step');
+});
+
+/** A fake Cache API with named stores, as a browser has: `open(name)`, `delete(name)`. */
+function namedCaches() {
+  const stores = new Map();
+  const open = async (name) => {
+    if (!stores.has(name)) stores.set(name, new Map());
+    const m = stores.get(name);
+    return { put: async (url, res) => void m.set(url, res), match: async (url) => m.get(url)?.clone(), delete: async (url) => m.delete(url) };
+  };
+  return { caches: { open, delete: async (name) => stores.delete(name) }, stores };
+}
+
+test('F1: the logos live in a store of their own: clearing either cache never deletes the other cache blobs', async () => {
+  const n = namedCaches();
+  const posters = createPosterCache({ storage: memoryStorage(), caches: n.caches });
+  const logos = createPosterCache({ storage: memoryStorage(), caches: logosIn(n.caches) });
+  assert.equal(logos.available, true);
+  const put = async () => {
+    await posters.put({ ratingKey: '41', title: 'A', thumb: '/a' }, new Blob(['poster']), SIZE);
+    await logos.put({ ratingKey: 'tmdb-logo:movie:603', title: 'A', thumb: 'tmdb-art:movie:603:logo-en' }, new Blob(['logo']), SIZE);
+  };
+  await put();
+  await logos.clear();
+  assert.deepEqual([posters.entries().length, logos.entries().length], [1, 0]);
+  assert.equal(await read(await posters.get('41')), 'poster', 'the poster blob stays when the logos are cleared');
+  await put();
+  await posters.clear();
+  assert.deepEqual([posters.entries().length, logos.entries().length], [0, 1]);
+  assert.equal(await read(await logos.get('tmdb-logo:movie:603')), 'logo', 'the logo blob stays when the posters are cleared');
+  assert.notEqual(logosIn(n.caches), n.caches);
+  assert.equal(logosIn(undefined), undefined, 'no Cache API: the logo cache is as unavailable as the poster cache');
 });

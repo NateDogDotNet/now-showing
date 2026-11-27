@@ -627,8 +627,641 @@ for (const [label, viewport, extra] of [['a phone', { width: 390, height: 844 },
   });
 }
 
+// ---------- Title as logo (R-ART-2, D221) ----------
+//
+// The mock TMDB's logos: 1001 (Plex ratingKey 1, "The Grand Marquee") has an English logo, 1002 (ratingKey 2, "Midnight Projector") only a logo with no language, 1004 (ratingKey 4,
+// "Popcorn Skies") an English and a French one; 1006 has none, and `/__mock/empty` takes all of them away. The card is read by structure, never by a wait on time.
+
+const MARQUEE = 'The Grand Marquee';
+const PROJECTOR = 'Midnight Projector';
+const POPCORN = 'Popcorn Skies';
+const logoSeed = (extra = {}) => seed({ posterArt: 'source', showTitle: true, showMeta: true, titleLogo: true, ...extra });
+const withKey = (key, title, extra = {}) => logoSeed({ staticRatingKey: key, staticTitle: title, ...extra });
+
+const logoShown = (page) => page.waitForFunction(() => { const i = document.querySelector('#title-card img.title-logo'); return Boolean(i && i.naturalWidth > 0); }, null, { timeout: 20000 });
+const cardShown = (page) => page.waitForSelector('#title-card:not([hidden])', { timeout: 20000 });
+/** What the title card holds: its lines, whether each is a logo or text, the `alt`, where the image came from and the boxes. */
+const cardOf = (page) =>
+  page.evaluate(() => {
+    const card = document.getElementById('title-card');
+    const box = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };
+    const img = card.querySelector('img');
+    return {
+      hidden: card.hidden,
+      text: card.textContent,
+      lines: [...card.children].map((c) => (c.querySelector('img') ? 'logo' : c.textContent)),
+      images: card.querySelectorAll('img').length,
+      svgs: card.querySelectorAll('svg, object, embed').length,
+      alt: img?.alt ?? null,
+      from: img ? (img.src.startsWith('blob:') ? 'blob' : img.src) : null,
+      boxes: img ? { img: box(img), line: box(img.parentElement), card: box(card), poster: box(document.getElementById('poster-box')) } : null,
+    };
+  });
+const inside = (a, b) => a.l >= b.l - 0.5 && a.t >= b.t - 0.5 && a.r <= b.r + 0.5 && a.b <= b.b + 0.5;
+const logoRequests = (seen) => images(seen).filter((r) => r.params.include_image_language !== 'null');
+
+for (const [label, viewport] of [['portrait 1080x1920', { width: 1080, height: 1920 }], ['landscape 1920x1080', { width: 1920, height: 1080 }]]) {
+  artCase(`30 Title as logo at ${label}: an img in the title card, alt the title, the box inside the title line's, from a blob, one request by the title's own id; the meta line unchanged`, { viewport, settings: withKey('1', MARQUEE) }, async ({ page, app }) => {
+    const seen = watchTmdb(page);
+    await page.goto(app.url);
+    await posterShown(page);
+    await logoShown(page);
+    const c = await cardOf(page);
+    assert.equal(c.images, 1);
+    assert.equal(c.alt, MARQUEE, 'the title is the alt');
+    assert.equal(c.from, 'blob', 'drawn from a same-origin object URL');
+    assert.equal(c.svgs, 0, 'never inlined');
+    assert.equal(c.lines.length, 2);
+    assert.equal(c.lines[0], 'logo');
+    assert.match(c.lines[1], /\d{4}/, 'the rating, runtime and year line is still text');
+    assert.ok(!c.text.includes(MARQUEE), 'the title line is not text');
+    assert.ok(c.boxes.img.b - c.boxes.img.t >= 20, 'the logo has a size');
+    assert.ok(inside(c.boxes.img, c.boxes.line), `the logo box is inside the title line's box: ${JSON.stringify(c.boxes)}`);
+    assert.ok(inside(c.boxes.line, c.boxes.card) && inside(c.boxes.card, c.boxes.poster), 'and the line inside the card, the card inside the poster');
+    assert.deepEqual(logoRequests(seen).map((r) => [r.path, r.params.include_image_language]), [['/3/movie/1001/images', 'en,null']], 'one request, by the title\'s own id and type');
+    const files = seen.filter((r) => r.host === 'image.tmdb.org');
+    assert.deepEqual(files.map((r) => r.path), ['/t/p/original/mock-logo-1001-en.svg'], 'an SVG logo is asked for at its own size');
+    assert.ok(files.every((r) => !r.url.includes(API_KEY)));
+    assert.equal((await artOf(page)).plex, true, 'the poster itself is still the source\'s');
+    await quiet(page);
+    check(`30 ${label}: the logo is an img inside the title line`);
+  });
+}
+
+artCase('31 a title with no logo at TMDB shows its title as text, with no img and no error card', { settings: logoSeed({ staticRatingKey: '1' }) }, async ({ page, app }) => {
+  await mockGet(app, 'empty');
+  await page.goto(app.url);
+  await posterShown(page);
+  await cardShown(page);
+  const c = await cardOf(page);
+  assert.equal(c.images, 0, 'no image at all (not an empty one)');
+  assert.ok(c.lines[0].startsWith(MARQUEE), c.lines[0]);
+  assert.equal(c.lines.length, 2);
+  assert.equal(await page.evaluate(() => document.getElementById('empty').hidden), true, 'no error card');
+  await quiet(page);
+  check('31 no logo: the title is text');
+});
+
+artCase('32 TMDB down: the title stays text, no error card, and the display carries on', { settings: logoSeed({ staticRatingKey: '1' }) }, async ({ page, app }) => {
+  await mockGet(app, 'down');
+  await page.goto(app.url);
+  await posterShown(page);
+  await cardShown(page);
+  const c = await cardOf(page);
+  assert.deepEqual([c.images, c.lines[0].startsWith(MARQUEE)], [0, true]);
+  assert.equal(await page.evaluate(() => document.getElementById('empty').hidden), true);
+  await quiet(page);
+  check('32 TMDB down: text');
+});
+
+artCase('33 the title card off: no logo and no title, and TMDB is not asked at all', { settings: logoSeed({ showTitle: false }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await cardShown(page); // the meta line keeps the card
+  const c = await cardOf(page);
+  assert.deepEqual([c.images, c.lines.length, c.text.includes(MARQUEE)], [0, 1, false], 'neither the logo nor the title');
+  await quiet(page);
+  assert.deepEqual(seen, [], 'no logo request at all (L5)');
+  check('33 title card off: neither, no request');
+});
+
+artCase('34 no key asks TMDB nothing and shows the title as text', { settings: logoSeed({ tmdbKey: '' }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await cardShown(page);
+  const c = await cardOf(page);
+  assert.deepEqual([c.images, c.lines[0].startsWith(MARQUEE)], [0, true]);
+  await quiet(page);
+  assert.deepEqual(seen, [], 'L6');
+  check('34 no key: text, no request');
+});
+
+artCase('35 a title with no TMDB id, and the setting off, ask TMDB nothing', { settings: logoSeed(NO_ID) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await cardShown(page);
+  assert.equal((await cardOf(page)).images, 0);
+  await quiet(page);
+  assert.deepEqual(seen, [], 'no id: no request');
+  check('35 no id: text, no request');
+});
+
+artCase('36 Title as logo off (the default) asks TMDB nothing, whatever the key', { settings: logoSeed({ titleLogo: false }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await cardShown(page);
+  const c = await cardOf(page);
+  assert.deepEqual([c.images, c.lines[0].startsWith(MARQUEE)], [0, true]);
+  await quiet(page);
+  assert.deepEqual(seen, []);
+  check('36 setting off: text, no request');
+});
+
+artCase('37 the logo language is the Poster art language: fr takes a French logo, falls back to the logo with no language, and is text when there is neither', { settings: logoSeed({ posterArtLanguage: 'fr', staticRatingKey: '4', staticTitle: POPCORN }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  assert.equal((await cardOf(page)).alt, POPCORN);
+  assert.deepEqual(seen.filter((r) => r.host === 'image.tmdb.org').map((r) => r.path), ['/t/p/original/mock-logo-1004-fr.svg'], 'the French logo, not the English one (L1)');
+  assert.equal(logoRequests(seen)[0].params.include_image_language, 'fr,null');
+  await quiet(page);
+  check('37 fr: the French logo');
+});
+
+artCase('38 fr with a title that has only an English logo: text (never the English logo)', { settings: logoSeed({ posterArtLanguage: 'fr' }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await cardShown(page);
+  await quiet(page);
+  const c = await cardOf(page);
+  assert.deepEqual([c.images, c.lines[0].startsWith(MARQUEE)], [0, true]);
+  assert.deepEqual(seen.filter((r) => r.host === 'image.tmdb.org'), [], 'no logo file fetched');
+  check('38 fr, an English logo only: text');
+});
+
+artCase('39 a title with only a logo with no language shows that logo (the fallback)', { settings: withKey('2', PROJECTOR) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  const c = await cardOf(page);
+  assert.equal(c.alt, PROJECTOR);
+  assert.deepEqual(seen.filter((r) => r.host === 'image.tmdb.org').map((r) => r.path), ['/t/p/original/mock-logo-1002-xx.svg']);
+  await quiet(page);
+  check('39 a logo with no language is the fallback');
+});
+
+artCase('40 the Poster art choice does not matter: textless art and the logo together, each by its own request', { settings: withKey('1', MARQUEE, { posterArt: 'textless' }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  assert.equal((await artOf(page)).words, 'poster no language');
+  assert.deepEqual(images(seen).map((r) => r.params.include_image_language).sort(), ['en,null', 'null']);
+  await quiet(page);
+  check('40 textless art with the logo');
+});
+
+artCase('41 cache first: after a reload the logo is drawn from the store and TMDB is asked nothing; it is in its own index, not the poster index', { settings: withKey('1', MARQUEE) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  await quiet(page);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]').length === 1, null, { timeout: 10000 });
+  const logos = await page.evaluate(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex')));
+  assert.match(logos[0].thumb, /^tmdb-art:movie:1001:logo-en$/);
+  assert.ok(!(await index(page)).some((e) => /logo/.test(JSON.stringify(e))), 'no logo in the poster index (offline never draws it as a poster)');
+  const seen = watchTmdb(page);
+  await page.reload();
+  await posterShown(page);
+  await logoShown(page);
+  await quiet(page);
+  assert.deepEqual(seen.filter((r) => /\/images$|mock-logo/.test(r.path)), [], 'the logo came from the store');
+  check('41 the logo is cached on its own');
+});
+
+artCase('42 turned on in Settings it shows when saved, and off again it is text; one logo request for the title', { settings: logoSeed({ titleLogo: false }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await cardShown(page);
+  assert.equal((await cardOf(page)).images, 0);
+  await openSettings(page);
+  await page.check('input[name="titleLogo"]');
+  await save(page); // not a live control: the sheet's TMDB key and choices are used when it is saved
+  assert.equal((await stored(page)).titleLogo, true);
+  await logoShown(page);
+  assert.equal((await cardOf(page)).alt, MARQUEE);
+  assert.equal(logoRequests(seen).length, 1, 'one logo request for the one title');
+  await openSettings(page);
+  await page.uncheck('input[name="titleLogo"]');
+  await save(page);
+  assert.equal((await stored(page)).titleLogo, false);
+  await page.waitForFunction(() => !document.querySelector('#title-card img'), null, { timeout: 10000 });
+  assert.ok((await cardOf(page)).lines[0].startsWith(MARQUEE));
+  await quiet(page);
+  check('42 turned on and off from Settings');
+});
+
+for (const [label, viewport, extra] of [['a phone', { width: 390, height: 844 }, {}], ['a phone turned (rotation 90)', { width: 390, height: 844 }, { rotation: 90 }], ['a landscape screen', { width: 844, height: 390 }, {}]]) {
+  artCase(`43 the Title as logo control fits ${label}: its row and help show, the Language row shows with it, no sideways scroll; the logo fits the card`, { viewport, hasTouch: true, isMobile: true, settings: logoSeed({ titleLogo: true, ...extra }) }, async ({ page, app }) => {
+    await page.goto(app.url);
+    await posterShown(page);
+    await logoShown(page);
+    const c = await cardOf(page);
+    assert.ok(inside(c.boxes.img, c.boxes.line) && inside(c.boxes.line, c.boxes.card), 'the logo fits its line in the card');
+    await openSettings(page);
+    assert.equal(await page.isVisible('input[name="titleLogo"]'), true);
+    assert.equal(await page.isVisible('#title-logo-help'), true);
+    assert.equal(await page.isVisible('#art-language-row'), true, 'the logo uses the Poster art language, so the choice shows even for "As the source gives it"');
+    const overflow = await page.evaluate(() => {
+      const body = document.querySelector('#settings .sheet-body');
+      const box = document.getElementById('settings').getBoundingClientRect();
+      const wide = [...document.querySelectorAll('#art-fieldset label, #title-logo-help, input[name="titleLogo"]')].filter((el) => (el.tagName !== 'INPUT' && el.scrollWidth > el.clientWidth + 1) || el.getBoundingClientRect().right > box.right + 1).map((el) => el.id || el.name || el.className || el.tagName);
+      return { sideways: body.scrollWidth - body.clientWidth, wide };
+    });
+    assert.deepEqual(overflow, { sideways: 0, wide: [] });
+    await page.uncheck('input[name="titleLogo"]');
+    assert.equal(await page.isVisible('#art-language-row'), false, 'unticked, with "As the source gives it", the language row hides again');
+    await quiet(page);
+    check(`43 ${label}: the control fits`);
+  });
+}
+
+// The logo is inside the title card, so night dim (a filter on #stage or #frame) and every display filter reach it as they reach the text.
+const dimOf = (page) =>
+  page.evaluate(() => {
+    const chain = (el) => {
+      let level = 1;
+      for (let e = el; e; e = e.parentElement) {
+        const m = /brightness\(([\d.]+)\)/.exec(getComputedStyle(e).filter);
+        if (m) level *= Number(m[1]);
+      }
+      return Math.round(level * 1000) / 1000;
+    };
+    const card = document.getElementById('title-card');
+    const img = card.querySelector('img');
+    return { logo: chain(img), text: chain(card.lastElementChild), card: chain(card), inCard: card.contains(img), inStage: document.getElementById('stage').contains(img) };
+  });
+for (const target of ['stage', 'frame']) {
+  artCase(`44 night dim (target ${target}): the logo is dimmed exactly as the text is`, { clock: { time: new Date(2026, 5, 1, 23, 0, 0) }, settings: withKey('1', MARQUEE, { nightDim: true, nightDimStart: '22:00', nightDimEnd: '07:00', nightDimLevel: 60, nightDimTarget: target }) }, async ({ page, app }) => {
+    await page.goto(app.url);
+    await posterShown(page);
+    await logoShown(page);
+    const d = await dimOf(page);
+    assert.equal(d.inCard && d.inStage, true);
+    assert.equal(d.logo, d.text, 'the logo and the meta line text are under the same filters');
+    assert.equal(d.logo, d.card);
+    assert.equal(d.logo, target === 'stage' ? 0.6 : 1, `the stage is dimmed to 0.6 when it is the target (${target})`);
+    await quiet(page);
+    check(`44 ${target}: the logo follows the text's dim`);
+  });
+}
+
+artCase('45 TMDB mode: a title with an id of its own gets its logo too', { settings: (app) => ({ serverType: 'tmdb', tmdbKey: API_KEY, libraryKey: 'movie/popular', libraryKeys: ['movie/popular'], staticRatingKey: 'movie:1001', staticTitle: 'Paper Moon Rising', rotateSeconds: 3600, showNowPlaying: false, pixelShift: false, posterArt: 'source', showTitle: true, showMeta: true, titleLogo: true }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  assert.equal((await cardOf(page)).alt, 'Paper Moon Rising');
+  await quiet(page);
+  check('45 TMDB mode: the logo');
+});
+
+// ---------- Title as logo, round 2 (D222): readable logos only, offline from the cache, clearing, and a change of settings ----------
+
+const TMDB_LOGO_MODE = (extra = {}) => (app) => ({ serverType: 'tmdb', tmdbKey: API_KEY, libraryKey: 'movie/popular', libraryKeys: ['movie/popular'], rotateSeconds: 3600, showNowPlaying: false, pixelShift: false, plexToken: '', serverUrl: '', posterArt: 'source', showTitle: true, showMeta: true, titleLogo: true, ...extra });
+const logoIndexOf = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]'));
+const blobCount = (page, store) => page.evaluate(async (name) => (await (await caches.open(name)).keys()).length, store);
+/** The words of the SVG the title card's logo shows (`logo en`, `logo fr`, `logo no language`), or null when the card holds no logo. */
+const logoWords = (page) =>
+  page.evaluate(async () => {
+    const i = document.querySelector('#title-card img.title-logo');
+    return i ? (/logo (no language|en|fr)/.exec(await (await fetch(i.src)).text()) || [''])[0] : null;
+  });
+/** Waits, on the state itself, until the logo on screen says `words` (a bound on tries, not on time: a predicate in `waitForFunction` cannot await a fetch). */
+const logoWordsAre = async (page, words) => {
+  for (let i = 0; i < 300 && (await logoWords(page)) !== words; i++) await quiet(page);
+  assert.equal(await logoWords(page), words);
+};
+
+artCase('46 D222 1: a dark logo (dark lettering on a card that is near black) is text, and no other logo is tried; a light one is the logo', { settings: TMDB_LOGO_MODE({ staticRatingKey: 'movie:1003', staticTitle: 'Northern Lights Cafe' }) }, async ({ page, app }) => {
+  const seen = watchTmdb(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await cardShown(page);
+  await quiet(page);
+  const c = await cardOf(page);
+  assert.equal(c.images, 0, 'no image: the title is text');
+  assert.ok(c.lines[0].startsWith('Northern Lights Cafe'), c.lines[0]);
+  assert.equal(c.lines.length, 2);
+  assert.deepEqual(logoRequests(seen).map((r) => r.path), ['/3/movie/1003/images'], 'one logo request');
+  assert.deepEqual(seen.filter((r) => /mock-logo/.test(r.path)).map((r) => r.path), ['/t/p/original/mock-logo-1003-en.svg'], 'the one logo was fetched, no other tried');
+  assert.equal(await page.evaluate(() => document.getElementById('empty').hidden), true, 'no error card');
+  check('46 a dark logo is text');
+});
+
+artCase('47 D222 2: offline, a cached TMDB title shows its cached logo with no request; with none in the logo index it is text', { settings: TMDB_LOGO_MODE({ staticRatingKey: 'movie:1001', staticTitle: 'Paper Moon Rising' }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  await quiet(page);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]').length === 1 && JSON.parse(localStorage.getItem('plexPoster.posterIndex') || '[]').length === 1, null, { timeout: 10000 });
+  await mockGet(app, 'down');
+  const seen = watchTmdb(page);
+  await page.reload();
+  await posterShown(page);
+  await logoShown(page);
+  const c = await cardOf(page);
+  assert.equal(c.alt, 'Paper Moon Rising', 'offline: the cached logo, alt the title');
+  assert.equal(c.from, 'blob');
+  await quiet(page);
+  assert.deepEqual(seen.filter((r) => /\/images$|mock-logo/.test(r.path)), [], 'no logo request offline');
+  // Nothing in the logo index: the same cached title is text, and still no logo request.
+  await page.evaluate(() => localStorage.removeItem('plexPoster.logoIndex'));
+  seen.length = 0;
+  await page.reload();
+  await posterShown(page);
+  await cardShown(page);
+  await quiet(page);
+  const t = await cardOf(page);
+  assert.equal(t.images, 0);
+  assert.ok(t.lines[0].startsWith('Paper Moon Rising'), t.lines[0]);
+  assert.deepEqual(seen.filter((r) => /\/images$|mock-logo/.test(r.path)), []);
+  check('47 offline: the cached logo, else text, no request');
+});
+
+artCase('48 F1: a server type switch empties the logo index and its blobs together; the poster blobs go with theirs', { settings: logoSeed() }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  await quiet(page);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]').length === 1, null, { timeout: 10000 });
+  assert.equal(await blobCount(page, 'plex-logos-v1'), 1, 'the logo blob is in the logo store');
+  assert.equal(await blobCount(page, 'plex-posters-v1'), 1, 'and the poster blob in the poster store');
+  await openSettings(page);
+  await page.uncheck('input[name="titleLogo"]'); // so the new title does not store a logo again
+  await page.locator('#settings-form input[name="serverTypeTmdb"]').check({ force: true });
+  await save(page);
+  assert.equal((await stored(page)).serverType, 'tmdb');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]').length === 0, null, { timeout: 10000 });
+  assert.equal(await blobCount(page, 'plex-logos-v1'), 0, 'no logo blob is left');
+  await quiet(page);
+  check('48 a type switch clears the logos');
+});
+
+artCase('49 F1: Clear poster cache empties the logo index and the logo blobs, and the poster ones', { settings: logoSeed() }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  await quiet(page);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]').length === 1, null, { timeout: 10000 });
+  await openSettings(page);
+  await page.click('#clear-cache-btn');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]').length === 0, null, { timeout: 10000 });
+  assert.equal(await blobCount(page, 'plex-logos-v1'), 0);
+  assert.deepEqual(await index(page), []);
+  assert.equal(await blobCount(page, 'plex-posters-v1'), 0);
+  check('49 Clear poster cache clears the logos');
+});
+
+artCase('50 F2: a cached poster that will not decode is fetched again and the title still shows its logo', { settings: logoSeed() }, async ({ page, app }) => {
+  const logs = [];
+  page.on('console', (m) => logs.push(m.text()));
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  await quiet(page);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.posterIndex') || '[]').length === 1 && JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]').length === 1, null, { timeout: 10000 });
+  await page.evaluate(async () => {
+    const cache = await caches.open('plex-posters-v1');
+    await cache.put(new URL('/__posters__/1', location.origin).toString(), new Response('garbage', { headers: { 'Content-Type': 'image/jpeg' } }));
+  });
+  await page.reload();
+  await posterShown(page);
+  await logoShown(page);
+  assert.ok(logs.some((t) => t.includes('is unreadable; downloading it again')), 'the retry path ran');
+  assert.equal((await cardOf(page)).alt, MARQUEE, 'the retry draw kept the logo');
+  await quiet(page);
+  check('50 the decode retry keeps the logo');
+});
+
+artCase('51 F3: a change of Poster art language asks for the logo again at once, and a cleared key takes it away at once', { settings: withKey('4', POPCORN) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  await logoWordsAre(page, 'logo en');
+  await openSettings(page);
+  await page.selectOption('select[name="posterArtLanguage"]', 'fr');
+  await save(page); // a language is no connection change: nothing draws the title again, so only the settings change can alter the logo on screen
+  await logoWordsAre(page, 'logo fr'); // not the English one until the next title
+  assert.equal((await cardOf(page)).alt, POPCORN);
+  // A cleared key draws the title again too (a connection change); what comes first on screen is the logo going, or the poster being drawn. Only the settings change takes the logo away before a redraw.
+  await page.evaluate(() => {
+    window.__order = [];
+    new MutationObserver((records) => {
+      for (const r of records) {
+        if (r.type === 'attributes' && r.target.classList.contains('poster-layer')) window.__order.push('poster drawn');
+        if (r.type === 'childList' && r.target.id === 'title-card' && [...r.removedNodes].some((n) => n.querySelector?.('img')) && !r.target.querySelector('img')) window.__order.push('logo gone'); // gone, not drawn again at once
+      }
+    }).observe(document.getElementById('stage'), { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
+  });
+  await openSettings(page);
+  await page.click('#tmdb-key-clear');
+  await save(page);
+  await page.waitForFunction(() => !document.querySelector('#title-card img'), null, { timeout: 10000 });
+  const c = await cardOf(page);
+  assert.ok(c.lines[0].startsWith(POPCORN), 'the title is text again');
+  assert.equal(await logoWords(page), null);
+  assert.equal((await page.evaluate(() => window.__order))[0], 'logo gone', 'the logo goes at the save, before the poster is drawn again');
+  await quiet(page);
+  check('51 language change and cleared key apply at once');
+});
+
+artCase('52 UX F4-F6: the help no longer says art never changes the title; ticking Title as logo never moves it; the Language row names the logo; a muted line names what is missing', { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, settings: logoSeed({ titleLogo: false, posterArt: 'source' }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  const art = await page.textContent('#art-help');
+  assert.ok(!/never the title/i.test(art), art);
+  assert.match(art, /not its title/);
+  assert.match(await page.textContent('#title-logo-help'), /a logo in the Poster art language, or one with no language/);
+  assert.ok(!/language below/.test(await page.textContent('#title-logo-help')), 'ux N5: the help does not point at a row that may be hidden');
+  const top = () => page.evaluate(() => document.querySelector('input[name="titleLogo"]').getBoundingClientRect().top - document.getElementById('art-fieldset').getBoundingClientRect().top); // in the fieldset, whatever the sheet is scrolled to
+  const label = () => page.textContent('#art-language-label');
+  const status = async () => ((await page.isVisible('#title-logo-status')) ? (await page.textContent('#title-logo-status')).trim() : null);
+  const before = await top();
+  await page.check('input[name="titleLogo"]');
+  assert.equal(await top(), before, 'ticking never moves the checkbox (F5)');
+  assert.equal(await page.isVisible('#art-language-row'), true);
+  assert.equal(await label(), 'Language (title logo)', 'only the logo uses the language');
+  assert.equal(await status(), null, 'a key and the title card on: nothing is missing');
+  await page.selectOption('select[name="posterArt"]', 'largest');
+  assert.equal(await label(), 'Language (poster art and title logo)');
+  await page.selectOption('select[name="posterArt"]', 'language');
+  assert.equal(await label(), 'Language (poster art and title logo)');
+  await page.uncheck('input[name="titleLogo"]');
+  assert.equal(await label(), 'Language', 'poster art alone: as it was');
+  assert.equal(await status(), null, 'unticked: no line');
+  await page.selectOption('select[name="posterArt"]', 'source');
+  await page.check('input[name="titleLogo"]');
+  await page.fill('#tmdb-key-input', '');
+  assert.equal(await status(), 'No logo will show until you add a TMDB key (below).');
+  await page.uncheck('input[name="showTitle"]');
+  assert.equal(await status(), 'No logo will show until you add a TMDB key (below) and turn on "Show title below poster" (under Frame & layout).', 'ux N4');
+  assert.equal(await page.textContent('#layout-fieldset > legend'), 'Frame & layout', 'the fieldset the line names is the one that holds the checkbox');
+  assert.equal(await page.evaluate(() => document.querySelector('input[name="showTitle"]').closest('fieldset').id), 'layout-fieldset');
+  await page.fill('#tmdb-key-input', API_KEY);
+  assert.equal(await status(), 'No logo will show until you turn on "Show title below poster" (under Frame & layout).');
+  await page.check('input[name="showTitle"]');
+  assert.equal(await status(), null, 'both there: no line');
+  await page.fill('#tmdb-key-input', 'Bearer ');
+  assert.equal(await status(), 'No logo will show until you add a TMDB key (below).', 'a "Bearer" with nothing after it is no key');
+  const sideways = await page.evaluate(() => {
+    const body = document.querySelector('#settings .sheet-body');
+    return body.scrollWidth - body.clientWidth;
+  });
+  assert.equal(sideways, 0);
+  await quiet(page);
+  check('52 the control copy, order and status line');
+});
+
+artCase('53 D223 1 (M8): a pure red logo (#ff0000, 5.3:1 against black) is readable on the card: it shows, with the title as alt', { settings: TMDB_LOGO_MODE({ staticRatingKey: 'movie:1008', staticTitle: 'Action Only' }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  const c = await cardOf(page);
+  assert.equal(c.images, 1, 'the red logo is drawn, not text');
+  assert.equal(c.alt, 'Action Only');
+  assert.equal(c.from, 'blob');
+  assert.equal(await page.evaluate(() => document.getElementById('empty').hidden), true);
+  await quiet(page);
+  check('53 a readable red logo shows');
+});
+
+artCase('54 anchored F1 (M7): a language saved while the title logo is still being fetched: the new language logo shows at once, not the one asked under the old settings', { settings: withKey('4', POPCORN) }, async ({ page, app }) => {
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  let held;
+  const heldOnce = new Promise((resolve) => (held = resolve));
+  await page.route((url) => url.hostname === 'api.themoviedb.org' && url.pathname === '/3/movie/1004/images', async (route) => {
+    held();
+    await gate;
+    await route.fallback();
+  });
+  await page.goto(app.url);
+  await heldOnce; // the logo request is on the wire; no poster is drawn yet
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.poster-layer.active').length), 0, 'nothing drawn while the logo is asked');
+  await openSettings(page);
+  await page.selectOption('select[name="posterArtLanguage"]', 'fr');
+  await save(page); // no poster on screen yet, so the save asks for nothing
+  release();
+  await posterShown(page);
+  await logoShown(page);
+  await logoWordsAre(page, 'logo fr'); // not the English one the held request was planned under, until the next title
+  assert.equal((await cardOf(page)).alt, POPCORN);
+  await quiet(page);
+  check('54 a language saved during the logo fetch applies');
+});
+
+artCase('55 ux N1 (M9): the status line is written only when its words change: typing in the key field with the text unchanged leaves the node untouched', { viewport: { width: 390, height: 844 }, settings: logoSeed({ showTitle: false }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await openSettings(page);
+  await page.check('input[name="titleLogo"]');
+  const status = () => page.evaluate(() => document.getElementById('title-logo-status').textContent);
+  assert.match(await status(), /^No logo will show until you turn on "Show title below poster"/, 'a key is set, the title card is off');
+  await page.evaluate(() => {
+    window.__writes = 0;
+    new MutationObserver((records) => (window.__writes += records.length)).observe(document.getElementById('title-logo-status'), { childList: true, characterData: true, subtree: true });
+  });
+  const before = await status();
+  await page.focus('#tmdb-key-input');
+  await page.keyboard.type('abc'); // three input events, the same words
+  assert.equal(await status(), before);
+  await quiet(page);
+  assert.equal(await page.evaluate(() => window.__writes), 0, 'the live region was not written');
+  await page.check('input[name="showTitle"]'); // control: a change of words is written (the line goes empty)
+  await quiet(page);
+  assert.ok((await page.evaluate(() => window.__writes)) > 0, 'a change of words is written');
+  check('55 the status line is written on a change only');
+});
+
+artCase('56 anchored F1 (M7c): the offline rotation too: a language saved while the cached logo is being read applies at once (the logo asked under the old language is not kept)', { settings: TMDB_LOGO_MODE({ staticRatingKey: 'movie:1001', staticTitle: 'Paper Moon Rising' }) }, async ({ page, app }) => {
+  // Holds the read of the logo store (the lookup of a cached logo) while sessionStorage says so: the page's own Cache API, wrapped, with nothing else changed.
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('hold-logo-lookup')) window.__logoGate = new Promise((resolve) => (window.__releaseLogo = resolve));
+    const open = CacheStorage.prototype.open;
+    CacheStorage.prototype.open = async function (name) {
+      const cache = await open.call(this, name);
+      if (name !== 'plex-logos-v1') return cache;
+      return new Proxy(cache, {
+        get(target, key) {
+          const value = target[key];
+          if (typeof value !== 'function') return value;
+          if (key !== 'match') return value.bind(target);
+          return async (...args) => {
+            if (window.__logoGate) {
+              window.__logoHeld = true;
+              await window.__logoGate;
+            }
+            return value.apply(target, args);
+          };
+        },
+      });
+    };
+  });
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  await quiet(page);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]').length === 1 && JSON.parse(localStorage.getItem('plexPoster.posterIndex') || '[]').length === 1, null, { timeout: 10000 });
+  await mockGet(app, 'down');
+  await page.evaluate(() => sessionStorage.setItem('hold-logo-lookup', '1'));
+  await page.reload();
+  await page.waitForFunction(() => window.__logoHeld === true, null, { timeout: 20000 }); // offline: the cached poster is chosen, its logo is being read
+  await openSettings(page);
+  await page.selectOption('select[name="posterArtLanguage"]', 'fr'); // no French logo is stored
+  await save(page);
+  await page.evaluate(() => window.__releaseLogo());
+  await posterShown(page);
+  await cardShown(page);
+  for (let i = 0; i < 300 && (await cardOf(page)).images !== 0; i++) await quiet(page);
+  const c = await cardOf(page);
+  assert.equal(c.images, 0, 'the English logo the read was planned under is gone: French has none stored, so the title is text');
+  assert.ok(c.lines[0].startsWith('Paper Moon Rising'), c.lines[0]);
+  await quiet(page);
+  check('56 offline: a language saved during the cached logo read applies');
+});
+
+artCase('57 anchored F1 (M11): English saved again while the French logo is still being fetched: the logo ends English, and the late French reply draws nothing', { settings: withKey('4', POPCORN) }, async ({ page, app }) => {
+  // Holds the French logo's images request only (the English one is asked at the first draw, and the English logo is stored, so the second save asks TMDB nothing).
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  let held;
+  const heldOnce = new Promise((resolve) => (held = resolve));
+  await page.route((url) => url.hostname === 'api.themoviedb.org' && url.pathname === '/3/movie/1004/images' && url.searchParams.get('include_image_language').startsWith('fr'), async (route) => {
+    held();
+    await gate;
+    await route.fallback();
+  });
+  await page.goto(app.url);
+  await posterShown(page);
+  await logoShown(page);
+  await logoWordsAre(page, 'logo en');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]').some((e) => /logo-en$/.test(e.thumb)), null, { timeout: 10000 }); // the English logo is stored: the second save is a store hit
+  await openSettings(page);
+  await page.selectOption('select[name="posterArtLanguage"]', 'fr');
+  await save(page);
+  await heldOnce; // the French logo is asked and held; the English one is still on screen
+  await logoWordsAre(page, 'logo en');
+  await openSettings(page);
+  await page.selectOption('select[name="posterArtLanguage"]', 'en');
+  await save(page); // newer than the French save: the French reply, when it comes, is not wanted
+  const lateFile = page.waitForResponse((r) => new URL(r.url()).pathname === '/t/p/original/mock-logo-1004-fr.svg', { timeout: 20000 });
+  release();
+  await lateFile; // the French logo did come back
+  // The French logo is stored when it comes back (its entry replaces the English one); that is on the state, not a wait. Then its late draw, were there one, has had every turn of the page to run: poll the state, bounded in tries.
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('plexPoster.logoIndex') || '[]').some((e) => /logo-fr$/.test(e.thumb)), null, { timeout: 20000 });
+  for (let i = 0; i < 30; i++) {
+    await quiet(page);
+    assert.equal(await logoWords(page), 'logo en', 'the French logo asked under the older save is not drawn');
+  }
+  assert.equal((await cardOf(page)).alt, POPCORN);
+  check('57 English saved again during the French fetch: the logo stays English');
+});
+
 // ---------- run ----------
 
+if (process.env.E2E_ART_ONLY) {
+  const only = new RegExp(process.env.E2E_ART_ONLY); // a few cases while working: E2E_ART_ONLY='^5[345] '
+  cases.splice(0, cases.length, ...cases.filter((c) => only.test(c.name)));
+}
 const failures = [];
 for (const { name, opts, fn } of cases) {
   try {

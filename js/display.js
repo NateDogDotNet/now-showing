@@ -56,6 +56,11 @@ export function createDisplay(root = document) {
   let gapHideCancel = null; // removes the pending transitionend listener of that hide
   let gapStyle = 'none'; // the gap fill in force: 'none' | 'blur' | 'matte' (the gapFill setting; the layer shows only while a band does)
   let infoText = false; // the poster on screen has a title for the panel to show
+  let titleLogo = null; // { poster, url, failed }: the logo art of the poster on screen (R-ART-2), drawn by an <img> from a same-origin object URL; never inlined into the page
+  const useLogo = (poster, blob) => {
+    if (titleLogo) URL.revokeObjectURL(titleLogo.url);
+    titleLogo = poster && blob instanceof Blob ? { poster, url: URL.createObjectURL(blob), failed: false } : null;
+  };
 
   /** Runs the pixel-shift step timer while `pixelShift` is on, restarting it only when the interval changes. */
   function syncShiftTimer() {
@@ -373,7 +378,7 @@ export function createDisplay(root = document) {
     currentPoster: null,
 
     /** Shows an image (Blob or URL) with a cross-fade. Resolves once it is visible. */
-    async show(poster, image) {
+    async show(poster, image, { logo } = {}) {
       const next = el.layers[1 - front];
       const prev = el.layers[front];
       const url = image instanceof Blob ? URL.createObjectURL(image) : image;
@@ -401,7 +406,7 @@ export function createDisplay(root = document) {
       front = 1 - front;
       if (settings) layout(); // this poster's shape decides which bands it leaves
       this.currentPoster = poster;
-      this.setTitle(poster);
+      this.setTitle(poster, logo ?? null);
 
       const old = objectUrls.get(prev);
       if (old) {
@@ -417,10 +422,28 @@ export function createDisplay(root = document) {
     },
 
     /**
-     * The overlay slot: the 2.0.0 title line when `showTitle`, and "rating · runtime · year" when `showMeta`.
-     * It also fills the landscape info panel (title, the same meta line, the trimmed summary) from the same poster.
+     * The logo art of the poster on screen (a Blob), or none (null), arriving after the draw (Title as logo turned on while a poster shows). Another poster's is dropped.
      */
-    setTitle(poster) {
+    setLogo(poster, blob) {
+      if (!poster || poster !== this.currentPoster) return;
+      useLogo(poster, blob);
+      this.setTitle(poster);
+    },
+
+    /** Is a logo held for this poster (so the title card needs no request for one)? */
+    hasLogo(poster) {
+      return Boolean(poster && titleLogo && titleLogo.poster === poster && !titleLogo.failed);
+    },
+
+    /**
+     * The overlay slot: the 2.0.0 title line when `showTitle`, and "rating · runtime · year" when `showMeta`.
+     * With `titleLogo` on and a logo for this poster the title line is its logo art, an `<img>` whose `alt` is the title (R-ART-2); with none, or when the logo cannot be drawn, it is text.
+     * `logo` (a Blob or null) is the poster's logo when the poster is being drawn; left out, what is held stays. It also fills the landscape info panel
+     * (title, the same meta line, the trimmed summary) from the same poster.
+     */
+    setTitle(poster, logo) {
+      if (logo !== undefined) useLogo(poster, logo);
+      else if (titleLogo && titleLogo.poster !== poster) useLogo(null, null);
       const info = infoParts(poster, formatRuntime);
       el.infoTitle.textContent = info.title;
       el.infoMeta.textContent = info.meta;
@@ -431,7 +454,10 @@ export function createDisplay(root = document) {
       syncInfoVisibility();
       fitInfoSummary();
       const lines = [];
-      if (settings?.showTitle && poster?.title) lines.push([poster.title, poster.year && `(${poster.year})`].filter(Boolean).join(' '));
+      if (settings?.showTitle && poster?.title) {
+        const text = [poster.title, poster.year && `(${poster.year})`].filter(Boolean).join(' ');
+        lines.push(settings.titleLogo && titleLogo?.poster === poster && !titleLogo.failed ? { logo: titleLogo, alt: poster.title } : text);
+      }
       if (settings?.showMeta && poster) {
         const meta = [poster.contentRating, formatRuntime(poster.duration), poster.year].filter(Boolean).join(' · ');
         if (meta) lines.push(meta);
@@ -440,7 +466,23 @@ export function createDisplay(root = document) {
       el.title.replaceChildren(
         ...lines.map((text) => {
           const line = document.createElement('div');
-          line.textContent = text;
+          if (typeof text === 'string') {
+            line.textContent = text;
+            return line;
+          }
+          // The logo takes the title line's place: the line keeps a box of its own height and the image fits inside it, so it never overflows the line (css/app.css).
+          const mark = document.createElement('img');
+          mark.className = 'title-logo';
+          mark.alt = text.alt;
+          mark.decoding = 'async';
+          mark.addEventListener('error', () => {
+            if (titleLogo !== text.logo) return;
+            titleLogo.failed = true; // a logo that will not draw leaves the title as text
+            this.setTitle(poster);
+          });
+          mark.src = text.logo.url;
+          line.className = 'title-logo-line';
+          line.append(mark);
           return line;
         }),
       );

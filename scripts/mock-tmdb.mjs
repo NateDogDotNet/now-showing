@@ -10,7 +10,7 @@
 // `{status_code: 7, status_message, success: false}`. Image files and the /__mock control routes need no key.
 //
 // (verify) list, besides what the shapes above say: the file types of posters and backdrops (the mock serves SVG, a real TMDB JPEG); the file types
-// of logos; whether a browser can read `Retry-After` on a 429 (the mock sends no Access-Control-Expose-Headers); how `language` and
+// of logos (the mock's are SVG, PNG or SVG on a real TMDB); which language a title's logos carry (1002 has only one with no language, 1004 an English and a French one, 1006 none); whether a browser can read `Retry-After` on a 429 (the mock sends no Access-Control-Expose-Headers); how `language` and
 // `include_image_language` combine on the images route (the mock reads only include_image_language); the status and body of find/{id} with a
 // missing or unknown external_source (the mock answers 422, status_code 22).
 //
@@ -107,6 +107,9 @@ const MOVIES = MOVIE_ROWS.map(([id, title, year, genres, cert, company, adult, v
     { iso_3166_1: 'GB', release_dates: [rel('12A')] },
   ],
   noLogo: id === 1006,
+  darkLogo: id === 1003, // its logo is dark lettering (#111, luminance 0.006) with no background, which the near-black title card cannot show: a title with such a logo is text (D222 1, D223 1)
+  redLogo: id === 1008, // its logo is pure red lettering (#ff0000, luminance 0.2126: 5.3:1 against black), which the card shows (D223 1: the cut is 0.175, 4.5:1)
+  logoLanguages: id === 1002 ? [NO_LANGUAGE] : id === 1004 ? ['en', 'fr'] : ['en'], // 1002 has only a logo with no language, 1004 an English and a French one, the rest an English one (1006: none)
 }));
 function rel(certification, type = 3) {
   return { certification, descriptors: [], iso_639_1: '', note: '', release_date: '2020-01-01T00:00:00.000Z', type };
@@ -126,6 +129,9 @@ const SHOWS = TV_ROWS.map(([id, name, year, genres, rating, company, vote, popul
   releaseDate: `${year}-03-01`,
   ratings: [...(rating === undefined ? [] : [{ descriptors: [], iso_3166_1: 'US', rating }]), { descriptors: [], iso_3166_1: 'GB', rating: '12' }],
   noLogo: false,
+  darkLogo: false,
+  redLogo: false,
+  logoLanguages: ['en'],
 }));
 const certOf = (movie) => {
   const us = movie.releases.find((r) => r.iso_3166_1 === 'US');
@@ -186,7 +192,7 @@ const imagesOf = (t, languages) => {
   return {
     id: t.id,
     backdrops: [imageEntry(posterFile('backdrop', t.id, NO_LANGUAGE), NO_LANGUAGE, 1920, 1080, 5.5)].filter(keep),
-    logos: t.noLogo ? [] : [imageEntry(posterFile('logo', t.id, 'en'), 'en', 500, 200, 5.3)].filter(keep),
+    logos: t.noLogo ? [] : t.logoLanguages.map((lang) => imageEntry(posterFile('logo', t.id, lang), lang, 500, 200, 5.3)).filter(keep),
     posters: [
       imageEntry(posterFile('poster', t.id, NO_LANGUAGE), NO_LANGUAGE, 1000, 1500, 5.4),
       imageEntry(posterFile('poster', t.id, 'en'), 'en', 1000, 1500, 5.2),
@@ -219,10 +225,11 @@ function imageSvg(file) {
   if (!t || !imagesOf(t).posters.concat(imagesOf(t).backdrops, imagesOf(t).logos).some((e) => e.file_path === file)) return null;
   const [w, h] = m[1] === 'poster' ? [500, 750] : m[1] === 'backdrop' ? [780, 439] : [500, 200];
   const fill = m[1] === 'logo' ? 'none' : t.color;
+  const ink = m[1] === 'logo' ? (t.darkLogo ? '#111111' : t.redLogo ? '#ff0000' : '#f4f4f4') : '#fff'; // a logo is light lettering with no background, as most are; the one of a `darkLogo` title is dark, the one of a `redLogo` title pure red
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
   <rect width="${w}" height="${h}" fill="${fill}"/>
-  <text x="${w / 2}" y="${h / 2}" font-family="Georgia, serif" font-size="${m[1] === 'poster' ? 40 : 34}" font-weight="bold" fill="${m[1] === 'logo' ? '#222' : '#fff'}" text-anchor="middle">${esc(t.title)}</text>
-  <text x="${w / 2}" y="${h / 2 + 44}" font-family="sans-serif" font-size="24" fill="${m[1] === 'logo' ? '#222' : '#fff'}" text-anchor="middle">${m[1]} ${m[3] === 'xx' ? 'no language' : m[3]}</text>
+  <text x="${w / 2}" y="${h / 2}" font-family="Georgia, serif" font-size="${m[1] === 'poster' ? 40 : 34}" font-weight="bold" fill="${ink}" text-anchor="middle">${esc(t.title)}</text>
+  <text x="${w / 2}" y="${h / 2 + 44}" font-family="sans-serif" font-size="24" fill="${ink}" text-anchor="middle">${m[1]} ${m[3] === 'xx' ? 'no language' : m[3]}</text>
 </svg>`;
 }
 

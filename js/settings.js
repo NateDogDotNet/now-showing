@@ -176,6 +176,8 @@ const SCHEMA = {
   posterArt: ['source', oneOf(...ART_MODES)],
   // The language of 'language' art: one of the listed ISO 639-1 codes; the display's own language when listed, else English (D217 3).
   posterArtLanguage: [defaultArtLanguage(globalThis.navigator?.language), (v, d) => (LANGUAGES.some((l) => l.code === v) ? v : d)],
+  // Title as logo (R-ART-2, D221): the title line of the title card is the title's logo art from TMDB when the poster has a TMDB id, a key is set and TMDB has a logo; else text (js/artwork.js).
+  titleLogo: [false, bool],
   // Several servers (R-SRC-4, D156, D157). The keys above describe the FIRST server, as they did in 2.4.0, and `servers` holds up to two more.
   // `serverId` is the first server's own id, '' while it has not been read (a 2.4.0 object has none): it is recorded when the household
   // changes the address or adds a server, never rewritten on upgrade. `serverCarried` marks the entry that owns the bare ids (the offline

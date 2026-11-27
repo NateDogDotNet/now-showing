@@ -1606,3 +1606,15 @@ test('posterArt and posterArtLanguage travel in an export and an import, and the
   assert.equal(sanitize({ ...s, posterArt: 'weird' }).posterArt, 'source', 'an unknown choice is "As the source gives it": no TMDB request');
   assert.equal(defaults().posterArt, 'source');
 });
+
+// ---- Title as logo (clear-logo-title, R-ART-2, D221) ----
+
+test('titleLogo is off by default, takes only a boolean, and travels in an export and an import', () => {
+  assert.equal(defaults().titleLogo, false);
+  assert.equal(sanitize({ titleLogo: true }).titleLogo, true);
+  for (const bad of [1, 'yes', null, {}]) assert.equal(sanitize({ titleLogo: bad }).titleLogo, false, String(bad));
+  const file = toExport({ ...defaults(), titleLogo: true });
+  assert.equal(file.settings.titleLogo, true);
+  assert.equal(fromImport(JSON.stringify(file), defaults()).titleLogo, true);
+  assert.equal(fromImport(JSON.stringify(toExport(defaults())), { ...defaults(), titleLogo: true }).titleLogo, false, 'an export of the default turns it off again');
+});
