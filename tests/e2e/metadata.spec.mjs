@@ -109,8 +109,8 @@ metaCase('6 cache index and offline overlay', { settings: pinned('3', 'Velvet Cu
   assert.equal(entry.contentRating, 'PG-13');
   assert.equal(entry.year, '1972');
   assert.ok(!('summary' in entry), 'the summary is not stored');
-  assert.deepEqual(Object.keys(entry).sort(), ['contentRating', 'duration', 'genres', 'height', 'ratingKey', 'savedAt', 'thumb', 'title', 'width', 'year']);
-  check('the poster-cache index entry carries duration, contentRating and year (no summary)');
+  assert.deepEqual(Object.keys(entry).sort(), ['contentRating', 'duration', 'genres', 'height', 'ratingKey', 'savedAt', 'studios', 'thumb', 'title', 'width', 'year']);
+  check('the poster-cache index entry carries duration, contentRating and year (no summary), and its studios (D214 1)');
 
   await mock.down();
   await page.reload();

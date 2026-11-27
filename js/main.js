@@ -27,7 +27,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.4.8';
+export const VERSION = '2.5.0';
 
 const carriedPlayback = takeCarriedPlayback();
 
@@ -1716,42 +1716,34 @@ async function boot() {
   announceWhatsNew();
 }
 
-// ---------- The upgrade notice (R-UPG-6) ----------
+// ---------- The upgrade notice (R-UPG-7) ----------
 
 const WHATS_NEW_KEY = 'plexPoster.whatsNew';
-const WHATS_NEW_VERSION = '2.4.3';
+const WHATS_NEW_VERSION = '2.5.0';
 
 /**
- * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new
- * and pointed at the Allowed devices section (through the normal PIN gate), where Play now is turned on (D196 2, 3).
- * An unconfigured display is a fresh install, not an upgrade, so it shows nothing; neither does a household with no Plex server,
- * since Play now is for Plex posters only. Every one of them gets the marker written, so it never shows again. The 2.4.1 notice is retired.
- * Open settings scrolls the section as near the top of the view as the end of the sheet allows (it is the last section, so on an ordinary sheet it cannot reach the top),
- * and the control that has focus is inside the visible part of the sheet (D197 1).
+ * Once per release: a configured display whose marker is not this release's value is an upgrade, so it is told what is new and pointed at the Poster art section
+ * (through the normal PIN gate), which holds the one TMDB key for every server type (D224, D217 1). It is one toast for every configured display, whatever its sources:
+ * a TMDB-only, a Jellyfin-only and an Emby-only household too, since TMDB needs no media server. An unconfigured display is a fresh install, not an upgrade, so it shows
+ * nothing (D73); it gets the marker written all the same, as does every display, so the notice never shows again. The 2.4.3 notice and its Plex-only rule are retired.
+ * Open settings scrolls the section as near the top of the view as the sheet allows, and the control that has focus ("Image to show", the section's first control) is
+ * inside the visible part of the sheet (the rule of D197 1).
  */
 function announceWhatsNew() {
   if (storage.getItem(WHATS_NEW_KEY) === WHATS_NEW_VERSION) return;
   storage.setItem(WHATS_NEW_KEY, WHATS_NEW_VERSION);
   if (!isConfigured(state.settings)) return;
-  if (!serverList(state.settings).some((e) => e.type === 'plex')) return;
-  toast("What's new in 2.4.3: Play now sends the poster on screen to a Plex player you allow.", {
+  toast("What's new in 2.5: TMDB can be a poster source with no media server, Poster art and Title as logo use TMDB's images, and Production house narrows the pool by studio.", {
     action: 'Open settings',
     onAction: async () => {
       await requestSettings(); // through the PIN gate; the sheet opens at its top
       if (!settingsUI.isOpen) return;
-      const button = document.getElementById('players-open'); // "Show allowed devices": the list is not opened here, it asks the PIN itself (D187)
-      const section = button.closest('fieldset');
-      // The button is not rendered while the list is already open (it can be, through position mode, which keeps the list open): then the first visible control of the
-      // open list takes the focus, or the list's status line (it has tabindex -1) when the list has none (D197 2).
-      const open = button.getClientRects().length === 0;
-      const target = open ? ([...document.querySelectorAll('#players-body button, #players-body input')].find((el) => el.getClientRects().length > 0) ?? document.getElementById('players-status')) : button;
-      section.scrollIntoView({ block: 'start' }); // the Allowed devices section as near the top of the view as the end of the sheet allows,
-      target.focus({ preventScroll: true }); // and focus on that control
-      // Where the section and the button do not both fit (a short view, a turned sheet), the focused control must still be in the visible part of the sheet body:
-      // bring it to the middle of the view. A control already in view stays where it is, so the section stays as near the top as the sheet's end allowed.
-      const body = target.closest('.sheet-body').getBoundingClientRect();
-      const at = target.getBoundingClientRect();
-      if (at.top < body.top || at.bottom > body.bottom || at.left < body.left || at.right > body.right) target.scrollIntoView({ block: 'center', inline: 'nearest' });
+      const section = document.getElementById('art-fieldset'); // Poster art
+      const target = section.querySelector('select[name="posterArt"]'); // "Image to show": always shown, the section's first control
+      // The section is put as near the top of the view as the sheet allows, and the focus goes to its first control, which sits directly under the section's heading:
+      // wherever the section's top is in view, so is that control, at every size and rotation (preset.spec checks 20 of them). No second scroll is needed (D197 1).
+      section.scrollIntoView({ block: 'start' });
+      target.focus({ preventScroll: true });
     },
     ms: 20_000,
   });
