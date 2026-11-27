@@ -1471,3 +1471,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 - **D223 Two refinements of D222.**
   1. **The dark-logo cut is a contrast rule.** A logo is shown when its visible pixels' mean relative luminance gives at least 4.5:1 contrast against black (WCAG's ratio for text): a mean of 0.175 or more. This replaces D222 1's 0.35, which also turned readable red and blue logos into text. Under 0.175 the title is text, as before; no other logo is tried.
   2. **Offline needs the key too.** D222 2's cached logo is shown only under the rules in force now, the TMDB key among them: with the key cleared, a cached title's logo is not shown offline either, as online.
+
+## Conductor ruling — 2026-11-27 (`release-2.5.0` pre-flight; to be listed for the owner at the next stop): D224
+
+- **D224 The 2.5 notice.** "What's new in 2.5" is one toast, shown once per configured display whatever its sources (a TMDB-only household too), naming TMDB as a source (no server needed), Poster art, Title as logo and Production house. Its action "Open settings" opens the sheet through the PIN gate at the Poster art section, the section that holds the TMDB key for every server type (D217 1). A fresh install still shows nothing (D73). The 2.4.3 notice is retired.
