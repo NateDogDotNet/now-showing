@@ -1727,10 +1727,10 @@ Facts this section stands on (invocation probes, 2026-11-28; `.orchestrator/phas
 - **Goal:** with `hideCursor` on, the app does everything a page can do to hide an idle mouse pointer, and the README names `unclutter` as the kiosk's own layer.
 - **Requirements:** R-CTRL-4 · **Rulings:** D96, D231 · **Mode:** afk · **Tags:** ui · **Blocked by:** `cursor-kiosk-diagnosis`
 - **Output:** `js/main.js`, `css/app.css`, `tests/e2e/touch-controls.spec.mjs`, `README.md`, `docs/spec.md`
-- **Acceptance criteria:** provisional until `cursor-kiosk-diagnosis` lands; the conductor then fixes criteria 1 and 2 to the finding in a plan commit before the dispatch (D231 7).
-  1. `node tests/e2e/run.mjs touch-controls kiosk position` (new cases pin the fix the finding names; the D96 cases, kiosk mode and the position-mode `grab` cursor are unchanged.)
+- **Acceptance criteria:** fixed to the finding of `cursor-kiosk-diagnosis` (`docs/validation/kiosk-cursor.md`, D236):
+  1. `node tests/e2e/run.mjs touch-controls kiosk position` (new cases, `hideCursor` on: with a mouse resting on a control button the controls stay shown as today, and 3.5 s after the last pointer move the computed `cursor` on that button and on the poster is `none`; the next pointer move brings the cursor back at once; with `hideCursor` off it is never `none`; a keyboard user's focus in the controls does not hide a moving pointer. The D96 cases, kiosk mode and the position-mode `grab` cursor are unchanged.)
   2. `npm test`
-  3. `grep -q 'unclutter' README.md` (in "Raspberry Pi setup" and in "Kiosk": the package, the line for the X session, and that the app's own hiding is the second layer.)
+  3. `grep -q 'unclutter' README.md && grep -qi 'window manager' README.md` (in "Raspberry Pi setup" and in "Kiosk": the package, the line for the X session, that the app's own hiding is the second layer, and why: a browser window without focus, as in an X session with no window manager, keeps the pointer drawn until the next pointer event.)
   4. scope: only the Output paths changed.
 - **Notes/hazards:** Hazard: a keyboard user's 30 s hold (D96) and the first-tap rule (R-CTRL-2) must not change. If the finding is that no browser-side fix works, the phase is the README and spec text alone and criterion 1 is the unchanged suites.
 
