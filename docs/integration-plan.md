@@ -1736,7 +1736,7 @@ Facts this section stands on (invocation probes, 2026-11-28; `.orchestrator/phas
 
 ### 81. `gap-fill-backdrop` — Gap fill: the title's backdrop art
 - **Goal:** a new Gap fill choice **Backdrop art** shows the title's own background art, dimmed, in the bands the poster leaves inside the frame window.
-- **Requirements:** R-FILL-3 · **Rulings:** D67, D88, D95, D231 · **Mode:** afk · **Tags:** ui · **Blocked by:** —
+- **Requirements:** R-FILL-3 · **Rulings:** D67, D88, D95, D231, D232 (the ten cases the criteria left open) · **Mode:** afk · **Tags:** ui · **Blocked by:** —
 - **Output:** `js/fill.js`, `js/display.js`, `js/main.js`, `js/settings.js`, `js/settings-ui.js`, `js/sources/plex.js`, `js/sources/jellyfin.js`, `js/sources/emby.js`, `js/sources/tmdb.js`, `js/sources/index.js`, `index.html`, `css/app.css`, `scripts/mock-plex.mjs`, `scripts/mock-jellyfin.mjs`, `tests/fill.test.js`, `tests/settings.test.js`, `tests/plex.test.js`, `tests/jellyfin.test.js`, `tests/emby.test.js`, `tests/tmdb.test.js`, `tests/sources.test.js`, `tests/mock-plex.test.js`, `tests/mock-jellyfin.test.js`, `tests/e2e/gap-fill.spec.mjs`, `docs/spec.md`
 - **Acceptance criteria:**
   1. `npm test` (`gapFill` accepts `backdrop`; each adapter's poster carries `backdrop` only when the server names background art for that title: Plex `art`, and for an episode the series' `grandparentArt`; Jellyfin and Emby a non-empty `BackdropImageTags`, for an episode the series'; TMDB `backdrop_path`. A decision table in `js/fill.js`: style `backdrop` with a loaded backdrop image → the backdrop drawn to cover the window; with no `backdrop`, a failed or unfinished load, or a poster from the offline cache → the `blur` fill of that poster; never the backdrop of another title.)
