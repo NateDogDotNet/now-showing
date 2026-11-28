@@ -923,6 +923,7 @@ body.positioning.dragging.idle.hide-cursor #app * { cursor: grabbing !important;
 .tmdb-type input:disabled + span { opacity: 0.5; cursor: not-allowed; }
 #tmdb-pick-help { margin: 2px 0 0; }
 .tmdb-connection .input-row input { flex: 1 1 auto; min-width: 0; }
+.tmdb-connection > .input-row { margin-top: 4px; } /* the key's label is not wrapped around its row, so the row takes the 4 px gap `label .input-row` gives the token field (ux r2 N7) */
 .tmdb-credit { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--panel-line); }
 .tmdb-credit img { display: block; width: 77px; height: auto; max-width: 100%; margin-bottom: 6px; }
 .tmdb-credit p { margin: 0; overflow-wrap: anywhere; }

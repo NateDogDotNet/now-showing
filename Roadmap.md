@@ -224,6 +224,15 @@ TMDB as a source with no media server, Poster art, Title as logo and Production 
 - **Not in 2.5**: Kodi as a source (under Ideas); a production house list per viewer profile (under Viewer profiles); TV top rated and Coming Soon for titles not in a library (TMDB mode offers the seven lists above only).
 - **Not confirmed (verify)**: everything in section M of `docs/validation/real-server-extended.md`, for the owner with a real key after the release, and the new Plex and Jellyfin fields (Plex `Guid` and `studio`, Jellyfin `ProviderIds` and `Studios`).
 
+## ✅ Done in 2.5.1 (on `main`)
+
+The items carried from 2.5 (D227), made on `main` on 2026-11-27 with no run, pull request, tag or GitHub release (owner's word "direct", D230; D13, D79). No feature is added and the "What's new" notice stays at 2.5.0.
+
+- **Production-house help**: on a TMDB list with a house ticked, the help names the chosen list (`"Popular" is only narrowed to …`), so it is not read as the house rows above it, and says "that house" and "from it" when one house is ticked; the empty card says "from that house" for one house (ux r3 U1, U2).
+- **TMDB key field**: the gap between the "TMDB key" label and its field is 4 px, as for the token field, not 10 px (ux r2 N7).
+- **Browser case 57 (`clear-logo-title`)**: it waits for the English logo to be drawn again before it lets the late French reply through, so it no longer assumes the redraw wins that race (anchored r4 F1).
+- **Docs**: the five Minor drifts the 2.5 close found: the `release-2.5.0` traceability row in `docs/spec.md` no longer lists `tests/e2e/release.spec.mjs`; the validation intro names the TMDB key and the Jellyfin or Emby server of section M; README's "Errors that carry their fix" has a TMDB key row; the `poster-cache.js` layout line names the 180-day age of TMDB data; the Security notes say Diagnostics shows the TMDB key's first 4 characters only.
+
 ## 🧭 Suggested order
 
 Ordered by what each item needs first, not by size (D53). Each entry below also states its own place.
@@ -238,22 +247,11 @@ Ordered by what each item needs first, not by size (D53). Each entry below also 
 
 ## ⏭ Next
 
-2.2.0 to 2.5.0 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1", "Done in 2.4.2", "Done in 2.4.3", "Done in 2.4.4", "Done in 2.4.5", "Done in 2.4.6", "Done in 2.4.7", "Done in 2.4.8" and "Done in 2.5" sections above); nothing is in progress. The next feature follows the suggested order:
+2.2.0 to 2.5.1 are on `main` (see the "Done in 2.2", "Done in 2.3", "Done in 2.3.1", "Done in 2.4", "Done in 2.4.1", "Done in 2.4.2", "Done in 2.4.3", "Done in 2.4.4", "Done in 2.4.5", "Done in 2.4.6", "Done in 2.4.7", "Done in 2.4.8", "Done in 2.5" and "Done in 2.5.1" sections above); nothing is in progress. The next feature follows the suggested order:
 
 1. **3.0, Browse first mode** (see the suggested order above), or one of the 2.4.x items listed below as still ahead, whichever the owner picks.
 
 Still ahead: for a later 2.4.x run (D134 1), the movie-night countdown, birthday and occasion mode, the Picture frame sources, and Play now on Jellyfin and Emby and "Here" (D181 1); with no release number, "On this day", the playlist with Find a poster, frame and marquee styles with the captions, poster transitions, touch gestures and theme music.
-
-Carried from 2.5 (D227), for the next run:
-
-- Code: the production-house help wording says "that house" when one is ticked and names the chosen list.
-- Code: the TMDB key label sits 10 px above its field instead of 4 px.
-- Code: the timing assumption in `clear-logo-title`'s e2e case 57.
-- Docs: `docs/spec.md` (traceability row for `release-2.5.0`) lists `tests/e2e/release.spec.mjs`, which the release did not change.
-- Docs: `docs/validation/real-server-extended.md` intro omits section M (a real TMDB key and a Jellyfin or Emby server).
-- Docs: `README.md` "Errors that carry their fix" has no row for a missing or refused TMDB key.
-- Docs: `README.md` layout line for `poster-cache.js` omits the 180-day age of TMDB data.
-- Docs: `README.md` Security notes TMDB bullet omits that Diagnostics shows the key's first 4 characters.
 
 - **Optional:** "Validate on a Raspberry Pi", whenever a Pi is at hand (D79), and the Jellyfin and Emby rows (sections I and J of `docs/validation/real-server-extended.md`), the multiple-servers rows (section K) and the Play now rows (section L) on real servers and players.
 - **Not decided:** whether 2.4.1, 2.4.2 or 2.4.3 is tagged or released. All three were merged to `main` (D170, D180, D198), as 2.4.0 was (D155).

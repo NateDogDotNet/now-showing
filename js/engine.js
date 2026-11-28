@@ -333,7 +333,7 @@ export function createEngine({ client, getSettings, now = () => Date.now(), rand
           ? []
           : sel.source
             ? [`use the libraries instead of the ${sel.source.kind}`, sel.ratings.length && 'tick fewer ratings']
-            : [!tmdb && (await hasUntickedLibrary(sel)) && 'add a library', tickFewer(sel), housesNarrowAList(sel, s.serverType) && 'choose Discover to find every title from those houses']; // D216: a list is only narrowed by the houses
+            : [!tmdb && (await hasUntickedLibrary(sel)) && 'add a library', tickFewer(sel), housesNarrowAList(sel, s.serverType) && `choose Discover to find every title from ${sel.houses.length === 1 ? 'that house' : 'those houses'}`]; // D216: a list is only narrowed by the houses
         const advice = [s.unwatchedOnly && !tmdb && 'try turning off "unwatched only"', s.maxContentRating && (sanitizeSlots(s.limitSlots).length ? 'raise the limit or change the time slots' : 'raise the limit'), ...widen].filter(Boolean).join(' or ');
         const where = `${s.maxContentRating ? ` at or below ${s.maxContentRating}` : ''}${advice ? ` (${advice})` : ''}`;
         throw Object.assign(new Error(`No posters found in ${narrows(sel) ? describeSelection(sel) : tmdb ? 'that list' : 'that library'}${where}.`), { kind: 'empty' });

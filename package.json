@@ -1,6 +1,6 @@
 {
   "name": "now-showing",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "private": true,
   "description": "Installable, offline-capable PWA that shows movie posters from Plex, Jellyfin, Emby or TMDB full-screen inside a decorative frame.",
   "type": "module",

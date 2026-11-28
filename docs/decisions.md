@@ -1500,3 +1500,7 @@ Decisions that bind the integration plan (`docs/integration-plan.md`) and spec (
 ## Owner answer — 2026-11-27 ("merge, commit, push, and clean up. I tested 2.5 and it works great."): D229
 
 - **D229 The owner tested 2.5 and it works; the branch is removed.** The owner reports that 2.5 works on his own setup. The (verify) rows of section M stay open until someone runs them row by row against the real TMDB. The local branch `2.5` (merged in 6b746c2e) was deleted; `origin/2.5` is deleted by the owner, because the safety hook blocks remote deletes for the conductor. Two stale run-12 stashes were saved as patches in `/home/nathan/now-showing-run12-local-trail/` and dropped.
+
+## Owner answer — 2026-11-27 ("direct"): D230
+
+- **D230 The items carried from 2.5 (D227) are 2.5.1, made directly on `main`.** The orchestrator's floor check found the work too small to orchestrate; the owner chose to do it directly. Three code fixes (the production-house help names the chosen list and says "that house" for one, in the help and the empty card; the TMDB key label sits 4 px above its field; browser case 57 waits for the English redraw before the late French reply) and the five Minor doc drifts of the 2.5 close. Version 2.5.1 in `sw.js`, `js/main.js`, `package.json` and `package-lock.json`; the "What's new" notice stays at 2.5.0. No pull request, tag or GitHub release (D13, D79).

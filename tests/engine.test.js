@@ -2085,12 +2085,14 @@ test('ux F1: the empty card of a TMDB household with a house list says to tick f
   };
   const a24 = [{ key: '41077', title: 'A24' }];
   // D216: a list is only narrowed by the houses, so the one sentence also says Discover finds every title from them.
-  const more = 'choose Discover to find every title from those houses';
+  const more = 'choose Discover to find every title from that house'; // one house: "that house" (ux r3 U2)
   assert.equal(await emptyCard({ houses: a24 }), `No posters found in Popular, production house A24 (tick fewer production houses or ${more}).`);
   assert.equal(await emptyCard({ houses: a24, maxContentRating: 'PG' }), `No posters found in Popular, production house A24 at or below PG (raise the limit or tick fewer production houses or ${more}).`);
   assert.equal(await emptyCard({ houses: a24, genres: [{ key: '35', title: 'Comedy' }] }), `No posters found in Popular, genre Comedy, production house A24 (tick fewer genres or production houses or ${more}).`, 'with a genre too: still one sentence');
   assert.equal(await emptyCard({ houses: a24, libraryKey: 'movie/top_rated', libraryKeys: ['movie/top_rated'], libraryNames: ['Top rated'] }), `No posters found in Top rated, production house A24 (tick fewer production houses or ${more}).`, 'every list, not only Popular');
   assert.equal(await emptyCard({ houses: a24, libraryKey: 'tv/popular', libraryKeys: ['tv/popular'], libraryNames: ['Popular TV'] }), `No posters found in Popular TV, production house A24 (tick fewer production houses or ${more}).`, 'a TV list too');
+  const two = [...a24, { key: '420', title: 'Marvel Studios' }];
+  assert.match(await emptyCard({ houses: two }), /\(tick fewer production houses or choose Discover to find every title from those houses\)\.$/, 'two houses: "those houses" (ux r3 U2)');
   // M3: Discover sends with_companies itself, so it is never told to choose Discover.
   const discover = { libraryKey: 'discover/movie', libraryKeys: ['discover/movie'], libraryNames: ['Discover movies'] };
   assert.equal(await emptyCard({ houses: a24, ...discover }), 'No posters found in Discover movies, production house A24 (tick fewer production houses).');

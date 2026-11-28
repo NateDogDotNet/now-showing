@@ -1,6 +1,6 @@
 # Real-server validation: extended (V1, R-VAL-2)
 
-Template for a human to fill in against a real Plex server, the real plex.tv and, for the Pi rows, real Raspberry Pi hardware. Every parameter, flag and command the spec marked (verify) is listed. Only `Overall: PASS` closes the `real-server-validation-extended` phase (D11). A FAIL names the phase to reopen.
+Template for a human to fill in against a real Plex server, the real plex.tv, a real TMDB key and a Jellyfin or Emby server (section M) and, for the Pi rows, real Raspberry Pi hardware. Every parameter, flag and command the spec marked (verify) is listed. Only `Overall: PASS` closes the `real-server-validation-extended` phase (D11). A FAIL names the phase to reopen.
 
 **Secrets rule: never paste a token or a full `X-Plex-Token` URL into this file.** Check any pasted Diagnostics text or command output and delete any token or URL that carries one.
 

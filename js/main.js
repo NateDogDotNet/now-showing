@@ -27,7 +27,7 @@ import { createSleepControl, playbackMatters } from './sleep-control.js';
 import { createTvPower, DIAG_TEMP_MS } from './tv-power.js';
 import { actionButton, clientId as getClientId, createLog, formatDuration, safeStorage, sleep, toast } from './util.js';
 
-export const VERSION = '2.5.0';
+export const VERSION = '2.5.1';
 
 const carriedPlayback = takeCarriedPlayback();
 

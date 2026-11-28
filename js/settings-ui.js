@@ -1071,7 +1071,10 @@ export function createSettingsUI({ getSettings, clientId, version = '', log, onP
       : "A server lists the main studio of each title, usually one, not every production company. A title shows only when its studio is a ticked one.";
     // The static help is not a live region, so a library tick or a re-render never has it re-read; only the short transient status below is announced (ux r2 N1).
     const list = housesNarrowAList(sel, formType()); // D216: a house list on a TMDB list only narrows it
-    const listNote = list ? ' This list is only narrowed to those houses; Discover finds every title from them.' : '';
+    // ux r3 U1/U2: the note names the chosen list, so it is not read as the house rows above it, and says "that house" for one.
+    const listName = sel.libraries[0]?.name;
+    const one = sel.houses.length === 1;
+    const listNote = list ? ` ${listName ? `"${listName}"` : 'This list'} is only narrowed to ${one ? 'that house' : 'those houses'}; Discover finds every title from ${one ? 'it' : 'them'}.` : '';
     const help = editing
       ? "Production houses are the household's in 2.5, not the profile's. To change them, close the profile first."
       : sel.source

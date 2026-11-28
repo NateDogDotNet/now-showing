@@ -921,7 +921,7 @@ tmdbCase('26 a house list that no title has is the empty card, which names it', 
   await page.check('#house-list input[data-title="A24"]');
   await save(page);
   await waitUntil('the empty card names the house', async () => /production house A24/.test(await cardText(page)));
-  assert.match(await cardText(page), /\(raise the limit or tick fewer production houses or choose Discover to find every title from those houses\)/, 'and says how to widen it, Discover included (ux F1, D216)');
+  assert.match(await cardText(page), /\(raise the limit or tick fewer production houses or choose Discover to find every title from that house\)/, 'and says how to widen it, Discover included (ux F1, D216)');
   check('26 the empty card names the production house');
 });
 
@@ -966,7 +966,7 @@ tmdbCase('28 D216: a house list on a TMDB list says the list is only narrowed an
   await openSettings(page);
   await testOk(page);
   const help = () => page.textContent('#house-help');
-  assert.match(await help(), /only narrowed to those houses; Discover finds every title from them\./, 'Popular with a house ticked');
+  assert.match(await help(), /"Popular" is only narrowed to that house; Discover finds every title from it\./, 'Popular with a house ticked: the list is named and one house is "that house" (ux r3 U1/U2)');
   await page.selectOption('#tmdb-list', 'tv/popular');
   assert.match(await help(), /Discover finds every title/, 'a TV list too');
   await page.selectOption('#tmdb-list', 'discover/movie');

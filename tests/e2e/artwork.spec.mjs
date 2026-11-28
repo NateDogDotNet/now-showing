@@ -1240,9 +1240,14 @@ artCase('57 anchored F1 (M11): English saved again while the French logo is stil
   await save(page);
   await heldOnce; // the French logo is asked and held; the English one is still on screen
   await logoWordsAre(page, 'logo en');
+  const srcBefore = await page.getAttribute('#title-card img.title-logo', 'src');
   await openSettings(page);
   await page.selectOption('select[name="posterArtLanguage"]', 'en');
   await save(page); // newer than the French save: the French reply, when it comes, is not wanted
+  // The English redraw reads the stored English logo (index, then blob) and draws it from a new object URL. Wait for that draw before the French
+  // reply is let go: stored first, the French entry would replace the English one under the redraw's read (clear-logo-title anchored r4 F1).
+  await page.waitForFunction((before) => { const i = document.querySelector('#title-card img.title-logo'); return Boolean(i && i.src !== before && i.naturalWidth > 0); }, srcBefore, { timeout: 20000 });
+  await logoWordsAre(page, 'logo en');
   const lateFile = page.waitForResponse((r) => new URL(r.url()).pathname === '/t/p/original/mock-logo-1004-fr.svg', { timeout: 20000 });
   release();
   await lateFile; // the French logo did come back
