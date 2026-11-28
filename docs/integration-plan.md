@@ -1690,3 +1690,95 @@ Facts this section stands on (invocation probes, 2026-11-25; `.orchestrator/arti
 `mock-tmdb` and `tmdb-ids` run together (disjoint Outputs; `tmdb-ids` does not touch `tests/e2e/lib.mjs` or `scripts/serve.mjs`). From `tmdb-source` on the phases are serial: each touches `js/settings.js`, `js/settings-ui.js`, `index.html` and the TMDB files of the one before. Reviewers get their own pairs: 18680/19001, 18580/18901, 18782/19103. The conductor uses 18780/19101.
 
 Out of scope for run 13 (D203): TMDB as one of several servers; Coming Soon for titles not in the library (after 2.5, Roadmap); fanart.tv logos (TMDB only; fanart.tv's terms and CORS were not readable); Play now, Watch later and favourites for TMDB posters; IMDb (no free public API).
+
+## Run 14 — 2.5.2: the kiosk cursor and two more gap-fill styles (D231)
+
+Drafted on the owner's word (2026-11-27, `/orchestrate 2 and 3`, then "defaults" to the policy stop). The policy answer is D231. Starting commit: `main` f1b49726, on a new branch `2.5.2`, which is pushed. No pull request, merge or tag unless the owner asks (D13, D79). Conventions are as in runs 3–13. The gap-fill phases are tested against mock servers only; every server field or image the mocks invent is a **(verify)** row in `docs/validation/real-server-extended.md` (new section N).
+
+Facts this section stands on (invocation probes, 2026-11-28; `.orchestrator/phases/_invocation.md`):
+- The cursor rule is `body.idle.hide-cursor, body.idle.hide-cursor * { cursor: none !important; }` (`css/app.css:32`). `hide-cursor` follows the `hideCursor` setting (`js/main.js:752`); `idle` is added only by `hideControls()` (`js/main.js:1210-1215`) and removed by `showControls()`. D96 holds the controls shown while a mouse pointer rests over them.
+- The kiosk `marquee` (Orange Pi Zero 2W, DietPi, Chromium 156 under bare X) is not reachable from the devbox: `ssh -o BatchMode=yes marquee` answers "Host key verification failed".
+- `gapFill` is `none | blur | matte` (`js/settings.js:240`, `GAP_STYLES` in `js/fill.js`). `layoutGap` (`js/display.js:134-196`) lays the fill out from `gapBands`, `closeGap` and `blurPlan` (`js/layout.js`). The fill is a tiny canvas scaled up by CSS at `BACKDROP_OPACITY` 0.25, never a CSS `filter` (R-FILL-3).
+- No adapter's poster carries background art today: Plex `toPoster` (`js/sources/plex.js`) reads no `art`, Jellyfin's (`js/sources/jellyfin.js:67-93`) no backdrop tag, TMDB's (`js/sources/tmdb.js:137-157`) no `backdrop_path`. The mock TMDB already sends `backdrop_path` (`scripts/mock-tmdb.mjs:145`); the mock Plex and Jellyfin servers send no background art.
+- `posterFit` is `cover` (default) `| contain | fill`; a `cover` poster is cropped about its centre by CSS.
+- The pre-commit substitute is the one of run 13: `node --check` on staged `.js`/`.mjs`, `git diff --cached --check`, `npm test`, and the security grep over the staged diff.
+
+### 78. `kiosk-access` — The devbox can reach the kiosk
+- **Goal:** the devbox can run commands on `marquee` over ssh, and the owner has said what may be changed there.
+- **Rulings:** D231 1 · **Mode:** hitl · **Tags:** — · **Blocked by:** —
+- **Output:** none in the repository.
+- **Acceptance criteria:**
+  1. `ssh -o BatchMode=yes -o ConnectTimeout=8 marquee true`
+- **Notes/hazards:** the owner's act. The conductor never reads `~/.ssh/config` and never writes a host key itself.
+
+### 79. `cursor-kiosk-diagnosis` — Why the idle cursor stays on the kiosk
+- **Goal:** a written finding, from the real device, of why the pointer stays on the poster with `hideCursor` on, and which browser-side fix (if any) removes it there.
+- **Rulings:** D96, D231 1 · **Mode:** afk · **Tags:** — · **Blocked by:** `kiosk-access`
+- **Output:** `docs/validation/kiosk-cursor.md` (new)
+- **Acceptance criteria:**
+  1. `test -s docs/validation/kiosk-cursor.md && grep -q '^## Finding' docs/validation/kiosk-cursor.md && grep -q '^## Commands run on the device' docs/validation/kiosk-cursor.md`
+  2. narrated: the file states, each with the command that showed it: the Chromium version and launch flags; whether `body` has `idle` 6 s after the last pointer move, once with the pointer over the poster and once with it over the controls row; the computed `cursor` under the pointer at that time; whether the pointer is still drawn (an XFixes cursor read where a tool for it is on the device, otherwise the owner's observation, named as his).
+  3. narrated: for each candidate fix the file lists (at least: the idle class when the pointer rests over the controls; a forced cursor refresh with no pointer event), the result of trying it on the device from the DevTools console, with no change to the repository.
+  4. `grep -q '^## Device restored' docs/validation/kiosk-cursor.md` and the conductor's own ssh probe shows Chromium running with its first launch flags and `unclutter` running as before.
+  5. scope: only the Output path changed.
+- **Notes/hazards:** Hazard: the device is the owner's living-room display. `unclutter` is stopped only for the test and started again; Chromium is restarted with `--remote-debugging-port` bound to 127.0.0.1 only and reached through an ssh tunnel; its first command line is saved before the restart and used to restore it. No package is installed on the device without the owner's word. Hazard: the file names no address, token or server name of the owner's network.
+
+### 80. `cursor-idle-fix` — The pointer hides on an idle kiosk
+- **Goal:** with `hideCursor` on, the app does everything a page can do to hide an idle mouse pointer, and the README names `unclutter` as the kiosk's own layer.
+- **Requirements:** R-CTRL-4 · **Rulings:** D96, D231 · **Mode:** afk · **Tags:** ui · **Blocked by:** `cursor-kiosk-diagnosis`
+- **Output:** `js/main.js`, `css/app.css`, `tests/e2e/touch-controls.spec.mjs`, `README.md`, `docs/spec.md`
+- **Acceptance criteria:** provisional until `cursor-kiosk-diagnosis` lands; the conductor then fixes criteria 1 and 2 to the finding in a plan commit before the dispatch (D231 7).
+  1. `node tests/e2e/run.mjs touch-controls kiosk position` (new cases pin the fix the finding names; the D96 cases, kiosk mode and the position-mode `grab` cursor are unchanged.)
+  2. `npm test`
+  3. `grep -q 'unclutter' README.md` (in "Raspberry Pi setup" and in "Kiosk": the package, the line for the X session, and that the app's own hiding is the second layer.)
+  4. scope: only the Output paths changed.
+- **Notes/hazards:** Hazard: a keyboard user's 30 s hold (D96) and the first-tap rule (R-CTRL-2) must not change. If the finding is that no browser-side fix works, the phase is the README and spec text alone and criterion 1 is the unchanged suites.
+
+### 81. `gap-fill-backdrop` — Gap fill: the title's backdrop art
+- **Goal:** a new Gap fill choice **Backdrop art** shows the title's own background art, dimmed, in the bands the poster leaves inside the frame window.
+- **Requirements:** R-FILL-3 · **Rulings:** D67, D88, D95, D231 · **Mode:** afk · **Tags:** ui · **Blocked by:** —
+- **Output:** `js/fill.js`, `js/display.js`, `js/main.js`, `js/settings.js`, `js/settings-ui.js`, `js/sources/plex.js`, `js/sources/jellyfin.js`, `js/sources/emby.js`, `js/sources/tmdb.js`, `js/sources/index.js`, `index.html`, `css/app.css`, `scripts/mock-plex.mjs`, `scripts/mock-jellyfin.mjs`, `tests/fill.test.js`, `tests/settings.test.js`, `tests/plex.test.js`, `tests/jellyfin.test.js`, `tests/emby.test.js`, `tests/tmdb.test.js`, `tests/sources.test.js`, `tests/mock-plex.test.js`, `tests/mock-jellyfin.test.js`, `tests/e2e/gap-fill.spec.mjs`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `npm test` (`gapFill` accepts `backdrop`; each adapter's poster carries `backdrop` only when the server names background art for that title: Plex `art`, and for an episode the series' `grandparentArt`; Jellyfin and Emby a non-empty `BackdropImageTags`, for an episode the series'; TMDB `backdrop_path`. A decision table in `js/fill.js`: style `backdrop` with a loaded backdrop image → the backdrop drawn to cover the window; with no `backdrop`, a failed or unfinished load, or a poster from the offline cache → the `blur` fill of that poster; never the backdrop of another title.)
+  2. `node tests/e2e/run.mjs gap-fill fill smoke` (Plex mock, fit "Fit inside window", Gap fill "Backdrop art": the bands show the mock's backdrop for a title that has one, at brightness at most 0.25 and with no computed `filter`; a title without one shows the blur; with the backdrop request failing the blur shows and no error card; after the next poster the earlier title's backdrop is gone; `matte`, `blur` and `none` are unchanged.)
+  3. `node scripts/check-precache.mjs`
+  4. scope: only the Output paths changed.
+- **Notes/hazards:** Hazard: the backdrop canvas is at most 256 px on its longer side and is scaled up by CSS; no `filter` and no full-size image layer (the Pi GPU cost, R-FILL-3). Hazard: a Plex or Jellyfin backdrop address carries the token like a poster's; it is never logged or shown. Hazard: the fill moves with pixel shift and fades with the poster's transition, as the blur does. The backdrop is fetched once per shown poster and is not stored in the offline cache in this run. Every invented mock field is a (verify) row for `release-2.5.2`.
+
+### 82. `gap-fill-smart-crop` — Gap fill: smart crop
+- **Goal:** a new Gap fill choice **Smart crop** fills the frame window by cropping the poster about its most detailed part instead of its centre.
+- **Requirements:** R-FILL-3 · **Rulings:** D67, D231 2 · **Mode:** afk · **Tags:** ui, architecture · **Blocked by:** `gap-fill-backdrop`
+- **Output:** `js/crop.js` (new), `js/fill.js`, `js/display.js`, `js/layout.js`, `js/settings.js`, `js/settings-ui.js`, `index.html`, `css/app.css`, `sw.js`, `tests/crop.test.js` (new), `tests/fill.test.js`, `tests/layout.test.js`, `tests/settings.test.js`, `tests/e2e/gap-fill.spec.mjs`, `docs/spec.md`
+- **Acceptance criteria:**
+  1. `npm test` (`gapFill` accepts `crop`. `js/crop.js` is pure and has no dependency: from an image sample of at most 64 px on its longer side and a target aspect it returns a focus `{ x, y }`, each 0 to 1, and the same input gives the same output. A decision table: a uniform image → the centre; an image whose aspect is the target's → the centre; detail only in the top third with a wider target → a crop that keeps the top third whole; detail only at the left with a taller target → a crop that keeps the left; the crop rectangle never leaves the image. A canvas that cannot be read → the centre.)
+  2. `node tests/e2e/gap-fill.spec.mjs`'s cases through `node tests/e2e/run.mjs gap-fill fill position smoke` (Smart crop with fit "Fit inside window" and a poster wider than the window: no band shows and the poster's `object-position` is the focus, not `50% 50%`, for the mock poster whose detail is off-centre; bands that come from a scale under 100 or an offset still show, with the blur fill; `none`, `blur`, `matte` and `backdrop` are unchanged.)
+  3. `node scripts/check-precache.mjs`
+  4. scope: only the Output paths changed.
+- **Notes/hazards:** D231 2: content-aware cropping in plain JavaScript; no face or text detector, no WASM model, no new package. The scoring method is chosen from prior art before the design (`.orchestrator/artifacts/research--smart-crop-r1.md`). Hazard: the analysis runs once per poster on the tiny sample, never per frame. Hazard: position mode's drag and nudge still move the poster as before.
+
+### 83. `release-2.5.2` — Version 2.5.2 and the docs
+- **Goal:** `VERSION` is 2.5.2; README, Roadmap, the spec and `docs/validation/real-server-extended.md` (new section N: backdrop art on real servers) describe 2.5.2. No "What's new" notice (D231 4).
+- **Rulings:** D13, D79, D231 · **Mode:** afk · **Tags:** docs · **Blocked by:** `cursor-idle-fix`, `gap-fill-smart-crop`
+- **Output:** `sw.js`, `js/main.js`, `package.json`, `package-lock.json`, `Roadmap.md`, `README.md`, `docs/spec.md`, `docs/validation/real-server-extended.md`, `tests/e2e/release.spec.mjs`
+- **Acceptance criteria:**
+  1. `grep -q "VERSION = '2.5.2'" sw.js && grep -q "VERSION = '2.5.2'" js/main.js && test "$(grep -c '"version": "2.5.2"' package.json package-lock.json | awk -F: '{s+=$2} END{print s}')" = 3`
+  2. `grep -qE '^## .*Done in 2\.5\.2' Roadmap.md && grep -q "WHATS_NEW_VERSION = '2.5.0'" js/main.js && grep -q '^## N\. ' docs/validation/real-server-extended.md`
+  3. `npm test && npm run test:e2e && node scripts/check-precache.mjs` (once, by the conductor, after the memory gate)
+  4. scope: only the Output paths changed.
+  5. narrated: keep-docs-current over `f1b49726..HEAD` inside the phase; the anchored documentation review APPROVE on disk.
+- **Notes/hazards:** No tag, no GitHub release, no pull request and no merge into `main` unless the owner asks (D13, D79). The Roadmap's cursor bug and "Gap fill inside the frame: the deferred styles" entries are rewritten to what is left (better-fitting artwork, D231 3).
+
+### Run 14 graph, tags and ports
+
+| Phase | Blocked by | Tags | Builder ports |
+|---|---|---|---|
+| `kiosk-access` | — | hitl | — |
+| `cursor-kiosk-diagnosis` | `kiosk-access` | — | — |
+| `cursor-idle-fix` | `cursor-kiosk-diagnosis` | ui | 18490/18811 |
+| `gap-fill-backdrop` | — | ui | 18480/18801 |
+| `gap-fill-smart-crop` | `gap-fill-backdrop` | ui, architecture | 18480/18801 |
+| `release-2.5.2` | `cursor-idle-fix`, `gap-fill-smart-crop` | docs | 18480/18801 |
+
+The cursor chain and the gap-fill chain have no prerequisite between them, but `cursor-idle-fix` and both gap-fill phases list `js/main.js`, `css/app.css` and `docs/spec.md`. When `cursor-idle-fix` is takeable while a gap-fill phase runs, it runs in its own worktree and lands after that phase, with a seam run of both suites on the merged tree. Reviewers get their own pairs: 18680/19001, 18580/18901. The conductor uses 18780/19101.
+
+Out of scope for run 14 (D231): better-fitting artwork (D231 3, stays on the Roadmap); face or text detection (D231 2); TMDB backdrops for a server's poster; backdrops in the offline cache; an OS-level pointer hider installed by the app or the device helper.
