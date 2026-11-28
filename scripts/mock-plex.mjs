@@ -40,7 +40,10 @@
 //   POST /__mock/kind?ratingKey=3&type=show   the title is listed with that type (show, season, ...) instead of movie, as Plex lists other kinds of item
 //   POST /__mock/episode?ratingKey=3          the title is listed as an episode whose series is that title (type episode, its own key 500 + the series key, the series' title
 //                                             and key as grandparent*, as Plex sends them); /library/metadata/<own key> answers it
-//   GET  /__mock/stats                        {transcode, other}: image requests vs other Plex requests
+//   POST /__mock/art-fail[?status=500]        answer background art requests (the photo transcoder with url=<.../art/...>) with that status (status=200 = normal again)
+//   POST /__mock/art-hold  /  POST /__mock/art-release[?count=N]   hold background art requests unanswered until released (a late load); the request is in the log at once.
+//                                             Release answers all of them and stops holding; count=N answers only the N oldest, match=<text> only those whose art path contains the text, and either keeps holding.
+//   GET  /__mock/stats                       {transcode, other}: image requests vs other Plex requests
 //   GET  /__mock/log                          {requests}: every Plex request since the last reset, "path?query" without the token
 //   POST /__mock/reset-stats                  zero the counters and clear that log
 //   POST /__mock/down  /  POST /__mock/up      simulate the server going offline
@@ -122,6 +125,11 @@ const STUDIOS = { 1: 'Mock Pictures', 2: 'Pixar', 3: 'Mock Pictures', 4: 'Pixar'
 // TMDB ids the mock knows for some titles (by ratingKey); the rest have none. Sent as a Guid list only when the request has includeGuids=1, as Plex does.
 const TMDB_IDS = { 1: '1001', 2: '1002', 4: '1004', 9: '1009', 10: '1010' };
 
+// Background art (R-FILL-3, D232). The titles that have it carry `art`: /library/metadata/<n>/art/<stamp>; the rest (2, 6, 8, 12, 13) carry none, as a title
+// with no background art carries none. (verify) The `art` field and the path form are the community's description of the item reply, not confirmed against a
+// real server. A request for it goes through the same photo transcoder as a poster (url=<art path>) and is answered with a bright SVG, never the poster's.
+const WITH_ART = new Set([1, 3, 4, 5, 7, 9, 10, 11]);
+
 const movie = ([title, year, color, contentRating, duration, summary], n, lib, extra) => ({
   ratingKey: String(n),
   key: `/library/metadata/${n}`,
@@ -138,6 +146,7 @@ const movie = ([title, year, color, contentRating, duration, summary], n, lib, e
   rating: 9 - (n - 1) * 0.4,
   ...withExtra(extra),
   thumb: `/library/metadata/${n}/thumb/1700000000`,
+  ...(WITH_ART.has(n) ? { art: `/library/metadata/${n}/art/1700000001` } : {}),
 });
 function withExtra([genres, audienceRating, originallyAvailableAt, viewCount, lastViewedAt]) {
   return {
@@ -163,6 +172,9 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
   const clients = { list: [], status: 200 }; // what GET /clients answers (D199): the players this server lists itself
   const player = { commands: [], received: 0, fail: 'none', queues: [], queueStatus: 200, tokens: 0, tokenStatus: 200 }; // what the players received (Play now), and how the forward fails
   let sessionsStatus = 200;
+  let artStatus = 200; // what a background art request answers (/__mock/art-fail)
+  let artHold = false; // background art requests wait until /__mock/art-release
+  const held = []; // the answers waiting for it
   let countsStatus = 200; // the library count request (/library/sections/1/all with X-Plex-Container-Size=0)
   const plexTv = { lists: new Map(), statuses: new Map(), log: [] }; // the plex.tv side: per token ('*' = every token), what /__mock/plextv-resources answers
   let emptyUnwatched = false; // every title counts as watched: pool requests that ask for unwatched ones find none
@@ -186,7 +198,7 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
     if (kinds.has(m.ratingKey)) out = { ...out, type: kinds.get(m.ratingKey) };
     if (episodes.has(m.ratingKey)) {
       const own = episodes.get(m.ratingKey);
-      out = { ...out, type: 'episode', ratingKey: own, key: `/library/metadata/${own}`, title: 'Pilot', grandparentRatingKey: m.ratingKey, grandparentTitle: m.title, grandparentYear: m.year, grandparentThumb: m.thumb };
+      out = { ...out, type: 'episode', ratingKey: own, key: `/library/metadata/${own}`, title: 'Pilot', grandparentRatingKey: m.ratingKey, grandparentTitle: m.title, grandparentYear: m.year, grandparentThumb: m.thumb, ...(m.art ? { grandparentArt: m.art } : {}), art: `/library/metadata/${own}/art/1700000002` }; // an episode has art of its own, which the display never uses (the series')
     }
     return out;
   };
@@ -304,6 +316,8 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
             grandparentTitle: movie.title,
             grandparentYear: movie.year,
             grandparentThumb: movie.thumb,
+            ...(movie.art ? { grandparentArt: movie.art } : {}),
+            art: `/library/metadata/e${movie.ratingKey}/art/1700000002`, // the episode's own art, never the display's
             ...(own && own !== 'none' ? { contentRating: own } : {}),
             ...(series ? { grandparentContentRating: series } : {}),
           };
@@ -313,6 +327,18 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
       if (action === 'rate') {
         const rating = url.searchParams.get('contentRating') || '';
         ratings.set(url.searchParams.get('ratingKey'), rating === 'none' ? '' : rating);
+      }
+      if (action === 'art-fail') artStatus = url.searchParams.has('status') ? Number(url.searchParams.get('status')) || 200 : 500;
+      if (action === 'art-hold') artHold = true;
+      if (action === 'art-release') {
+        // No parameter: answer every held request and stop holding. `count` answers only that many of the oldest, and `match` only the held
+        // requests whose art path contains that text (e.g. /metadata/1/); both keep holding.
+        const match = url.searchParams.get('match');
+        if (!url.searchParams.has('count') && match === null) artHold = false;
+        const count = url.searchParams.has('count') ? Math.max(0, Number(url.searchParams.get('count')) || 0) : held.length;
+        const chosen = held.filter((answer) => match === null || answer.art.includes(match)).slice(0, count);
+        for (const answer of chosen) held.splice(held.indexOf(answer), 1);
+        for (const answer of chosen) answer();
       }
       if (action === 'sessions-status') sessionsStatus = Number(url.searchParams.get('status') || 200);
       if (action === 'counts-fail') countsStatus = url.searchParams.has('status') ? Number(url.searchParams.get('status')) || 200 : 500;
@@ -481,6 +507,16 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
     if (path === '/photo/:/transcode') {
       const thumb = url.searchParams.get('url') || '';
       const m = MOVIES.find((x) => thumb.startsWith(x.key + '/')) || MOVIES[0];
+      if (/\/art\//.test(thumb)) {
+        // Background art. artStatus (set by /__mock/art-fail) fails it; artHold (/__mock/art-hold, /__mock/art-release) answers it only when released.
+        const answer = () => {
+          if (artStatus !== 200) return json(artStatus, { error: `Mock: art answers ${artStatus}` });
+          res.writeHead(200, { ...cors, 'Content-Type': 'image/svg+xml' });
+          res.end(artSvg(m));
+        };
+        if (artHold) return void held.push(Object.assign(answer, { art: thumb }));
+        return answer();
+      }
       res.writeHead(200, { ...cors, 'Content-Type': 'image/svg+xml' });
       return res.end(posterSvg(m));
     }
@@ -489,6 +525,18 @@ export async function startMockPlex({ port = 32401, host = '127.0.0.1', machineI
 
   await new Promise((r) => server.listen(port, host, r));
   return server;
+}
+
+/**
+ * A bright 1280 x 720 "backdrop": the top is always #ffe066, and the bottom is the title's colour mixed with white, so two titles' art
+ * differ and neither can be mistaken for the dark poster blur.
+ */
+function artSvg(m) {
+  const mix = (hex) => `#${[1, 3, 5].map((i) => Math.round((parseInt(hex.slice(i, i + 2), 16) + 255 * 2) / 3).toString(16).padStart(2, '0')).join('')}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs><linearGradient id="a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe066"/><stop offset=".15" stop-color="#ffe066"/><stop offset=".85" stop-color="${mix(m.color)}"/><stop offset="1" stop-color="${mix(m.color)}"/></linearGradient></defs>
+  <rect width="1280" height="720" fill="url(#a)"/>
+</svg>`;
 }
 
 function posterSvg(m) {

@@ -255,3 +255,94 @@ test('GET /identity is not answered while the server is down', async () => {
     await post('/__mock/up');
   }
 });
+
+// ---- background art (R-FILL-3, D232) ----
+
+const art = (path, query = '') => fetch(`${base}/photo/:/transcode?url=${encodeURIComponent(path)}&width=256&X-Plex-Token=${TOKEN}${query}`);
+
+test('titles 1, 3, 4, 5 and 7 carry `art`, titles 2, 6 and 8 carry none, and an `art` path is served as bright background art, not the poster', async () => {
+  const items = await all(1);
+  assert.deepEqual(items.map((m) => 'art' in m), [true, false, true, true, true, false, true, false]);
+  const withArt = items[2];
+  assert.match(withArt.art, /^\/library\/metadata\/3\/art\//);
+  const res = await art(withArt.art);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'image/svg+xml');
+  const svg = await res.text();
+  assert.match(svg, /#ffe066/, 'a bright top');
+  assert.ok(!svg.includes(withArt.title), 'not the poster, which names the title');
+  assert.match(svg, /width="1280" height="720"/);
+  assert.ok((await (await fetch(`${base}/photo/:/transcode?url=${encodeURIComponent(withArt.thumb)}&X-Plex-Token=${TOKEN}`)).text()).includes(withArt.title), 'the poster is unchanged');
+  assert.equal((await art(withArt.art, '').then((r) => r.status)), 200);
+  assert.equal((await fetch(`${base}/photo/:/transcode?url=${encodeURIComponent(withArt.art)}`)).status, 401, 'art needs the token like a poster');
+});
+
+test('an episode listed by the mock carries its series\' art as grandparentArt and a different art of its own', async () => {
+  await post('/__mock/episode?ratingKey=3');
+  try {
+    const [m] = (await get('/library/metadata/503')).body.MediaContainer.Metadata;
+    assert.equal(m.type, 'episode');
+    assert.match(m.grandparentArt, /^\/library\/metadata\/3\/art\//);
+    assert.match(m.art, /^\/library\/metadata\/503\/art\//);
+    assert.notEqual(m.art, m.grandparentArt);
+  } finally {
+    await post('/__mock/kind?ratingKey=3&type=movie');
+  }
+});
+
+test('art-fail answers only art requests with that status and recovers; art-hold keeps them waiting until art-release', async () => {
+  const withArt = (await all(1))[2];
+  const poster = () => fetch(`${base}/photo/:/transcode?url=${encodeURIComponent(withArt.thumb)}&X-Plex-Token=${TOKEN}`).then((r) => r.status);
+  await post('/__mock/art-fail?status=503');
+  try {
+    assert.equal((await art(withArt.art)).status, 503);
+    assert.equal(await poster(), 200, 'the poster is not affected');
+  } finally {
+    await post('/__mock/art-fail?status=200');
+  }
+  assert.equal((await art(withArt.art)).status, 200);
+  await post('/__mock/art-hold');
+  let released = false;
+  const waiting = art(withArt.art).then((r) => {
+    assert.equal(released, true, 'answered before the release');
+    return r.status;
+  });
+  assert.equal(await poster(), 200, 'a poster is not held');
+  released = true;
+  await post('/__mock/art-release');
+  assert.equal(await waiting, 200);
+  assert.equal((await art(withArt.art)).status, 200, 'after the release art is answered at once again');
+  // A count answers only the oldest requests and keeps holding.
+  await post('/__mock/reset-stats');
+  await post('/__mock/art-hold');
+  const answered = [];
+  const logged = async (n) => {
+    while ((await get('/__mock/log')).body.requests.length < n) await new Promise((r) => setImmediate(r)); // until the server has the request
+  };
+  const first = art(withArt.art).then((r) => answered.push(['first', r.status]));
+  await logged(1);
+  const second = art(withArt.art).then((r) => answered.push(['second', r.status]));
+  await logged(2);
+  await post('/__mock/art-release?count=1');
+  await first;
+  assert.deepEqual(answered, [['first', 200]], 'only the oldest was answered');
+  await post('/__mock/art-release');
+  await second;
+  assert.deepEqual(answered, [['first', 200], ['second', 200]]);
+});
+
+test('art-release?match= answers only the held art whose path contains the text, and keeps holding', async () => {
+  const items = await all(1);
+  await post('/__mock/reset-stats');
+  await post('/__mock/art-hold');
+  const answered = [];
+  const one = art(items[0].art).then((r) => answered.push(['one', r.status]));
+  const four = art(items[3].art).then((r) => answered.push(['four', r.status])); // title 4: titles 3's key is an episode after the test above
+  while ((await get('/__mock/log')).body.requests.length < 2) await new Promise((r) => setImmediate(r));
+  await post('/__mock/art-release?match=%2Fmetadata%2F4%2F');
+  await four;
+  assert.deepEqual(answered, [['four', 200]], 'title 4 only; title 1 is still held');
+  await post('/__mock/art-release');
+  await one;
+  assert.deepEqual(answered, [['four', 200], ['one', 200]]);
+});

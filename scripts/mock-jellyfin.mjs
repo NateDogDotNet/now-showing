@@ -96,6 +96,10 @@ const studioItem = (name) => ({ Name: name, Id: hex('f', ['Mock Pictures', 'Pixa
 
 // TMDB ids the mock knows for some movies (by row index); the rest carry no ProviderIds.Tmdb.
 const TMDB_IDS = { 0: '2001', 1: '2002', 3: '2004', 8: '2009' };
+// Background art (R-FILL-3, D232): the movies at these row indexes carry `BackdropImageTags: ['back<n>']`; the rest carry none (an empty list, as Jellyfin sends one for an
+// item with no backdrop). The image is GET /Items/<id>/Images/Backdrop/0 (served as a bright SVG). (verify) The field names, the tag form and the route are inferred from the
+// BaseItemDto and the image API, not confirmed against a real server.
+const WITH_BACKDROP = new Set([0, 2, 3, 4, 8, 9]);
 const MOVIES = MOVIE_ROWS.map(([Name, year, color, rating, minutes, community, genres, plays, Overview, lib], i) => ({
   Id: hex('a', i + 1),
   Name,
@@ -111,6 +115,7 @@ const MOVIES = MOVIE_ROWS.map(([Name, year, color, rating, minutes, community, g
   Overview,
   UserData: { PlayCount: plays, Played: plays > 0 },
   ImageTags: { Primary: `tag${i + 1}` },
+  BackdropImageTags: WITH_BACKDROP.has(i) ? [`back${i + 1}`] : [],
   ParentId: LIBS[lib].Id,
   ...(TMDB_IDS[i] ? { ProviderIds: { Imdb: `tt100${i}`, Tmdb: TMDB_IDS[i] } } : { ProviderIds: { Imdb: `tt100${i}` } }),
   color,
@@ -196,7 +201,7 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
         const nowPlaying =
           kind === 'episode'
             ? // (verify) Episode fields SeriesName, ParentIndexNumber and IndexNumber: only SeriesId is named; NowPlayingItem is a BaseItemDto.
-              { Id: EPISODE_ID, Name: 'The Long Tide', Type: 'Episode', SeriesId: SERIES_ID, SeriesName: 'Harbor Lights', ParentIndexNumber: 1, IndexNumber: 3, ServerId: SERVER_ID }
+              { Id: EPISODE_ID, Name: 'The Long Tide', Type: 'Episode', SeriesId: SERIES_ID, SeriesName: 'Harbor Lights', ParentIndexNumber: 1, IndexNumber: 3, ServerId: SERVER_ID, BackdropImageTags: ['episodeown'], ParentBackdropItemId: SERIES_ID, ParentBackdropImageTags: ['backseries'] } // (verify) the Parent* names; the episode's own tag is never the display's
             : wire(MOVIES.find((m) => m.Id === q.get('id')) || MOVIES[0]);
         sessions = [
           {
@@ -259,7 +264,7 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
     // (verify) Token transports: the research reads the Authorization MediaBrowser Token, the X-Emby-Token header and the ApiKey query as current, and the api_key query as legacy; which a default server accepts, and whether the legacy Emby scheme works, is unconfirmed (the mock refuses that scheme).
     // (verify) An Emby request is read by X-Emby-Token or api_key (DEV-EMBY-KEY); the poster image of an Emby display carries only api_key, so that one route also takes EMBY_TOKEN.
     const header = /^MediaBrowser\s.*\bToken="?([^",]*)"?/i.exec(req.headers.authorization || '');
-    const isImage = /^\/Items\/[0-9a-f]+\/Images\/Primary$/.test(path);
+    const isImage = /^\/Items\/[0-9a-f]+\/Images\/(Primary|Backdrop\/0)$/.test(path);
     const token = emby ? (req.headers['x-emby-token'] ?? q.get('api_key')) : header ? header[1] : (req.headers['x-emby-token'] ?? q.get('apikey') ?? q.get('api_key'));
     if (emby ? token !== EMBY_TOKEN : token !== TOKEN && !(isImage && token === EMBY_TOKEN)) return json(401, { error: 'Unauthorized' });
 
@@ -339,6 +344,13 @@ export async function startMockJellyfin({ port = 8096, host = '127.0.0.1' } = {}
     }
 
     // (verify) Image auth: the research note could not confirm whether an anonymous request succeeds; the mock asks for the token (api_key works, as an <img> cannot send headers).
+    const backdrop = /^\/Items\/([0-9a-f]+)\/Images\/Backdrop\/0$/.exec(path);
+    if (req.method === 'GET' && backdrop) {
+      const item = EVERYTHING.find((i) => i.Id === backdrop[1]) || (backdrop[1] === SERIES.Id ? SERIES : null);
+      if (!item) return json(404, { error: 'Not found' });
+      res.writeHead(200, { ...cors, 'Content-Type': 'image/svg+xml' });
+      return res.end(`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720"><rect width="1280" height="720" fill="#ffe066"/></svg>`);
+    }
     const image = /^\/Items\/([0-9a-f]+)\/Images\/Primary$/.exec(path);
     if (req.method === 'GET' && image) {
       const item = EVERYTHING.find((i) => i.Id === image[1]) || (image[1] === SERIES.Id ? SERIES : null);

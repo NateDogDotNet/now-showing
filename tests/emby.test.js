@@ -456,3 +456,31 @@ test('tmdb ids: Emby requests ProviderIds, reads Tmdb of digits, and gives an ep
   assert.equal((await reply({ ...movie, ProviderIds: { Tmdb: '77' } }).item('m1')).tmdbId, '77');
   for (const Tmdb of ['12a', '']) assert.ok(!('tmdbId' in (await reply({ ...movie, ProviderIds: { Tmdb } }).item('m1'))), Tmdb);
 });
+
+// ---- background art for the Backdrop art gap fill (R-FILL-3, D232) ----
+
+test('an Emby movie carries `backdrop` only when the server names a tag, and the address carries the Emby token and the width asked', async () => {
+  const { source } = connect();
+  const [movies] = await source.libraries();
+  const all = await source.pool({ libraryKey: movies.key, unwatchedOnly: false, size: 20 });
+  const withArt = all.find((p) => p.backdrop);
+  assert.ok(withArt && all.some((p) => !p.backdrop), 'titles with and without background art');
+  assert.ok(!JSON.stringify(all).includes(EMBY_TOKEN));
+  const url = new URL(source.imageUrl(withArt.backdrop, { width: 256, height: 144, backdrop: true }));
+  assert.equal(url.pathname, `/Items/${withArt.thumb}/Images/Backdrop/0`);
+  assert.equal(url.searchParams.get('api_key'), EMBY_TOKEN);
+  assert.equal(url.searchParams.get('maxWidth'), '256');
+  assert.equal((await fetch(url)).status, 200);
+});
+
+test("an Emby episode takes its series' backdrop only, from the reply in hand", async () => {
+  const { source } = connect();
+  await post('/__mock/jellyfin-sessions?kind=episode');
+  const np = source.nowPlaying(await source.sessions(), { username: '', includeEpisodes: true });
+  assert.match(np.backdrop, /^f0+1\/backseries$/, 'ParentBackdropItemId and the first ParentBackdropImageTags entry, not the episode\'s own tag');
+  await post('/__mock/jellyfin-sessions?kind=none');
+  const stubbedEpisode = { Id: 'e1', Name: 'Ep', Type: 'Episode', SeriesId: 'sr1', SeriesName: 'S', BackdropImageTags: ['own'] };
+  const poster = stubbed({ '/Sessions': [{ Id: 's', UserName: 'demo', PlayState: {}, NowPlayingItem: stubbedEpisode }], '/Items': { Items: [] } });
+  const [session] = await poster.sessions();
+  assert.equal('backdrop' in poster.nowPlaying([session], { includeEpisodes: true }), false, 'an episode with no parent art has none');
+});

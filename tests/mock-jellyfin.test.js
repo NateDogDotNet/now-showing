@@ -410,3 +410,31 @@ test('Emby mode reports an Id of its own, on /System/Info/Public and as the Serv
   const jfItems = (await get('/Items?IncludeItemTypes=Movie&Recursive=true')).body.Items;
   assert.ok(jfItems.every((i) => i.ServerId === SERVER_ID), 'every Jellyfin item still names the Jellyfin server');
 });
+
+// ---- background art (R-FILL-3, D232) ----
+
+test('movies 1, 3, 4, 5, 9 and 10 name a backdrop tag, the rest an empty list, and the backdrop route serves bright art for a listed item and a 404 for none', async () => {
+  const list = (await movies()).Items;
+  assert.deepEqual(list.slice(0, 10).map((m) => m.BackdropImageTags.length), [1, 0, 1, 1, 1, 0, 0, 0, 1, 1]);
+  const withArt = list[0];
+  const res = await raw(`/Items/${withArt.Id}/Images/Backdrop/0?tag=${withArt.BackdropImageTags[0]}&maxWidth=256&api_key=${TOKEN}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'image/svg+xml');
+  assert.match(await res.text(), /#ffe066/);
+  assert.equal((await raw(`/Items/${withArt.Id}/Images/Backdrop/0`)).status, 401, 'needs the token');
+  assert.equal((await raw(`/Items/${'0'.repeat(32)}/Images/Backdrop/0?api_key=${TOKEN}`)).status, 404);
+});
+
+test('the episode session names its series\' backdrop (Parent*) and a tag of its own that a display must not use', async () => {
+  await post('/__mock/jellyfin-sessions?kind=episode');
+  try {
+    const [s] = (await get('/Sessions')).body;
+    const item = s.NowPlayingItem;
+    assert.equal(item.Type, 'Episode');
+    assert.deepEqual(item.ParentBackdropImageTags, ['backseries']);
+    assert.equal(item.ParentBackdropItemId, item.SeriesId);
+    assert.deepEqual(item.BackdropImageTags, ['episodeown']);
+  } finally {
+    await post('/__mock/jellyfin-sessions?kind=none');
+  }
+});

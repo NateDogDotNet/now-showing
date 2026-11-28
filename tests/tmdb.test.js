@@ -847,3 +847,28 @@ test('houses: a company result keeps its origin country when TMDB names one, and
     { key: '6', title: 'B' },
   ]);
 });
+
+// ---- background art for the Backdrop art gap fill (R-FILL-3, D232) ----
+
+test('a TMDB poster carries `backdrop` (its backdrop_path) only when TMDB names a plain file path', async () => {
+  const stub = stubTmdb({
+    pages: { 'movie/popular': [[movie(1, { backdrop_path: '/b1.jpg' }), movie(2), movie(3, { backdrop_path: null }), movie(4, { backdrop_path: '' }), movie(5, { backdrop_path: 'b5.jpg' }), movie(6, { backdrop_path: '//evil.test/x.jpg' }), movie(7, { backdrop_path: 7 })]] },
+    certs: Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map((id) => [`movie:${id}`, [usDates('PG')]])),
+  });
+  const posters = await client(stub).pool({ libraryKey: 'movie/popular', maxContentRating: 'PG' });
+  const byKey = Object.fromEntries(posters.map((p) => [p.ratingKey, p]));
+  assert.equal(byKey['movie:1'].backdrop, '/b1.jpg');
+  for (const id of [2, 3, 4, 5, 6, 7]) assert.equal('backdrop' in byKey[`movie:${id}`], false, `movie ${id}: the field is absent`);
+});
+
+test("a TMDB backdrop address is TMDB's image host at a backdrop size (w300 at 256 wide), never the poster's size list and never with a key", () => {
+  const source = createTmdbClient({ key: V3, fetchImpl: async () => assert.fail('no request') });
+  for (const [width, size] of [[100, 'w300'], [256, 'w300'], [300, 'w300'], [301, 'w780'], [480, 'w780'], [781, 'w1280'], [1280, 'w1280'], [1281, 'original']]) {
+    const url = source.imageUrl('/b1.jpg', { width, height: width / 1.78, backdrop: true });
+    assert.equal(url, `https://image.tmdb.org/t/p/${size}/b1.jpg`, String(width));
+    assert.ok(!url.includes(V3) && !url.includes('api_key') && !url.includes('?'), url);
+  }
+  assert.equal(source.imageUrl('/b1.jpg', { width: 'wide', backdrop: true }), 'https://image.tmdb.org/t/p/w300/b1.jpg', 'a width that is no number is the smallest backdrop size');
+  assert.equal(source.imageUrl('/b1.jpg', { width: 256 }), 'https://image.tmdb.org/t/p/w342/b1.jpg', 'without the flag it is a poster address, as before');
+  assert.ok(!source.imageUrl('//evil.test/x.jpg', { width: 256, backdrop: true }).includes('evil.test'));
+});

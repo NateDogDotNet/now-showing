@@ -237,7 +237,7 @@ const SCHEMA = {
   statusIndicator: ['dot', oneOf('dot', 'off')],
   controlLabels: ['auto', oneOf('auto', 'always', 'never')],
   fillMode: ['none', oneOf('none', 'blur', 'info')],
-  gapFill: ['none', oneOf('none', 'blur', 'matte')],
+  gapFill: ['none', oneOf('none', 'blur', 'matte', 'backdrop')],
 
   // Cache
   posterCacheLimit: [100, strictNum(10, 300, { int: true })],

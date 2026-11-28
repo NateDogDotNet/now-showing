@@ -154,7 +154,18 @@ export function toPoster(m, source) {
     ...(rating !== null ? { rating } : {}),
     ...playable,
     ...tmdbOf(m), // tmdbId and tmdbType, only when the server names exactly one TMDB id
+    ...backdropOf(m), // the title's background art (R-FILL-3, D232), only when the server names it
   };
+}
+
+/**
+ * The background art Plex names for a title: `art` for a movie or show, and for an episode its series' `grandparentArt` only (the poster
+ * shows the series, D232 4). A path that is empty or not text is none. (verify) The `art` and `grandparentArt` fields are the community's
+ * description of the item reply, not confirmed against a real server.
+ */
+function backdropOf(m) {
+  const art = m.type === 'episode' ? m.grandparentArt : m.art;
+  return typeof art === 'string' && art.trim() !== '' ? { backdrop: art.trim() } : {};
 }
 
 /** A positive whole count from a JSON number or an XML attribute string; anything else is 0. */

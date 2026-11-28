@@ -40,7 +40,9 @@
       <div id="gap-fill" class="gap-fill" aria-hidden="true" hidden>
         <div class="gap-tint">
           <canvas id="gap-a" class="fill-canvas" width="48" height="72"></canvas>
+          <canvas id="gap-art-a" class="fill-canvas" width="1" height="1"></canvas>
           <canvas id="gap-b" class="fill-canvas" width="48" height="72"></canvas>
+          <canvas id="gap-art-b" class="fill-canvas" width="1" height="1"></canvas>
         </div>
       </div>
       <div id="poster-box" class="poster-box">
@@ -507,9 +509,10 @@
               <option value="none">Off</option>
               <option value="blur">Dimmed blurred poster</option>
               <option value="matte">Colour matte</option>
+              <option value="backdrop">Backdrop art</option>
             </select>
           </label>
-          <p id="gap-help" class="muted small">Fills the gap inside the frame’s window when the poster does not reach its edges, with a blurred copy (“Dimmed blurred poster”) or one colour from its edge (“Colour matte”). A gap of a few pixels is closed by scaling or cropping the poster slightly.</p>
+          <p id="gap-help" class="muted small">Fills the gap in the frame’s window with a blur (“Dimmed blurred poster”), one edge colour (“Colour matte”) or the title’s dimmed art (“Backdrop art”). The blurred poster shows while the art loads, for a title with none, if it cannot load, and for a poster from the offline cache. Small gaps are closed by scaling or cropping.</p>
           <label>Control labels
             <select name="controlLabels">
               <option value="auto">Auto</option>

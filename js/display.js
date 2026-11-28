@@ -3,7 +3,7 @@
 import { detectWindow, findFrame, NO_FRAME, CUSTOM_FRAME_ID } from './frames.js';
 import { formatRuntime } from './duration.js';
 import { blurPlan, closeGap, gapBands, imageRect, posterBox, shiftOffset, shiftRoom, stageSize } from './layout.js';
-import { backdropBox, fillState, infoBox, infoParts, gapLayerOpen, infoTitleSize, swapBackdrop, swapGapFill, visibleRight } from './fill.js';
+import { backdropBox, drawGapFill, fillState, gapFillKind, infoBox, infoParts, gapLayerOpen, infoTitleSize, swapBackdrop, swapGapFill, visibleRight, wantsBackdrop } from './fill.js';
 
 const POSTER_ASPECT = 2 / 3;
 // Empty border per side while pixel shift is on; the stage moves inside it.
@@ -31,6 +31,7 @@ export function createDisplay(root = document) {
     canvases: [root.getElementById('fill-a'), root.getElementById('fill-b')], // one per poster layer: they cross-fade together
     gap: root.getElementById('gap-fill'),
     gapCanvases: [root.getElementById('gap-a'), root.getElementById('gap-b')], // the gap fill's pair, cross-fading with the poster layers
+    artCanvases: [root.getElementById('gap-art-a'), root.getElementById('gap-art-b')], // the backdrop art's pair, one over each gap canvas: the art fades in over the blur, and leaves with its poster's slot
     info: root.getElementById('info-panel'),
     infoTitle: root.getElementById('info-title'),
     infoMeta: root.getElementById('info-meta'),
@@ -54,7 +55,14 @@ export function createDisplay(root = document) {
   let infoRoom = false; // the empty side is wide enough for the info panel
   let gapHideTimer = null; // fallback: takes the gap layer away if the tint's transitionend never comes after gapFill was turned off
   let gapHideCancel = null; // removes the pending transitionend listener of that hide
-  let gapStyle = 'none'; // the gap fill in force: 'none' | 'blur' | 'matte' (the gapFill setting; the layer shows only while a band does)
+  let gapStyle = 'none'; // the gap fill in force: 'none' | 'blur' | 'matte' | 'backdrop' (the gapFill setting; the layer shows only while a band does)
+  // The backdrop art of the gap fill (R-FILL-3, D232). It belongs to ONE poster: `shownPoster` is the poster on screen (set in show(), cleared by
+  // dropBackdrop() when it is blocked), `backdropHeld` the decoded art of that poster ({ img }), `backdropAsked` the poster it was last asked for, and `backdropFaded`
+  // the poster whose art has faded in. Art is used only while its poster is the one on screen, so another title's is never drawn.
+  let shownPoster = null;
+  let backdropHeld = null; // { img }: the art of shownPoster
+  let backdropAsked = null;
+  let wantBackdrop = () => {}; // called with the poster whose backdrop is to be asked of its server (main.js)
   let infoText = false; // the poster on screen has a title for the panel to show
   let titleLogo = null; // { poster, url, failed }: the logo art of the poster on screen (R-ART-2), drawn by an <img> from a same-origin object URL; never inlined into the page
   const useLogo = (poster, blob) => {
@@ -132,13 +140,15 @@ export function createDisplay(root = document) {
    * With gapFill off nothing changes: the box is the one posterBox gave and the gap layer stays hidden.
    */
   function layoutGap(stageW, stageH, box) {
-    const want = settings.gapFill === 'blur' || settings.gapFill === 'matte' ? settings.gapFill : 'none';
+    const want = settings.gapFill === 'blur' || settings.gapFill === 'matte' || settings.gapFill === 'backdrop' ? settings.gapFill : 'none';
     let fit = settings.posterFit;
     let out = box;
     let open = false;
     const was = gapStyle;
     gapStyle = want;
     let plan = null;
+    const kind = want === 'backdrop' ? 'blur' : want; // what is drawn in the gap canvas: the backdrop style keeps the blur under its art, which has a layer of its own
+    let art = false;
     if (want !== 'none') {
       const win = posterBox({ stageW, stageH, win: frame.window });
       const img = el.layers[front];
@@ -148,10 +158,15 @@ export function createDisplay(root = document) {
       out = closed.box;
       fit = closed.fit;
       open = gapLayerOpen(want, gapBands({ win, box: out, aspect, fit }));
+      art = gapFillKind({ style: want, poster: shownPoster, loaded: backdropHeld !== null }) === 'backdrop';
+      if (wantsBackdrop({ style: want, poster: shownPoster, open }) && backdropAsked !== shownPoster) {
+        backdropAsked = shownPoster; // one request per shown poster, made only while a band shows
+        wantBackdrop(shownPoster); // main.js fetchBackdrop: async, and it never throws
+      }
       Object.assign(el.gap.style, { left: `${win.left}px`, top: `${win.top}px`, width: `${win.width}px`, height: `${win.height}px` });
       // The blurred copy continues the poster: the poster sits on its tile and the poster's edge rows and columns are stretched
       // out to the window, so a wide band shows no inner detail of the poster (D95). Drawn again here, as the layout decides it.
-      plan = want === 'blur' && known ? blurPlan({ win, shown: imageRect({ box: out, aspect, fit }), imageAspect: aspect, fit }) : null;
+      plan = kind === 'blur' && known ? blurPlan({ win, shown: imageRect({ box: out, aspect, fit }), imageAspect: aspect, fit }) : null;
       if (plan) {
         swapGapFill(el.gapCanvases, front, img, 'blur', plan);
         Object.assign(el.gapCanvases[front].style, { left: `${plan.rect.left}px`, top: `${plan.rect.top}px`, width: `${plan.rect.width}px`, height: `${plan.rect.height}px` });
@@ -160,7 +175,18 @@ export function createDisplay(root = document) {
         // leave part of the bands black after a resize (D89: the matte is unchanged).
         Object.assign(el.gapCanvases[front].style, { left: '0px', top: '0px', width: `${win.width}px`, height: `${win.height}px` });
       }
+      // The art has its own canvas over this slot's blur, which stays drawn underneath. The art covers the whole window, at most 256 px on
+      // its longer side, stretched by CSS. Marking it active starts a CSS opacity fade from 0 over the blur (never from black); a redraw of
+      // art already active starts nothing. A style change or a poster without art takes it away.
+      const layer = el.artCanvases[front];
+      if (art && drawGapFill(layer, backdropHeld.img, 'backdrop', { width: win.width, height: win.height })) {
+        Object.assign(layer.style, { left: '0px', top: '0px', width: `${win.width}px`, height: `${win.height}px` });
+        layer.classList.add('active');
+      } else {
+        layer.classList.remove('active');
+      }
     }
+    if (want === 'none') el.artCanvases.forEach((canvas) => canvas.classList.remove('active')); // the style is off: no art stays current
     // A change of style redraws the matte or clears the canvas. A blur drawn from its plan above is not touched again: it would be
     // cleared and drawn once more (or left cleared) for the want of the plan that only this function has (D95).
     if (want !== was && !plan) drawFrontGap();
@@ -204,6 +230,19 @@ export function createDisplay(root = document) {
     swapBackdrop(el.canvases, front, img, img.classList.contains('active'));
   }
 
+  /** Forgets the backdrop art and what it was asked for: the poster it belonged to is no longer on screen. The canvases are emptied only when art was drawn. */
+  function forgetBackdrop() {
+    const drawn = backdropHeld !== null;
+    shownPoster = null;
+    backdropHeld = null;
+    backdropAsked = null;
+    if (!drawn) return;
+    [...el.gapCanvases, ...el.artCanvases].forEach((canvas) => { // the art's layers and the blur beneath: a blocked poster keeps nothing
+      canvas.classList.remove('active');
+      canvas.width = 1; // clears what was drawn
+    });
+  }
+
   /**
    * Cuts a backdrop canvas with its poster layer. main.js hides a poster that is fading out and no longer allowed with
    * `.cut` (K20, C7M1); the canvas of the same index gets `.cut` in the same task (a mutation observer's microtask), so
@@ -214,6 +253,7 @@ export function createDisplay(root = document) {
       const cut = layer.classList.contains('cut');
       el.canvases[i].classList.toggle('cut', cut);
       el.gapCanvases[i].classList.toggle('cut', cut); // the gap fill is a copy of the poster too
+      el.artCanvases[i].classList.toggle('cut', cut); // and so is its art
     });
   }
   if (typeof MutationObserver === 'function') {
@@ -369,6 +409,37 @@ export function createDisplay(root = document) {
 
     layout,
 
+    /** main.js gives the function that fetches a poster's backdrop; layout calls it once for a poster whose gap layer shows a band. */
+    onBackdropWanted(fn) {
+      wantBackdrop = typeof fn === 'function' ? fn : () => {};
+    },
+
+    /**
+     * The backdrop art of `poster` (a Blob), arriving after the draw. It replaces the blur of
+     * that poster at once (D232 1); a poster that is no longer the one on screen (the next one came up, or it was blocked) drops it. Nothing or an
+     * image that cannot be decoded leaves the blur. Never throws. Resolves whether it was drawn.
+     */
+    async setBackdrop(poster, source) {
+      if (!(source instanceof Blob)) return false;
+      const img = new Image(); // never put in the page
+      const url = URL.createObjectURL(source);
+      try {
+        img.src = url;
+        await decodeWithin(img, DECODE_TIMEOUT_MS);
+      } catch {
+        return false;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      if (poster !== shownPoster) return false; // the next poster came up, or this one was blocked, while the art loaded
+      backdropHeld = { img };
+      layout();
+      return true;
+    },
+
+    /** The poster on screen was taken off (the limit or the selection blocked it): its backdrop goes with it, at once. */
+    dropBackdrop: forgetBackdrop,
+
     /** Current poster box size in CSS pixels (used to request a right-sized image). */
     posterSize() {
       const b = layout();
@@ -399,6 +470,16 @@ export function createDisplay(root = document) {
       if (image instanceof Blob) objectUrls.set(next, url);
       next.classList.add('active');
       prev.classList.remove('active');
+      // A new poster starts with no art, asked for or drawn: what was held belonged to the poster before (setBackdrop only holds art for the poster on screen).
+      shownPoster = poster;
+      backdropHeld = null;
+      backdropAsked = null;
+      // The art of the poster before leaves with its slot: its layer loses `active` in this task and fades out with the poster (no snap, no clear until it is drawn again).
+      el.artCanvases.forEach((canvas) => canvas.classList.remove('active'));
+      // The slot taking this poster may still hold the art of the poster two back (a second change inside one cross-fade): empty it at once, so no title's art is drawn for another.
+      const incomingArt = el.artCanvases[1 - front];
+      incomingArt.width = 1;
+      incomingArt.height = 1;
       // The backdrop changes in the same task as the poster, through the same transition, so the two stay in step.
       swapBackdrop(el.canvases, 1 - front, next, fill === 'blur');
       // and the gap fill, through the same transition: the matte now, the blur by layout() just below, which knows where it goes

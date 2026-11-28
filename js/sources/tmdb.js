@@ -154,6 +154,7 @@ export function toPoster(item, type, { rating = '', names = new Map(), source = 
     ...(companyIds.length ? { companyIds } : {}), // a list result carries none: a title's details read (every TMDB title has one, D215 1) names its companies
     tmdbId: id,
     tmdbType: type,
+    ...(POSTER_PATH.test(String(item.backdrop_path ?? '')) ? { backdrop: item.backdrop_path } : {}), // the title's background art file (R-FILL-3, D232), only when TMDB names one
   };
 }
 
@@ -212,6 +213,7 @@ async function request(url, { headers, fetchImpl, timeoutMs = 10000, signal = nu
 const noSource = (key) => new SourceError(`TMDB has no list "${String(key).slice(0, 60)}". Choose a list in Settings.`, { kind: 'config' });
 const noCollections = () => new SourceError('TMDB has no collections or playlists.', { kind: 'config' });
 const gone = () => new SourceError('That title is no longer on TMDB.', { kind: 'http', status: 404 });
+const backdropSize = (width) => ['w300', 'w780', 'w1280'].find((s) => Number(s.slice(1)) >= width) || 'original';
 const imageSize = (width) => ['w92', 'w154', 'w185', 'w342', 'w500', 'w780'].find((s) => Number(s.slice(1)) >= width) || 'original';
 
 /**
@@ -426,7 +428,8 @@ export function createTmdbClient({ key, fetchImpl = (...a) => fetch(...a) } = {}
     },
 
     /** A poster file at about this width. No key: the image host needs none, and a key must never reach a URL (D210 4). */
-    imageUrl(thumb, { width = 500 } = {}) {
+    imageUrl(thumb, { width = 500, backdrop = false } = {}) {
+      if (backdrop) return `${IMAGE_BASE}${backdropSize(Number(width) || 300)}${POSTER_PATH.test(String(thumb)) ? thumb : '/'}`; // a background art file: its own size list
       return `${IMAGE_BASE}${imageSize(Number(width) || 500)}${POSTER_PATH.test(String(thumb)) ? thumb : '/'}`;
     },
   };

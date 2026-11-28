@@ -694,3 +694,51 @@ test('tmdb ids: a poster that carries tmdbId keeps it through the combined sourc
   assert.equal(p.tmdbId, '42');
   assert.equal(p.tmdbType, 'movie');
 });
+
+test("with several servers a poster's backdrop is scoped like its thumb and asked of the poster's own server, with that server's token (D232 8)", async () => {
+  await startServers();
+  try {
+    const { fetchImpl } = spy();
+    const source = createSources(household(), { clientId: 'cid', version: '1', fetchImpl });
+    const libs = await source.libraries();
+    const pick = async (serverType) => {
+      const lib = libs.find((l) => l.serverType === serverType && l.title === 'Movies');
+      const posters = await source.pool({ libraryKey: lib.key, size: 20, unwatchedOnly: false });
+      const withArt = posters.find((p) => p.backdrop);
+      assert.ok(withArt, `${serverType} has a title with background art`);
+      assert.ok(posters.some((p) => !('backdrop' in p)), `${serverType} has a title without, and the field is absent from it`);
+      return withArt;
+    };
+    const [plex, jf, emby] = [await pick('plex'), await pick('jellyfin'), await pick('emby')];
+    assert.equal(plex.backdrop.startsWith('@'), false, "the carried Plex server's ids stay bare");
+    assert.ok(jf.backdrop.startsWith(`@${JF_SERVER_ID}/`), jf.backdrop);
+    assert.ok(emby.backdrop.startsWith(`@${EMBY_SERVER_ID}/`), emby.backdrop);
+    assert.ok(jf.thumb.startsWith(`@${JF_SERVER_ID}/`), 'scoped like its thumb');
+    const ask = (p) => source.imageUrl(p.backdrop, { width: 256, height: 144, backdrop: true });
+    const [plexUrl, jfUrl, embyUrl] = [ask(plex), ask(jf), ask(emby)];
+    assert.ok(plexUrl.startsWith(multi.plexUrl) && plexUrl.includes('art') && hasToken(plexUrl, PLEX_TOKEN), plexUrl);
+    assert.ok(new URL(jfUrl).pathname.endsWith('/Images/Backdrop/0') && hasToken(jfUrl, JF_TOKEN) && !hasToken(jfUrl, EMBY_TOKEN), 'the Jellyfin address carries the Jellyfin token');
+    assert.ok(new URL(embyUrl).pathname.endsWith('/Images/Backdrop/0') && hasToken(embyUrl, EMBY_TOKEN) && !hasToken(embyUrl, JF_TOKEN), 'the Emby address carries the Emby token');
+    assert.ok(!hasToken(jfUrl, PLEX_TOKEN) && !hasToken(embyUrl, PLEX_TOKEN) && !hasToken(plexUrl, JF_TOKEN), 'no token goes to another server');
+    for (const u of [plexUrl, jfUrl, embyUrl]) assert.equal((await fetch(u)).status, 200, 'the art is served');
+    assert.throws(() => source.imageUrl('@nobody/x/y', { width: 256, backdrop: true }), SourceError, 'a backdrop of no server asks nobody');
+  } finally {
+    await stopServers();
+  }
+});
+
+test('a poster stored in the offline cache keeps no `backdrop`: neither the index entry nor the poster drawn from the cache has one (D232 7)', async () => {
+  const storage = memoryStorage();
+  const blobs = new Map();
+  const caches = {
+    open: async () => ({ match: async (url) => (blobs.has(url) ? new Response(blobs.get(url)) : undefined), put: async (url, res) => blobs.set(url, await res.text()), delete: async (url) => blobs.delete(url) }),
+    delete: async () => true,
+  };
+  const cache = createPosterCache({ storage, caches, limit: () => 100 });
+  await cache.put({ ratingKey: '3', title: 'Velvet Curtain', year: '1972', thumb: '/library/metadata/3/thumb/1', backdrop: '/library/metadata/3/art/1', contentRating: 'PG', source: 'random' }, new Blob(['bytes']), { width: 600, height: 900 });
+  assert.equal(cache.entries().length, 1, 'the poster is stored');
+  assert.ok(!JSON.stringify(cache.entries()).includes('backdrop') && !JSON.stringify(cache.entries()).includes('/art/'), 'no art in the index');
+  const drawn = await cache.random('', '');
+  assert.equal(drawn.poster.source, 'cache');
+  assert.equal('backdrop' in drawn.poster, false, 'and none on the poster drawn from the cache');
+});

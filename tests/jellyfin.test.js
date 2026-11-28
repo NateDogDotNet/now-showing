@@ -237,6 +237,7 @@ test('a Jellyfin movie maps to the poster shape the engine reads', async () => {
     audienceRating: 7.9,
     tmdbId: '2001',
     tmdbType: 'movie',
+    backdrop: 'a0000000000000000000000000000001/back1',
   });
   const fresh = all.find((p) => p.title === 'Midnight Projector');
   assert.equal('viewCount' in fresh, false, 'a play count of 0 is left off');
@@ -786,4 +787,52 @@ test('D215 2: a studio name holding a pipe is not sent in Studios=; the request 
   assert.equal(calls.at(-1).url.searchParams.has('Studios'), false, 'one such name leaves the parameter off for the whole request');
   await source.pool({ libraryKey: movies.key, houses: ['Lucasfilm Ltd., LLC'] });
   assert.equal(calls.at(-1).url.searchParams.get('Studios'), 'Lucasfilm Ltd., LLC', 'a comma is no delimiter for Jellyfin: sent as is');
+});
+
+// ---- background art for the Backdrop art gap fill (R-FILL-3, D232) ----
+
+test('a movie carries `backdrop` (its id and first BackdropImageTags entry) only when the server names a tag', () => {
+  assert.equal(toPoster({ ...movieItem, BackdropImageTags: ['t1', 't2'] }, 'random').backdrop, 'm1/t1');
+  for (const tags of [undefined, null, [], [''], ['  '], [7], 'back1', {}]) {
+    assert.equal('backdrop' in toPoster({ ...movieItem, BackdropImageTags: tags }, 'random'), false, `tags ${JSON.stringify(tags)}: the field is absent`);
+  }
+});
+
+test("an episode takes its series' backdrop (ParentBackdropItemId and the first ParentBackdropImageTags entry), never its own tags", () => {
+  const own = { ...episodeItem, BackdropImageTags: ['episodeown'] };
+  assert.equal('backdrop' in toPoster(own, 'now-playing'), false, 'an episode that names no parent art has none, whatever its own tags say');
+  assert.equal(toPoster({ ...own, ParentBackdropItemId: 'sr1', ParentBackdropImageTags: ['p1', 'p2'] }, 'now-playing').backdrop, 'sr1/p1');
+  assert.equal('backdrop' in toPoster({ ...own, ParentBackdropItemId: 'sr1', ParentBackdropImageTags: [] }, 'now-playing'), false);
+  assert.equal('backdrop' in toPoster({ ...own, ParentBackdropImageTags: ['p1'] }, 'now-playing'), false, 'no parent item id: no address');
+  assert.equal('backdrop' in toPoster({ ...own, ParentBackdropItemId: 'a/b', ParentBackdropImageTags: ['p1'] }, 'now-playing'), false, 'an id with a slash would split wrongly: none');
+  assert.equal('backdrop' in toPoster({ ...movieItem, BackdropImageTags: ['t/1'] }, 'random'), false, 'so would a tag with one');
+  const np = pickNowPlaying([session({ ...own, ParentBackdropItemId: 'sr1', ParentBackdropImageTags: ['p1'] })], {});
+  assert.equal(np.backdrop, 'sr1/p1', 'a now-playing poster carries it (D232 8)');
+});
+
+test('the backdrop address carries the token like a poster, asks the width given and never the full-size art; no poster object holds the token', async () => {
+  const { source } = connect();
+  const [movies] = await source.libraries();
+  const all = await source.pool({ libraryKey: movies.key, unwatchedOnly: false, size: 20 });
+  const withArt = all.find((p) => p.backdrop);
+  const without = all.find((p) => !p.backdrop);
+  assert.ok(withArt && without, 'the mock has titles with and without background art');
+  assert.ok(!JSON.stringify(all).includes(TOKEN));
+  const url = new URL(source.imageUrl(withArt.backdrop, { width: 256, height: 144, backdrop: true }));
+  assert.equal(url.pathname, `/Items/${withArt.thumb}/Images/Backdrop/0`);
+  assert.equal(url.searchParams.get('api_key'), TOKEN);
+  assert.equal(url.searchParams.get('maxWidth'), '256');
+  assert.equal(url.searchParams.get('tag'), withArt.backdrop.split('/')[1]);
+  const res = await fetch(url);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /image/);
+  assert.equal(new URL(source.imageUrl(withArt.thumb, { width: 400, height: 600 })).pathname, `/Items/${withArt.thumb}/Images/Primary`, 'the poster address is as before');
+});
+
+test('the mock names the series\' art for an episode session, and the display takes it (not the episode\'s own tag)', async () => {
+  const { source } = connect();
+  await post('/__mock/jellyfin-sessions?kind=episode&user=demo');
+  const np = source.nowPlaying(await source.sessions(), { username: '', includeEpisodes: true });
+  assert.match(np.backdrop, /^f0+1\/backseries$/);
+  await post('/__mock/jellyfin-sessions?kind=none');
 });

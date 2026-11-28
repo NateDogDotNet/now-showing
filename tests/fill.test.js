@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatRuntime } from '../js/duration.js';
-import { BACKDROP_OPACITY, BACKDROP_WIDTH, PANEL_MIN_EM, SUMMARY_MAX, backdropBox, drawBackdrop, drawGapBlur, drawGapFill, edgeColour, fillState, gapLayerOpen, infoBox, infoParts, infoTitleSize, isLandscape, swapBackdrop, swapGapFill, trimSummary, visibleRight } from '../js/fill.js';
+import { BACKDROP_OPACITY, BACKDROP_WIDTH, PANEL_MIN_EM, SUMMARY_MAX, backdropBox, GAP_BACKDROP_MAX, GAP_BACKDROP_REQUEST, GAP_STYLES, drawBackdrop, drawGapBackdrop, drawGapBlur, drawGapFill, edgeColour, fillState, gapFillKind, gapLayerOpen, infoBox, infoParts, infoTitleSize, isLandscape, swapBackdrop, swapGapFill, trimSummary, visibleRight, wantsBackdrop } from '../js/fill.js';
 import { posterBox } from '../js/layout.js';
 
 test('isLandscape is the effective aspect: 90 and 270 swap width and height', () => {
@@ -386,4 +386,93 @@ test('drawGapFill blur with a plan is drawGapBlur; without one it is the plain b
   assert.deepEqual([canvas.width, canvas.height], [20, 30]);
   assert.equal(drawGapFill(canvas, loaded, 'blur'), true);
   assert.equal(canvas.width, BACKDROP_WIDTH);
+});
+
+// ---- the Backdrop art gap fill (R-FILL-3, D232) ----
+
+test('GAP_STYLES names the four styles and the request is a small image', () => {
+  assert.deepEqual(GAP_STYLES, ['none', 'blur', 'matte', 'backdrop']);
+  assert.ok(GAP_BACKDROP_REQUEST > 0 && GAP_BACKDROP_REQUEST <= 480, 'the server is asked for at most 480 px (D232 2)');
+  assert.equal(GAP_BACKDROP_MAX, 256);
+});
+
+test('gapFillKind, the decision table: backdrop only with art, not from the cache, and loaded for this poster; otherwise the blur', () => {
+  const art = { backdrop: '/library/metadata/3/art/1', source: 'random' };
+  const table = [
+    ['backdrop, art, loaded', { style: 'backdrop', poster: art, loaded: true }, 'backdrop'],
+    ['backdrop, art, loaded, now playing', { style: 'backdrop', poster: { ...art, source: 'now-playing' }, loaded: true }, 'backdrop'],
+    ['backdrop, art, not loaded yet (or failed)', { style: 'backdrop', poster: art, loaded: false }, 'blur'],
+    ['backdrop, no art field', { style: 'backdrop', poster: { source: 'random' }, loaded: true }, 'blur'],
+    ['backdrop, empty art field', { style: 'backdrop', poster: { backdrop: '', source: 'random' }, loaded: true }, 'blur'],
+    ['backdrop, from the offline cache', { style: 'backdrop', poster: { ...art, source: 'cache' }, loaded: true }, 'blur'],
+    ['backdrop, no poster', { style: 'backdrop', poster: null, loaded: true }, 'blur'],
+    ['blur is itself', { style: 'blur', poster: art, loaded: true }, 'blur'],
+    ['matte is itself', { style: 'matte', poster: art, loaded: true }, 'matte'],
+    ['none is none', { style: 'none', poster: art, loaded: true }, 'none'],
+    ['an unknown style is none', { style: 'sepia', poster: art, loaded: true }, 'none'],
+  ];
+  for (const [name, input, want] of table) assert.equal(gapFillKind(input), want, name);
+});
+
+test('wantsBackdrop: asked only for the backdrop style, with art, not from the cache, and while a band shows', () => {
+  const art = { backdrop: '/a', source: 'random' };
+  assert.equal(wantsBackdrop({ style: 'backdrop', poster: art, open: true }), true);
+  assert.equal(wantsBackdrop({ style: 'backdrop', poster: art, open: false }), false, 'no band, no request');
+  assert.equal(wantsBackdrop({ style: 'backdrop', poster: { ...art, source: 'cache' }, open: true }), false, 'a cached poster asks nothing');
+  assert.equal(wantsBackdrop({ style: 'backdrop', poster: { source: 'random' }, open: true }), false, 'no art named');
+  assert.equal(wantsBackdrop({ style: 'backdrop', poster: null, open: true }), false);
+  for (const style of ['blur', 'matte', 'none']) assert.equal(wantsBackdrop({ style, poster: art, open: true }), false, style);
+});
+
+test("drawGapBackdrop: the canvas has the window's aspect, never more than 256 px on its longer side, and the art is cropped about its centre (cover)", () => {
+  const windows = [[924, 1218], [1920, 1080], [3840, 2160], [10, 4000], [4000, 10], [1, 1], [255, 256], [256, 255], [100000, 70000], [1, 100000], [100000, 1]];
+  const arts = [[1280, 720], [300, 450], [1, 1], [4000, 1000], [1000, 4000]];
+  let cases = 0;
+  for (const [ww, wh] of windows) {
+    for (const [nw, nh] of arts) {
+      const canvas = fakeCanvas();
+      const img = { naturalWidth: nw, naturalHeight: nh };
+      assert.equal(drawGapBackdrop(canvas, img, { width: ww, height: wh }), true);
+      assert.ok(canvas.width >= 1 && canvas.height >= 1 && Math.max(canvas.width, canvas.height) <= 256, `${ww}x${wh}: canvas ${canvas.width}x${canvas.height} is at most 256 on its longer side`);
+      if (Math.min(ww, wh) >= 2 && Math.max(ww, wh) / Math.min(ww, wh) < 100) assert.equal(Math.max(canvas.width, canvas.height), 256, 'and as large as the cap allows');
+      const [, sx, sy, sw, sh, dx, dy, dw, dh] = canvas.calls[0];
+      assert.deepEqual([dx, dy, dw, dh], [0, 0, canvas.width, canvas.height]);
+      assert.ok(sx >= -1e-9 && sy >= -1e-9 && sx + sw <= nw + 1e-9 && sy + sh <= nh + 1e-9, 'the crop stays inside the art');
+      assert.ok(Math.abs(sx + sw / 2 - nw / 2) < 1e-6 && Math.abs(sy + sh / 2 - nh / 2) < 1e-6, 'about the centre');
+      assert.ok(Math.abs(sw / sh - canvas.width / canvas.height) < 1e-6 || Math.min(canvas.width, canvas.height) <= 2, 'at the canvas aspect');
+      assert.ok(Math.abs(sw - nw) < 1e-6 || Math.abs(sh - nh) < 1e-6, 'it covers: one side is the whole art');
+      cases++;
+    }
+  }
+  assert.equal(cases, windows.length * arts.length);
+});
+
+test('drawGapBackdrop draws nothing for art that has not loaded, no window or a canvas that cannot draw, and never throws', () => {
+  const win = { width: 900, height: 1200 };
+  const art = { naturalWidth: 1280, naturalHeight: 720 };
+  assert.equal(drawGapBackdrop(fakeCanvas(), { naturalWidth: 0, naturalHeight: 0 }, win), false);
+  assert.equal(drawGapBackdrop(fakeCanvas(), null, win), false);
+  assert.equal(drawGapBackdrop(fakeCanvas(), art, null), false);
+  assert.equal(drawGapBackdrop(fakeCanvas(), art, { width: 0, height: 10 }), false);
+  assert.equal(drawGapBackdrop(fakeCanvas(), art, { width: 10, height: 0 }), false);
+  assert.equal(drawGapBackdrop({ width: 5, height: 5, getContext: () => null }, art, win), false);
+  assert.equal(drawGapBackdrop({ width: 5, height: 5, getContext: () => ({ drawImage() { throw new Error('boom'); } }) }, art, win), false);
+});
+
+test('swapGapFill with the backdrop style draws the art when it has the window, and shows no canvas when it has not', () => {
+  const [a, b] = [fakeLayerCanvas(), fakeLayerCanvas()];
+  a.classList.add('active');
+  const art = { naturalWidth: 1280, naturalHeight: 720 };
+  assert.equal(swapGapFill([a, b], 1, art, 'backdrop', { width: 924, height: 1218 }), true);
+  assert.equal(b.classList.contains('active'), true);
+  assert.equal(a.classList.contains('active'), false);
+  b.classList.add('active');
+  assert.equal(swapGapFill([a, b], 1, art, 'backdrop'), false, 'no window: nothing drawn, nothing active');
+  assert.equal(a.classList.contains('active') || b.classList.contains('active'), false);
+});
+
+test('gapLayerOpen shows the layer for the backdrop style too', () => {
+  const band = { left: 0, top: 0, width: 10, height: 10 };
+  assert.equal(gapLayerOpen('backdrop', [band]), true);
+  assert.equal(gapLayerOpen('backdrop', []), false);
 });

@@ -90,7 +90,21 @@ export function toPoster(item, source, { seriesRating } = {}) {
     ...(plays ? { viewCount: Math.floor(plays) } : {}),
     ...(audience !== null ? { audienceRating: audience } : {}),
     ...tmdbOf(item),
+    ...backdropOf(item),
   };
+}
+
+/**
+ * The background art a Jellyfin or Emby item names, as `<item id>/<image tag>` (what imageUrl takes with `backdrop: true`): a movie's own first
+ * `BackdropImageTags` entry; an episode's series' only, read from the reply in hand (`ParentBackdropItemId` and the first `ParentBackdropImageTags`
+ * entry, D232 4 and 9). Nothing when the server names no tag. (verify) The Parent* fields are named in the BaseItemDto, not confirmed on a real server.
+ */
+function backdropOf(item) {
+  const isEpisode = item.Type === 'Episode';
+  const id = text(isEpisode ? item.ParentBackdropItemId : item.Id);
+  const tags = isEpisode ? item.ParentBackdropImageTags : item.BackdropImageTags;
+  const tag = Array.isArray(tags) ? text(tags[0]) : '';
+  return id && tag && !id.includes('/') && !tag.includes('/') ? { backdrop: `${id}/${tag}` } : {};
 }
 
 /**
@@ -328,7 +342,12 @@ export function createMediaBrowserClient({ label, serverUrl, token, headers, pub
     },
 
     /** A resized poster; the token is the `api_key` query, as an <img> cannot send a header. */
-    imageUrl(thumb, { width, height }) {
+    imageUrl(thumb, { width, height, backdrop = false }) {
+      if (backdrop) {
+        // `thumb` is the poster's `backdrop` (`<item id>/<image tag>`); the tag lets the server cache the image. Asked at the width given, never full size.
+        const [id, tag = ''] = String(thumb).split('/');
+        return buildUrl(serverUrl, `Items/${encodeURIComponent(id)}/Images/Backdrop/0`, { maxWidth: Math.round(width), quality: 90, tag, api_key: token });
+      }
       return buildUrl(serverUrl, `Items/${encodeURIComponent(thumb)}/Images/Primary`, { maxWidth: Math.round(width), maxHeight: Math.round(height), quality: 90, api_key: token });
     },
   };

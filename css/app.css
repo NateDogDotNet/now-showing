@@ -127,6 +127,10 @@ body.poster-blocked .poster-layer, body.poster-blocked .title-card, body.poster-
    rows and columns stretched to the window. The matte's canvas is one pixel, stretched over the whole window. */
 .gap-tint .fill-canvas { object-fit: fill; }
 .poster-box.gap-open { background: transparent; }
+/* The Backdrop art style (D232 1, D234 1): the art has its own canvas (#gap-art-a/b) over each gap canvas, so the blur stays drawn
+   underneath. It is a .fill-canvas: opacity 0 until `.active`, then the same CSS fade as the poster (never from black, so the band does not dip
+   toward black during the change). The slot keeps its poster's timing: at a poster change the old slot loses `.active` and its art fades out with
+   the poster, and the .cut and poster-blocked rules apply to it unchanged. No filter, no animation of its own. */
 
 /* Beside the frame, type sized from the short side of the screen for reading across a room. The body is centred while it fits;
    when it does not it starts at the top (auto margins never go negative), so the title is never pushed off the screen. The panel's

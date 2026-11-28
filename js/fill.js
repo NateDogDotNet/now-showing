@@ -145,7 +145,11 @@ export function infoParts(poster, formatRuntime) {
 // upscaled by CSS; 'matte' is one flat colour from the poster's edge. Both sit at BACKDROP_OPACITY inside the stage.
 
 /** The gap fill's styles; 'none' draws nothing. */
-export const GAP_STYLES = ['none', 'blur', 'matte'];
+export const GAP_STYLES = ['none', 'blur', 'matte', 'backdrop'];
+/** The backdrop canvas is never more than this many pixels on its longer side; CSS scales it up (the Pi GPU cost, R-FILL-3). */
+export const GAP_BACKDROP_MAX = 256;
+/** The width, in pixels, the backdrop is asked of the server at: far under the 480 the ruling allows (D232 2). */
+export const GAP_BACKDROP_REQUEST = 256;
 /** The share of a poster's width and height, per side, that edgeColour averages. */
 export const EDGE_SHARE = 0.02;
 
@@ -212,12 +216,62 @@ export function drawGapBlur(canvas, img, plan) {
 }
 
 /**
- * Draws the gap fill for `img` into `canvas`. 'blur' is drawBackdrop, or drawGapBlur once the layout (`plan`) is known.
+ * Draws the title's backdrop art into `canvas` so it covers a window of `win.width` x `win.height` (CSS then stretches the canvas over
+ * the window): the canvas has the window's aspect and at most GAP_BACKDROP_MAX pixels on its longer side, and the picture is cropped about
+ * its centre to that aspect. False, drawing nothing, for an image that has not loaded, no window or a canvas that cannot draw.
+ */
+export function drawGapBackdrop(canvas, img, win) {
+  const nw = img?.naturalWidth;
+  const nh = img?.naturalHeight;
+  if (!(nw > 0 && nh > 0) || !(win?.width > 0 && win?.height > 0)) return false;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return false;
+  const scale = GAP_BACKDROP_MAX / Math.max(win.width, win.height);
+  const w = Math.max(1, Math.round(win.width * scale));
+  const h = Math.max(1, Math.round(win.height * scale));
+  let sw = nw;
+  let sh = nh;
+  if (nw / nh > w / h) sw = (nh * w) / h;
+  else sh = (nw * h) / w;
+  try {
+    canvas.width = w;
+    canvas.height = h;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, (nw - sw) / 2, (nh - sh) / 2, sw, sh, 0, 0, w, h);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The gap fill that is drawn (D232): 'none' | 'blur' | 'matte' | 'backdrop'. The style 'backdrop' draws the backdrop only when the
+ * poster on screen names one, did not come from the offline cache and its backdrop has loaded (`loaded`, for THIS poster); in every other
+ * case it is the 'blur' of that poster, never the backdrop of another title. The other styles, and an unknown one ('none'), are themselves.
+ */
+export function gapFillKind({ style, poster, loaded }) {
+  if (style === 'backdrop') return loaded && poster?.backdrop && poster.source !== 'cache' ? 'backdrop' : 'blur';
+  return style === 'blur' || style === 'matte' ? style : 'none';
+}
+
+/**
+ * Whether the backdrop is to be asked of the server now (D232 10): the style is 'backdrop', the poster names art and did not come from
+ * the offline cache, and the gap layer shows a band (`open`). Otherwise no request.
+ */
+export function wantsBackdrop({ style, poster, open }) {
+  return style === 'backdrop' && open === true && Boolean(poster?.backdrop) && poster.source !== 'cache';
+}
+
+/**
+ * Draws the gap fill for `img` into `canvas`. 'backdrop' is drawGapBackdrop, `plan` being the window `{ width, height }`.
+ * 'blur' is drawBackdrop, or drawGapBlur once the layout (`plan`) is known.
  * 'matte' reads the poster at 48 px, takes edgeColour and leaves a 1 x 1 canvas of that colour. A canvas the browser will not
  * let us read (a cross-origin poster) draws nothing: false, never a throw, so the matte shows nothing rather than a guess.
  */
 export function drawGapFill(canvas, img, style, plan = null) {
   if (style === 'blur') return plan ? drawGapBlur(canvas, img, plan) : drawBackdrop(canvas, img);
+  if (style === 'backdrop') return plan ? drawGapBackdrop(canvas, img, plan) : false;
   if (style !== 'matte') return false;
   if (!drawBackdrop(canvas, img)) return false;
   try {
@@ -249,5 +303,5 @@ export function swapGapFill(canvases, next, img, style, plan = null) {
 
 /** Whether the gap layer shows: a style is on and the poster leaves at least one band. The layer fades to this with the poster. */
 export function gapLayerOpen(style, bands) {
-  return (style === 'blur' || style === 'matte') && Array.isArray(bands) && bands.length > 0;
+  return (style === 'blur' || style === 'matte' || style === 'backdrop') && Array.isArray(bands) && bands.length > 0;
 }

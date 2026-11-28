@@ -323,11 +323,16 @@ for (const gapFill of ['blur', 'matte']) {
       }
     }
     assert.ok(changed, 'a different poster came up');
-    await page.waitForTimeout(500);
-    const mid = await page.evaluate(() => {
+    // Read the opacities the moment a poster is mid-fade, and freeze the fades in that same task, so a slow machine cannot move them on
+    // between the wait and the reading (nothing here depends on how much wall time has passed).
+    const mid = await (await page.waitForFunction(() => {
       const o = (id) => Number(getComputedStyle(document.getElementById(id)).opacity);
-      return { poster: [o('poster-a'), o('poster-b')], gap: [o('gap-a'), o('gap-b')] };
-    });
+      const read = { poster: [o('poster-a'), o('poster-b')], gap: [o('gap-a'), o('gap-b')] };
+      if (!read.poster.some((v) => v > 0.02 && v < 0.98)) return null;
+      document.getAnimations().forEach((an) => an.pause());
+      return read;
+    }, null, { timeout: 8000 })).jsonValue();
+    await page.evaluate(() => document.getAnimations().forEach((an) => an.play()));
     for (let i = 0; i < 2; i++) assert.ok(Math.abs(mid.poster[i] - mid.gap[i]) <= 0.1, `layer ${i}: poster ${mid.poster[i]} vs gap fill ${mid.gap[i]} in step`);
     assert.ok(mid.poster.some((v) => v > 0.02 && v < 0.98), `sampled mid-fade: ${JSON.stringify(mid)}`);
     await settled(page);
@@ -395,7 +400,8 @@ gapCase('10 the Settings control', { settings: seed() }, async ({ page, app }) =
   await page.evaluate(() => document.querySelector('[data-action="settings"]').click());
   await page.waitForSelector('#settings[open]');
   const options = await page.evaluate(() => [...document.querySelectorAll('#settings-form select[name="gapFill"] option')].map((o) => o.value));
-  assert.deepEqual(options, ['none', 'blur', 'matte']);
+  assert.deepEqual(options, ['none', 'blur', 'matte', 'backdrop']);
+  assert.equal(await page.evaluate(() => document.querySelector('select[name="gapFill"] option[value="backdrop"]').textContent), 'Backdrop art');
   assert.equal(await page.inputValue('select[name="gapFill"]'), 'none', 'off by default');
   const help = await page.evaluate(() => document.getElementById('gap-help').textContent);
   assert.match(help, /scaling or cropping/);
@@ -406,6 +412,11 @@ gapCase('10 the Settings control', { settings: seed() }, async ({ page, app }) =
   await page.waitForFunction(() => !document.getElementById('gap-fill').hidden, null, { timeout: 5000 });
   await page.selectOption('select[name="gapFill"]', 'matte');
   await page.waitForFunction(() => document.querySelector('#gap-fill canvas.active')?.width === 1, null, { timeout: 5000 });
+  await page.selectOption('select[name="gapFill"]', 'backdrop');
+  await page.waitForFunction(() => { // the art of the pinned title (3) replaces the matte: a canvas of more than one pixel, bright across its top
+    const c = [...document.querySelectorAll('#gap-fill canvas.active')].pop();
+    return Boolean(c) && c.width > 1 && c.getContext('2d').getImageData(Math.floor(c.width / 2), 2, 1, 1).data[0] > 200;
+  }, null, { timeout: 10000 });
   await page.selectOption('select[name="gapFill"]', 'none');
   await page.waitForFunction(() => document.getElementById('gap-fill').hidden, null, { timeout: 5000 });
   assert.equal(await page.evaluate(() => document.querySelectorAll('#gap-fill canvas.active').length), 0, 'nothing is left drawn');
@@ -447,6 +458,14 @@ for (const gapFill of ['blur', 'matte']) {
     await refreshUntil(page, (alt) => alt === 'Poster: The Grand Marquee', 'title 1 (R)');
     await settled(page);
     await refreshUntil(page, (alt) => alt === 'Poster: Midnight Projector', 'title 2 (PG)');
+    // Hold the incoming fade part-way (frozen in the same task that sees it there), so the cut below always lands mid-fade however slow the
+    // machine is; the cut itself ends the outgoing fade.
+    await page.waitForFunction(() => {
+      const v = Number(getComputedStyle(document.querySelector('.poster-layer.active')).opacity);
+      if (!(v > 0.1 && v < 0.9)) return false;
+      document.getAnimations().forEach((an) => an.pause());
+      return true;
+    }, null, { timeout: 8000 });
     await page.evaluate(() => {
       window.__cuts = [];
       const op = (el) => Number(getComputedStyle(el).opacity);
@@ -646,6 +665,15 @@ gapCase('15 the gap layer fades in and out with the poster when the next one is 
     if (thumb.startsWith('/library/metadata/2/')) return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: WINDOW_SHAPED });
     return route.fallback();
   });
+  // The app's fallback for a missed transitionend (crossfadeMs + 500 ms of wall time, display.js) hands the poster box its black back. The
+  // readings below freeze the fades but not that wall clock, so on a slow machine it fired mid-reading and both readings came out black.
+  // Hold that one timer until the readings are taken; the end of the fade (transitionend) is still what the case waits for after that.
+  await page.addInitScript(() => {
+    const real = window.setTimeout.bind(window);
+    window.__holdFallback = true;
+    window.__held = [];
+    window.setTimeout = (fn, ms, ...rest) => (ms === 6500 ? real(() => (window.__holdFallback ? window.__held.push(fn) : fn(...rest)), ms) : real(fn, ms, ...rest));
+  });
   await page.goto(app.url);
   await posterShown(page);
   await refreshUntil(page, (alt) => alt === 'Poster: The Grand Marquee', 'title 1 (pillarbox)');
@@ -658,28 +686,44 @@ gapCase('15 the gap layer fades in and out with the poster when the next one is 
   const layerOpacity = () => page.evaluate(() => Number(getComputedStyle(document.querySelector('#gap-fill .gap-tint')).opacity) / 0.25);
   // 1 -> 2: the layer fades out while the posters cross-fade.
   await refreshUntil(page, (alt) => alt === 'Poster: Midnight Projector', 'title 2 (no band)');
-  await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('#gap-fill .gap-tint')).opacity) <= 0.25 * 0.6, null, { timeout: 8000 });
-  // Freeze the fades where they are, so the two readings below see one picture.
-  await page.evaluate(() => document.getAnimations().forEach((a) => a.pause()));
-  // The band pixel as it is, and the same pixel with the gap layer taken away: the difference is what the layer still gives.
+  // Freeze the fades in the very task that sees the layer part-way (0.3 to 0.6 of its cap), so the pause cannot land late on a loaded machine.
+  await page.waitForFunction(() => {
+    const v = Number(getComputedStyle(document.querySelector('#gap-fill .gap-tint')).opacity) / 0.25;
+    if (!(v > 0.3 && v < 0.6)) return false;
+    document.getAnimations().forEach((a) => a.pause());
+    return true;
+  }, null, { timeout: 8000 });
+  // Both poster layers are hidden for both readings (the outgoing poster is drawn at cover over the band pixel while it fades, and would hide the layer's share),
+  // so the pixel shows only the gap layer or what lies under it. The band pixel as it is, and the same pixel with the gap layer taken away.
+  await page.evaluate(() => document.querySelectorAll('.poster-layer').forEach((l) => { l.style.visibility = 'hidden'; }));
   const [bandMid] = await pixels(page, [band15]);
   await page.evaluate(() => { document.getElementById('gap-fill').style.visibility = 'hidden'; });
   const [bandBare] = await pixels(page, [band15]);
-  await page.evaluate(() => { document.getElementById('gap-fill').style.visibility = ''; });
-  await page.evaluate(() => document.getAnimations().forEach((a) => a.play()));
+  await page.evaluate(() => {
+    document.getElementById('gap-fill').style.visibility = '';
+    document.querySelectorAll('.poster-layer').forEach((l) => { l.style.visibility = ''; });
+    document.getAnimations().forEach((a) => a.play());
+  });
+  await page.evaluate(() => { window.__holdFallback = false; window.__held.splice(0).forEach((fn) => fn()); }); // the readings are taken: the fallback may fire now
   const out = { layer: await layerOpacity(), posters: await page.evaluate(() => ['poster-a', 'poster-b'].map((id) => Number(getComputedStyle(document.getElementById(id)).opacity))) };
   assert.ok(out.layer > 0.02 && out.layer < 0.98, `mid-fade the gap layer is between 0 and 1 (${out.layer}), not switched at once`);
   assert.ok(out.posters.some((v) => v > 0.02 && v < 0.98), `while the posters are mid-fade ${out.posters}`);
-  // A snap to black puts an opaque box over the layer, so the two readings are then exactly equal; any difference is the layer showing.
-  assert.ok(sum(bandMid) > sum(bandBare), `mid-fade the gap layer still lights the band pixel, it has not snapped to black: ${bandMid} with the layer, ${bandBare} without (start ${bandStart})`);
+  // A snap to black puts an opaque box over the layer, so the two readings are then exactly equal; the layer at 0.3 to 0.6 of a start of 30 or so levels gives well over 3.
+  assert.ok(sum(bandMid) >= sum(bandBare) + 3, `mid-fade the gap layer still lights the band pixel, it has not snapped to black (by at least 3 levels): ${bandMid} with the layer, ${bandBare} without (start ${bandStart})`);
   await settled(page);
   assert.equal(await layerOpacity(), 0, 'it ends gone: title 2 has no band');
   assert.ok(sum((await pixels(page, [band15]))[0]) <= 6, 'and the band ends black');
   assert.equal(await gapOn(page), false);
   // 2 -> 1: it fades in.
   await refreshUntil(page, (alt) => alt === 'Poster: The Grand Marquee', 'title 1 again');
-  await page.waitForTimeout(1500);
-  const into = await layerOpacity();
+  // Read it the moment the layer is part-way, freezing the fades in that same task (no wait on wall time).
+  const into = await (await page.waitForFunction(() => {
+    const v = Number(getComputedStyle(document.querySelector('#gap-fill .gap-tint')).opacity) / 0.25;
+    if (!(v > 0.02 && v < 0.98)) return null;
+    document.getAnimations().forEach((an) => an.pause());
+    return v;
+  }, null, { timeout: 8000 })).jsonValue();
+  await page.evaluate(() => document.getAnimations().forEach((an) => an.play()));
   assert.ok(into > 0.02 && into < 0.98, `fading in with title 1 (${into})`);
   await settled(page);
   assert.equal(await layerOpacity(), 1);
@@ -1021,9 +1065,539 @@ gapCase('24 a blocked poster leaves no stale blur in the window after a resize',
   check(`blocked, then resized to 1600x2400: gap canvases ${JSON.stringify(shown)}, band place ${inside}`);
 });
 
+// ---------- Backdrop art (R-FILL-3, D232) ----------
+// The Plex mock gives titles 1, 3, 4, 5 and 7 background art (a bright SVG: #ffe066 across the top, the title's colour mixed with white across the bottom);
+// titles 2, 6 and 8 have none. Marquee-glow at fit 'contain' leaves a pillarbox pair, as above.
+
+const ART_TOP = [255, 224, 102];
+const ART_BOTTOM_TITLE_3 = [200, 184, 215]; // #5b2a86 mixed with white, the mock's formula
+
+/** What the active gap canvas holds: its size and the colours of its top and bottom rows (the art's two flat ends). */
+const activeCanvas = (page) => page.evaluate(() => {
+  const c = [...document.querySelectorAll('#gap-fill canvas.active')].pop(); // the art's canvas lies over the blur's, so the last current one is what shows on top
+  if (!c) return null;
+  const ctx = c.getContext('2d');
+  const at = (y) => [...ctx.getImageData(Math.floor(c.width / 2), Math.max(0, Math.min(c.height - 1, y)), 1, 1).data].slice(0, 3);
+  return { id: c.id, width: c.width, height: c.height, top: at(2), bottom: at(c.height - 3) };
+});
+const isArt = (c) => Boolean(c) && near(c.top, ART_TOP, 8);
+
+/** Every gap canvas that can be seen (the product of its opacities over 1 %) and holds the art. Empty when no art is on screen. */
+const artOnScreen = (page) => page.evaluate((top) => {
+  const out = [];
+  for (const c of document.querySelectorAll('#gap-fill canvas')) {
+    let v = 1;
+    for (let el = c; el; el = el.parentElement) v *= Number(getComputedStyle(el).opacity);
+    if (c.width <= 1 || v <= 0.01 || getComputedStyle(c).visibility === 'hidden') continue;
+    const d = c.getContext('2d').getImageData(Math.floor(c.width / 2), 2, 1, 1).data;
+    if (Math.abs(d[0] - top[0]) <= 8 && Math.abs(d[1] - top[1]) <= 8 && Math.abs(d[2] - top[2]) <= 8) out.push(c.id);
+  }
+  return out;
+}, ART_TOP);
+
+const waitArt = (page) => page.waitForFunction((top) => {
+  const c = [...document.querySelectorAll('#gap-fill canvas.active')].pop();
+  if (!c || c.width <= 1) return false;
+  const d = c.getContext('2d').getImageData(Math.floor(c.width / 2), 2, 1, 1).data;
+  return Math.abs(d[0] - top[0]) <= 8 && Math.abs(d[1] - top[1]) <= 8 && Math.abs(d[2] - top[2]) <= 8;
+}, ART_TOP, { timeout: 15000 });
+
+/**
+ * Counts, in the page, the art's own events so a check that something was dropped can wait on the event and not on time: `__artBlobs` (an image body that
+ * finished downloading through fetch) and `__decStart` / `__decEnd` (decodes of an image that is not in the page, which is how the display decodes art).
+ */
+const hookArt = (page) => page.addInitScript(() => {
+  // The app gives up on a request after 20 s (AbortSignal.timeout). A case that holds art while it drives posters can take longer than that on a loaded
+  // machine, and an abandoned request would never produce the body the case waits for; so the app's 20 s limit is lifted here, and only here.
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  AbortSignal.timeout = (ms) => (ms === 20000 ? new AbortController().signal : timeout(ms));
+  window.__artBlobs = 0;
+  window.__decStart = 0;
+  window.__decEnd = 0;
+  const blob = Response.prototype.blob;
+  Response.prototype.blob = function () {
+    const p = blob.call(this);
+    if (decodeURIComponent(this.url).includes('/art/')) p.then(() => window.__artBlobs++).catch(() => {});
+    return p;
+  };
+  const decode = HTMLImageElement.prototype.decode;
+  HTMLImageElement.prototype.decode = function () {
+    const p = decode.call(this);
+    if (!this.id) {
+      window.__decStart++;
+      p.then(() => window.__decEnd++, () => window.__decEnd++);
+    }
+    return p;
+  };
+});
+/** Waits until `n` image bodies have arrived and every decode that started has ended: whatever the display was going to do with them is done. */
+const artHandled = (page, n) => page.waitForFunction((n) => window.__artBlobs >= n && window.__decStart === window.__decEnd, n, { timeout: 15000 });
+
+/** The art requests the page makes (the transcoder with an /art/ path), noted when they are issued, whether or not the server answers. */
+const watchArt = (page) => {
+  const seen = [];
+  page.on('request', (req) => {
+    const u = new URL(req.url());
+    if (u.pathname === '/photo/:/transcode' && /\/art\//.test(u.searchParams.get('url') || '')) seen.push({ art: u.searchParams.get('url'), width: Number(u.searchParams.get('width')), height: Number(u.searchParams.get('height')) });
+  });
+  return seen;
+};
+const consoleOf = (page) => {
+  const lines = [];
+  page.on('console', (m) => lines.push(m.text()));
+  return lines;
+};
+const backdropSettings = (extra = {}) => seed({ gapFill: 'backdrop', ...extra });
+
+// 25. The bands show the mock's backdrop for a title that has one: dimmed to at most 0.25, no filter, a small canvas, one small request.
+gapCase('25 backdrop: a title with art shows it in the bands, dimmed, from one small request', { settings: backdropSettings() }, async ({ page, app, mock }) => {
+  const asked = watchArt(page);
+  const lines = consoleOf(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await waitArt(page);
+  await settled(page);
+  const held = await activeCanvas(page);
+  assert.ok(isArt(held), `the active gap canvas holds the art: ${JSON.stringify(held)}`);
+  assert.ok(near(held.bottom, ART_BOTTOM_TITLE_3, 10), `and it is title 3's art (bottom ${held.bottom})`);
+  assert.ok(held.width > 1 && held.height > 1 && Math.max(held.width, held.height) <= 256, `the canvas is at most 256 px on its longer side: ${held.width}x${held.height}`);
+  assert.equal(await gapOn(page), true);
+  const eff = await effectiveBrightness(page, '#gap-art-a.active, #gap-art-b.active');
+  assert.ok(eff > 0 && eff <= 0.25 + 1e-9, `brightness ${eff} is at most 0.25`);
+  assert.deepEqual(await filtered(page), [], 'no element has a filter or backdrop-filter');
+  const images = await page.evaluate(() => [...document.images].map((i) => ({ id: i.id, w: i.naturalWidth, src: i.currentSrc.slice(0, 5) })));
+  assert.ok(images.every((i) => i.w < 1000), `no full-size art in an image element: ${JSON.stringify(images)}`);
+  const g = await geometry(page);
+  const { gaps } = bandsOf(g);
+  const x = g.win.left + gaps.left / 2;
+  const [topPx, bottomPx] = await pixels(page, [[x, g.win.top + g.win.height * 0.06], [x, g.win.top + g.win.height * 0.94]]);
+  assert.ok(near(topPx, ART_TOP.map((v) => v * 0.25), 12), `the band's top is the art at a quarter: ${topPx}`);
+  assert.ok(near(bottomPx, ART_BOTTOM_TITLE_3.map((v) => v * 0.25), 12), `and its bottom: ${bottomPx}`);
+  assert.equal(asked.length, 1, `one backdrop request: ${JSON.stringify(asked)}`);
+  assert.match(asked[0].art, /^\/library\/metadata\/3\/art\//, "the poster's own art");
+  assert.ok(asked[0].width > 0 && asked[0].width <= 480, `asked at width ${asked[0].width}, never the full size`);
+  const log = (await mock.get('log')).requests.filter((r) => /\/art\//.test(decodeURIComponent(r)));
+  assert.equal(log.length, 1, 'and the server saw one');
+  assert.ok(!lines.some((l) => l.includes('demo-token')), 'the token is in no console line');
+  assert.equal(await page.isVisible('#empty'), false, 'no error card');
+  check(`backdrop: ${held.width}x${held.height} canvas, top ${held.top} bottom ${held.bottom}, on screen ${topPx} / ${bottomPx}, effective ${eff.toFixed(3)}, one request at width ${asked[0].width}`);
+});
+
+// 26. A title without art shows the blur and asks nothing.
+gapCase('26 backdrop: a title with no art shows the blur and makes no request', { settings: backdropSettings({ staticRatingKey: '2', staticTitle: 'Midnight Projector' }) }, async ({ page, app }) => {
+  const asked = watchArt(page);
+  await prepare(page, app);
+  assert.equal(await gapOn(page), true);
+  const held = await activeCanvas(page);
+  assert.ok(held && !isArt(held), `the gap canvas is the blur, not art: ${JSON.stringify(held)}`);
+  assert.deepEqual(await artOnScreen(page), []);
+  const g = await geometry(page);
+  const { gaps } = bandsOf(g);
+  const [band] = await pixels(page, [[g.win.left + gaps.left / 2, g.win.top + g.win.height / 2]]);
+  assert.ok(sum(band) > 0, `the band is lit: ${band}`);
+  assert.deepEqual(asked, [], 'nothing is asked of the server');
+  check(`backdrop, no art: blur ${held.width}x${held.height}, band ${band}, no request`);
+});
+
+// 27. With the request failing the blur shows, there is no error card, and the token is not in the console.
+gapCase('27 backdrop: a failing backdrop request leaves the blur, no error card, no token in the console', { settings: backdropSettings() }, async ({ page, app, mock }) => {
+  await mock.post('art-fail', { status: 500 });
+  const asked = watchArt(page);
+  const lines = consoleOf(page);
+  const warned = page.waitForEvent('console', { predicate: (m) => /backdrop art/.test(m.text()), timeout: 15000 });
+  await page.goto(app.url);
+  await posterShown(page);
+  await warned;
+  await settled(page);
+  assert.equal(asked.length, 1, 'it was asked once');
+  const held = await activeCanvas(page);
+  assert.ok(held && !isArt(held), `the blur shows: ${JSON.stringify(held)}`);
+  assert.equal(await gapOn(page), true);
+  assert.equal(await page.isVisible('#empty'), false, 'no error card');
+  assert.ok(!lines.some((l) => l.includes('demo-token') || l.includes('X-Plex-Token') || l.includes('/photo/')), `no address or token in the console: ${lines.filter((l) => /backdrop/.test(l)).join(' | ')}`);
+  check(`backdrop request failing: blur ${held.width}x${held.height} stays, no error card, console clean`);
+});
+
+// 28. Art that finishes loading while its poster is on screen replaces the blur (D232 1).
+gapCase('28 backdrop: art that arrives late replaces the blur of its own poster', { settings: backdropSettings() }, async ({ page, app, mock }) => {
+  await hookArt(page);
+  await mock.post('art-hold');
+  const requested = page.waitForRequest((req) => decodeURIComponent(req.url()).includes('/art/'), { timeout: 15000 });
+  await page.goto(app.url);
+  await posterShown(page);
+  await requested;
+  await settled(page);
+  const before = await activeCanvas(page);
+  assert.ok(before && !isArt(before), `the blur shows while the art is held: ${JSON.stringify(before)}`);
+  await mock.post('art-release');
+  await waitArt(page);
+  await settled(page);
+  assert.ok(isArt(await activeCanvas(page)), 'the art replaced the blur');
+  check('backdrop, late: blur first, then the art of the same poster');
+});
+
+// ---- D234 1: late art fades in over the blur, never from black ----
+/**
+ * Starts a per-animation-frame trace in the page. Each frame records `level`: the band's composited level (0 to 255), modelled from what the browser
+ * reports for the gap layer (the tint's opacity chain times the canvases composed over black in document order, each canvas being its own opacity
+ * times the colour of its left column at mid height), and `art`: for each art canvas its own opacity and whether it is current.
+ */
+const startTrace = (page) => page.evaluate(() => {
+  window.__trace = [];
+  window.__tracing = true;
+  const colour = (c) => {
+    if (c.width < 1 || c.height < 1) return 0;
+    const d = c.getContext('2d').getImageData(0, Math.floor(c.height / 2), 1, 1).data;
+    return (d[0] + d[1] + d[2]) / 3;
+  };
+  const frame = () => {
+    const tint = document.querySelector('.gap-tint');
+    let level = 0;
+    for (const c of tint.children) {
+      const op = Number(getComputedStyle(c).opacity);
+      level = op * colour(c) + (1 - op) * level;
+    }
+    for (let el = tint; el; el = el.parentElement) level *= Number(getComputedStyle(el).opacity);
+    const art = {};
+    for (const id of ['gap-art-a', 'gap-art-b']) {
+      const c = document.getElementById(id);
+      art[id] = { op: Number(getComputedStyle(c).opacity), active: c.classList.contains('active') };
+    }
+    const shown = document.querySelector('.poster-layer.active');
+    window.__trace.push({ level, art, poster: shown ? Number(getComputedStyle(shown).opacity) : 1 });
+    if (window.__tracing) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+});
+const stopTrace = (page) => page.evaluate(() => {
+  window.__tracing = false;
+  return window.__trace;
+});
+const twoFrames = (page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(document.getAnimations().length)))));
+const artCurrent = (page) => page.waitForFunction(() => {
+  const c = document.querySelector('#gap-art-a.active, #gap-art-b.active');
+  return Boolean(c) && c.width > 1;
+}, null, { timeout: 15000 });
+/** Waits until the server holds `n` art requests (they are in its log at once), so the test releases them when it chooses. */
+const artAtServer = async (mock, n = 1) => {
+  for (let i = 0; i < 300; i++) {
+    if ((await mock.get('log')).requests.filter((r) => decodeURIComponent(r).includes('/art/')).length >= n) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.fail('the art request never reached the server');
+};
+
+// 35. Art that lands after its poster is up never darkens the band: it fades in over the blur, and the band does not dip toward black (D234 1 a, D235 3).
+gapCase('35 backdrop: late art never takes the band below the blur\'s level', { settings: backdropSettings({ crossfadeMs: 1200 }) }, async ({ page, app, mock }) => {
+  await mock.post('art-hold');
+  await page.goto(app.url);
+  await posterShown(page);
+  await artAtServer(mock);
+  await settled(page);
+  await startTrace(page);
+  await page.waitForFunction(() => window.__trace.length >= 3, null, { timeout: 15000 }); // the trace is running before anything is released
+  await twoFrames(page);
+  await mock.post('art-release');
+  await artCurrent(page);
+  await settled(page);
+  await twoFrames(page);
+  const trace = await stopTrace(page);
+  const base = trace[0].level;
+  assert.ok(base > 4, `the blur is lit before the release (level ${base.toFixed(1)})`);
+  const min = Math.min(...trace.map((f) => f.level));
+  const last = trace[trace.length - 1].level;
+  assert.ok(min >= base - 1, `through the change the band does not dip below the blur's level (it goes from the blur to the art without passing under the lower of the two; the mock's art is the brighter): blur ${base.toFixed(1)}, lowest ${min.toFixed(1)}, ${trace.length} frames`);
+  assert.ok(isArt(await activeCanvas(page)), 'and the art is what shows at the end');
+  const g = await geometry(page);
+  const { gaps } = bandsOf(g);
+  const [px] = await pixels(page, [[g.win.left + gaps.left / 2, g.win.top + g.win.height / 2]]);
+  const seen = (px[0] + px[1] + px[2]) / 3;
+  assert.ok(Math.abs(seen - last) <= 8, `the trace's model matches the screen: model ${last.toFixed(1)}, screen ${seen.toFixed(1)}`);
+  check(`backdrop, late art over blur: blur level ${base.toFixed(1)}, lowest ${min.toFixed(1)}, end ${last.toFixed(1)} (screen ${seen.toFixed(1)}), ${trace.length} frames`);
+});
+
+// 36. Art that lands while its poster is still cross-fading in does not pull the band back: the level only rises (D234 1 b).
+gapCase('36 backdrop: art that lands mid cross-fade does not pull the band back', { settings: backdropSettings({ crossfadeMs: 4000 }) }, async ({ page, app, mock }) => {
+  await mock.post('art-hold');
+  await page.goto(app.url);
+  await posterShown(page);
+  await artAtServer(mock);
+  await startTrace(page);
+  await page.waitForFunction(() => window.__trace.length >= 3, null, { timeout: 15000 }); // the trace is running before anything is released
+  await page.waitForFunction(() => {
+    const v = Number(getComputedStyle(document.querySelector('.poster-layer.active')).opacity);
+    return v > 0.35 && v < 0.65; // the poster is well into its 4 s fade, and has time left
+  }, null, { timeout: 15000 });
+  await mock.post('art-release');
+  await artCurrent(page);
+  await settled(page);
+  await twoFrames(page);
+  const trace = await stopTrace(page);
+  let peak = 0;
+  let worst = 0;
+  for (const f of trace) {
+    peak = Math.max(peak, f.level);
+    worst = Math.max(worst, peak - f.level);
+  }
+  const first = trace[0].level;
+  const last = trace[trace.length - 1].level;
+  const landed = trace.findIndex((f) => f.art['gap-art-a'].active || f.art['gap-art-b'].active);
+  assert.ok(landed > 0 && trace[landed - 1].level > 3, `the art landed with the band part-way up (level ${trace[landed - 1]?.level.toFixed(1)} at frame ${landed})`);
+  assert.ok(trace[landed].poster < 0.95, `the art landed while the poster's cross-fade was still running (poster opacity ${trace[landed].poster.toFixed(2)} at frame ${landed})`);
+  assert.ok(last > first + 4, `the band rose over the change (${first.toFixed(1)} to ${last.toFixed(1)})`);
+  assert.ok(worst <= 1, `the band's level never fell back after the art landed: largest fall ${worst.toFixed(2)} over ${trace.length} frames`);
+  assert.ok(isArt(await activeCanvas(page)), 'and the art shows at the end');
+  check(`backdrop, art mid cross-fade: level ${first.toFixed(1)} to ${last.toFixed(1)}, largest fall ${worst.toFixed(2)}, ${trace.length} frames`);
+});
+
+// 37. The next poster comes while the art is still fading in: the art leaves with its own poster, by fading out, and none of it is left (D234 1 c).
+gapCase('37 backdrop: art that is still fading in leaves with its poster', { settings: limitPool({ gapFill: 'backdrop', randomPoolSize: 3, crossfadeMs: 4000 }) }, async ({ page, app, mock }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await refreshUntil(page, (alt) => alt === 'Poster: Midnight Projector', 'title 2 (no art)');
+  await settled(page);
+  await mock.post('art-hold');
+  await refreshUntil(page, (alt) => alt === 'Poster: The Grand Marquee', 'title 1 (art held)');
+  await artAtServer(mock, 1);
+  await settled(page);
+  await startTrace(page);
+  await page.waitForFunction(() => window.__trace.length >= 3, null, { timeout: 15000 }); // the trace is running before anything is released
+  await mock.post('art-release', { match: '/metadata/1/' });
+  // The poster is changed in the very task that sees the art part-way in (a 4 s fade, the fade back out then takes the same share of it), so the change always lands mid-fade however slow the machine is.
+  const id = await (await page.waitForFunction(() => {
+    const c = document.querySelector('#gap-art-a.active, #gap-art-b.active');
+    const v = c ? Number(getComputedStyle(c).opacity) : 0;
+    if (!(v > 0.35 && v < 0.7)) return false;
+    document.querySelector('[data-action="refresh"]').click();
+    return c.id;
+  }, null, { timeout: 15000 })).jsonValue();
+  await page.waitForFunction(() => document.querySelector('.poster-layer.active')?.alt !== 'Poster: The Grand Marquee', null, { timeout: 15000 });
+  await settled(page);
+  await twoFrames(page);
+  const trace = await stopTrace(page);
+  const mine = trace.map((f) => f.art[id]);
+  const up = mine.findIndex((a) => a.active);
+  const at = up < 0 ? -1 : up + mine.slice(up).findIndex((a) => !a.active);
+  assert.ok(up >= 0 && at > up, `the art's layer was taken off its poster at the change (frame ${at} of ${trace.length})`);
+  const before = mine[at - 1].op;
+  const after = mine.slice(at);
+  assert.ok(before > 0.25 && before < 0.9, `it was part-way in when the poster changed: ${before.toFixed(2)}`);
+  assert.ok(after.slice(0, 2).every((a) => a.op > 0 && a.op <= before + 0.2), `no jump to 0 and no jump to 1 at the change: ${after.slice(0, 2).map((a) => a.op.toFixed(2))} after ${before.toFixed(2)}`);
+  let worst = 0;
+  for (let i = 1; i < after.length; i++) worst = Math.max(worst, after[i].op - after[i - 1].op);
+  assert.ok(worst <= 0.01, `it only fades down from there (largest rise ${worst.toFixed(3)})`);
+  assert.equal(after[after.length - 1].op, 0, 'and it ends at 0');
+  assert.deepEqual(await artOnScreen(page), [], "none of title 1's art is on screen once the change ends");
+  check(`backdrop, art leaves with its poster: ${before.toFixed(2)} then ${after.slice(0, 2).map((a) => a.op.toFixed(2))} ... 0 over ${after.length} frames`);
+});
+
+// 38. A slot reused by a second change inside one cross-fade holds no art of the title two posters back (D235 2). Art is held at the server after title 1's has been drawn,
+//     so any art found on screen after the second change is title 1's.
+gapCase('38 backdrop: a slot taken again by a quick second change shows nothing of the title before', { settings: limitPool({ gapFill: 'backdrop', randomPoolSize: 3, crossfadeMs: 4000 }) }, async ({ page, app, mock }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await refreshUntil(page, (alt) => alt === 'Poster: The Grand Marquee', 'title 1 (has art)');
+  await waitArt(page);
+  await settled(page);
+  assert.equal((await artOnScreen(page)).length, 1, 'title 1 shows its art first');
+  await mock.post('art-hold');
+  await page.evaluate(() => { window.__q = { slot: document.querySelector('.poster-layer.active').id, step: 0 }; });
+  await clickRefresh(page);
+  // The second change is asked for in the very task that sees the first one, and read in the task that sees the slot taken again.
+  const out = await (await page.waitForFunction((top) => {
+    const q = window.__q;
+    const act = document.querySelector('.poster-layer.active');
+    if (q.step === 0) {
+      if (act.id === q.slot) return false;
+      q.step = 1;
+      document.querySelector('[data-action="refresh"]').click();
+      return false;
+    }
+    if (act.id !== q.slot) return false;
+    const seen = [];
+    for (const c of document.querySelectorAll('#gap-fill canvas')) {
+      let v = 1;
+      for (let e = c; e; e = e.parentElement) v *= Number(getComputedStyle(e).opacity);
+      if (c.width <= 1 || v <= 0.01 || getComputedStyle(c).visibility === 'hidden') continue;
+      const d = c.getContext('2d').getImageData(Math.floor(c.width / 2), 2, 1, 1).data;
+      if (Math.abs(d[0] - top[0]) <= 8 && Math.abs(d[1] - top[1]) <= 8 && Math.abs(d[2] - top[2]) <= 8) seen.push(c.id);
+    }
+    return { alt: act.alt, seen };
+  }, ART_TOP, { timeout: 20000 })).jsonValue();
+  assert.deepEqual(out.seen, [], `after the second change (${out.alt}) no gap canvas that shows anything holds title 1's art`);
+  check(`backdrop, quick second change: slot reused for ${out.alt}, no art of title 1 on screen`);
+});
+
+// 29. After the next poster the earlier title's backdrop is gone (title 1 has art, title 2 has none).
+gapCase('29 backdrop: after the next poster the earlier title\'s backdrop is gone', { settings: limitPool({ gapFill: 'backdrop', crossfadeMs: 300 }) }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await refreshUntil(page, (alt) => alt === 'Poster: The Grand Marquee', 'title 1 (has art)');
+  await waitArt(page);
+  await settled(page);
+  assert.deepEqual((await artOnScreen(page)).length, 1, 'title 1 shows its art');
+  await refreshUntil(page, (alt) => alt === 'Poster: Midnight Projector', 'title 2 (no art)');
+  await settled(page);
+  assert.deepEqual(await artOnScreen(page), [], 'no gap canvas that shows anything holds title 1\'s art');
+  const held = await activeCanvas(page);
+  assert.ok(held && !isArt(held), `title 2 shows its blur: ${JSON.stringify(held)}`);
+  check('backdrop: title 1 art, then title 2 (none): only the blur is left on screen');
+});
+
+// 30. A backdrop that finishes loading after the poster changed is dropped, not drawn for the new poster (D232 1). Title 3 has art of its own, still held.
+// Which requests are held is not assumed: the poster shown first may have asked for art too, and the engine may show a title more than once on the way. So the
+// test waits until nothing is in flight, holds, and then releases exactly title 1's requests by path (mock `art-release?match=`), once the server has them all.
+gapCase('30 backdrop: a late load for the poster before is dropped, even for a poster that has art of its own', { settings: limitPool({ gapFill: 'backdrop', randomPoolSize: 3 }) }, async ({ page, app, mock }) => {
+  await hookArt(page);
+  const asked = watchArt(page);
+  await page.goto(app.url);
+  await posterShown(page);
+  await refreshUntil(page, (alt) => alt === 'Poster: Midnight Projector', 'title 2 (no art)');
+  await settled(page);
+  await artHandled(page, asked.length); // every request made so far has been answered and handled: none is in flight when the hold starts
+  const before = asked.length;
+  const blobsBefore = await page.evaluate(() => window.__artBlobs);
+  const atServer = async () => (await mock.get('log')).requests.filter((r) => decodeURIComponent(r).includes('/metadata/1/art/')).length;
+  const serverBefore = await atServer(); // title 1's art may have been asked for before the hold, on the way to title 2
+  await mock.post('art-hold');
+  await refreshUntil(page, (alt) => alt === 'Poster: The Grand Marquee', 'title 1 (art held)');
+  await refreshUntil(page, (alt) => alt === 'Poster: Velvet Curtain', 'title 3 (art held too)');
+  await settled(page);
+  const titleOne = asked.slice(before).filter((a) => a.art.includes('/metadata/1/')).length;
+  assert.ok(titleOne >= 1, 'title 1 asked for its art');
+  while ((await atServer()) - serverBefore < titleOne) await new Promise((resolve) => setTimeout(resolve, 20)); // until the server holds them all
+  await mock.post('art-release', { match: '/metadata/1/' });
+  await artHandled(page, blobsBefore + titleOne);
+  await settled(page);
+  assert.deepEqual(await artOnScreen(page), [], "title 1's art is not drawn for title 3");
+  const held = await activeCanvas(page);
+  assert.ok(held && !isArt(held), `the blur of title 3 shows: ${JSON.stringify(held)}`);
+  await mock.post('art-release');
+  await waitArt(page);
+  await settled(page);
+  const own = await activeCanvas(page);
+  assert.ok(near(own.bottom, ART_BOTTOM_TITLE_3, 10), `then title 3's own art: ${own.bottom}`);
+  check(`backdrop: title 1's art arrived after title 3 was up and was dropped; title 3's own then showed (${own.bottom})`);
+});
+
+// 31. A poster the household limit blocks keeps no backdrop on screen, whether its art was already drawn or arrives later.
+for (const late of [false, true]) {
+  gapCase(`31 backdrop: a blocked poster keeps no backdrop (${late ? 'its art arrives after the block' : 'its art was drawn'})`, { settings: limitPool({ gapFill: 'backdrop', randomPoolSize: 1 }) }, async ({ page, app, mock }) => {
+    await hookArt(page);
+    await mock.post('rate', { ratingKey: '1', contentRating: 'R' });
+    if (late) await mock.post('art-hold');
+    await page.goto(app.url);
+    await posterShown(page);
+    await settled(page);
+    if (!late) await waitArt(page);
+    for (let i = 0; i < 100; i++) {
+      if ((await page.evaluate(() => JSON.parse(localStorage.getItem('plexPoster.posterIndex') || '[]'))).length) break;
+      await page.waitForTimeout(100);
+    }
+    await mock.down();
+    await setHouseholdLimit(page);
+    await page.waitForFunction(() => document.body.classList.contains('poster-blocked'), null, { timeout: 5000 });
+    if (late) {
+      await mock.up();
+      await mock.post('art-release');
+      await artHandled(page, 1);
+    }
+    await settled(page);
+    const state = await page.evaluate(() => ({ active: document.querySelectorAll('#gap-fill canvas.active').length, widths: [...document.querySelectorAll('#gap-fill canvas')].map((c) => c.width) }));
+    if (!late) assert.equal(state.active, 0, `the art that was drawn is taken off with its poster: ${JSON.stringify(state)}`); // a blur is hidden by poster-blocked, as before
+    assert.ok(state.widths.every((w) => w <= 64), `and no art is held (canvas widths ${state.widths})`);
+    if (late) assert.ok(state.widths.some((w) => w > 1), `a blur that was never replaced by art is left as it was (canvas widths ${state.widths})`);
+    assert.deepEqual(await artOnScreen(page), []);
+    assert.equal(await gapOn(page), false);
+    check(`backdrop, blocked (${late ? 'late art' : 'art drawn'}): no gap canvas current, widths ${state.widths}`);
+  });
+}
+
+// 31b. The art of the poster before is never shown for one that has art of its own which has not loaded: the blur shows until its own arrives.
+gapCase('31b backdrop: a poster whose art is still loading does not show the last poster\'s art', { settings: limitPool({ gapFill: 'backdrop', randomPoolSize: 3 }) }, async ({ page, app, mock }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await refreshUntil(page, (alt) => alt === 'Poster: The Grand Marquee', 'title 1 (has art)');
+  await waitArt(page);
+  await settled(page);
+  const first = await activeCanvas(page);
+  await mock.post('art-hold');
+  await refreshUntil(page, (alt) => alt === 'Poster: Velvet Curtain', 'title 3 (has art, held)');
+  await settled(page);
+  assert.deepEqual(await artOnScreen(page), [], 'title 1\'s art is not on screen for title 3');
+  await mock.post('art-release');
+  await waitArt(page);
+  await settled(page);
+  const second = await activeCanvas(page);
+  assert.ok(near(second.bottom, ART_BOTTOM_TITLE_3, 10) && !near(first.bottom, ART_BOTTOM_TITLE_3, 10), `title 3's own art arrived: ${first.bottom} then ${second.bottom}`);
+  check(`backdrop: title 1 art (${first.bottom}), blur while title 3's art loaded, then title 3's own (${second.bottom})`);
+});
+
+// 31c. Art that has faded in does not fade in again when the layout runs again (a resize, a pixel-shift step).
+gapCase('31c backdrop: a new layout does not restart the art\'s fade', { settings: backdropSettings() }, async ({ page, app }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await waitArt(page);
+  await settled(page);
+  await page.setViewportSize({ width: 1100, height: 1920 });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const running = await page.evaluate(() => document.getAnimations().map((a) => `${a.effect?.target?.id || a.effect?.target?.className}:${a.animationName || a.transitionProperty}`));
+  assert.deepEqual(running.filter((r) => r.endsWith(':gap-arrive')), [], `the art does not fade in again after a resize (running: ${running})`);
+  assert.ok(isArt(await activeCanvas(page)), 'and the art is still there');
+  check('backdrop: a resize leaves the art as it was, with no new fade');
+});
+
+// 32. The art is asked for only while a band shows (a poster that fills the window asks nothing), and then only once.
+gapCase('32 backdrop: no band, no request; a band, one request', { settings: backdropSettings({ posterFit: 'cover' }) }, async ({ page, app }) => {
+  const asked = watchArt(page);
+  await prepare(page, app);
+  assert.equal(await gapOn(page), false, 'cover leaves no band');
+  assert.deepEqual(asked, [], 'and nothing is asked for');
+  await reconfigure(page, { posterScale: 80 });
+  assert.equal(await gapOn(page), true, 'a scale of 80 leaves bands');
+  await waitArt(page);
+  assert.equal(asked.length, 1, `one request once a band shows: ${JSON.stringify(asked)}`);
+  check('backdrop: cover, no request; scale 80, one request');
+});
+
+// 33. A poster drawn from the offline cache shows the blur and asks no backdrop.
+gapCase('33 backdrop: a poster from the offline cache shows the blur and asks no backdrop', { settings: limitPool({ gapFill: 'backdrop', randomPoolSize: 1 }) }, async ({ page, app, mock }) => {
+  await page.goto(app.url);
+  await posterShown(page);
+  await waitArt(page);
+  await settled(page);
+  for (let i = 0; i < 100; i++) {
+    if ((await page.evaluate(() => JSON.parse(localStorage.getItem('plexPoster.posterIndex') || '[]'))).length) break;
+    await page.waitForTimeout(100);
+  }
+  const stored = await page.evaluate(() => localStorage.getItem('plexPoster.posterIndex') || '');
+  assert.ok(!/art|backdrop/.test(stored), 'the offline index holds no art');
+  await mock.down();
+  const asked = watchArt(page);
+  await page.reload();
+  await posterShown(page);
+  await settled(page);
+  assert.deepEqual(asked, [], 'a cached poster asks for no backdrop');
+  assert.deepEqual(await artOnScreen(page), [], 'and shows none');
+  const held = await activeCanvas(page);
+  assert.ok(held && !isArt(held), `the blur of the cached poster shows: ${JSON.stringify(held)}`);
+  check('backdrop, offline cache: blur only, no request');
+});
+
+// 34. The other styles are as before: none, blur and matte make no backdrop request, and the select offers Backdrop art.
+for (const gapFill of ['none', 'blur', 'matte']) {
+  gapCase(`34 ${gapFill} asks for no backdrop`, { settings: seed({ gapFill }) }, async ({ page, app }) => {
+    const asked = watchArt(page);
+    await prepare(page, app);
+    assert.deepEqual(asked, []);
+    assert.deepEqual(await artOnScreen(page), []);
+    check(`${gapFill}: no backdrop request, no art on screen`);
+  });
+}
+
 // ---------- run ----------
 
-const WORKERS = Number(process.env.E2E_GAP_WORKERS || 3);
+const WORKERS = Number(process.env.E2E_GAP_WORKERS || 8);
 if (process.env.E2E_GAP_ONLY) {
   const only = new RegExp(process.env.E2E_GAP_ONLY);
   cases.splice(0, cases.length, ...cases.filter((c) => only.test(c.name)));

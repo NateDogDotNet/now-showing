@@ -1189,3 +1189,37 @@ test('D215 2: a studio name holding a comma is not sent in studio=; the request 
   await client.pool({ libraryKey: '1', size: 40, houses: ['Pixar', 'A24'] });
   assert.equal(calls[2].searchParams.get('studio'), 'Pixar,A24', 'names without a comma are sent as before');
 });
+
+// ---- background art for the Backdrop art gap fill (R-FILL-3, D232) ----
+
+test('toPoster carries `backdrop` only when Plex names art: a movie its `art`, never an empty or non-text value', () => {
+  assert.equal(toPoster({ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t', art: '/library/metadata/1/art/9' }, 'random').backdrop, '/library/metadata/1/art/9');
+  for (const art of [undefined, null, '', '   ', 7, {}, ['/a']]) {
+    assert.equal('backdrop' in toPoster({ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t', art }, 'random'), false, `art ${JSON.stringify(art)}: the field is absent`);
+  }
+});
+
+test('an episode takes its series\' art (`grandparentArt`) and never its own `art`', () => {
+  const episode = { type: 'episode', ratingKey: '501', grandparentRatingKey: '5', title: 'Pilot', grandparentTitle: 'Show', thumb: '/t/e', grandparentThumb: '/t/s', art: '/library/metadata/501/art/2' };
+  assert.equal('backdrop' in toPoster(episode, 'now-playing'), false, 'an episode with no series art has none (its own is not used)');
+  assert.equal(toPoster({ ...episode, grandparentArt: '/library/metadata/5/art/1' }, 'now-playing').backdrop, '/library/metadata/5/art/1');
+  assert.equal(toPoster({ ...episode, grandparentArt: '' }, 'now-playing').backdrop, undefined);
+  const np = pickNowPlaying([{ ...episode, grandparentArt: '/library/metadata/5/art/1', Player: { state: 'playing' } }]);
+  assert.equal(np.backdrop, '/library/metadata/5/art/1', 'a now-playing poster carries it (D232 8)');
+  const movie = pickNowPlaying([{ type: 'movie', ratingKey: '1', title: 'A', thumb: '/t', art: '/library/metadata/1/art/9', Player: { state: 'playing' } }]);
+  assert.equal(movie.backdrop, '/library/metadata/1/art/9');
+});
+
+test('pool and item carry `backdrop` for a title with art and leave it off for one without', async () => {
+  assert.equal((await poolCalls([{ ratingKey: '3', title: 'C', thumb: '/t/3', art: '/a/3' }]).client.item('3')).backdrop, '/a/3');
+  assert.equal('backdrop' in (await poolCalls([{ ratingKey: '4', title: 'D', thumb: '/t/4' }]).client.item('4')), false);
+});
+
+test('a backdrop is asked through imageUrl at the size given, with the token like a poster', () => {
+  const client = createPlexClient({ serverUrl: 'http://h:32400', token: 'tok', clientId: 'c' });
+  const url = new URL(client.imageUrl('/library/metadata/7/art/123', { width: 256, height: 144, backdrop: true }));
+  assert.equal(url.pathname, '/photo/:/transcode');
+  assert.equal(url.searchParams.get('url'), '/library/metadata/7/art/123');
+  assert.equal(url.searchParams.get('width'), '256');
+  assert.equal(url.searchParams.get('X-Plex-Token'), 'tok');
+});

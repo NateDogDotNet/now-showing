@@ -27,7 +27,7 @@
 //   playlists()                           [{ key, title }]
 //   item(id)                              one poster, or an error of kind 'http' when it is gone
 //   items(ids)                            several posters in one request; ids the server does not return are absent
-//   imageUrl(thumb, { width, height })    the address of a resized poster image
+//   imageUrl(thumb, { width, height, backdrop })   the address of a resized poster image; with `backdrop: true`, `thumb` is a poster's `backdrop` and the image is its background art
 //   nowPlaying(sessions, settings)        the poster of the playing session that counts (settings.username, .includeEpisodes), or null;
 //                                         it also carries viewOffset, playerTitle, playerState and paused (ms, text, text, boolean)
 //
@@ -35,6 +35,7 @@
 //   ratingKey      the server's id for the title, as a string; an episode carries its series' id
 //   title, year    text; year is '' when unknown; an episode carries its series' title and year
 //   thumb          what imageUrl() takes
+//   backdrop       what imageUrl() takes with `backdrop: true`: the title's background art (an episode's series'); left off when the server names none (R-FILL-3, D232)
 //   source         'random', 'static' or 'now-playing' (js/poster-cache.js sets 'cache' on a poster drawn from the offline cache)
 //   user           who is playing it, '' when not a session
 //   contentRating  the item's own rating as text, '' when unrated; the household limit reads it (D5, D75)
@@ -230,7 +231,7 @@ export function createSources(settings, opts = {}) {
     return message.includes(m.source.label) ? message.replace(m.source.label, nameOf(m)) : `${nameOf(m)}: ${message}`;
   };
   const owner = (id) => usable.find((m) => belongsTo(id, m.entry)) || null;
-  const scoped = (m, p) => (m.entry.carried ? p : { ...p, ratingKey: keyFor(m.entry, p.ratingKey), thumb: keyFor(m.entry, p.thumb) });
+  const scoped = (m, p) => (m.entry.carried ? p : { ...p, ratingKey: keyFor(m.entry, p.ratingKey), thumb: keyFor(m.entry, p.thumb), ...(p.backdrop ? { backdrop: keyFor(m.entry, p.backdrop) } : {}) });
   /** The server an id belongs to and the id as that server knows it. */
   const route = (id) => {
     const m = owner(id);

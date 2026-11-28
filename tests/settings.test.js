@@ -229,10 +229,10 @@ test('stored 2.0.0 settings load with new keys filled', () => {
   assert.equal(settings.pixelShift, true);
 });
 
-test('gapFill: default none; none, blur and matte are kept, anything else falls back to none', () => {
+test('gapFill: default none; none, blur, matte and backdrop are kept, anything else falls back to none', () => {
   assert.equal(defaults().gapFill, 'none');
-  for (const v of ['none', 'blur', 'matte']) assert.equal(sanitize({ gapFill: v }).gapFill, v);
-  for (const bad of ['info', 'BLUR', '', null, 7, true, undefined]) assert.equal(sanitize({ gapFill: bad }).gapFill, 'none', String(bad));
+  for (const v of ['none', 'blur', 'matte', 'backdrop']) assert.equal(sanitize({ gapFill: v }).gapFill, v);
+  for (const bad of ['info', 'BLUR', 'Backdrop', 'crop', '', null, 7, true, undefined]) assert.equal(sanitize({ gapFill: bad }).gapFill, 'none', String(bad));
 });
 
 test('gapFill migrates: stored settings without it load as none; one saved with it round-trips; imports and exports carry it', () => {
@@ -1617,4 +1617,13 @@ test('titleLogo is off by default, takes only a boolean, and travels in an expor
   assert.equal(file.settings.titleLogo, true);
   assert.equal(fromImport(JSON.stringify(file), defaults()).titleLogo, true);
   assert.equal(fromImport(JSON.stringify(toExport(defaults())), { ...defaults(), titleLogo: true }).titleLogo, false, 'an export of the default turns it off again');
+});
+
+test('gapFill backdrop round-trips: saved, loaded, exported and imported; an old value of another name still falls back to none', () => {
+  const storage = memoryStorage();
+  save(storage, { ...defaults(), gapFill: 'backdrop' });
+  assert.equal(load(storage).settings.gapFill, 'backdrop');
+  const exported = toExport({ ...defaults(), gapFill: 'backdrop' });
+  assert.equal(fromImport(JSON.stringify(exported)).gapFill, 'backdrop');
+  assert.equal(sanitize({ gapFill: 'smart-crop' }).gapFill, 'none');
 });

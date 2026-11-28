@@ -4,6 +4,7 @@ import { createArtwork, logosIn } from './artwork.js';
 import { createBackoff } from './backoff.js';
 import { createBrightnessTimer } from './brightness-timer.js';
 import { createDisplay } from './display.js';
+import { GAP_BACKDROP_REQUEST } from './fill.js';
 import { createEngine } from './engine.js';
 import { createHelper } from './helper.js';
 import { cornerZone, createHold, HOLD_MS, inZone, REVEAL_MS, shouldResetPin } from './kiosk.js';
@@ -186,6 +187,7 @@ function blockPoster() {
     img.alt = '';
   });
   display.currentPoster = null;
+  display.dropBackdrop(); // the gap fill's backdrop art goes with the poster it belongs to
   display.setTitle(null);
   display.setNowPlaying(null);
   syncPlayNow();
@@ -275,6 +277,23 @@ async function fetchLogo(poster) {
   const got = poster?.source === 'cache' ? await artwork.cachedLogo(poster).catch(() => null) : await artwork.logo(poster).catch(() => null);
   return got?.blob ?? null;
 }
+
+/**
+ * The backdrop art of the poster on screen for the Backdrop art gap fill (R-FILL-3, D232): asked of the poster's own server through its `imageUrl`, a small
+ * image (never the full-size art), and handed to the display, which drops it if its poster is no longer the one on screen. It never throws and never
+ * names the address (it carries the token): a failure leaves the blurred poster and is logged without it. It is not stored in the offline cache.
+ */
+async function fetchBackdrop(poster) {
+  try {
+    const url = client.imageUrl(poster.backdrop, { width: GAP_BACKDROP_REQUEST, height: Math.round((GAP_BACKDROP_REQUEST * 9) / 16), backdrop: true });
+    const res = await fetch(url, { signal: AbortSignal.timeout?.(20000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await display.setBackdrop(poster, await res.blob());
+  } catch {
+    log.warn(`Could not load the backdrop art of "${poster.title}"; showing the blurred poster.`); // never the error: a message may carry the address, which carries the token
+  }
+}
+display.onBackdropWanted(fetchBackdrop);
 
 async function fetchImage(poster, { skipCache = false } = {}) {
   const size = requestSize(display.posterSize(), window.devicePixelRatio || 1);
